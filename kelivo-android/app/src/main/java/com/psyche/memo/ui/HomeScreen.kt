@@ -112,6 +112,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
@@ -280,24 +281,28 @@ fun HomeScreen(
                 isTemporary = temporaryActive,
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        val px = contentOffsetPx.floatValue
-                        alpha = if (drawerWidthPx > 0f) 0.12f * px / drawerWidthPx else 0f
-                    }
-                    .background(MaterialTheme.colorScheme.onSurface)
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            val up = waitForUpOrCancellation()
-                            if (up != null && contentOffsetPx.floatValue > 1f) {
-                                drawerOpen = false
-                            }
+            // Composed only while the drawer presents — a permanently-mounted
+            // gesture layer sits in the hit path and can eat taps.
+            if (presenting) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val px = contentOffsetPx.floatValue
+                            alpha = if (drawerWidthPx > 0f) 0.12f * px / drawerWidthPx else 0f
                         }
-                    },
-            )
+                        .background(MaterialTheme.colorScheme.onSurface)
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                val up = waitForUpOrCancellation()
+                                if (up != null && contentOffsetPx.floatValue > 1f) {
+                                    drawerOpen = false
+                                }
+                            }
+                        },
+                )
+            }
         }
         // Drawer: layout-offset so the touch region follows the panel.
         if (presenting) {
@@ -794,7 +799,12 @@ private fun Modifier.drawerDragGesture(
     onPresent: () -> Unit,
     onSettle: (open: Boolean, velocityPx: Float) -> Unit,
 ): Modifier = pointerInput(widthPx) {
-    val slopPx = viewConfiguration.touchSlop
+    // Flutter's kTouchSlop is 18 logical pixels — much larger than the
+    // Android default (8px physical on many devices). Real fingers always
+    // drift a few pixels while tapping; with the small default every tap
+    // would be mistaken for a drag and clicks would die. Align with the
+    // original project's threshold.
+    val slopPx = max(viewConfiguration.touchSlop, with(density) { 18.dp.toPx() })
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
         velocityPx.floatValue = 0f
