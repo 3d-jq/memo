@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -713,7 +714,16 @@ private fun ChatInputBar(
             // navigation bar (kelivo's ChatInputBar behaviour).
             .windowInsetsPadding(WindowInsets.navigationBars),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                // union, not stacked: the IME inset already covers the nav bar,
+                // adding both pushed the input card above the visible area.
+                .windowInsetsPadding(
+                    WindowInsets.ime.union(WindowInsets.navigationBars),
+                )
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        ) {
             // Input field (top).
             TextField(
                 value = input,
