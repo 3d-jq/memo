@@ -1,5 +1,13 @@
 package com.psyche.memo.ui
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.Lightbulb
 import com.composables.icons.lucide.Lucide
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.ui.R as UiR
@@ -209,4 +218,125 @@ private fun LanguageOption(
             )
         }
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// Shared switch row + iOS divider (ported from display_settings_page.dart
+// _iosSwitchRow L1363-1432 and _iosDivider L1183-1192) for settings sub-pages.
+// ---------------------------------------------------------------------------
+
+/** 源码 display_settings_page.dart L1183-1192 —— iOS 分隔线。 */
+@Composable
+fun SettingsIosDivider() {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 54.dp, end = 12.dp)
+            .height(6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.6.dp)
+                .background(cs.outlineVariant.copy(alpha = 0.18f)),
+        )
+    }
+}
+
+/**
+ * 源码 display_settings_page.dart L1363-1432 —— _iosSwitchRow：
+ * 36dp 图标位 + 15sp 标签（+tip 副标题 12sp@56% 与提示图标）+ IosSwitch。
+ */
+@Composable
+fun SettingsSwitchRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tip: String? = null,
+    value: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle(!value) }
+            .padding(horizontal = 12.dp, vertical = if (tip == null) 2.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.width(36.dp)) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = cs.onSurface.copy(alpha = 0.9f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
+                if (!tip.isNullOrEmpty()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        tip,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
+                            color = cs.onSurface.copy(alpha = 0.56f),
+                        ),
+                    )
+                }
+            }
+        }
+        // MemoryTipIcon slot (L1424-1426) — CircleHelp glyph（Info 缺失）。
+        if (!tip.isNullOrEmpty()) {
+            Icon(
+                Lucide.Lightbulb,
+                contentDescription = null,
+                tint = cs.onSurface.copy(alpha = 0.45f),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = value,
+            onCheckedChange = onToggle,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = cs.primary,
+                checkedThumbColor = Color.White,
+                uncheckedThumbColor = Color.White,
+                uncheckedTrackColor = cs.surfaceVariant,
+            ),
+        )
+    }
+}
+
+/**
+ * 源码 section_card.dart L30-66 —— SectionCard standard：r12、hairline 边框
+ * （outlineVariant @ dark 0.08 / light 0.06）、背景 surfaceCard、纵向内边距 4。
+ */
+@Composable
+fun SettingsSectionCard(content: @Composable () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val lum = 0.2126f * cs.surface.red + 0.7152f * cs.surface.green + 0.0722f * cs.surface.blue
+    val dark = lum < 0.5f
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                androidx.compose.ui.graphics.lerp(cs.surface, Color.White, if (dark) 0.10f else 0.96f),
+                RoundedCornerShape(12.dp),
+            )
+            .border(
+                1.dp,
+                cs.outlineVariant.copy(alpha = if (dark) 0.08f else 0.06f),
+                RoundedCornerShape(12.dp),
+            )
+            .padding(vertical = 4.dp),
+    ) { content() }
 }

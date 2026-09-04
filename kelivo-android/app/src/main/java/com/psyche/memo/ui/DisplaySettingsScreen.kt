@@ -55,6 +55,7 @@ fun DisplaySettingsScreen(
     appLocale: AppLocale,
     onLocaleChange: (AppLocale) -> Unit,
     onOpenChatItemDisplay: () -> Unit,
+    onOpenRendering: () -> Unit,
     onBack: () -> Unit,
 ) {
     var languageSheetVisible by remember { mutableStateOf(false) }
@@ -118,7 +119,7 @@ fun DisplaySettingsScreen(
                 SettingsRow(
                     Lucide.LetterText,
                     stringResource(UiR.string.display_settings_page_rendering_settings_title),
-                    onTap = {},
+                    onTap = onOpenRendering,
                 )
                 DividerRow()
                 SettingsRow(

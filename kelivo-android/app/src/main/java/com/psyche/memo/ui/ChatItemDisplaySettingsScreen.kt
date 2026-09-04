@@ -116,77 +116,6 @@ private fun IosDivider() {
     }
 }
 
-/** L1363-1424: nav/switch row shared metrics (h12/v11 via tip==null branch). */
-@Composable
-private fun SwitchRow(
-    item: SwitchItem,
-    value: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggle(!value) }
-            .padding(horizontal = 12.dp, vertical = if (item.tipRes == null) 2.dp else 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.width(36.dp)) {
-                Icon(
-                    item.icon,
-                    contentDescription = null,
-                    tint = cs.onSurface.copy(alpha = 0.9f),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = stringResource(item.labelRes),
-                    style = TextStyle(fontSize = 15.sp, color = cs.onSurface),
-                )
-                item.tipRes?.let { tipRes ->
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        text = stringResource(tipRes),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(
-                            fontSize = 12.sp,
-                            lineHeight = 14.sp,
-                            color = cs.onSurface.copy(alpha = 0.56f),
-                        ),
-                    )
-                }
-            }
-        }
-        // MemoryTipIcon slot (L1424-1426) — info glyph at 45%.
-        if (item.tipRes != null) {
-            Icon(
-                Lucide.CircleHelp,
-                contentDescription = null,
-                tint = cs.onSurface.copy(alpha = 0.45f),
-                modifier = Modifier.size(16.dp),
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(
-            checked = value,
-            onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = cs.primary,
-                checkedThumbColor = Color.White,
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = cs.surfaceVariant,
-            ),
-        )
-    }
-}
-
 @Composable
 fun ChatItemDisplaySettingsScreen(
     container: AppContainerImpl,
@@ -235,31 +164,16 @@ fun ChatItemDisplaySettingsScreen(
             ),
         ) {
             item {
-                // SectionCard standard (section_card.dart L30-66): r12,
-                // hairline border, vertical padding 4. hairline =
-                // outlineVariant @ (dark 0.08 / light 0.06).
-                val dark = cs.surface.luminanceCompat() < 0.5f
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            cs.surfaceCardColor(dark),
-                            RoundedCornerShape(12.dp),
-                        )
-                        .border(
-                            1.dp,
-                            cs.outlineVariant.copy(alpha = if (dark) 0.08f else 0.06f),
-                            RoundedCornerShape(12.dp),
-                        )
-                        .padding(vertical = 4.dp),
-                ) {
+                SettingsSectionCard {
                     switchRows.forEachIndexed { index, item ->
-                        SwitchRow(
-                            item = item,
+                        SettingsSwitchRow(
+                            icon = item.icon,
+                            label = stringResource(item.labelRes),
+                            tip = item.tipRes?.let { stringResource(it) },
                             value = values[item.prefsKey] ?: true,
                             onToggle = { writeBool(item.prefsKey, it) },
                         )
-                        if (index != switchRows.lastIndex) IosDivider()
+                        if (index != switchRows.lastIndex) SettingsIosDivider()
                     }
                 }
             }
@@ -267,9 +181,4 @@ fun ChatItemDisplaySettingsScreen(
     }
 }
 
-/** AppSemanticColors.surfaceCard (AppSemanticColors.kt L29). */
-private fun ColorScheme.surfaceCardColor(dark: Boolean): Color =
-    lerp(surface, Color.White, if (dark) 0.10f else 0.96f)
 
-private fun Color.luminanceCompat(): Float =
-    0.2126f * red + 0.7152f * green + 0.0722f * blue
