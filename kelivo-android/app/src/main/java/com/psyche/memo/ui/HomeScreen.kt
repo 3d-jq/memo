@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.activity.compose.BackHandler
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -71,7 +73,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -91,9 +92,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -688,6 +692,106 @@ private fun MessageActionIcon(
     }
 }
 
+// ---------------------------------------------------------------------------
+// 输入栏 1:1 常量与算法 —— 数值全部取自 Flutter 源码，逐项标注「源码文件:行号」
+// ---------------------------------------------------------------------------
+
+/** 源码 lib/theme/design_tokens.dart:31-37 —— AppSpacing */
+private val SpacingXxs = 4.dp
+private val SpacingXs = 8.dp
+private val SpacingSm = 12.dp
+private val SpacingMd = 16.dp
+
+/** 源码 lib/shared/responsive/breakpoints.dart:5 —— AppBreakpoints.tablet = 900 */
+private const val BREAKPOINT_TABLET_DP = 900f
+
+/** 源码 lib/features/home/widgets/chat_input_bar.dart:247-248 —— 附件预览高度 */
+private const val DOCUMENT_PREVIEW_HEIGHT_DP = 48f
+private const val IMAGE_PREVIEW_HEIGHT_DP = 64f
+
+/**
+ * 源码 lib/features/home/widgets/chat_input_bar.dart:2569
+ * baseChromeHeight = 120 // padding + action row + chrome buffer
+ */
+private const val BASE_CHROME_HEIGHT_DP = 120f
+
+/** 源码 chat_input_bar.dart:2574 —— softCap = visibleHeight * 0.45 */
+private const val SOFT_CAP_RATIO = 0.45f
+
+/** 源码 chat_input_bar.dart:2577/2579 —— max(80.0, …) 下限 */
+private const val MIN_INPUT_HEIGHT_DP = 80f
+
+/** 源码 chat_input_bar.dart:2618-2619 / 2626 —— ClipRRect + BoxDecoration borderRadius: 20 */
+private val InputContainerShape = RoundedCornerShape(20.dp)
+
+/**
+ * 源码 chat_input_bar.dart:2620-2621
+ * BackdropFilter(filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14))
+ */
+private val InputBackdropBlur = 14.dp
+
+/** 源码 lib/core/providers/settings_provider.dart:5094-5095 —— 默认输入框背景透明度 */
+private const val DEFAULT_INPUT_BG_OPACITY_LIGHT = 0.8236f
+private const val DEFAULT_INPUT_BG_OPACITY_DARK = 0.7396f
+
+/**
+ * Flutter `Color.alphaBlend(foreground, background)` 的等价实现（source-over，
+ * 非线性 sRGB，与 Flutter SDK 的整型算法一致）：
+ *   backAlpha' = ba * (1 - fa); outAlpha = fa + backAlpha'
+ *   channel    = (fc * fa + bc * backAlpha') / outAlpha
+ *
+ * 源码 lib/features/home/widgets/chat_input_bar.dart:284
+ */
+private fun alphaBlend(foreground: Color, background: Color): Color {
+    val fa = foreground.alpha
+    val ba = background.alpha
+    if (fa == 0f) return background
+    val backAlpha = ba * (1f - fa)
+    val outAlpha = fa + backAlpha
+    if (outAlpha == 0f) return Color.Transparent
+    return Color(
+        red = (foreground.red * fa + background.red * backAlpha) / outAlpha,
+        green = (foreground.green * fa + background.green * backAlpha) / outAlpha,
+        blue = (foreground.blue * fa + background.blue * backAlpha) / outAlpha,
+        alpha = outAlpha,
+    )
+}
+
+/**
+ * 源码 lib/features/home/widgets/chat_input_bar.dart:260-285 —— _inputFillColor
+ *
+ * @param backgroundImageActive 移植版暂无聊天背景图能力，恒为 false，
+ *   因此 backgroundRatio 分支（源码 :270-275）不会生效，仅保留结构。
+ */
+private fun inputFillColor(
+    cs: androidx.compose.material3.ColorScheme,
+    isDark: Boolean,
+    backgroundImageActive: Boolean = false,
+    lightOpacity: Float = DEFAULT_INPUT_BG_OPACITY_LIGHT,
+    darkOpacity: Float = DEFAULT_INPUT_BG_OPACITY_DARK,
+): Color {
+    val configuredOpacity = (if (isDark) darkOpacity else lightOpacity).coerceIn(0f, 1f)
+    val backgroundRatio = if (isDark) {
+        0.545f / DEFAULT_INPUT_BG_OPACITY_DARK
+    } else {
+        0.5296f / DEFAULT_INPUT_BG_OPACITY_LIGHT
+    }
+    val targetOpacity = if (backgroundImageActive) {
+        configuredOpacity * backgroundRatio
+    } else {
+        configuredOpacity
+    }
+    val overlayAlpha = if (isDark) {
+        if (backgroundImageActive) 0.09f else 0.07f
+    } else {
+        0.02f
+    }
+    val overlayTint = (if (isDark) cs.onSurface else cs.primary).copy(alpha = overlayAlpha)
+    val baseAlpha = ((targetOpacity - overlayAlpha) / (1f - overlayAlpha)).coerceIn(0f, 1f)
+    val base = cs.surface.copy(alpha = baseAlpha)
+    return alphaBlend(overlayTint, base).copy(alpha = targetOpacity)
+}
+
 @Composable
 private fun ChatInputBar(
     input: String,
@@ -698,73 +802,211 @@ private fun ChatInputBar(
     onSelectModel: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    // Mirrors kelivo ChatInputBar: one rounded frosted container which holds
-    // the TextField on top and an action row (spaceBetween: left tools, right
-    // plus / mic / circular send) at the bottom.
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = cs.surface.copy(alpha = 0.53f),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp, cs.onSurface.copy(alpha = 0.10f),
-        ),
+    // 源码 chat_input_bar.dart:2547 —— theme.brightness == Brightness.dark。
+    // 移植版没有暴露主题模式的 CompositionLocal，按 Material3 惯例由 surface 亮度判定
+    // （浅色 surface 亮度 ≈0.96，深色 ≈0.05）。
+    val isDark = cs.surface.luminance() < 0.5f
+
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+    // 源码 chat_input_bar.dart:2558-2561
+    //   size        = MediaQuery.sizeOf(context)
+    //   viewInsets  = MediaQuery.viewInsetsOf(context)
+    //   visibleHeight = size.height - viewInsets.bottom
+    val visibleHeightDp = configuration.screenHeightDp.toFloat() -
+        WindowInsets.ime.getBottom(density) / density.density
+    // 源码 chat_input_bar.dart:2560 —— isMobileLayout = size.width < AppBreakpoints.tablet
+    val isMobileLayout = configuration.screenWidthDp < BREAKPOINT_TABLET_DP
+
+    // 源码 chat_input_bar.dart:2555-2556 / 2641-2642 —— 附件（图片 / 文档）内联预览。
+    // 移植版当前没有附件数据，两个列表恒为空：预览高度按源码公式算得 0，
+    // 结构保留，接入附件时只需让列表非空。
+    val imageAttachments: List<String> = emptyList()
+    val docAttachments: List<String> = emptyList()
+    val hasImages = imageAttachments.isNotEmpty()
+    val hasDocs = docAttachments.isNotEmpty()
+    // 源码 chat_input_bar.dart:2562-2568
+    val attachmentPreviewHeight = if (hasDocs || hasImages) {
+        SpacingSm.value +
+            (if (hasImages) IMAGE_PREVIEW_HEIGHT_DP else 0f) +
+            (if (hasImages && hasDocs) SpacingXs.value else 0f) +
+            (if (hasDocs) DOCUMENT_PREVIEW_HEIGHT_DP else 0f) +
+            SpacingXxs.value
+    } else {
+        0f
+    }
+
+    // 源码 chat_input_bar.dart:2569-2581 —— maxInputHeight 计算（照搬）
+    val maxInputHeightDp = if (isMobileLayout) {
+        val available = visibleHeightDp - attachmentPreviewHeight - BASE_CHROME_HEIGHT_DP
+        val softCap = visibleHeightDp * SOFT_CAP_RATIO
+        if (available > 0) {
+            val capped = minOf(softCap, available)
+            minOf(available, maxOf(MIN_INPUT_HEIGHT_DP, capped))
+        } else {
+            maxOf(MIN_INPUT_HEIGHT_DP, softCap)
+        }
+    } else {
+        Float.POSITIVE_INFINITY
+    }
+    // 源码 chat_input_bar.dart:2583-2586：只有 isMobileLayout 且高度有限且 > 0 才约束。
+    val textFieldModifier = if (
+        isMobileLayout && maxInputHeightDp.isFinite() && maxInputHeightDp > 0
+    ) {
+        Modifier.fillMaxWidth().heightIn(max = maxInputHeightDp.dp)
+    } else {
+        Modifier.fillMaxWidth()
+    }
+
+    // 源码 chat_input_bar.dart:2588-2599
+    //   SafeArea(top:false, left:false, right:false, bottom:true)
+    //   + Padding.fromLTRB(AppSpacing.sm, AppSpacing.xxs, AppSpacing.sm, AppSpacing.xs)
+    // union（而非叠加）：IME 高度已覆盖导航栏区域，叠加会把输入卡顶出可视区。
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            // SafeArea(bottom) equivalent: keep the input bar above the
-            // navigation bar (kelivo's ChatInputBar behaviour).
-            .windowInsetsPadding(WindowInsets.navigationBars),
+            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
+            .padding(
+                start = SpacingSm,
+                top = SpacingXxs,
+                end = SpacingSm,
+                bottom = SpacingXs,
+            ),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                // union, not stacked: the IME inset already covers the nav bar,
-                // adding both pushed the input card above the visible area.
-                .windowInsetsPadding(
-                    WindowInsets.ime.union(WindowInsets.navigationBars),
-                )
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-        ) {
-            // Input field (top).
-            TextField(
-                value = input,
-                onValueChange = onInputChange,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text(stringResource(UiR.string.chat_input_bar_hint)) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { if (!streaming) onSend() }),
-                maxLines = 5,
-                shape = RoundedCornerShape(16.dp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
+        // 源码 chat_input_bar.dart:2600-2602 Column(mainAxisSize: min)
+        //   → 2614 Stack → 2618 ClipRRect(20) → 2620 BackdropFilter(14) → 2622 Container
+        Box(modifier = Modifier.fillMaxWidth().clip(InputContainerShape)) {
+            // 背景 / 模糊层。
+            // 源码 chat_input_bar.dart:2620-2621 BackdropFilter(ImageFilter.blur(14, 14))。
+            // Compose 没有 BackdropFilter 等价物，用 Modifier.blur 近似；该修饰符只在
+            // API 31 (Android 12) 及以上生效，API 30 及以下为空实现，自动退化为「不加
+            // 模糊」，不会崩溃。放在最底层，避免把容器内的文本 / 图标一起模糊掉。
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .blur(InputBackdropBlur)
+                    // 源码 chat_input_bar.dart:2625 —— color: inputFillColor
+                    .background(color = inputFillColor(cs, isDark), shape = InputContainerShape),
             )
-
-            // Bottom action row: left tools, right plus / mic / send.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            // 源码 chat_input_bar.dart:2639-2655 / 2830-2949 —— 容器内 Column：
+            // ① 附件预览区 ② 输入区 ③ 底部按钮行
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // 源码 chat_input_bar.dart:2628-2637
+                    //   Border.all(width: 1,
+                    //     color: isDark ? onSurface@0.10 : outline@0.20)
+                    // 不随背景层模糊，保持 1px 描边清晰可见。
+                    .border(
+                        width = 1.dp,
+                        color = if (isDark) {
+                            cs.onSurface.copy(alpha = 0.10f)
+                        } else {
+                            cs.outline.copy(alpha = 0.20f)
+                        },
+                        shape = InputContainerShape,
+                    ),
             ) {
-                Row(modifier = Modifier.weight(1f)) {
-                    InputIcon(Lucide.Boxes, "Model", onSelectModel, cs)
-                    InputIcon(Lucide.Globe, "Search", {}, cs)
-                    InputIcon(Lucide.Brain, "Reasoning budget", {}, cs)
-                    InputIcon(Lucide.Hammer, "MCP servers", {}, cs)
-                    InputIcon(Lucide.Zap, "Quick phrases", {}, cs)
+                // ① 附件内联预览区（源码 chat_input_bar.dart:2641-2642）。
+                //    移植版暂无附件数据（hasImages / hasDocs 恒为 false），该分支不渲染。
+
+                // ② 输入区（源码 chat_input_bar.dart:2646-2654）
+                //    Padding.fromLTRB(md, xxs, md, xs) + ConstrainedBox(maxHeight)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = SpacingMd,
+                            top = SpacingXxs,
+                            end = SpacingMd,
+                            bottom = SpacingXs,
+                        ),
+                ) {
+                    TextField(
+                        value = input,
+                        onValueChange = onInputChange,
+                        modifier = textFieldModifier,
+                        placeholder = { Text(stringResource(UiR.string.chat_input_bar_hint)) },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                        keyboardActions = KeyboardActions(onSend = { if (!streaming) onSend() }),
+                        // 源码 chat_input_bar.dart:2741 —— maxLines: 5（未展开状态）
+                        maxLines = 5,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                        ),
+                    )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    InputIcon(Lucide.Plus, "More tools", {}, cs)
-                    InputIcon(Lucide.Mic, "Voice input", {}, cs)
-                    FilledIconButton(
-                        onClick = if (streaming) onStop else onSend,
-                        modifier = Modifier.size(38.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (streaming) Lucide.CircleStop else Lucide.ArrowUp,
-                            contentDescription = if (streaming) "Stop" else "Send",
+
+                // ③ 底部按钮行（源码 chat_input_bar.dart:2830-2949）
+                //    Padding.fromLTRB(xs, 0, xs, xs)，spaceBetween：左侧工具 + 右侧 plus/mic/发送
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = SpacingXs,
+                            top = 0.dp,
+                            end = SpacingXs,
+                            bottom = SpacingXs,
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(modifier = Modifier.weight(1f)) {
+                        InputIcon(
+                            Lucide.Boxes,
+                            stringResource(UiR.string.chat_input_bar_select_model_tooltip),
+                            onSelectModel,
+                            cs,
                         )
+                        InputIcon(
+                            Lucide.Globe,
+                            stringResource(UiR.string.chat_input_bar_online_search_tooltip),
+                            {},
+                            cs,
+                        )
+                        InputIcon(
+                            Lucide.Brain,
+                            stringResource(UiR.string.chat_input_bar_reasoning_strength_tooltip),
+                            {},
+                            cs,
+                        )
+                        InputIcon(
+                            Lucide.Hammer,
+                            stringResource(UiR.string.chat_input_bar_mcp_servers_tooltip),
+                            {},
+                            cs,
+                        )
+                        InputIcon(
+                            Lucide.Zap,
+                            stringResource(UiR.string.chat_input_bar_quick_phrase_tooltip),
+                            {},
+                            cs,
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        InputIcon(
+                            Lucide.Plus,
+                            stringResource(UiR.string.chat_input_bar_more_tooltip),
+                            {},
+                            cs,
+                        )
+                        InputIcon(
+                            Lucide.Mic,
+                            stringResource(UiR.string.chat_input_bar_voice_input_tooltip),
+                            {},
+                            cs,
+                        )
+                        FilledIconButton(
+                            onClick = if (streaming) onStop else onSend,
+                            modifier = Modifier.size(38.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (streaming) Lucide.CircleStop else Lucide.ArrowUp,
+                                contentDescription = if (streaming) "Stop" else "Send",
+                            )
+                        }
                     }
                 }
             }
