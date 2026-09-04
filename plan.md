@@ -1,5 +1,11 @@
 # kelivo Flutter → 原生 Android (Kotlin) 全量移植计划
 
+> ⚠️ **本计划中的品牌与兼容性前提已作废。** 原生应用现为独立产品 **Memo**
+> （包名 `com.psyche.memo`、库名 `memo.db`、目录 `memo-android/`），与 Flutter 原应用
+> **不做数据兼容**，且任何用户可见文案/标识符/资源键/素材都不得出现 kelivo 字样。
+> 下文「兼容性铁律」「包名沿用 com.psyche.kelivo」等条目仅为当时的计划记录，
+> 现行约束以 `AGENTS.md` 为准。
+
 ## Context
 
 用户无法使用 VPN（但直连 Google Maven / Maven Central / services.gradle.org 均实测可达），要把开源的 **kelivo**（Flutter 跨平台 LLM 聊天客户端 v1.2.5，584 个 Dart 文件，已浅克隆到 `D:\program\memo`）**全量移植为原生 Android 应用**，最终交付签名 release APK，并用 Android 模拟器逐阶段验收。用户已确认：多会话分阶段推进、本会话尽量做到 P2、Markdown 渲染走"原生 Compose 为主 + Mermaid/公式/HTML 特殊块 WebView 兜底"、验收用新建模拟器。
@@ -18,7 +24,7 @@
 
 ## 工程结构
 
-新工程：**`D:\program\memo\kelivo-android`**（与 Flutter 源平级并存，Flutter 源只读作为移植参照，不删除；.gitignore 补 `kelivo-android/build/`、`.gradle/`、`local.properties`、`keystore.properties`）。
+新工程：**`D:\program\memo\memo-android`**（与 Flutter 源平级并存，Flutter 源只读作为移植参照，不删除；.gitignore 补 `memo-android/build/`、`.gradle/`、`local.properties`、`keystore.properties`）。
 
 单个 Gradle 工程（AGP 8.11.1 / Gradle 8.14 wrapper 指向本地已解压发行版 / Kotlin 2.2.20 + plugin.compose + plugin.serialization，version catalog `gradle/libs.versions.toml`），9 模块，依赖单向：`app → feature:* → core:*`，feature 间不互依赖：
 
@@ -50,10 +56,10 @@ Compose BOM `androidx.compose:compose-bom:2025.06.01`（material3 1.3.2）、mat
 
 | 阶段 | 内容 | 验收核心 |
 |---|---|---|
-| **P0 基建** | 工程骨架；`tools/drift_schema_to_sql.py` + `kelivo_schema_v3.sql` + SchemaV3Helper/Verifier；主题（动态取色/深浅/色板/字号）；`tools/arb_to_android.py`（en→values、zh_Hans→values-zh、zh_Hant→values-zh-rTW）；SettingsKeyRegistry（133 键）；assets 拷贝（html/mermaid）；模拟器准备；keystore | 启动；中英切换、深浅主题；user_version=3、29 表/17 索引 table_info 与 JSON 一致；assembleDebug 出 APK |
+| **P0 基建** | 工程骨架；`tools/drift_schema_to_sql.py` + `memo_schema_v3.sql` + SchemaV3Helper/Verifier；主题（动态取色/深浅/色板/字号）；`tools/arb_to_android.py`（en→values、zh_Hans→values-zh、zh_Hant→values-zh-rTW）；SettingsKeyRegistry（133 键）；assets 拷贝（html/mermaid）；模拟器准备；keystore | 启动；中英切换、深浅主题；user_version=3、29 表/17 索引 table_info 与 JSON 一致；assembleDebug 出 APK |
 | **P1 聊天 MVP** | 会话/消息 DAO（幂等 UNIQUE、FK CASCADE、分页游标）；provider 配置+GET /models；SSE 解析器；OpenAI/Anthropic/Gemini 三客户端；0-chunk 指数退避重试+取消；流式聊天 UI（检查点局部刷新）；基础 markdown 渲染 | MockWebServer 单测；真 key 流式对话、打断、杀进程重启续读 |
 | **P2 会话能力** | 助手编辑 tabs、provider 多 key/分组、模型选择、工具调用/部件可视化、分页、quick phrase/world book/指令注入、drawer 全入口 | 助手切换注入生效；工具轮次可视化；长会话不卡 |
-| P3 工具与 MCP | 搜索执行器（首批 ~10 家注册表化）；MCP sse/http + OAuth(PKCE/DCR) + `psyche.kelivo://` deep link；kelivo_fetch inmemory | 搜索工具出结果；MCP 授权回跳 |
+| P3 工具与 MCP | 搜索执行器（首批 ~10 家注册表化）；MCP sse/http + OAuth(PKCE/DCR) + `psyche.memo://` deep link；memo_fetch inmemory | 搜索工具出结果；MCP 授权回跳 |
 | P4 备份兼容 | v2 zip 读写；恢复 staging→lease→receipt；settings/实体 DTO 全映射；WebDAV；S3 SigV4 最小集；本地快照；ChatBox 导入 | 旧备份恢复一致；往返一致 |
 | P5 语音/统计/翻译/QR/设置全量 | 系统 ASR+网络 TTS+系统 TTS；翻译页；统计（自绘图表）；QR；24 搜索补全；24 设置页 | 各项冒烟 |
 | P6 系统打磨 | process-text 入口；高刷；通知+前台服务+WorkManager；R8；自适应图标；签名 release | 全套回归+签名 APK 装机 |
@@ -62,15 +68,15 @@ Compose BOM `androidx.compose:compose-bom:2025.06.01`（material3 1.3.2）、mat
 
 ### P0 交付物
 - 修复死代理（注释 4 行，保留 .bak）
-- 新建 `kelivo-android/`：settings.gradle.kts、9 模块、libs.versions.toml、local.properties（sdk.dir=D:\Android\Sdk）、wrapper 指向本地 gradle-8.14-all
-- `tools/drift_schema_to_sql.py`：解析 drift_schema_v3.json fixed_sql → `core:data/assets/kelivo_schema_v3.sql`，断言 29 表/17 索引
+- 新建 `memo-android/`：settings.gradle.kts、9 模块、libs.versions.toml、local.properties（sdk.dir=D:\Android\Sdk）、wrapper 指向本地 gradle-8.14-all
+- `tools/drift_schema_to_sql.py`：解析 drift_schema_v3.json fixed_sql → `core:data/assets/memo_schema_v3.sql`，断言 29 表/17 索引
 - `SchemaV3Helper.kt` + SchemaVerifier 测试
 - 主题：theme_factory 语义（亮暗 + 动态色开关 + 自定义色板先期载入 core:ui）
 - `tools/arb_to_android.py`：ARB → strings.xml（en/zh/zh-rTW），占位符校对一轮
 - SettingsKeyRegistry + PreferenceRepository
 - app 壳：MainActivity + 空 Home + 导航骨架 + 权限清单（对齐原 Manifest）+ 图标资源拷贝（assets/app_icon*.png）
 - 模拟器：下载 commandlinetools-win（dl.google.com/android/repository/）→ `sdkmanager "platform-tools" "system-images;android-35;google_apis;x86_64"` → avdmanager 建 AVD（镜像下载 ~1.5GB）
-- keystore 生成：`keytool -genkeypair -keystore kelivo-android/keystore/kelivo-release.jks -alias kelivo`（产物 gitignore）
+- keystore 生成：`keytool -genkeypair -keystore memo-android/keystore/memo-release.jks -alias memo`（产物 gitignore）
 - 验收：AVD 冷启动装 debug APK；adb shell 校验 `PRAGMA user_version` 与表结构；主题/语言切换截图
 
 ### P1 交付物（参考 lib/core/services/api/*、lib/features/chat、lib/features/provider）

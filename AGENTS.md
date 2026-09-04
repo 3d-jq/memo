@@ -4,20 +4,29 @@
 
 Kelivo is a cross-platform LLM chat client built with Flutter, targeting iOS, Android, macOS, Windows, and Linux. Package name is `Kelivo` — imports use `package:Kelivo/...`.
 
-**Native Android port** lives in `kelivo-android/` (Kotlin + Jetpack Compose,
-AGP 8.11.1 / Gradle 8.14 / Kotlin 2.2.20, minSdk 26 / target 35). It reuses the
-Flutter drift v3 schema verbatim (see `kelivo-android/core/data/src/main/assets/kelivo_schema_v3.sql`)
-so an existing `kelivo.db` opens in place. UI brand name is **Memo** (package id
-stays `com.psyche.kelivo` for backup compatibility). Reference implementation
-for native details: **RikkaHub** (https://github.com/rikkahub/rikkahub, same
-AGPL-3.0 license; its `ai` module is the closest match to `core:llm`).
+**Memo** is a standalone native Android app (Kotlin + Jetpack Compose,
+AGP 8.11.1 / Gradle 8.14 / Kotlin 2.2.20, minSdk 26 / target 35) in
+`memo-android/`. It is **not** data-compatible with the upstream Flutter app:
+`namespace`/`applicationId` are `com.psyche.memo` and the database is
+`memo.db`. The SQLite DDL is still generated verbatim from drift v3
+(`tools/drift_schema_to_sql.py` → `core/data/src/main/assets/memo_schema_v3.sql`)
+because it is a proven schema — not for compatibility. No user-visible string,
+identifier, resource key or asset may carry the kelivo name. Reference
+implementation for native details: **RikkaHub** (https://github.com/rikkahub/rikkahub,
+same AGPL-3.0 license; its `ai` module is the closest match to `core:llm`).
 
-## Native Android port (kelivo-android)
+## Native Android port (memo-android)
 
 **Golden rule (user requirement): 1:1 translation of the Flutter source — every
 screen, component, string and icon must come from the original kelivo code.
 Never invent UI/UX. The Flutter project in this repo is the source of truth;
 RikkaHub is only a reference for solving native-side issues.**
+
+1:1 covers behaviour, layout and components — **not branding or upstream
+endpoints**. Do not carry over the kelivo name, its GitHub/Discord/afdian links,
+the `kelivo.psycheas.top` update/sponsor/tools endpoints, or upstream-branded
+seed entries; comment references to Flutter source paths (`mirrors kelivo's
+_iosNavRow`) stay as-is because they are provenance, not UI text.
 
 Already aligned (committed, quality-gate green):
 - Top bar: list icon + title + model subtitle + Map (mini map) + MessageCirclePlus
@@ -43,15 +52,16 @@ ChatHistoryPage, mini-map panel, tool detail cards, 24 business features
   GradleWorkerMain`).
 - Quality gate (all must pass before commit):
   ```bash
-  cd kelivo-android && bash tools/quality_gate.sh
+  cd memo-android && bash tools/quality_gate.sh
   ```
-  which runs `:app:lintDebug`, `:app:testDebugUnitTest`, `:app:assembleDebug`.
-  CI `.github/workflows/android-pr-check.yml` enforces the same plus a
-  regenerated-resources check (`tools/arb_to_android.py`, `tools/settings_keys_gen.py`).
+  which runs aggregate `lintDebug` + `testDebugUnitTest` across **all** modules,
+  `:app:assembleDebug`, then two presence checks: every module with sources must
+  have at least one test, and all four generators must produce no diff.
+  CI `.github/workflows/android-pr-check.yml` enforces the same gates.
 - Generated resources are committed and must stay in sync: ARB→strings via
-  `tools/arb_to_android.py` (brandifies `Kelivo`→`Memo`), drift schema→SQL via
-  `tools/drift_schema_to_sql.py`, palettes via `tools/palettes_gen.py`,
-  settings keys via `tools/settings_keys_gen.py`.
+  `tools/arb_to_android.py` (brandifies `Kelivo`/`kelivo`→`Memo`/`memo`), drift
+  schema→SQL via `tools/drift_schema_to_sql.py`, palettes via
+  `tools/palettes_gen.py`, settings keys via `tools/settings_keys_gen.py`.
 - Modules: `app` (UI/nav/container), `core:common`, `core:ui` (theme + l10n),
   `core:data` (SQLite DAO + settings), `core:llm` (OkHttp SSE + OpenAI/Claude/
   Gemini clients), `feature:*` (assistant/chat/settings/utility — skeleton so far).

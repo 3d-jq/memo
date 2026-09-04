@@ -65,12 +65,13 @@ internationalization.md
 /skills-lock.json
 /.scratch/
 /.grok/
+.workbuddy_tmp_*
 
-# kelivo-android (native port) build artifacts
-kelivo-android/build/
-kelivo-android/.gradle/
-kelivo-android/.kotlin/
-kelivo-android/local.properties
-kelivo-android/keystore.properties
-kelivo-android/keystore/
-kelivo-android/**/*.apk
+# memo-android (native port) build artifacts
+memo-android/build/
+memo-android/.gradle/
+memo-android/.kotlin/
+memo-android/local.properties
+memo-android/keystore.properties
+memo-android/keystore/
+memo-android/**/*.apk
