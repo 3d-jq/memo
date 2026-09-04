@@ -57,6 +57,10 @@ fun DisplaySettingsScreen(
     onOpenChatItemDisplay: () -> Unit,
     onOpenRendering: () -> Unit,
     onOpenBehavior: () -> Unit,
+    onOpenImage: () -> Unit,
+    onOpenMessageStyle: () -> Unit,
+    onOpenAutoRetry: () -> Unit,
+    onOpenHaptics: () -> Unit,
     onBack: () -> Unit,
 ) {
     var languageSheetVisible by remember { mutableStateOf(false) }
@@ -132,25 +136,25 @@ fun DisplaySettingsScreen(
                 SettingsRow(
                     Lucide.Image,
                     stringResource(UiR.string.image_settings_page_title),
-                    onTap = {},
+                    onTap = onOpenImage,
                 )
                 DividerRow()
                 SettingsRow(
                     Lucide.MessageSquare,
                     stringResource(UiR.string.message_style_settings_page_title),
-                    onTap = {},
+                    onTap = onOpenMessageStyle,
                 )
                 DividerRow()
                 SettingsRow(
                     Lucide.RefreshCw,
                     stringResource(UiR.string.settings_page_auto_retry),
-                    onTap = {},
+                    onTap = onOpenAutoRetry,
                 )
                 DividerRow()
                 SettingsRow(
                     Lucide.Vibrate,
                     stringResource(UiR.string.display_settings_page_haptics_settings_title),
-                    onTap = {},
+                    onTap = onOpenHaptics,
                 )
                 DividerRow()
                 // L200-231: Android-only background chat row, detail = mode

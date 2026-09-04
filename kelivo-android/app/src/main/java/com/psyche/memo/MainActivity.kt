@@ -30,6 +30,10 @@ import com.psyche.memo.common.AppLocale
 import com.psyche.memo.ui.DisplaySettingsScreen
 import com.psyche.memo.ui.HomeScreen
 import com.psyche.memo.ui.ChatHistoryScreen
+import com.psyche.memo.ui.ImageSettingsScreen
+import com.psyche.memo.ui.MessageStyleSettingsScreen
+import com.psyche.memo.ui.AutoRetrySettingsScreen
+import com.psyche.memo.ui.HapticsSettingsScreen
 import com.psyche.memo.ui.ChatItemDisplaySettingsScreen
 import com.psyche.memo.ui.RenderingSettingsScreen
 import com.psyche.memo.ui.BehaviorStartupSettingsScreen
@@ -184,6 +188,30 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
+                    composable("image") {
+                        ImageSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("message_style") {
+                        MessageStyleSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("auto_retry") {
+                        AutoRetrySettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("haptics") {
+                        HapticsSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                     composable("display") {
                         DisplaySettingsScreen(
                             container = container,
@@ -192,6 +220,10 @@ private fun AppThemeAndContent(
                             onOpenChatItemDisplay = { navController.navigate("chat_item_display") },
                             onOpenRendering = { navController.navigate("rendering") },
                             onOpenBehavior = { navController.navigate("behavior") },
+                            onOpenImage = { navController.navigate("image") },
+                            onOpenMessageStyle = { navController.navigate("message_style") },
+                            onOpenAutoRetry = { navController.navigate("auto_retry") },
+                            onOpenHaptics = { navController.navigate("haptics") },
                             onBack = { navController.popBackStack() },
                         )
                     }
