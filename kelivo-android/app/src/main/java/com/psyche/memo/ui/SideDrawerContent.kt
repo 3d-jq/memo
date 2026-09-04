@@ -415,11 +415,11 @@ fun SideDrawerContent(
                 },
             )
             }
-        } else
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 10.dp, top = 4.dp, end = 10.dp, bottom = 16.dp),
-        ) {
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(start = 10.dp, top = 4.dp, end = 10.dp, bottom = 16.dp),
+            ) {
             if (isFilteredEmpty) {
                 item(key = "empty") {
                     val emptyText = if (query.isNotEmpty()) {
@@ -531,6 +531,7 @@ fun SideDrawerContent(
                     }
                 }
             }
+        }
         }
 
         if (selectionMode) {
