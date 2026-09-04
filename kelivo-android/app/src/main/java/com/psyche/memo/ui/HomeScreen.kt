@@ -389,6 +389,9 @@ fun ChatContent(
 
     val cs = MaterialTheme.colorScheme
     var showModelSheet by remember { mutableStateOf(false) }
+    var showMiniMap by remember { mutableStateOf(false) }
+    val timelineListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     // Model choices from provider_rows payloads (kelivo showModelSelectSheet).
     val modelOptions = remember(container) {
@@ -455,7 +458,11 @@ fun ChatContent(
             }
             // Actions (memo mobile order, size/minSize from IosIconButton):
             // mini-map (22px icon) + new-chat / temporary-chat toggle (22px).
-            IconButton(onClick = { /* mini map */ }, modifier = Modifier.size(44.dp)) {
+            // home_page.dart L1099-1102: empty conversation -> return, no sheet.
+            IconButton(
+                onClick = { if (messages.isNotEmpty()) showMiniMap = true },
+                modifier = Modifier.size(44.dp),
+            ) {
                 Icon(
                     Lucide.Map,
                     contentDescription = UIStrings.miniMapTooltip(),
@@ -523,6 +530,7 @@ fun ChatContent(
             }
         } else {
             LazyColumn(
+                state = timelineListState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     horizontal = 16.dp, vertical = 8.dp,
@@ -554,7 +562,32 @@ fun ChatContent(
             },
             onDismiss = { showModelSheet = false },
         )
-    }
+
+    if (showMiniMap) {
+        MiniMapSheet(
+            // UiMessage -> ChatMessage projection (mini map only reads
+            // id/role/parts, matching _buildPairs' usage).
+            messages = messages.map { m ->
+                com.psyche.memo.data.model.ChatMessage(
+                    id = m.id,
+                    role = m.role,
+                    parts = m.parts,
+                    timestamp = 0L,
+                    conversationId = "",
+                    groupId = "",
+                    messageOrder = 0,
+                )
+            },
+            onDismiss = { showMiniMap = false },
+            onJumpToMessage = { id ->
+                showMiniMap = false
+                val idx = messages.indexOfFirst { it.id == id }
+                if (idx >= 0) coroutineScope.launch {
+                    timelineListState.animateScrollToItem(idx)
+                }
+            },
+        )
+    }    }
 }
 
 @Composable

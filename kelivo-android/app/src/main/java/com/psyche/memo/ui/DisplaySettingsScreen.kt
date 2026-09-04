@@ -22,6 +22,19 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Languages
+import com.composables.icons.lucide.MessageCircleMore
+import com.composables.icons.lucide.LetterText
+import com.composables.icons.lucide.Eclipse
+import com.composables.icons.lucide.Image
+import com.composables.icons.lucide.MessageSquare
+import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.Vibrate
+import com.composables.icons.lucide.Monitor
+import com.composables.icons.lucide.Type
+import com.composables.icons.lucide.Code
+import com.composables.icons.lucide.CaseSensitive
+import com.composables.icons.lucide.ArrowDown
+import com.composables.icons.lucide.RectangleHorizontal
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Palette
 import com.psyche.memo.AppContainerImpl
@@ -91,6 +104,96 @@ fun DisplaySettingsScreen(
                     stringResource(UiR.string.display_settings_page_language_title),
                     detailText = stringResource(languageLabelRes(appLocale)),
                     onTap = { languageSheetVisible = true },
+                )
+                DividerRow()
+                // 以下行序与图标逐一对照 display_settings_page.dart L112-556。
+                // 子页内容按批次移植：本批先呈现主屏全量行（结构 1:1）。
+                SettingsRow(
+                    Lucide.MessageCircleMore,
+                    stringResource(UiR.string.display_settings_page_chat_item_display_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.LetterText,
+                    stringResource(UiR.string.display_settings_page_rendering_settings_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.Eclipse,
+                    stringResource(UiR.string.display_settings_page_behavior_startup_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.Image,
+                    stringResource(UiR.string.image_settings_page_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.MessageSquare,
+                    stringResource(UiR.string.message_style_settings_page_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.RefreshCw,
+                    stringResource(UiR.string.settings_page_auto_retry),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.Vibrate,
+                    stringResource(UiR.string.display_settings_page_haptics_settings_title),
+                    onTap = {},
+                )
+                DividerRow()
+                // L200-231: Android-only background chat row, detail = mode
+                // label (移植版尚无后台会话能力，默认 Off —— 与
+                // AndroidBackgroundChatMode.off 的 l10n 一致)。
+                SettingsRow(
+                    Lucide.Monitor,
+                    stringResource(UiR.string.display_settings_page_android_background_chat_title),
+                    detailText = stringResource(UiR.string.android_background_option_off),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.Type,
+                    stringResource(UiR.string.display_settings_page_app_font_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.Code,
+                    stringResource(UiR.string.display_settings_page_code_font_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.CaseSensitive,
+                    stringResource(UiR.string.display_settings_page_chat_font_size_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.ArrowDown,
+                    stringResource(UiR.string.display_settings_page_auto_scroll_idle_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.Image,
+                    stringResource(UiR.string.display_settings_page_chat_background_mask_title),
+                    onTap = {},
+                )
+                DividerRow()
+                SettingsRow(
+                    Lucide.RectangleHorizontal,
+                    stringResource(UiR.string.display_settings_page_chat_input_background_opacity_title),
+                    onTap = {},
                 )
             }
         }
