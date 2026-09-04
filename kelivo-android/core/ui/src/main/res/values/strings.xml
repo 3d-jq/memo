@@ -2689,4 +2689,9 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="world_book_title">World Book</string>
     <string name="world_book_unnamed">Unnamed World Book</string>
     <string name="world_book_unnamed_entry">Unnamed Entry</string>
+    <string name="providers_page_name_label">Name</string>
+    <string name="providers_page_host_label">API Host</string>
+    <string name="providers_page_api_key_label">API Key</string>
+    <string name="default_model_page_models_section_title">Models</string>
+    <string name="settings_page_save">Save</string>
 </resources>

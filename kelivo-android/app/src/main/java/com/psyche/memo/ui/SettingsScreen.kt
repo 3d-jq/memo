@@ -52,6 +52,7 @@ fun SettingsScreen(
     appLocale: AppLocale,
     onLocaleChange: (AppLocale) -> Unit,
     onOpenDisplay: () -> Unit,
+    onOpenProviders: () -> Unit,
     onBack: () -> Unit,
 ) {
     // Fixed top bar (like kelivo's Scaffold AppBar) so the back button never
@@ -101,7 +102,7 @@ fun SettingsScreen(
             SectionCard {
                 SettingsRow(Lucide.Boxes, stringResource(UiR.string.settings_page_default_model), onTap = {})
                 DividerRow()
-                SettingsRow(Lucide.Database, stringResource(UiR.string.settings_page_providers), onTap = {})
+                SettingsRow(Lucide.Database, stringResource(UiR.string.settings_page_providers), onTap = onOpenProviders)
                 DividerRow()
                 SettingsRow(Lucide.Search, stringResource(UiR.string.settings_page_search), onTap = {})
                 DividerRow()

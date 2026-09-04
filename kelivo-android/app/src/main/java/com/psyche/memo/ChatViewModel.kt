@@ -66,7 +66,10 @@ class ChatViewModel(
         // Start with the first configured provider and its default model;
         // leave both empty when nothing is configured (the top bar then shows
         // no model subtitle, like kelivo before a model is picked).
-        val firstProvider = container.providerConfig("openai") ?: container.providerConfig("anthropic")
+        // First enabled provider wins (providers_page order = DB order);
+        // the previous hardcoded openai/anthropic lookup missed user-added
+        // providers like LongCat.
+        val firstProvider = container.firstEnabledProviderConfig()
         if (firstProvider != null) {
             selectedProviderId.value = firstProvider.id
             selectedModelId.value = firstProvider.models.firstOrNull()

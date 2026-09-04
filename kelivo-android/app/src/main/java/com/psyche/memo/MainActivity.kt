@@ -29,6 +29,8 @@ import androidx.navigation.compose.rememberNavController
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.ui.DisplaySettingsScreen
 import com.psyche.memo.ui.HomeScreen
+import com.psyche.memo.ui.ProvidersScreen
+import com.psyche.memo.ui.ProviderEditScreen
 import com.psyche.memo.ui.ChatHistoryScreen
 import com.psyche.memo.ui.ImageSettingsScreen
 import com.psyche.memo.ui.MessageStyleSettingsScreen
@@ -148,6 +150,7 @@ private fun AppThemeAndContent(
                             modifier = Modifier.fillMaxSize(),
                             onOpenSettings = { navController.navigate("settings") },
                             onOpenHistory = { navController.navigate("chat_history") },
+                            onOpenProviders = { navController.navigate("providers") },
                             pendingOpenConversation = pendingOpenConversation,
                         )
                     }
@@ -167,6 +170,7 @@ private fun AppThemeAndContent(
                             appLocale = appLocale,
                             onLocaleChange = onLocaleChange,
                             onOpenDisplay = { navController.navigate("display") },
+                            onOpenProviders = { navController.navigate("providers") },
                             onBack = { navController.popBackStack() },
                         )
                     }
@@ -209,6 +213,22 @@ private fun AppThemeAndContent(
                     composable("haptics") {
                         HapticsSettingsScreen(
                             container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("providers") {
+                        ProvidersScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenProvider = { pid ->
+                                navController.navigate(if (pid == null) "provider_edit" else "provider_edit?pid=$pid")
+                            },
+                        )
+                    }
+                    composable("provider_edit?pid={pid}") { entry ->
+                        ProviderEditScreen(
+                            container = container,
+                            providerId = entry.arguments?.getString("pid"),
                             onBack = { navController.popBackStack() },
                         )
                     }

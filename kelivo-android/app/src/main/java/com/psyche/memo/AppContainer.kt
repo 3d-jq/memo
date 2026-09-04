@@ -71,6 +71,20 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         )
     }
 
+    /** First enabled provider from provider_rows (DB order). */
+    fun firstEnabledProviderConfig(): com.psyche.memo.data.model.ProviderConfig? =
+        com.psyche.memo.data.db.PayloadEntityDao(database.readableDatabase, "provider_rows", primaryKey = "provider_key")
+            .getAll()
+            .mapNotNull { row ->
+                runCatching {
+                    com.psyche.memo.data.model.ProviderConfig.fromJsonString(
+                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
+                        row.payload,
+                    )
+                }.getOrNull()
+            }
+            .firstOrNull { it.enabled }
+
     fun apiKeyFor(providerId: String): String? =
         providerConfig(providerId)?.effectiveApiKey()
             ?: appContext.getSharedPreferences("memo_providers", Context.MODE_PRIVATE)

@@ -2689,4 +2689,9 @@
     <string name="world_book_title">世界书</string>
     <string name="world_book_unnamed">未命名世界书</string>
     <string name="world_book_unnamed_entry">未命名条目</string>
+    <string name="providers_page_name_label">名称</string>
+    <string name="providers_page_host_label">API 地址</string>
+    <string name="providers_page_api_key_label">API 密钥</string>
+    <string name="default_model_page_models_section_title">模型</string>
+    <string name="settings_page_save">保存</string>
 </resources>
