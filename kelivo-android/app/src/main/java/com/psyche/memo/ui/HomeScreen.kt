@@ -4,11 +4,17 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +32,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -74,6 +81,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -81,11 +90,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.psyche.memo.AppContainerImpl
@@ -100,6 +112,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Home screen mirroring the Kelivo mobile layout:
@@ -115,6 +128,20 @@ fun HomeScreen(
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var drawerOpen by remember { mutableStateOf(false) }
+    val drawerWidth = LocalConfiguration.current.screenWidthDp.dp * 0.75f
+    val drawerWidthPx = with(LocalDensity.current) { drawerWidth.toPx() }
+    // Continuous-drag layer (Kelivo InteractiveDrawer): the chat content
+    // slides right and the drawer sits flush beside it. The gesture detector
+    // is hand-written so plain taps are never consumed (child clickables
+    // keep working) — full-screen horizontal drags open/close the drawer.
+    val contentOffsetPx = remember { mutableFloatStateOf(0f) }
+    val dragVelocityPx = remember { mutableFloatStateOf(0f) }
+    val lastMoveUptime = remember { mutableLongStateOf(0L) }
+    var dragJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    // Drawer composed only while open/dragging/animating; unmounted fully
+    // closed so it can never intercept taps aimed at the chat.
+    var presenting by remember { mutableStateOf(false) }
 
     var selectedConversationId by remember { mutableStateOf<String?>(null) }
     var temporaryActive by remember { mutableStateOf(false) }
@@ -178,6 +205,31 @@ fun HomeScreen(
         }
     }
 
+    fun settleDrawer(open: Boolean, velocityPx: Float = 0f) {
+        presenting = true
+        dragJob?.cancel()
+        dragJob = scope.launch {
+            androidx.compose.animation.core.animate(
+                initialValue = contentOffsetPx.floatValue,
+                targetValue = if (open) drawerWidthPx else 0f,
+                initialVelocity = velocityPx,
+                animationSpec = androidx.compose.animation.core.spring(
+                    dampingRatio = 1f,
+                    stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
+                ),
+            ) { value, _ -> contentOffsetPx.floatValue = value }
+            if (!open) {
+                presenting = false
+                contentOffsetPx.floatValue = 0f
+            }
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(drawerOpen, drawerWidthPx) {
+        settleDrawer(drawerOpen)
+    }
+    BackHandler(enabled = drawerOpen) { drawerOpen = false }
+
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (selectedConversationId == null) {
             val latest = container.conversationDao.getAll().firstOrNull()
@@ -189,57 +241,105 @@ fun HomeScreen(
         }
     }
 
-    // Material drawer (Rikkahub-identical): official component — edge swipe,
-    // drag-to-close, scrim tap and back-button all handled by the framework.
-    // 75% width + 12% scrim + flat panel to match Kelivo's proportions.
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        modifier = modifier,
-        scrimColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-        drawerContent = {
-            ModalDrawerSheet(
-                drawerState = drawerState,
-                drawerContainerColor = MaterialTheme.colorScheme.surface,
-                drawerShape = RoundedCornerShape(0.dp),
-                drawerTonalElevation = 0.dp,
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                modifier = Modifier.width(
-                    LocalConfiguration.current.screenWidthDp.dp * 0.75f,
+    // Kelivo InteractiveDrawer (continuous look): chat content slides right
+    // and the drawer sits flush beside it (no overlap). Full-screen horizontal
+    // drag toggles; taps pass through untouched (hand-written detector).
+    BackHandler(enabled = drawerOpen) { drawerOpen = false }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .clipToBounds(),
+    ) {
+        // Chat content: slides right while the drawer opens (layer translate,
+        // never recomposes), then sits flush beside the drawer.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = contentOffsetPx.floatValue }
+                .drawerDragGesture(
+                    widthPx = drawerWidthPx,
+                    contentOffsetPx = contentOffsetPx,
+                    velocityPx = dragVelocityPx,
+                    lastUptimeMillis = lastMoveUptime,
+                    onPresent = { presenting = true },
+                    onSettle = { open, vx ->
+                        drawerOpen = open
+                        settleDrawer(open, velocityPx = vx)
+                    },
                 ),
+        ) {
+            ChatContent(
+                container = container,
+                conversationId = if (temporaryActive) Conversation.TEMPORARY_ID
+                else selectedConversationId ?: Conversation.TEMPORARY_ID,
+                onOpenDrawer = { drawerOpen = true },
+                onNew = ::handleTopBarAction,
+                newActionToggleable = temporaryActive || currentIsEmpty(),
+                modifier = modifier,
+                isTemporary = temporaryActive,
+            )
+            // 12% scrim, alpha driven in the graphics layer (no recomposition).
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val px = contentOffsetPx.floatValue
+                        alpha = if (drawerWidthPx > 0f) 0.12f * px / drawerWidthPx else 0f
+                    }
+                    .background(MaterialTheme.colorScheme.onSurface)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            val up = waitForUpOrCancellation()
+                            if (up != null && contentOffsetPx.floatValue > 1f) {
+                                drawerOpen = false
+                            }
+                        }
+                    },
+            )
+        }
+        // Drawer: layout-offset so the touch region follows the panel.
+        if (presenting) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .fillMaxHeight()
+                    .width(drawerWidth)
+                    .offset {
+                        IntOffset(
+                            (contentOffsetPx.floatValue - drawerWidthPx).roundToInt(),
+                            0,
+                        )
+                    }
+                    .background(MaterialTheme.colorScheme.surface)
+                    .drawerDragGesture(
+                        widthPx = drawerWidthPx,
+                        contentOffsetPx = contentOffsetPx,
+                        velocityPx = dragVelocityPx,
+                        lastUptimeMillis = lastMoveUptime,
+                        onPresent = {},
+                        onSettle = { open, vx ->
+                            drawerOpen = open
+                            settleDrawer(open, velocityPx = vx)
+                        },
+                    ),
             ) {
                 SideDrawerContent(
                     container = container,
                     selectedId = selectedConversationId,
                     onSelect = { id ->
                         selectedConversationId = id
-                        scope.launch { drawerState.close() }
+                        drawerOpen = false
                     },
                     onNew = {
                         newConversation()
-                        scope.launch { drawerState.close() }
+                        drawerOpen = false
                     },
                     onOpenSettings = onOpenSettings,
                     onCurrentDeleted = ::onCurrentDeleted,
                 )
             }
-        },
-    ) {
-        // Opaque page background so the window never shows through.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface),
-        ) {
-            ChatContent(
-                container = container,
-                conversationId = if (temporaryActive) Conversation.TEMPORARY_ID
-                else selectedConversationId ?: Conversation.TEMPORARY_ID,
-                onOpenDrawer = { scope.launch { drawerState.open() } },
-                onNew = ::handleTopBarAction,
-                newActionToggleable = temporaryActive || currentIsEmpty(),
-                modifier = modifier,
-                isTemporary = temporaryActive,
-            )
         }
     }
 }
@@ -677,4 +777,59 @@ private fun InputIcon(
 private fun timeStr(millis: Long): String {
     val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     return fmt.format(Date(millis))
+}
+
+
+/**
+ * Horizontal drag detector that never consumes plain taps: events flow until
+ * the horizontal touch slop is exceeded, then the drag is consumed and the
+ * drawer offset follows the finger. A plain tap (no slop) is left entirely
+ * to the child clickables.
+ */
+private fun Modifier.drawerDragGesture(
+    widthPx: Float,
+    contentOffsetPx: androidx.compose.runtime.MutableFloatState,
+    velocityPx: androidx.compose.runtime.MutableFloatState,
+    lastUptimeMillis: androidx.compose.runtime.MutableLongState,
+    onPresent: () -> Unit,
+    onSettle: (open: Boolean, velocityPx: Float) -> Unit,
+): Modifier = pointerInput(widthPx) {
+    val slopPx = viewConfiguration.touchSlop
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        velocityPx.floatValue = 0f
+        var pastSlop = false
+        var totalDx = 0f
+        var lastUptime = down.uptimeMillis
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull() ?: break
+            if (change.changedToUp()) break
+            if (change.isConsumed) break
+            val dx = change.positionChange().x
+            if (!pastSlop) {
+                totalDx += dx
+                if (kotlin.math.abs(totalDx) > slopPx) {
+                    pastSlop = true
+                    onPresent()
+                }
+            }
+            if (pastSlop) {
+                change.consume()
+                contentOffsetPx.floatValue =
+                    (contentOffsetPx.floatValue + dx).coerceIn(0f, widthPx)
+                val dtMs = (change.uptimeMillis - lastUptimeMillis.longValue).coerceIn(1L, 66L)
+                velocityPx.floatValue = dx / dtMs * 1000f
+                lastUptimeMillis.longValue = change.uptimeMillis
+            } else {
+                lastUptimeMillis.longValue = change.uptimeMillis
+            }
+        }
+        if (pastSlop) {
+            val vx = velocityPx.floatValue
+            val open = if (kotlin.math.abs(vx) >= 365f) vx > 0f
+            else contentOffsetPx.floatValue > widthPx / 2f
+            onSettle(open, vx)
+        }
+    }
 }
