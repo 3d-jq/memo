@@ -32,6 +32,7 @@ import com.psyche.memo.ui.HomeScreen
 import com.psyche.memo.ui.ChatHistoryScreen
 import com.psyche.memo.ui.ChatItemDisplaySettingsScreen
 import com.psyche.memo.ui.RenderingSettingsScreen
+import com.psyche.memo.ui.BehaviorStartupSettingsScreen
 import com.psyche.memo.ui.SettingsScreen
 import com.psyche.memo.ui.locale.withAppLocale
 import com.psyche.memo.ui.theme.MemoTheme
@@ -177,6 +178,12 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
+                    composable("behavior") {
+                        BehaviorStartupSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                     composable("display") {
                         DisplaySettingsScreen(
                             container = container,
@@ -184,6 +191,7 @@ private fun AppThemeAndContent(
                             onLocaleChange = onLocaleChange,
                             onOpenChatItemDisplay = { navController.navigate("chat_item_display") },
                             onOpenRendering = { navController.navigate("rendering") },
+                            onOpenBehavior = { navController.navigate("behavior") },
                             onBack = { navController.popBackStack() },
                         )
                     }

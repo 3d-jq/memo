@@ -340,3 +340,15 @@ fun SettingsSectionCard(content: @Composable () -> Unit) {
             .padding(vertical = 4.dp),
     ) { content() }
 }
+
+
+/** AppSemanticColors.surfaceCard（AppSemanticColors.kt L29）。 */
+internal fun androidx.compose.material3.ColorScheme.surfaceCardColorCompat(): androidx.compose.ui.graphics.Color {
+    val lum = 0.2126f * surface.red + 0.7152f * surface.green + 0.0722f * surface.blue
+    val dark = lum < 0.5f
+    return androidx.compose.ui.graphics.lerp(
+        surface,
+        androidx.compose.ui.graphics.Color.White,
+        if (dark) 0.10f else 0.96f,
+    )
+}

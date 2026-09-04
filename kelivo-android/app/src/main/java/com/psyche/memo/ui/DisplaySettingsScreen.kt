@@ -56,6 +56,7 @@ fun DisplaySettingsScreen(
     onLocaleChange: (AppLocale) -> Unit,
     onOpenChatItemDisplay: () -> Unit,
     onOpenRendering: () -> Unit,
+    onOpenBehavior: () -> Unit,
     onBack: () -> Unit,
 ) {
     var languageSheetVisible by remember { mutableStateOf(false) }
@@ -125,7 +126,7 @@ fun DisplaySettingsScreen(
                 SettingsRow(
                     Lucide.Eclipse,
                     stringResource(UiR.string.display_settings_page_behavior_startup_title),
-                    onTap = {},
+                    onTap = onOpenBehavior,
                 )
                 DividerRow()
                 SettingsRow(
