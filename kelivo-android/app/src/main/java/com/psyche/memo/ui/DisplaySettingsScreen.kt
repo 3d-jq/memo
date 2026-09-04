@@ -54,6 +54,7 @@ fun DisplaySettingsScreen(
     container: AppContainerImpl,
     appLocale: AppLocale,
     onLocaleChange: (AppLocale) -> Unit,
+    onOpenChatItemDisplay: () -> Unit,
     onBack: () -> Unit,
 ) {
     var languageSheetVisible by remember { mutableStateOf(false) }
@@ -111,7 +112,7 @@ fun DisplaySettingsScreen(
                 SettingsRow(
                     Lucide.MessageCircleMore,
                     stringResource(UiR.string.display_settings_page_chat_item_display_title),
-                    onTap = {},
+                    onTap = onOpenChatItemDisplay,
                 )
                 DividerRow()
                 SettingsRow(

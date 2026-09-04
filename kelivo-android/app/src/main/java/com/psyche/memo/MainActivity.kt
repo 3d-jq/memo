@@ -30,6 +30,7 @@ import com.psyche.memo.common.AppLocale
 import com.psyche.memo.ui.DisplaySettingsScreen
 import com.psyche.memo.ui.HomeScreen
 import com.psyche.memo.ui.ChatHistoryScreen
+import com.psyche.memo.ui.ChatItemDisplaySettingsScreen
 import com.psyche.memo.ui.SettingsScreen
 import com.psyche.memo.ui.locale.withAppLocale
 import com.psyche.memo.ui.theme.MemoTheme
@@ -163,11 +164,18 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
+                    composable("chat_item_display") {
+                        ChatItemDisplaySettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                     composable("display") {
                         DisplaySettingsScreen(
                             container = container,
                             appLocale = appLocale,
                             onLocaleChange = onLocaleChange,
+                            onOpenChatItemDisplay = { navController.navigate("chat_item_display") },
                             onBack = { navController.popBackStack() },
                         )
                     }
