@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Kelivo</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+		<string>zh-Hant</string>
+	</array>
+	<key>CFBundleName</key>
+	<string>kelivo</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>psyche.kelivo.oauth-return</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>kelivo</string>
+				<string>psyche.kelivo</string>
+			</array>
+		</dict>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>psyche.kelivo.background-generation.refresh</string>
+		<string>psyche.kelivo.background-generation.processing</string>
+	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Kelivo 需要读取您选择的健康数据，以便生成健康活动摘要。摘要可能会发送给您选择的 AI 服务以生成回答。 / Kelivo needs to read the health data you choose so it can build an activity summary. That summary may be sent to the AI provider you selected to generate answers.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Kelivo 不会写入健康数据。此说明仅用于满足系统对 HealthKit 的要求。 / Kelivo does not write health data. This description is required by HealthKit.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Kelivo 需要获取您的位置，以便提供当前位置和天气信息。位置信息可能会发送给您选择的 AI 服务以生成回答。 / Kelivo needs your location to provide current location and weather. Location data may be sent to the AI provider you selected to generate answers.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Kelivo 需要访问提醒事项，以便在您确认后查询、创建和完成提醒。提醒内容可能会发送给您选择的 AI 服务以生成回答。 / Kelivo needs reminders access so it can query, create, and complete reminders after you confirm. Reminder content may be sent to the AI provider you selected to generate answers.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Kelivo 需要访问提醒事项，以便在您确认后查询、创建和完成提醒。提醒内容可能会发送给您选择的 AI 服务以生成回答。 / Kelivo needs reminders access so it can query, create, and complete reminders after you confirm. Reminder content may be sent to the AI provider you selected to generate answers.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Kelivo 需要访问日历，以便 AI 助手在您授权后查询和创建日程；数据仅在设备上处理，我们不会收集这些信息。 / Kelivo needs calendar access so the AI assistant can query and create events when you enable the calendar tools; data is processed on-device and Kelivo does not collect this information.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Kelivo 需要访问日历，以便 AI 助手在您授权后查询和创建日程；数据仅在设备上处理，我们不会收集这些信息。 / Kelivo needs calendar access so the AI assistant can query and create events when you enable the calendar tools; data is processed on-device and Kelivo does not collect this information.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Kelivo 需要使用相机拍摄照片，以便您将图片发送给 AI 助手进行分析。您可以选择是否上传照片。 / Kelivo uses the camera to capture photos that you can share with AI assistants for analysis. Your photo may be uploaded by your choice.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Kelivo 使用麦克风录制您主动提交的语音并转换为文字；我们不会收集这些信息。 / Kelivo uses the microphone to record audio you choose to submit for transcription; Kelivo does not collect this information.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Kelivo 使用系统语音识别将您主动录制的语音转换为文字。您的数据由系统处理；我们不会收集这些信息。 / Kelivo uses system speech recognition to turn audio you choose to record into text. Your data is processed by the system; Kelivo does not collect this information.</string>
+        <key>NSPhotoLibraryAddUsageDescription</key>
+        <string>允许保存图片到相册，您的数据将保存在本地。/ Allow saving images to your photo library.Your data will be saved locally.</string>
+        <key>NSPhotoLibraryUsageDescription</key>
+	<string>允许访问相册以选择头像图片 / Allow access to your photos to pick an avatar.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+    <true/>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIStatusBarHidden</key>
+	<false/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>io.flutter.embedded_views_preview</key>
+	<true/>
+</dict>
+</plist>

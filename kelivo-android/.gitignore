@@ -1,0 +1,18 @@
+# Build outputs
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+
+# Local config
+local.properties
+keystore.properties
+
+# Signing keystore (generated, never commit)
+keystore/
+
+# IDE
+.idea/
+*.iml
+.DS_Store

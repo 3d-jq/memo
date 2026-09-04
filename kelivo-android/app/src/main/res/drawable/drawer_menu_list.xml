@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Custom three-bar drawer icon (user request): staggered widths
+     20 -> 13 -> 6.5, rounded ends, 20x16. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="16dp"
+    android:viewportWidth="20"
+    android:viewportHeight="16">
+    <path
+        android:fillColor="#FF202020"
+        android:pathData="M1.1,0 H18.9 A1.1,1.1 0 0 1 20,1.1 A1.1,1.1 0 0 1 18.9,2.2 H1.1 A1.1,1.1 0 0 1 0,1.1 A1.1,1.1 0 0 1 1.1,0 Z" />
+    <path
+        android:fillColor="#FF202020"
+        android:pathData="M1.1,6.9 H11.9 A1.1,1.1 0 0 1 13,8 A1.1,1.1 0 0 1 11.9,9.1 H1.1 A1.1,1.1 0 0 1 0,8 A1.1,1.1 0 0 1 1.1,6.9 Z" />
+    <path
+        android:fillColor="#FF202020"
+        android:pathData="M1.1,13.8 H5.4 A1.1,1.1 0 0 1 6.5,14.9 A1.1,1.1 0 0 1 5.4,16 H1.1 A1.1,1.1 0 0 1 0,14.9 A1.1,1.1 0 0 1 1.1,13.8 Z" />
+</vector>

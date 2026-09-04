@@ -1,0 +1,63 @@
+package com.psyche.memo.data.model
+
+/**
+ * Chat message entity — mirrors Flutter `ChatMessage`.
+ *
+ * Text body is derived from [TextPart]s in order (same as Dart's `content`).
+ * Versioning: groupId identifies a message thread; version starts at 0 and
+ * increments for regenerations.
+ */
+class ChatMessage(
+    val id: String,
+    val role: String,
+    var parts: List<MessagePart>,
+    val timestamp: Long,
+    val modelId: String? = null,
+    val providerId: String? = null,
+    val totalTokens: Int? = null,
+    val conversationId: String,
+    var isStreaming: Boolean = false,
+    val reasoningStartAt: Long? = null,
+    val reasoningFinishedAt: Long? = null,
+    val translation: String? = null,
+    val reasoningSegmentsJson: String? = null,
+    val groupId: String,
+    var version: Int = 0,
+    val promptTokens: Int? = null,
+    val completionTokens: Int? = null,
+    val cachedTokens: Int? = null,
+    val durationMs: Long? = null,
+    val updatedAt: Long? = null,
+    val messageOrder: Int,
+) {
+    /** Concatenation of every TextPart in order. */
+    val content: String
+        get() = parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+
+    companion object {
+        fun newId(): String = java.util.UUID.randomUUID().toString()
+
+        /**
+         * Content-only rewrite preserving part ordinals: first TextPart gets
+         * [newContent], later TextParts are skipped; non-text parts keep place.
+         * No TextPart → prepends one. Mirrors Dart partsWithReplacedText.
+         */
+        fun partsWithReplacedText(original: List<MessagePart>, newContent: String): List<MessagePart> {
+            var replaced = false
+            val out = ArrayList<MessagePart>(original.size + 1)
+            for (part in original) {
+                if (part is TextPart) {
+                    if (!replaced) {
+                        out.add(TextPart(newContent))
+                        replaced = true
+                    }
+                    // skip further TextParts
+                } else {
+                    out.add(part)
+                }
+            }
+            if (!replaced) out.add(0, TextPart(newContent))
+            return out
+        }
+    }
+}
