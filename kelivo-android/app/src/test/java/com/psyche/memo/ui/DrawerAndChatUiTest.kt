@@ -91,6 +91,7 @@ class DrawerAndChatUiTest {
                     onSelect = {},
                     onNew = {},
                     onOpenSettings = {},
+                    onOpenHistory = {},
                     onCurrentDeleted = {},
                 )
             }
@@ -123,6 +124,7 @@ class DrawerAndChatUiTest {
                     onSelect = {},
                     onNew = {},
                     onOpenSettings = {},
+                    onOpenHistory = {},
                     onCurrentDeleted = {},
                     forceSelectionMode = true,
                 )

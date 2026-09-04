@@ -29,6 +29,7 @@ import androidx.navigation.compose.rememberNavController
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.ui.DisplaySettingsScreen
 import com.psyche.memo.ui.HomeScreen
+import com.psyche.memo.ui.ChatHistoryScreen
 import com.psyche.memo.ui.SettingsScreen
 import com.psyche.memo.ui.locale.withAppLocale
 import com.psyche.memo.ui.theme.MemoTheme
@@ -126,6 +127,9 @@ private fun AppThemeAndContent(
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             ) {
                 val navController = rememberNavController()
+                val pendingOpenConversation = remember {
+                    androidx.compose.runtime.mutableStateOf<String?>(null)
+                }
                 NavHost(
                     navController = navController,
                     startDestination = "home",
@@ -136,6 +140,18 @@ private fun AppThemeAndContent(
                             container = container,
                             modifier = Modifier.fillMaxSize(),
                             onOpenSettings = { navController.navigate("settings") },
+                            onOpenHistory = { navController.navigate("chat_history") },
+                            pendingOpenConversation = pendingOpenConversation,
+                        )
+                    }
+                    composable("chat_history") {
+                        ChatHistoryScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenConversation = { id ->
+                                pendingOpenConversation.value = id
+                                navController.popBackStack()
+                            },
                         )
                     }
                     composable("settings") {

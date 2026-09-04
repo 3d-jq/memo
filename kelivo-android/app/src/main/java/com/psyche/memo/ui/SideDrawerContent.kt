@@ -100,6 +100,7 @@ fun SideDrawerContent(
     onSelect: (String) -> Unit,
     onNew: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenHistory: () -> Unit,
     onCurrentDeleted: () -> Unit,
     assistantName: String? = null,
     userName: String? = null,
@@ -267,7 +268,7 @@ fun SideDrawerContent(
                 contentAlignment = Alignment.Center,
             ) {
                 IconButton(
-                    onClick = { /* ChatHistoryPage not yet ported */ },
+                    onClick = onOpenHistory,
                     modifier = Modifier.size(44.dp),
                 ) {
                     Icon(

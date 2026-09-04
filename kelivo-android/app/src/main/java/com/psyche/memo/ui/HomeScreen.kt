@@ -131,6 +131,8 @@ fun HomeScreen(
     container: AppContainerImpl,
     modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit,
+    onOpenHistory: () -> Unit,
+    pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -235,6 +237,16 @@ fun HomeScreen(
         settleDrawer(drawerOpen)
     }
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
+
+    // A conversation picked in ChatHistoryScreen lands here: select it.
+    androidx.compose.runtime.LaunchedEffect(pendingOpenConversation?.value) {
+        val id = pendingOpenConversation?.value
+        if (!id.isNullOrEmpty()) {
+            selectedConversationId = id
+            temporaryActive = false
+            pendingOpenConversation.value = null
+        }
+    }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (selectedConversationId == null) {
@@ -347,6 +359,7 @@ fun HomeScreen(
                         drawerOpen = false
                     },
                     onOpenSettings = onOpenSettings,
+                    onOpenHistory = onOpenHistory,
                     onCurrentDeleted = ::onCurrentDeleted,
                 )
             }
