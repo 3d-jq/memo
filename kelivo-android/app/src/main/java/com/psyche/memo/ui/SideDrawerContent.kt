@@ -2,6 +2,14 @@
 
 package com.psyche.memo.ui
 
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.changedToUp
+import androidx.compose.ui.input.pointer.positionChange
+import com.composables.icons.lucide.Database
+import com.composables.icons.lucide.BotMessageSquare
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -25,6 +33,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +73,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -135,6 +145,12 @@ fun SideDrawerContent(
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     var deleteTarget by remember { mutableStateOf<Conversation?>(null) }
     var multiDeleteConfirm by remember { mutableStateOf(false) }
+    // Global search mode (side_drawer.dart): the search field prefix toggles
+    // it, a >=18px horizontal swipe on the field also toggles, and the list
+    // area is replaced by cross-conversation results.
+    var globalSearchMode by remember { mutableStateOf(false) }
+    var globalResults by remember { mutableStateOf<List<com.psyche.memo.data.db.MessageDao.GlobalHit>>(emptyList()) }
+    var globalHasRun by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Conversation?>(null) }
     var moveTarget by remember { mutableStateOf<Conversation?>(null) }
 
@@ -203,7 +219,35 @@ fun SideDrawerContent(
                 .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 0.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .pointerInput(Unit) {
+                        // Side_drawer.dart L2185-2227: swipe >= 18 toggles.
+                        var accumulated = 0f
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            accumulated = 0f
+                            var handled = false
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull() ?: break
+                                if (change.changedToUp()) break
+                                if (change.isConsumed) break
+                                accumulated += change.positionChange().x
+                                if (kotlin.math.abs(accumulated) >= 18f && !handled) {
+                                    handled = true
+                                    globalSearchMode = !globalSearchMode
+                                    globalHasRun = false
+                                    globalResults = emptyList()
+                                    change.consume()
+                                } else if (handled) {
+                                    change.consume()
+                                }
+                            }
+                        }
+                    }
+            ) {
                 TextField(
                     value = query,
                     onValueChange = { query = it },
@@ -213,12 +257,24 @@ fun SideDrawerContent(
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
                     leadingIcon = {
-                        Icon(
-                            Lucide.Search,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = cs.onSurface.copy(alpha = 0.6f),
-                        )
+                        // Tapping the prefix toggles global search mode
+                        // (side_drawer.dart L2270-2327: prefix is the toggle).
+                        Box(
+                            modifier = Modifier
+                                .clickable {
+                                    globalSearchMode = !globalSearchMode
+                                    globalHasRun = false
+                                    globalResults = emptyList()
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                if (globalSearchMode) Lucide.Database else Lucide.BotMessageSquare,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = cs.onSurface.copy(alpha = 0.72f),
+                            )
+                        }
                     },
                     trailingIcon = {
                         if (query.isNotEmpty()) {
@@ -249,7 +305,7 @@ fun SideDrawerContent(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = searchHint,
+                            text = if (globalSearchMode) stringResource(UiR.string.side_drawer_global_search_hint) else searchHint,
                             modifier = Modifier.padding(horizontal = 40.dp),
                             fontSize = 14.sp,
                             color = cs.onSurface.copy(alpha = 0.55f),
@@ -344,6 +400,22 @@ fun SideDrawerContent(
         // 3. Conversation list grouped by date (Pinned / Today / Yesterday /
         //    MMM d, yyyy). Section gap 8dp, tile gap 4dp, tile padding matches
         //    memo's _ChatTile (fontSize 15, weight regular).
+        if (globalSearchMode) {
+            Box(modifier = Modifier.weight(1f)) {
+            GlobalSearchResults(
+                container = container,
+                query = query,
+                results = globalResults,
+                onResults = { r, ran ->
+                    globalResults = r
+                    globalHasRun = ran
+                },
+                onOpenConversation = { id ->
+                    onSelect(id)
+                },
+            )
+            }
+        } else
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(start = 10.dp, top = 4.dp, end = 10.dp, bottom = 16.dp),
@@ -1037,5 +1109,94 @@ private fun MenuRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+
+/**
+ * 全局搜索结果区（side_drawer.dart L1188-1366 的移植）：
+ * 计数行 + 结果行（r14、标题 14sp medium + 摘要 12.5sp@65% 3 行、
+ * 命中高亮背景、tap 打开会话）。
+ */
+@Composable
+private fun GlobalSearchResults(
+    container: AppContainerImpl,
+    query: String,
+    results: List<com.psyche.memo.data.db.MessageDao.GlobalHit>,
+    onResults: (List<com.psyche.memo.data.db.MessageDao.GlobalHit>, Boolean) -> Unit,
+    onOpenConversation: (String) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    var searching by remember { mutableStateOf(false) }
+    val needle = query.trim()
+
+    LaunchedEffect(needle) {
+        if (needle.isNotEmpty()) {
+            onResults(container.messageDao.searchGlobal(needle), true)
+        }
+    }
+
+    if (needle.isEmpty()) {
+        // Pre-search: nothing (mobile branch, L1202-1205).
+        return
+    }
+    if (results.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, top = 28.dp, end = 20.dp, bottom = 0.dp),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Text(
+                text = stringResource(UiR.string.side_drawer_global_search_no_results),
+                textAlign = TextAlign.Center,
+                style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.45f)),
+            )
+        }
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Result count (L1246-1256)
+        Text(
+            text = stringResource(UiR.string.side_drawer_global_search_result_count, results.size),
+            modifier = Modifier.padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 6.dp),
+            style = TextStyle(
+                fontSize = 12.sp,
+                color = cs.onSurface.copy(alpha = 0.5f),
+                fontWeight = FontWeight.Medium,
+            ),
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, bottom = 16.dp),
+        ) {
+            items(results, key = { it.conversationId }) { result ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 2.dp)
+                        .background(cs.primary.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+                        .clickable { onOpenConversation(result.conversationId) }
+                        .padding(start = 14.dp, top = 9.dp, end = 14.dp, bottom = 9.dp),
+                ) {
+                    Text(
+                        text = result.conversationTitle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = cs.onSurface),
+                    )
+                    if (result.snippet.isNotEmpty()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = result.snippet,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(fontSize = 12.5.sp, color = cs.onSurface.copy(alpha = 0.65f)),
+                        )
+                    }
+                }
+            }
+        }
     }
 }

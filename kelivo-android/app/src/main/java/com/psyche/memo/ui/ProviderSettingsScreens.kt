@@ -83,7 +83,28 @@ fun ProvidersScreen(
 ) {
     val cs = MaterialTheme.colorScheme
     var providers by remember { mutableStateOf(loadProviders(container)) }
-    LaunchedEffect(Unit) { providers = loadProviders(container) }
+    LaunchedEffect(Unit) {
+        var current = loadProviders(container)
+        if (current.isEmpty()) {
+            // settings_provider.dart L1556-1567: seed sensible defaults on
+            // first launch (hosts from _defaultBase, keys left empty).
+            val seeds = listOf(
+                "KelivoIN" to "https://text.pollinations.ai/openai",
+                "Tensdaq" to "https://tensdaq-api.x-aio.com/v1",
+                "SiliconFlow" to "https://api.siliconflow.cn/v1",
+                "AIhubmix" to "https://aihubmix.com/v1",
+            )
+            seeds.forEachIndexed { index, (name, host) ->
+                saveProvider(
+                    container,
+                    name.lowercase(),
+                    ProviderConfig(id = name.lowercase(), enabled = true, name = name, baseUrl = host, models = emptyList()),
+                )
+            }
+            current = loadProviders(container)
+        }
+        providers = current
+    }
 
     Column(
         modifier = Modifier
@@ -210,6 +231,34 @@ fun ProviderEditScreen(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         ) {
             item {
+                if (isNew) {
+                    // add_provider_sheet.dart L49-497: three vendor templates
+                    // (OpenAI / Google / Claude) that pre-fill the API host.
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(
+                            "OpenAI" to "https://api.openai.com/v1",
+                            "Google" to "https://generativelanguage.googleapis.com/v1beta",
+                            "Claude" to "https://api.anthropic.com/v1",
+                        ).forEach { (label, host) ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(cs.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                                    .clickable { baseUrl = host },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = label,
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    style = TextStyle(fontSize = 13.sp, color = cs.onSurface),
+                                )
+                            }
+                        }
+                    }
+                }
                 LabeledField(stringResource(UiR.string.providers_page_name_label), name, { name = it })
                 LabeledField(stringResource(UiR.string.providers_page_host_label), baseUrl, { baseUrl = it })
                 LabeledField(stringResource(UiR.string.providers_page_api_key_label), apiKey, { apiKey = it }, obscure = true)

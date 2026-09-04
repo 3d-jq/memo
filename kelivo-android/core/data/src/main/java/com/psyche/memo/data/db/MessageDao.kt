@@ -93,6 +93,46 @@ class MessageDao(private val db: SQLiteDatabase) {
         }
     }
 
+    /** Row of a global search hit. */
+    data class GlobalHit(
+        val conversationId: String,
+        val conversationTitle: String,
+        val firstMatchedMessageId: String,
+        val snippet: String,
+    )
+
+    /**
+     * Cross-conversation search over message text (side_drawer global
+     * search): groups by conversation, keeps the first matched message.
+     */
+    fun searchGlobal(query: String, limit: Int = 40): List<GlobalHit> {
+        val needle = "%" + query.trim().replace("'", "''") + "%"
+        val lower = query.trim().lowercase()
+        val hits = mutableListOf<GlobalHit>()
+        db.rawQuery(
+            "SELECT c.id, c.title, m.id, p.payload FROM conversation_rows c " +
+            "JOIN message_rows m ON m.conversation_id = c.id " +
+            "JOIN message_part_rows p ON p.revision_id = m.id AND p.kind = 'text' AND p.payload LIKE ? " +
+            "WHERE c.title LIKE ? OR p.payload LIKE ? " +
+            "GROUP BY c.id ORDER BY c.updated_at DESC LIMIT ?",
+            arrayOf<String>(needle, needle, needle, limit.toString()),
+).use { cursor ->
+            while (cursor.moveToNext()) {
+                val convId = cursor.getString(0)
+                val title = cursor.getString(1) ?: ""
+                val msgId = cursor.getString(2) ?: ""
+                val rawPayload = cursor.getString(3) ?: ""
+                val sample = rawPayload.replace("\\n", " ")
+                val idx = sample.lowercase().indexOf(lower)
+                val start = maxOf(0, idx - 20)
+                val end = minOf(sample.length, idx + query.length + 40)
+                val snippet = if (idx >= 0) sample.substring(start, end) else sample.take(80)
+                hits.add(GlobalHit(convId, title, msgId, snippet))
+            }
+        }
+        return hits
+    }
+
     /** Inserts message and its parts transactionally; parts ordinal from index. */
     fun insert(message: ChatMessage) {
         db.beginTransaction()
