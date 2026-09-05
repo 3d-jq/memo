@@ -50,7 +50,7 @@ fun <T> ReorderableColumn(
                     modifier = Modifier
                         .alpha(if (isDragging) 0.95f else 1f)
                         .scale(if (isDragging) 0.98f else 1f)
-                        .longPressDraggableHandle(enabled = reorderEnabled && !isDragging),
+                        .longPressDraggableHandle(enabled = reorderEnabled),
                 ) {
                     itemContent(item, isDragging)
                 }

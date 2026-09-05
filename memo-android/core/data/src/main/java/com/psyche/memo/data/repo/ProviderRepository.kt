@@ -32,6 +32,12 @@ class ProviderRepository(
     private val providerDao = PayloadEntityDao(db, "provider_rows", primaryKey = "provider_key")
     private val groupDao = PayloadEntityDao(db, "provider_group_rows", primaryKey = "id")
 
+    init {
+        // One-time sweep of empty builtin rows left by earlier test builds
+        // (idempotent: re-running matches nothing once removed).
+        cleanupEmptyBuiltinRows()
+    }
+
     /** Base provider keys shown before any user-added config (providers_page._providers). */
     val builtinKeys: List<String> get() = BUILTIN_KEYS
 
@@ -56,6 +62,22 @@ class ProviderRepository(
 
     fun deleteConfig(key: String) {
         providerDao.delete(key)
+    }
+
+    /**
+     * Remove rows left by earlier test builds: builtin keys whose config has
+     * no API key and no models carry no user data (the virtual builtin entry
+     * already renders), so dropping them de-duplicates the list.
+     */
+    fun cleanupEmptyBuiltinRows() {
+        val builtinLower = BUILTIN_KEYS.map { it.lowercase() }.toSet()
+        for (row in providerDao.getAll()) {
+            if (row.id.lowercase() !in builtinLower) continue
+            val cfg = runCatching { ProviderConfig.fromJsonString(json, row.payload) }.getOrNull() ?: continue
+            if (cfg.apiKey.isBlank() && cfg.models.isEmpty()) {
+                providerDao.delete(row.id)
+            }
+        }
     }
 
     // ---- ordering (providers_order_v1) ----

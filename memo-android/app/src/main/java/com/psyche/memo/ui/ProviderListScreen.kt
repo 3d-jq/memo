@@ -117,8 +117,12 @@ fun ProvidersScreen(
     val selected = remember { mutableStateListOf<String>() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    // Reload on entry (add/import sheets mutate the store).
-    LaunchedEffect(Unit) { providers = loadProviders(container) }
+    // Reload on entry (add/import sheets mutate the store); first sweep drops
+    // empty builtin rows left by earlier test builds (KelivoIN / dup Tensdaq).
+    LaunchedEffect(Unit) {
+        repo.cleanupEmptyBuiltinRows()
+        providers = loadProviders(container)
+    }
 
     // Merge builtin + dynamic keys, then apply saved order (providers_page.build).
     val items: List<ProviderItem> = remember(providers, searchQuery) {
