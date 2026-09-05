@@ -48,7 +48,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Cloud
 import com.composables.icons.lucide.KeyRound
@@ -167,6 +171,8 @@ fun ProviderDetailScreen(
             if (page == 0) {
                 ConfigTab(
                     cfg = cfg,
+                    container = container,
+                    providerId = providerId,
                     onCfgChange = { cfg = it },
                 )
             } else {
@@ -223,7 +229,12 @@ fun ProviderDetailScreen(
 
 /** Config tab — settings card, credentials inputs; every edit saves instantly. */
 @Composable
-private fun ConfigTab(cfg: ProviderConfig, onCfgChange: (ProviderConfig) -> Unit) {
+private fun ConfigTab(
+    cfg: ProviderConfig,
+    container: AppContainerImpl,
+    providerId: String,
+    onCfgChange: (ProviderConfig) -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
     var showApiKey by remember { mutableStateOf(false) }
@@ -235,7 +246,53 @@ private fun ConfigTab(cfg: ProviderConfig, onCfgChange: (ProviderConfig) -> Unit
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         // Toggles card (kind-conditional rows in kelivo order).
+        val kind = cfg.classifiedKind()
+        var showKindSheet by remember { mutableStateOf(false) }
+        var showGroupSheet by remember { mutableStateOf(false) }
         SettingsSectionCard {
+            // Provider kind row (Gemini/Claude/OpenAI) with selection sheet.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showKindSheet = true }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_type_title),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = when (kind) {
+                        "gemini" -> "Gemini"
+                        "anthropic" -> "Claude"
+                        else -> "OpenAI"
+                    },
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 15.sp,
+                        color = cs.onSurface.copy(alpha = 0.6f),
+                    ),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
+            }
+            SettingsIosDivider()
+            // Group row (opens the group picker sheet).
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showGroupSheet = true }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(com.psyche.memo.ui.R.string.provider_groups_picker_title),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
+            }
+            SettingsIosDivider()
             SettingsSwitchRow(
                 icon = Lucide.Power,
                 label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_enabled_title),
@@ -249,6 +306,12 @@ private fun ConfigTab(cfg: ProviderConfig, onCfgChange: (ProviderConfig) -> Unit
                 value = cfg.multiKeyEnabled == true,
                 onToggle = { onCfgChange(cfg.copy(multiKeyEnabled = it)) },
             )
+            if (cfg.multiKeyEnabled == true) {
+                SettingsIosDivider()
+                NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_manage_keys_button)) {
+                    // MultiKeyManagerPage lands with #11.
+                }
+            }
             if (cfg.classifiedKind() == "openai") {
                 SettingsIosDivider()
                 SettingsSwitchRow(
@@ -257,6 +320,10 @@ private fun ConfigTab(cfg: ProviderConfig, onCfgChange: (ProviderConfig) -> Unit
                     value = cfg.useResponseApi == true,
                     onToggle = { onCfgChange(cfg.copy(useResponseApi = it)) },
                 )
+                SettingsIosDivider()
+                NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_balance_title)) {
+                    // ProviderBalancePage lands with #11.
+                }
             }
             if (cfg.classifiedKind() == "gemini") {
                 SettingsIosDivider()
@@ -267,6 +334,72 @@ private fun ConfigTab(cfg: ProviderConfig, onCfgChange: (ProviderConfig) -> Unit
                     onToggle = { onCfgChange(cfg.copy(vertexAI = it)) },
                 )
             }
+            if (cfg.classifiedKind() == "anthropic") {
+                SettingsIosDivider()
+                SettingsSwitchRow(
+                    icon = Lucide.Database,
+                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_claude_prompt_caching_title),
+                    value = cfg.claudePromptCachingEnabled,
+                    onToggle = { onCfgChange(cfg.copy(claudePromptCachingEnabled = it)) },
+                )
+                if (cfg.claudePromptCachingEnabled) {
+                    SettingsIosDivider()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onCfgChange(
+                                    cfg.copy(
+                                        claudePromptCachingTtl = if (cfg.claudePromptCachingTtl == "1h") "5m" else "1h",
+                                    ),
+                                )
+                            }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_claude_prompt_caching_ttl_title),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = cfg.claudePromptCachingTtl,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 15.sp,
+                                color = cs.onSurface.copy(alpha = 0.6f),
+                            ),
+                        )
+                    }
+                }
+            }
+            // Custom request + network proxy entries (#11 sub-pages).
+            SettingsIosDivider()
+            NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_custom_request_title)) {
+                // ProviderCustomRequestPage lands with #11.
+            }
+            SettingsIosDivider()
+            NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_network_tab)) {
+                // Network proxy page lands with #11.
+            }
+        }
+
+        // Kind selection sheet + group picker.
+        if (showKindSheet) {
+            ProviderKindSheet(
+                current = kind,
+                onSelect = { picked ->
+                    onCfgChange(cfg.copy(providerType = picked))
+                    showKindSheet = false
+                },
+                onDismiss = { showKindSheet = false },
+            )
+        }
+        if (showGroupSheet) {
+            ProviderGroupPickerSheet(
+                container = container,
+                providerKey = providerId,
+                onDismiss = { showGroupSheet = false },
+            )
         }
         Spacer(Modifier.height(12.dp))
         // Credentials.
@@ -402,6 +535,73 @@ private fun BottomTabs(
                     ),
                 )
             }
+        }
+    }
+}
+
+/** 48dp chevron nav row inside a settings card (kelivo _TactileRow variant). */
+@Composable
+private fun NavRow(label: String, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+            modifier = Modifier.weight(1f),
+        )
+        Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
+    }
+}
+
+/** Provider kind selection sheet (Gemini/Claude/OpenAI) - _showProviderKindSheet. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        dragHandle = null,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+            )
+            Spacer(Modifier.height(12.dp))
+            listOf("Gemini" to "gemini", "Claude" to "anthropic", "OpenAI" to "openai").forEach { (label, kind) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(kind) }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (current == kind) cs.primary else cs.onSurface,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (current == kind) {
+                        Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
