@@ -108,6 +108,8 @@ fun ProviderDetailScreen(
         )
     }
     var showDelete by remember { mutableStateOf(false) }
+    var showCustomRequest by remember { mutableStateOf(false) }
+    var showNetwork by remember { mutableStateOf(false) }
     var testModel by remember { mutableStateOf<String?>(null) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     val deletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_deleted_snackbar)
@@ -199,6 +201,8 @@ fun ProviderDetailScreen(
                     container = container,
                     providerId = providerId,
                     onCfgChange = { cfg = it },
+                    onOpenCustomRequest = { showCustomRequest = true },
+                    onOpenNetwork = { showNetwork = true },
                 )
             } else {
                 ModelsTab(
@@ -234,6 +238,22 @@ fun ProviderDetailScreen(
             )
             testResult = null
         }
+    }
+
+    // ---- #11 sub-pages ----
+    if (showCustomRequest) {
+        ProviderCustomRequestPage(
+            container = container,
+            providerId = providerId,
+            onBack = { showCustomRequest = false },
+        )
+    }
+    if (showNetwork) {
+        ProviderNetworkPage(
+            container = container,
+            providerId = providerId,
+            onBack = { showNetwork = false },
+        )
     }
 
     // ---- Delete confirmation: clear model refs, remove row, pop ----
@@ -276,6 +296,8 @@ private fun ConfigTab(
     container: AppContainerImpl,
     providerId: String,
     onCfgChange: (ProviderConfig) -> Unit,
+    onOpenCustomRequest: () -> Unit,
+    onOpenNetwork: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -417,11 +439,11 @@ private fun ConfigTab(
             // Custom request + network proxy entries (#11 sub-pages).
             SettingsIosDivider()
             NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_custom_request_title)) {
-                // ProviderCustomRequestPage lands with #11.
+                onOpenCustomRequest()
             }
             SettingsIosDivider()
             NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_network_tab)) {
-                // Network proxy page lands with #11.
+                onOpenNetwork()
             }
         }
 

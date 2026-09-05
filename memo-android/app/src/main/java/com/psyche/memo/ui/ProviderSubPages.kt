@@ -1,0 +1,355 @@
+package com.psyche.memo.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.ChevronLeft
+import com.composables.icons.lucide.Globe
+import com.composables.icons.lucide.Lucide
+import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.data.db.PayloadEntityDao
+import com.psyche.memo.data.model.ProviderConfig
+import com.psyche.memo.ui.theme.LocalSemanticColors
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
+import kotlinx.serialization.json.Json
+
+/**
+ * Provider sub-pages (#11) — 1:1 ports of provider_network_page.dart and
+ * provider_custom_request_page.dart: each control saves immediately through
+ * a debounced config writer (no save button), mirroring the detail page.
+ */
+private val subPageJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
+/** Shared immediate-save helper: reloads the row, applies [change], persists. */
+internal fun persistProviderConfig(
+    container: AppContainerImpl,
+    providerId: String,
+    change: (ProviderConfig) -> ProviderConfig,
+) {
+    val dao = PayloadEntityDao(container.database.writableDatabase, "provider_rows", primaryKey = "provider_key")
+    val current = dao.get(providerId)?.let {
+        runCatching { subPageJson.decodeFromString(ProviderConfig.serializer(), it.payload) }.getOrNull()
+    } ?: return
+    val next = change(current)
+    dao.upsert(providerId, subPageJson.encodeToString(ProviderConfig.serializer(), next), dao.get(providerId)?.sortOrder ?: 0)
+}
+
+/** Back-chevron + title app bar used by all provider sub-pages. */
+@Composable
+internal fun SubPageScaffold(
+    title: String,
+    onBack: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Lucide.ChevronLeft, contentDescription = "Back", tint = cs.onSurface, modifier = Modifier.size(22.dp))
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        content()
+    }
+}
+
+@Composable
+internal fun SubPageInput(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    singleLine: Boolean = true,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 13.sp,
+                color = cs.onSurface.copy(alpha = 0.8f),
+            ),
+        )
+        Spacer(Modifier.height(6.dp))
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = singleLine,
+            shape = RoundedCornerShape(12.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = semantic.surfaceCard,
+                unfocusedContainerColor = semantic.surfaceCard,
+                focusedIndicatorColor = cs.primary.copy(alpha = 0.5f),
+                unfocusedIndicatorColor = cs.outlineVariant.copy(alpha = 0.4f),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+// ------------------------------------------------------ network proxy page
+
+@Composable
+fun ProviderNetworkPage(
+    container: AppContainerImpl,
+    providerId: String,
+    onBack: () -> Unit,
+) {
+    var proxyEnabled by remember { mutableStateOf(false) }
+    var proxyType by remember { mutableStateOf("http") }
+    var proxyHost by remember { mutableStateOf("") }
+    var proxyPort by remember { mutableStateOf("8080") }
+    var proxyUsername by remember { mutableStateOf("") }
+    var proxyPassword by remember { mutableStateOf("") }
+
+    LaunchedEffect(providerId) {
+        val dao = PayloadEntityDao(container.database.readableDatabase, "provider_rows", primaryKey = "provider_key")
+        dao.get(providerId)?.let { row ->
+            runCatching { subPageJson.decodeFromString(ProviderConfig.serializer(), row.payload) }.getOrNull()
+        }?.let { cfg ->
+            proxyEnabled = cfg.proxyEnabled ?: false
+            proxyType = if (cfg.proxyType == "socks5") "socks5" else "http"
+            proxyHost = cfg.proxyHost ?: ""
+            proxyPort = cfg.proxyPort ?: "8080"
+            proxyUsername = cfg.proxyUsername ?: ""
+            proxyPassword = cfg.proxyPassword ?: ""
+        }
+    }
+
+    // Debounced immediate save.
+    LaunchedEffect(providerId) {
+        snapshotFlow { arrayOf(proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword) }
+            .debounce(400)
+            .collect {
+                persistProviderConfig(container, providerId) { cfg ->
+                    cfg.copy(
+                        proxyEnabled = proxyEnabled,
+                        proxyType = proxyType,
+                        proxyHost = proxyHost,
+                        proxyPort = proxyPort,
+                        proxyUsername = proxyUsername,
+                        proxyPassword = proxyPassword,
+                    )
+                }
+            }
+    }
+
+    SubPageScaffold(
+        title = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_network_tab),
+        onBack = onBack,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            SettingsSectionCard {
+                SettingsSwitchRow(
+                    icon = Lucide.Globe,
+                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_network_tab),
+                    value = proxyEnabled,
+                    onToggle = { proxyEnabled = it },
+                )
+            }
+            if (proxyEnabled) {
+                Spacer(Modifier.height(12.dp))
+                SubPageInput(
+                    label = stringResource(com.psyche.memo.ui.R.string.network_proxy_type),
+                    value = proxyType,
+                    onValueChange = { proxyType = it },
+                )
+                Spacer(Modifier.height(12.dp))
+                SubPageInput(
+                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_host_label),
+                    value = proxyHost,
+                    onValueChange = { proxyHost = it },
+                )
+                Spacer(Modifier.height(12.dp))
+                SubPageInput(
+                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_port_label),
+                    value = proxyPort,
+                    onValueChange = { proxyPort = it },
+                )
+                Spacer(Modifier.height(12.dp))
+                SubPageInput(
+                    label = "用户名",
+                    value = proxyUsername,
+                    onValueChange = { proxyUsername = it },
+                )
+                Spacer(Modifier.height(12.dp))
+                SubPageInput(
+                    label = "密码",
+                    value = proxyPassword,
+                    onValueChange = { proxyPassword = it },
+                )
+            }
+        }
+    }
+}
+
+// ------------------------------------------------- custom request page
+
+@Composable
+fun ProviderCustomRequestPage(
+    container: AppContainerImpl,
+    providerId: String,
+    onBack: () -> Unit,
+) {
+    var headers by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
+    var body by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
+    var loaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(providerId) {
+        val dao = PayloadEntityDao(container.database.readableDatabase, "provider_rows", primaryKey = "provider_key")
+        dao.get(providerId)?.let { row ->
+            runCatching { subPageJson.decodeFromString(ProviderConfig.serializer(), row.payload) }.getOrNull()
+        }?.let { cfg ->
+            headers = cfg.customHeaders
+            body = cfg.customBody
+        }
+        loaded = true
+    }
+
+    LaunchedEffect(loaded, headers, body) {
+        if (!loaded) return@LaunchedEffect
+        kotlinx.coroutines.delay(400)
+        persistProviderConfig(container, providerId) { cfg ->
+            cfg.copy(customHeaders = headers, customBody = body)
+        }
+    }
+
+    SubPageScaffold(
+        title = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_custom_request_title),
+        onBack = onBack,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Text(
+                text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_custom_request_description),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
+                ),
+            )
+            Spacer(Modifier.height(18.dp))
+            // Headers section.
+            Text("自定义请求头", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            headers.forEachIndexed { i, row ->
+                RequestRow(
+                    name = row["name"] ?: "",
+                    value = row["value"] ?: "",
+                    onChange = { n, v ->
+                        headers = headers.toMutableList().also { it[i] = mapOf("name" to n, "value" to v) }
+                    },
+                    onDelete = { headers = headers.toMutableList().also { it.removeAt(i) } },
+                )
+            }
+            Text(
+                text = "+",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier
+                    .clickable { headers = headers + mapOf("name" to "", "value" to "") }
+                    .padding(8.dp),
+            )
+            Spacer(Modifier.height(18.dp))
+            // Body overrides section.
+            Text("自定义请求体", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(6.dp))
+            body.forEachIndexed { i, row ->
+                RequestRow(
+                    name = row["key"] ?: "",
+                    value = row["value"] ?: "",
+                    onChange = { n, v ->
+                        body = body.toMutableList().also { it[i] = mapOf("key" to n, "value" to v) }
+                    },
+                    onDelete = { body = body.toMutableList().also { it.removeAt(i) } },
+                )
+            }
+            Text(
+                text = "+",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier
+                    .clickable { body = body + mapOf("key" to "", "value" to "") }
+                    .padding(8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RequestRow(
+    name: String,
+    value: String,
+    onChange: (String, String) -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .background(LocalSemanticColors.current.surfaceCard, RoundedCornerShape(12.dp))
+            .padding(8.dp),
+    ) {
+        SubPageInput(label = "name", value = name, onValueChange = { onChange(it, value) })
+        Spacer(Modifier.height(6.dp))
+        SubPageInput(label = "value", value = value, onValueChange = { onChange(name, it) })
+        Text(
+            text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_button),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier
+                .align(Alignment.End)
+                .clickable(onClick = onDelete)
+                .padding(6.dp),
+        )
+    }
+}
