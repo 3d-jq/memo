@@ -35,6 +35,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.lucide.icons)
+    implementation(libs.reorderable)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.commonmark)
     implementation(libs.commonmark.gfm.tables)

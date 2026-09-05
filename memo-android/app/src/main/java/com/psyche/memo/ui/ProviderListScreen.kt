@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -155,7 +156,11 @@ fun ProvidersScreen(
         selectMode = false
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
+    ) {
         // ---- AppBar ----
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
@@ -200,9 +205,21 @@ fun ProvidersScreen(
             onChanged = { searchQuery = it },
         )
 
-        // ---- List card ----
+        // ---- List card (LazyColumn clipped inside the rounded card) ----
         Box(modifier = Modifier.weight(1f)) {
-            Column(
+            val reorderEnabled = !selectMode && searchQuery.isBlank()
+            ReorderableColumn(
+                items = items,
+                keyOf = { it.key },
+                reorderEnabled = reorderEnabled,
+                onMove = { from, to ->
+                    val reorderedItems = items.toMutableList()
+                    val movedItem = reorderedItems.removeAt(from)
+                    reorderedItems.add(to, movedItem)
+                    repo.setOrder(reorderedItems.map { it.key })
+                    val cfgMap = providers.toMap()
+                    providers = reorderedItems.map { item -> item.key to (cfgMap[item.key] ?: ProviderConfig(id = item.key, name = item.name)) }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, top = 8.dp)
@@ -214,38 +231,28 @@ fun ProvidersScreen(
                         0.6.dp,
                         cs.outlineVariant.copy(alpha = if (semantic.isDark) 0.08f else 0.06f),
                         RoundedCornerShape(12.dp),
+                    ),
+                header = {
+                    item { Spacer(Modifier.height(4.dp)) }
+                },
+                footer = {
+                    item { Spacer(Modifier.height(4.dp)) }
+                },
+            ) { item, isDragging ->
+                Column {
+                    ProviderListRow(
+                        item = item,
+                        config = providers.toMap()[item.key],
+                        selectMode = selectMode,
+                        selected = selected.contains(item.key),
+                        onToggleSelect = { toggleSelect(item.key) },
+                        onOpen = {
+                            if (selectMode) toggleSelect(item.key)
+                            else onOpenProvider(item.key)
+                        },
                     )
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                val reorderEnabled = !selectMode && searchQuery.isBlank()
-                ReorderableColumn(
-                    items = items,
-                    keyOf = { it.key },
-                    onMove = { from, to ->
-                        val reorderedItems = items.toMutableList()
-                        val movedItem = reorderedItems.removeAt(from)
-                        reorderedItems.add(to, movedItem)
-                        repo.setOrder(reorderedItems.map { it.key })
-                        val cfgMap = providers.toMap()
-                        providers = reorderedItems.map { item -> item.key to (cfgMap[item.key] ?: ProviderConfig(id = item.key, name = item.name)) }
-                    },
-                ) { item, isDragging ->
-                    Column {
-                        ProviderListRow(
-                            item = item,
-                            config = providers.toMap()[item.key],
-                            selectMode = selectMode,
-                            selected = selected.contains(item.key),
-                            onToggleSelect = { toggleSelect(item.key) },
-                            onOpen = {
-                                if (selectMode) toggleSelect(item.key)
-                                else onOpenProvider(item.key)
-                            },
-                        )
-                        if (item != items.last()) DividerLine()
-                    }
+                    if (item != items.last()) DividerLine()
                 }
-                Spacer(Modifier.height(4.dp))
             }
 
             // ---- Floating selection bar ----
@@ -454,26 +461,50 @@ private fun ProviderListRow(
     }
 }
 
-/** Small provider avatar: emoji > brand asset > initial (provider_avatar.dart). */
+/** Small provider avatar — brandOrInitial path of provider_avatar.dart:
+ * known brand -> its SVG at 0.7x on a primary-a circle (dark mono logos tinted
+ * onSurface); unknown -> initial letter on primary a0.1 circle. */
 @Composable
 internal fun ProviderAvatarSmall(providerKey: String, displayName: String, size: Dp) {
     val cs = MaterialTheme.colorScheme
-    val asset = remember(providerKey, displayName) { BrandAssets.assetForName(displayName) }
-    val initial = displayName.trim().take(1).uppercase().ifEmpty { "?" }
-    Box(
-        modifier = Modifier
-            .size(size)
-            .background(cs.primary.copy(alpha = 0.15f), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = asset ?: initial,
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = (size.value * 0.42f).sp,
-                color = cs.primary,
-            ),
-            maxLines = 1,
-        )
+    val semantic = LocalSemanticColors.current
+    val asset = remember(displayName) { BrandAssets.assetForName(displayName) }
+    if (asset == null) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .background(cs.primary.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = displayName.trim().take(1).uppercase().ifEmpty { "?" },
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = (size.value * 0.42f).sp,
+                    fontWeight = FontWeight.Bold,
+                    color = cs.primary,
+                ),
+                maxLines = 1,
+            )
+        }
+    } else {
+        val mono = semantic.isDark && BrandAssets.assetNeedsDarkInvert(asset)
+        Box(
+            modifier = Modifier
+                .size(size)
+                .background(cs.primary.copy(alpha = if (semantic.isDark) 0.18f else 0.1f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            coil.compose.AsyncImage(
+                model = asset,
+                contentDescription = null,
+                colorFilter = if (mono) {
+                    androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
+                } else {
+                    null
+                },
+                modifier = Modifier.size(size * 0.7f),
+            )
+        }
     }
 }
 
