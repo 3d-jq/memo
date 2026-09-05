@@ -67,8 +67,79 @@ class MemoThemeTest {
     }
 
     @Test
-    fun colorSchemePicksTheRequestedBrightness() {
-        assertSame(defaultPalette.dark, MemoTheme.colorScheme(defaultPalette, dark = true))
-        assertSame(defaultPalette.light, MemoTheme.colorScheme(defaultPalette, dark = false))
+    fun colorSchemeKeepsThePaletteSurfaceInFlatMode() {
+        val light = MemoTheme.colorScheme(defaultPalette, dark = false)
+        val dark = MemoTheme.colorScheme(defaultPalette, dark = true)
+        assertEquals(defaultPalette.light.surface, light.surface)
+        assertEquals(defaultPalette.dark.surface, dark.surface)
+    }
+
+    @Test
+    fun layeredModeSinksTheLightPageSurfaceFourTones() {
+        // theme_factory.dart `_applyPageSurface`, values from
+        // material_color_utilities 0.13.0 (shiftTone(surface, -4.0)).
+        assertEquals(
+            Color(0xFFEBECEC),
+            MemoTheme.colorScheme(defaultPalette, dark = false, layeredSurfaces = true).surface,
+        )
+        assertEquals(
+            Color(0xFFF1F0F3),
+            MemoTheme.colorScheme(bluePalette, dark = false, layeredSurfaces = true).surface,
+        )
+        // Dark schemes come back from `_applyPageSurface` untouched.
+        assertEquals(
+            defaultPalette.dark.surface,
+            MemoTheme.colorScheme(defaultPalette, dark = true, layeredSurfaces = true).surface,
+        )
+    }
+
+    @Test
+    fun pureBackgroundRewritesTheSurfaces() {
+        val light = MemoTheme.colorScheme(defaultPalette, dark = false, pureBackground = true)
+        assertEquals(Color.White, light.surface)
+        assertEquals(Color.Black, light.inverseSurface)
+        assertEquals(Color.White, light.inverseOnSurface)
+
+        val dark = MemoTheme.colorScheme(defaultPalette, dark = true, pureBackground = true)
+        assertEquals(Color.Black, dark.surface)
+        assertEquals(Color.White, dark.inverseSurface)
+        assertEquals(Color.Black, dark.inverseOnSurface)
+    }
+
+    @Test
+    fun pureBackgroundWinsOverTheLayeredSink() {
+        // `_applyPageSurface` checks pureBackground before the layered branch.
+        assertEquals(
+            Color.White,
+            MemoTheme.colorScheme(
+                defaultPalette,
+                dark = false,
+                pureBackground = true,
+                layeredSurfaces = true,
+            ).surface,
+        )
+    }
+
+    @Test
+    fun surfaceContainersComeFromTheLadderOfTheResolvedSurface() {
+        for (palette in allPalettes) {
+            for (dark in listOf(false, true)) {
+                for (layered in listOf(false, true)) {
+                    val scheme = MemoTheme.colorScheme(palette, dark, layeredSurfaces = layered)
+                    val ladder = SurfaceLadder.fromScheme(scheme, dark, layered)
+                    val label = palette.id + (if (dark) " dark" else " light") +
+                        (if (layered) " layered" else " flat")
+                    assertEquals(label, ladder.surfaceContainerLowest, scheme.surfaceContainerLowest)
+                    assertEquals(label, ladder.surfaceContainerLow, scheme.surfaceContainerLow)
+                    assertEquals(label, ladder.surfaceContainer, scheme.surfaceContainer)
+                    assertEquals(label, ladder.surfaceContainerHigh, scheme.surfaceContainerHigh)
+                    assertEquals(
+                        label,
+                        ladder.surfaceContainerHighest,
+                        scheme.surfaceContainerHighest,
+                    )
+                }
+            }
+        }
     }
 }
