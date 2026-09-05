@@ -40,9 +40,19 @@ Already aligned (committed, quality-gate green):
 - Launch: most recent conversation (or fresh); temporary chat only via toggle
 - Theme: light default + palettes; status/nav icons follow theme
 
-Still to port (per original source): showModelSelectSheet, settings sections,
-ChatHistoryPage, mini-map panel, tool detail cards, 24 business features
-(search/translate/MCP/backup/voice/QR/OCR), real device chat smoke w/ API key.
+Also aligned (9/3-9/4): model select sheet (search/Bookmark/provider chips),
+ChatHistoryScreen (swipe delete/pin/date formats), MiniMapSheet (QA pairing +
+jump), display-settings 16 rows + ChatItemDisplay 13 toggles + Rendering 8 +
+Behavior/Startup 20 rows + Image/MessageStyle/AutoRetry/Haptics sub-pages,
+provider management pages, drawer global-search mode, temporary-chat 3-state
+icon, long-press conversation sheet + multi-select bar, streaming breathing
+dot, IosSwitch/IosCheckbox/IosTileButton + tactile press + Haptics, semantic
+colors + surface ladder + HCT port, self-drawn InteractiveDrawer (offset
+slide-in, scrim 0.12, edge-only drag, settle by velocity), global ripple off.
+
+Still to port (per original source): tool detail cards, 24 business features
+(search/translate/MCP/backup/voice/QR/OCR), real device chat smoke w/ API key,
+remaining settings sub-pages, feature:* modules are still empty shells.
 
 - Build env on this machine: system `JAVA_HOME` points at jdk-13 (breaks AGP) —
   always pin `JAVA_HOME=/c/Program Files/Java/jdk-21.0.10` and
