@@ -96,6 +96,7 @@ fun SettingsScreen(
     onOpenMemory: () -> Unit,
     onOpenNetworkProxy: () -> Unit,
     onOpenToolSchema: () -> Unit,
+    onOpenTtsServices: () -> Unit,
     onOpenLogs: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -257,7 +258,8 @@ fun SettingsScreen(
                     DividerRow()
                     SettingsRow(Lucide.Earth, stringResource(UiR.string.settings_page_search), onTap = {})
                     DividerRow()
-                    SettingsRow(Lucide.Volume2, stringResource(UiR.string.settings_page_tts), onTap = {})
+                    // settings_page.dart L311: TTS row opens TtsServicesPage directly.
+                    SettingsRow(Lucide.Volume2, stringResource(UiR.string.settings_page_tts), onTap = onOpenTtsServices)
                     DividerRow()
                     SettingsRow(Lucide.Terminal, stringResource(UiR.string.settings_page_mcp), onTap = {})
                     DividerRow()

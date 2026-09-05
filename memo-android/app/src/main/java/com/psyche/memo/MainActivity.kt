@@ -231,6 +231,7 @@ private fun AppThemeAndContent(
                             onOpenMemory = { navController.navigate("memory_settings") },
                             onOpenNetworkProxy = { navController.navigate("network_proxy") },
                             onOpenToolSchema = { navController.navigate("tool_schema_settings") },
+                            onOpenTtsServices = { navController.navigate("tts_services") },
                             onOpenLogs = { navController.navigate("log_viewer") },
                             onBack = { navController.popBackStack() },
                         )
@@ -430,7 +431,7 @@ private fun AppThemeAndContent(
                         )
                     }
                     // tts_settings route registered; the settings TTS row stays
-                    // dead until the tts_services batch lands (task #25).
+                    // TTS pages (task #25 batch); settings row wires tts_services.
                     composable("tts_settings") {
                         TtsSettingsScreen(
                             container = container,

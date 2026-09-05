@@ -223,12 +223,19 @@ fun ProvidersScreen(
                 keyOf = { it.key },
                 reorderEnabled = reorderEnabled,
                 onMove = { from, to ->
-                    val reorderedItems = items.toMutableList()
-                    val movedItem = reorderedItems.removeAt(from)
-                    reorderedItems.add(to, movedItem)
-                    repo.setOrder(reorderedItems.map { it.key })
-                    val cfgMap = providers.toMap()
-                    providers = reorderedItems.map { item -> item.key to (cfgMap[item.key] ?: ProviderConfig(id = item.key, name = item.name)) }
+                    // The reorderable lib can fire with stale layout indices when
+                    // items re-compose mid-drag (crash: Index 29 of length 29).
+                    // Validate against the current snapshot; drop invalid moves
+                    // (clamping could silently reorder against wrong indices).
+                    val snapshot = items
+                    if (from in snapshot.indices && to in snapshot.indices) {
+                        val reorderedItems = snapshot.toMutableList()
+                        val movedItem = reorderedItems.removeAt(from)
+                        reorderedItems.add(to, movedItem)
+                        repo.setOrder(reorderedItems.map { it.key })
+                        val cfgMap = providers.toMap()
+                        providers = reorderedItems.map { item -> item.key to (cfgMap[item.key] ?: ProviderConfig(id = item.key, name = item.name)) }
+                    }
                 },
                 modifier = Modifier
                     .fillMaxWidth()

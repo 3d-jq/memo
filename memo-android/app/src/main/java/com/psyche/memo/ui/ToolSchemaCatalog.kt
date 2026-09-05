@@ -79,14 +79,15 @@ data class BuiltInToolCatalogEntry(
 
     companion object {
         internal fun stringAt(obj: JsonObject, vararg path: String): String? {
+            // Walk intermediate levels as JsonObject; the final key addresses a
+            // JsonPrimitive on the current node (e.g. def["function"]["description"]).
             var node: JsonObject = obj
             for ((index, key) in path.withIndex()) {
-                val next = node[key] as? JsonObject ?: return null
                 if (index == path.size - 1) {
-                    val value = next[path.last()] as? JsonPrimitive ?: return null
+                    val value = node[key] as? JsonPrimitive ?: return null
                     return if (value.isString) value.content else null
                 }
-                node = next
+                node = node[key] as? JsonObject ?: return null
             }
             return null
         }
