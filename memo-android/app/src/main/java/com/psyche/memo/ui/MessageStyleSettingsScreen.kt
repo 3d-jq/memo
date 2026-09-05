@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.toColorInt
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -570,8 +571,8 @@ fun MessageStyleSettingsScreen(
 private fun parseHexColor(hex: String): Int? {
     val cleaned = hex.trim().removePrefix("#")
     return when (cleaned.length) {
-        6 -> runCatching { android.graphics.Color.parseColor("#$cleaned") or 0xFF000000.toInt() }.getOrNull()
-        8 -> runCatching { android.graphics.Color.parseColor("#$cleaned") }.getOrNull()
+        6 -> runCatching { "#$cleaned".toColorInt() or 0xFF000000.toInt() }.getOrNull()
+        8 -> runCatching { "#$cleaned".toColorInt() }.getOrNull()
         else -> null
     }
 }

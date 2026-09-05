@@ -1,7 +1,7 @@
 package com.psyche.memo.ui
 
 import android.content.Intent
-import android.net.Uri
+import androidx.core.net.toUri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -68,7 +68,6 @@ import com.composables.icons.lucide.Zap
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.ui.R as UiR
-import com.psyche.memo.ui.theme.MemoTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -92,6 +91,8 @@ fun SettingsScreen(
     onLocaleChange: (AppLocale) -> Unit,
     onOpenDisplay: () -> Unit,
     onOpenProviders: () -> Unit,
+    onOpenAbout: () -> Unit,
+    onOpenStorage: () -> Unit,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -105,13 +106,10 @@ fun SettingsScreen(
         }
     }
 
-    // B2 — theme mode (theme_mode_v1: system/light/dark), same key as
-    // MemoTheme (MainActivity.kt reads MemoTheme.MODE_KEY).
-    var themeMode by remember { mutableStateOf("system") }
-    LaunchedEffect(Unit) {
-        themeMode = container.preferenceRepository.readLocal(MemoTheme.MODE_KEY)
-            ?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "system"
-    }
+    // B2 — theme mode observed through ThemeState (theme_mode_v1), so the
+    // label updates immediately and MainActivity reacts to the same store.
+    LaunchedEffect(Unit) { ThemeState.load(container) }
+    val themeMode = ThemeState.mode
     var colorModeSheetVisible by remember { mutableStateOf(false) }
 
     // B4 — chat storage summary (files + bytes over the app data dirs).
@@ -277,7 +275,8 @@ fun SettingsScreen(
                 SectionCard {
                     SettingsRow(Lucide.Database, stringResource(UiR.string.settings_page_backup), onTap = {})
                     DividerRow()
-                    // B4 — chat storage summary (L332-342,497-545).
+                    // B4 — chat storage summary (L332-342,497-545); the row
+                    // opens the storage space page (settings_page.dart L337).
                     val summary = storageSummary
                     SettingsRow(
                         Lucide.HardDrive,
@@ -291,7 +290,7 @@ fun SettingsScreen(
                                 fmtBytes(summary.second),
                             )
                         },
-                        onTap = {},
+                        onTap = onOpenStorage,
                     )
                 }
             }
@@ -300,7 +299,7 @@ fun SettingsScreen(
             item { SectionHeader(stringResource(UiR.string.settings_page_about_section)) }
             item {
                 SectionCard {
-                    SettingsRow(Lucide.BadgeInfo, stringResource(UiR.string.settings_page_about), onTap = {})
+                    SettingsRow(Lucide.BadgeInfo, stringResource(UiR.string.settings_page_about), onTap = onOpenAbout)
                     DividerRow()
                     SettingsRow(Lucide.ChartColumnBig, stringResource(UiR.string.settings_page_statistics), onTap = {})
                     DividerRow()
@@ -310,7 +309,7 @@ fun SettingsScreen(
                         stringResource(UiR.string.settings_page_docs),
                         onTap = {
                             runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(docsUrl)))
+                                context.startActivity(Intent(Intent.ACTION_VIEW, docsUrl.toUri()))
                             }
                         },
                     )
@@ -322,8 +321,10 @@ fun SettingsScreen(
                     // B5 — Tool Descriptions row (L398-410).
                     DividerRow()
                     SettingsRow(Lucide.Wrench, stringResource(UiR.string.tool_schema_settings_page_title), onTap = {})
-                    DividerRow()
-                    SettingsRow(Lucide.Heart, stringResource(UiR.string.settings_page_sponsor), onTap = {})
+                    // Sponsor row (L411-421) deliberately dropped: the whole
+                    // sponsor page is upstream (kelivo afdian / WeChat QR /
+                    // kelivo sponsors list) and is Memo-ized away per the
+                    // brand rules.
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }
@@ -340,8 +341,7 @@ fun SettingsScreen(
                     value = "system",
                     current = themeMode,
                 ) { mode ->
-                    themeMode = mode
-                    container.preferenceRepository.writeLocal(MemoTheme.MODE_KEY, mode)
+                    ThemeState.setMode(container, mode)
                     colorModeSheetVisible = false
                 }
                 HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
@@ -351,8 +351,7 @@ fun SettingsScreen(
                     value = "light",
                     current = themeMode,
                 ) { mode ->
-                    themeMode = mode
-                    container.preferenceRepository.writeLocal(MemoTheme.MODE_KEY, mode)
+                    ThemeState.setMode(container, mode)
                     colorModeSheetVisible = false
                 }
                 HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
@@ -362,8 +361,7 @@ fun SettingsScreen(
                     value = "dark",
                     current = themeMode,
                 ) { mode ->
-                    themeMode = mode
-                    container.preferenceRepository.writeLocal(MemoTheme.MODE_KEY, mode)
+                    ThemeState.setMode(container, mode)
                     colorModeSheetVisible = false
                 }
             }

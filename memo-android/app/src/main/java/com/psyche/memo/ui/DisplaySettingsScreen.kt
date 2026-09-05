@@ -21,6 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -84,6 +87,7 @@ fun DisplaySettingsScreen(
     onOpenMessageStyle: () -> Unit,
     onOpenAutoRetry: () -> Unit,
     onOpenHaptics: () -> Unit,
+    onOpenTheme: () -> Unit,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -106,12 +110,12 @@ fun DisplaySettingsScreen(
     var codeFontFamily by remember { mutableStateOf<String?>(null) }
     // settings_provider.dart:5041-5088 — scale 1.0 / autoScroll on / idle 8 /
     // mask 1.0 / opacity light 0.8236 / dark 0.7396.
-    var chatFontScale by remember { mutableStateOf(1.0) }
+    var chatFontScale by remember { mutableDoubleStateOf(1.0) }
     var autoScrollEnabled by remember { mutableStateOf(true) }
-    var autoScrollIdleSeconds by remember { mutableStateOf(8) }
-    var maskStrength by remember { mutableStateOf(1.0) }
-    var inputOpacityLight by remember { mutableStateOf(0.8236) }
-    var inputOpacityDark by remember { mutableStateOf(0.7396) }
+    var autoScrollIdleSeconds by remember { mutableIntStateOf(8) }
+    var maskStrength by remember { mutableDoubleStateOf(1.0) }
+    var inputOpacityLight by remember { mutableDoubleStateOf(0.8236) }
+    var inputOpacityDark by remember { mutableDoubleStateOf(0.7396) }
 
     // Read once per recomposition at composable scope: local funs below are
     // recreated each recomposition and capture the latest value, and calling
@@ -189,12 +193,14 @@ fun DisplaySettingsScreen(
 
         item {
             SectionCard {
-                // B8 — theme row detail reads the stored palette responsively.
+                // B8 — theme row detail reads the stored palette responsively;
+                // the row opens the theme settings page (display_settings_page
+                // .dart L72-79).
                 SettingsRow(
                     Lucide.Palette,
                     stringResource(UiR.string.display_settings_page_theme_settings_title),
                     detailText = paletteName,
-                    onTap = {},
+                    onTap = onOpenTheme,
                 )
                 DividerRow()
                 SettingsRow(
@@ -357,7 +363,7 @@ fun DisplaySettingsScreen(
     // L612-727 — chat font size slider sheet (0.5-1.5, step 0.05) + sample.
     if (fontSizeSheetVisible) {
         ModalBottomSheet(onDismissRequest = { fontSizeSheetVisible = false }) {
-            var scale by remember { mutableStateOf(chatFontScale.toFloat()) }
+            var scale by remember { mutableFloatStateOf(chatFontScale.toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("50%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)))
@@ -395,7 +401,7 @@ fun DisplaySettingsScreen(
     if (autoScrollSheetVisible) {
         ModalBottomSheet(onDismissRequest = { autoScrollSheetVisible = false }) {
             var enabled by remember { mutableStateOf(autoScrollEnabled) }
-            var seconds by remember { mutableStateOf(autoScrollIdleSeconds.toFloat()) }
+            var seconds by remember { mutableFloatStateOf(autoScrollIdleSeconds.toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -439,7 +445,7 @@ fun DisplaySettingsScreen(
     // L902-1001 — background mask sheet: 0-200%, step 5%.
     if (maskSheetVisible) {
         ModalBottomSheet(onDismissRequest = { maskSheetVisible = false }) {
-            var strength by remember { mutableStateOf((maskStrength * 100).toFloat()) }
+            var strength by remember { mutableFloatStateOf((maskStrength * 100).toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Slider(
@@ -465,8 +471,8 @@ fun DisplaySettingsScreen(
     // L1003-1156 — input opacity sheet: separate light/dark sliders, 0-100 step 5.
     if (inputOpacitySheetVisible) {
         ModalBottomSheet(onDismissRequest = { inputOpacitySheetVisible = false }) {
-            var light by remember { mutableStateOf((inputOpacityLight * 100).toFloat()) }
-            var dark by remember { mutableStateOf((inputOpacityDark * 100).toFloat()) }
+            var light by remember { mutableFloatStateOf((inputOpacityLight * 100).toFloat()) }
+            var dark by remember { mutableFloatStateOf((inputOpacityDark * 100).toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
                 Text(
                     text = stringResource(UiR.string.settings_page_light_mode),
@@ -544,7 +550,7 @@ fun DisplaySettingsScreen(
 @Composable
 private fun OpacitySliderRow(value: Float, onCommit: (Float) -> Unit) {
     val cs = MaterialTheme.colorScheme
-    var local by remember(value) { mutableStateOf(value) }
+    var local by remember(value) { mutableFloatStateOf(value) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("0%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)))
         Spacer(Modifier.size(8.dp))

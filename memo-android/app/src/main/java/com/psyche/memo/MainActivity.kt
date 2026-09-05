@@ -12,6 +12,7 @@ import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -41,6 +42,15 @@ import com.psyche.memo.ui.ProvideHapticsSettings
 import com.psyche.memo.ui.ChatItemDisplaySettingsScreen
 import com.psyche.memo.ui.RenderingSettingsScreen
 import com.psyche.memo.ui.BehaviorStartupSettingsScreen
+import com.psyche.memo.ui.AboutScreen
+import com.psyche.memo.ui.MoreScreen
+import com.psyche.memo.ui.StorageCategoryScreen
+import com.psyche.memo.ui.StorageSpaceScreen
+import com.psyche.memo.ui.StorageCategoryKey
+import com.psyche.memo.ui.ThemeAdvancedScreen
+import com.psyche.memo.ui.ThemeState
+import com.psyche.memo.ui.ThemeSettingsScreen
+import com.psyche.memo.ui.UserProfileScreen
 import com.psyche.memo.ui.SettingsScreen
 import com.psyche.memo.ui.locale.withAppLocale
 import com.psyche.memo.ui.theme.MemoTheme
@@ -95,21 +105,49 @@ private fun AppThemeAndContent(
     appLocale: AppLocale,
     onLocaleChange: (AppLocale) -> Unit,
 ) {
-    // Theme from preferences (theme_mode_v1 / theme_palette_v1); the default
-    // is system (mirrors Flutter SettingsProvider.themeMode default). Compose
+    // Theme from preferences (theme_mode_v1 / theme_palette_v1) observed
+    // reactively through ThemeState, so color mode / palette / advanced
+    // switches take effect immediately (no restart). The default is system
+    // (mirrors Flutter SettingsProvider.themeMode default); Compose
     // isSystemInDarkTheme is Flutter platformBrightness's equivalent.
     val context = LocalContext.current
-    val paletteId = remember(context) {
-        container.preferenceRepository.readLocal(MemoTheme.PALETTE_KEY)
-    }
-    val themeMode = remember(context) {
-        container.preferenceRepository.readLocal(MemoTheme.MODE_KEY)
-    }
+    LaunchedEffect(Unit) { ThemeState.load(container) }
+    val themeMode = ThemeState.mode
     val systemDark = isSystemInDarkTheme()
-    val (palette, dark) = remember(paletteId, themeMode, systemDark) {
-        MemoTheme.resolve(paletteId, themeMode, systemDark)
+    // MemoTheme.resolve's mode logic (system/light/dark); the palette comes
+    // from ThemeState so custom themes resolve without re-reading prefs.
+    val dark = remember(themeMode, systemDark) {
+        MemoTheme.resolve("default", themeMode, systemDark).second
     }
-    val colorScheme = MemoTheme.colorScheme(palette, dark)
+    val resolvedPalette = remember(ThemeState.paletteId, ThemeState.selectedCustomThemeId, ThemeState.customThemes) {
+        ThemeState.resolvePalette()
+    }
+    val colorScheme = if (ThemeState.useDynamicColor && android.os.Build.VERSION.SDK_INT >= 31) {
+        // use_dynamic_color_v1: Material You scheme, then the same
+        // pure-background / page-surface / derived-container pipeline.
+        val dynamic = if (dark) {
+            androidx.compose.material3.dynamicDarkColorScheme(context)
+        } else {
+            androidx.compose.material3.dynamicLightColorScheme(context)
+        }
+        MemoTheme.withDerivedSurfaceContainers(
+            MemoTheme.applyPageSurface(
+                dynamic,
+                dark,
+                ThemeState.usePureBackground,
+                ThemeState.useLayeredSurfaces,
+            ),
+            dark,
+            ThemeState.useLayeredSurfaces,
+        )
+    } else {
+        MemoTheme.colorScheme(
+            resolvedPalette,
+            dark,
+            ThemeState.usePureBackground,
+            ThemeState.useLayeredSurfaces,
+        )
+    }
     MaterialTheme(
         colorScheme = colorScheme,
     ) {
@@ -177,8 +215,60 @@ private fun AppThemeAndContent(
                             onLocaleChange = onLocaleChange,
                             onOpenDisplay = { navController.navigate("display") },
                             onOpenProviders = { navController.navigate("providers") },
+                            onOpenAbout = { navController.navigate("about") },
+                            onOpenStorage = { navController.navigate("storage") },
                             onBack = { navController.popBackStack() },
                         )
+                    }
+                    composable("theme_settings") {
+                        ThemeSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenAdvanced = { navController.navigate("theme_advanced") },
+                        )
+                    }
+                    composable("theme_advanced") {
+                        ThemeAdvancedScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("user_profile") {
+                        UserProfileScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("about") {
+                        AboutScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("more") {
+                        MoreScreen(onBack = { navController.popBackStack() })
+                    }
+                    composable("storage") {
+                        StorageSpaceScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenCategory = { key ->
+                                navController.navigate("storage_category/${key.name}")
+                            },
+                        )
+                    }
+                    composable("storage_category/{key}") { entry ->
+                        val key = entry.arguments?.getString("key")
+                        val category = key?.let { runCatching { StorageCategoryKey.valueOf(it) }.getOrNull() }
+                        if (category == null) {
+                            navController.popBackStack()
+                        } else {
+                            StorageCategoryScreen(
+                                container = container,
+                                categoryKey = category,
+                                onBack = { navController.popBackStack() },
+                            )
+                        }
                     }
                     composable("chat_item_display") {
                         ChatItemDisplaySettingsScreen(
@@ -256,6 +346,7 @@ private fun AppThemeAndContent(
                             onOpenMessageStyle = { navController.navigate("message_style") },
                             onOpenAutoRetry = { navController.navigate("auto_retry") },
                             onOpenHaptics = { navController.navigate("haptics") },
+                            onOpenTheme = { navController.navigate("theme_settings") },
                             onBack = { navController.popBackStack() },
                         )
                     }
