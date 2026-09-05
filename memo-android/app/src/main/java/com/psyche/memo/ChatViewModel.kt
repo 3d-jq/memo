@@ -43,8 +43,20 @@ class ChatViewModel(
         val isStreaming: Boolean,
         val timestamp: Long = System.currentTimeMillis(),
         val model: String = "",
+        val providerId: String = "",
         val failed: Boolean = false,
-    )
+        val groupId: String = id,
+        val version: Int = 0,
+        val messageOrder: Int = 0,
+        val totalTokens: Int? = null,
+        val promptTokens: Int? = null,
+        val completionTokens: Int? = null,
+        val cachedTokens: Int? = null,
+        val durationMs: Long? = null,
+    ) {
+        val content: String
+            get() = parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+    }
 
     /** Conversation title shown in the top bar; "" for a conversation whose
      * title is empty or for a temporary chat. HomeScreen resolves the final
@@ -53,6 +65,15 @@ class ChatViewModel(
 
     private val _messages = MutableStateFlow<List<UiMessage>>(emptyList())
     val messages: StateFlow<List<UiMessage>> = _messages
+
+    /**
+     * Available versions per message group (sorted ASC) — drives the branch
+     * selector. The displayed version per group is [versionSelections] when
+     * set, otherwise the newest version.
+     */
+    private val _versionInfo = MutableStateFlow<Map<String, List<Int>>>(emptyMap())
+    val versionInfo: StateFlow<Map<String, List<Int>>> = _versionInfo
+    private val versionSelections = mutableMapOf<String, Int>()
 
     private val _sendEnabled = MutableStateFlow(false)
     val sendEnabled: StateFlow<Boolean> = _sendEnabled
@@ -100,13 +121,55 @@ class ChatViewModel(
             _sendEnabled.value = true
             return
         }
-        viewModelScope.launch {
-            val loaded = withContext(Dispatchers.IO) {
-                container.messageDao.getTail(conversationId)
-            }
-            _messages.value = loaded.map { it.toUi() }
-            _sendEnabled.value = true
+        viewModelScope.launch { reloadTail() }
+    }
+
+    private suspend fun reloadTail() {
+        val loaded = withContext(Dispatchers.IO) {
+            container.messageDao.getTail(conversationId)
         }
+        val versions = withContext(Dispatchers.IO) {
+            container.messageDao.groupVersions(conversationId)
+        }
+        _versionInfo.value = versions
+        _messages.value = loaded.collapseVersions()
+        _sendEnabled.value = true
+    }
+
+    /**
+     * Version collapse (mirrors the original timeline grouping): several rows
+     * can share one group_id (edit/regenerate versions). Only the selected
+     * version stays visible, positioned at the group's first occurrence in
+     * wall order. Selected = [versionSelections], else the newest version.
+     */
+    private fun List<ChatMessage>.collapseVersions(): List<UiMessage> {
+        val out = ArrayList<UiMessage>(size)
+        val indexByGroup = HashMap<String, Int>()
+        for (row in this) {
+            val gid = row.groupId.ifEmpty { row.id }
+            val existingIdx = indexByGroup[gid]
+            if (existingIdx == null) {
+                indexByGroup[gid] = out.size
+                out.add(row.toUi())
+                continue
+            }
+            val selected = versionSelections[gid]
+            val existing = out[existingIdx]
+            val existingWins = when (selected) {
+                null -> existing.version >= row.version
+                else -> existing.version == selected || row.version != selected
+            }
+            if (!existingWins) {
+                out[existingIdx] = row.toUi()
+            }
+        }
+        return out
+    }
+
+    /** Branch selector: switch the visible version of a group. */
+    fun switchVersion(groupId: String, version: Int) {
+        versionSelections[groupId] = version
+        refreshTail()
     }
 
     fun updateInput(text: String) {
@@ -144,9 +207,139 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * Regenerate from a user message (chat_message_widget onResend +
+     * _confirmRegeneration): the confirm dialog lives in the UI layer; here
+     * the messages below the anchor are deleted and the anchor's text is
+     * sent again. The anchor row itself is kept.
+     */
+    fun regenerate(userMessageId: String) {
+        if (_streaming.value) return
+        val msgs = _messages.value
+        val idx = msgs.indexOfFirst { it.id == userMessageId }
+        if (idx < 0) return
+        val anchor = msgs[idx]
+        viewModelScope.launch {
+            if (!isTemporary) {
+                withContext(Dispatchers.IO) {
+                    container.messageDao.deleteAfterOrder(conversationId, anchor.messageOrder)
+                }
+            }
+            _messages.value = msgs.take(idx + 1)
+            startGeneration(anchor.toChatMessage())
+        }
+    }
+
+    /**
+     * Edit a message (message_edit_sheet semantics): the trimmed text is
+     * saved as the next version of the message's group; [shouldSend] sends
+     * it again after saving (Save & Send — user messages only in this port).
+     * Temporary chats rewrite the in-memory message in place (no DB).
+     * Returns false when the message has no editable text content
+     * (user_message_edit_unsupported_snackbar in the original).
+     */
+    suspend fun editMessage(messageId: String, newContent: String, shouldSend: Boolean): Boolean {
+        if (_streaming.value) return false
+        val msgs = _messages.value
+        val idx = msgs.indexOfFirst { it.id == messageId }
+        if (idx < 0) return false
+        val target = msgs[idx]
+        if (target.parts.none { it is TextPart }) return false
+        if (isTemporary) {
+            val newParts = ChatMessage.partsWithReplacedText(target.parts, newContent)
+            val edited = target.copy(parts = newParts)
+            _messages.value = msgs.take(idx) + edited
+            if (shouldSend && target.role == "user") {
+                startGeneration(edited.toChatMessage())
+            }
+            return true
+        }
+        val newVersionRow = withContext(Dispatchers.IO) {
+            val orig = container.messageDao.get(messageId) ?: return@withContext null
+            val groupId = orig.groupId.ifEmpty { orig.id }
+            val version = container.messageDao.maxVersionForGroup(conversationId, groupId) + 1
+            val row = ChatMessage(
+                id = ChatMessage.newId(),
+                role = orig.role,
+                parts = ChatMessage.partsWithReplacedText(orig.parts, newContent),
+                timestamp = System.currentTimeMillis(),
+                modelId = orig.modelId,
+                providerId = orig.providerId,
+                conversationId = conversationId,
+                groupId = groupId,
+                version = version,
+                messageOrder = container.messageDao.nextOrder(conversationId),
+            )
+            container.messageDao.insert(row)
+            row
+        } ?: return false
+        versionSelections[newVersionRow.groupId] = newVersionRow.version
+        reloadTail()
+        if (shouldSend && target.role == "user") {
+            // The collapsed list now shows the edited version in the group's
+            // original position; generate against it.
+            val visible = _messages.value.firstOrNull {
+                it.groupId == newVersionRow.groupId && it.version == newVersionRow.version
+            }
+            if (visible != null) startGeneration(visible.toChatMessage())
+        }
+        return true
+    }
+
+    /** Delete the visible version of a message (more sheet / context menu). */
+    fun deleteVersion(messageId: String) {
+        if (_streaming.value) return
+        val msgs = _messages.value
+        val idx = msgs.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        val target = msgs[idx]
+        if (isTemporary) {
+            _messages.value = msgs.filterNot { it.id == messageId }
+            return
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                container.messageDao.delete(messageId)
+            }
+            versionSelections.remove(target.groupId)
+            refreshTail()
+        }
+    }
+
+    /** Delete every stored version of a message group. */
+    fun deleteAllVersions(messageId: String) {
+        if (_streaming.value) return
+        val target = _messages.value.firstOrNull { it.id == messageId } ?: return
+        if (isTemporary) {
+            _messages.value = _messages.value.filterNot { it.groupId == target.groupId }
+            return
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                container.messageDao.deleteByGroup(conversationId, target.groupId)
+            }
+            versionSelections.remove(target.groupId)
+            refreshTail()
+        }
+    }
+
+    private fun UiMessage.toChatMessage(): ChatMessage = ChatMessage(
+        id = id,
+        role = role,
+        parts = parts,
+        timestamp = timestamp,
+        modelId = model.ifEmpty { null },
+        providerId = providerId.ifEmpty { null },
+        conversationId = conversationId,
+        groupId = groupId,
+        version = version,
+        messageOrder = messageOrder,
+    )
+
     private fun startGeneration(userMessage: ChatMessage) {
         generationJob?.cancel()
         _streaming.value = true
+        val generationStartMs = System.currentTimeMillis()
         generationJob = viewModelScope.launch {
             // Publish streaming state so the drawer can show its loading dot.
             container.streamingConversationIds.value =
@@ -164,6 +357,8 @@ class ChatViewModel(
             // Folding handler lives outside the try: the stop path (catch)
             // reads the accumulated partial parts from it.
             val handler = com.psyche.memo.llm.stream.StreamChunkHandler()
+            // Terminal usage reported by the provider (Finish chunk), if any.
+            var finishUsage: UsageStats? = null
             try {
                 // Build request from current UI messages (exclude skeleton).
                 val history = _messages.value
@@ -192,7 +387,12 @@ class ChatViewModel(
                 fun persistOnce(parts: List<MessagePart>) {
                     if (persisted) return
                     persisted = true
-                    persistAssistant(assistantId, parts)
+                    persistAssistant(
+                        assistantId,
+                        parts,
+                        usage = finishUsage,
+                        durationMs = System.currentTimeMillis() - generationStartMs,
+                    )
                 }
                 client.streamChat(request).collect { chunk ->
                     handler.handle(chunk)
@@ -203,6 +403,7 @@ class ChatViewModel(
                         -> updateAssistantStreaming(assistantId, handler.parts())
                         is StreamChunk.Finish -> if (!terminalHandled) {
                             terminalHandled = true
+                            finishUsage = parseUsage(chunk.usage)
                             updateAssistantStreaming(assistantId, handler.parts())
                             finishAssistant(assistantId, handler.parts())
                             // Persist the finished reply (chat_service terminal
@@ -235,6 +436,42 @@ class ChatViewModel(
                     container.streamingConversationIds.value - conversationId
             }
         }
+    }
+
+    /**
+     * Token usage reported by the provider on the Finish chunk. Field
+     * fallbacks mirror chat_completions_decoder._mergeUsage in the original:
+     * prompt_tokens|input_tokens, completion_tokens|output_tokens,
+     * prompt_tokens_details.cached_tokens|input_tokens_details.cached_tokens
+     * (plus Claude cache_read_input_tokens).
+     */
+    private data class UsageStats(
+        val promptTokens: Int?,
+        val completionTokens: Int?,
+        val cachedTokens: Int?,
+        val totalTokens: Int?,
+    )
+
+    private fun parseUsage(usage: kotlinx.serialization.json.JsonObject?): UsageStats? {
+        if (usage == null) return null
+        fun intOf(vararg keys: String): Int? {
+            for (key in keys) {
+                (usage[key] as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.content?.toIntOrNull()?.let { return it }
+            }
+            return null
+        }
+        val details = (usage["prompt_tokens_details"]
+            ?: usage["input_tokens_details"]) as? kotlinx.serialization.json.JsonObject
+        val cached = details?.get("cached_tokens")
+            ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
+            ?: intOf("cache_read_input_tokens")
+        val prompt = intOf("prompt_tokens", "input_tokens")
+        val completion = intOf("completion_tokens", "output_tokens")
+        val total = intOf("total_tokens")
+            ?: listOfNotNull(prompt, completion).sum().takeIf { it > 0 }
+        if (prompt == null && completion == null && total == null) return null
+        return UsageStats(prompt, completion, cached, total)
     }
 
     private fun buildUserMessage(text: String): ChatMessage {
@@ -311,7 +548,12 @@ class ChatViewModel(
      * → nothing to persist. Idempotent: a Finish plus a late user stop can
      * both reach here, and a second insert would violate UNIQUE(id).
      */
-    private fun persistAssistant(assistantId: String, parts: List<MessagePart>) {
+    private fun persistAssistant(
+        assistantId: String,
+        parts: List<MessagePart>,
+        usage: UsageStats? = null,
+        durationMs: Long = 0L,
+    ) {
         if (isTemporary || parts.isEmpty()) return
         val providerId = selectedProviderId.value
         val modelId = selectedModelId.value
@@ -326,7 +568,12 @@ class ChatViewModel(
                         timestamp = System.currentTimeMillis(),
                         modelId = modelId,
                         providerId = providerId,
+                        totalTokens = usage?.totalTokens,
                         conversationId = conversationId,
+                        promptTokens = usage?.promptTokens,
+                        completionTokens = usage?.completionTokens,
+                        cachedTokens = usage?.cachedTokens,
+                        durationMs = durationMs.takeIf { it > 0 },
                         groupId = assistantId,
                         version = 0,
                         messageOrder = container.messageDao.nextOrder(conversationId),
@@ -336,8 +583,23 @@ class ChatViewModel(
         }
     }
 
-    private fun ChatMessage.toUi(): UiMessage =
-        UiMessage(id = id, role = role, parts = parts, isStreaming = isStreaming)
+    private fun ChatMessage.toUi(): UiMessage = UiMessage(
+        id = id,
+        role = role,
+        parts = parts,
+        isStreaming = isStreaming,
+        timestamp = timestamp,
+        model = modelId ?: "",
+        providerId = providerId ?: "",
+        groupId = groupId.ifEmpty { id },
+        version = version,
+        messageOrder = messageOrder,
+        totalTokens = totalTokens,
+        promptTokens = promptTokens,
+        completionTokens = completionTokens,
+        cachedTokens = cachedTokens,
+        durationMs = durationMs,
+    )
 
     companion object {
         fun factory(container: AppContainerImpl, conversationId: String) =
@@ -346,5 +608,33 @@ class ChatViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
                     ChatViewModel(container, conversationId) as T
             }
+
+        /**
+         * Fork ("create branch") copy: the message row duplicated into a new
+         * conversation (drawer duplicateConversation semantics, truncated at
+         * the anchor). New row id, streaming cleared.
+         */
+        fun forkCopy(m: ChatMessage, newConversationId: String): ChatMessage = ChatMessage(
+            id = ChatMessage.newId(),
+            role = m.role,
+            parts = m.parts,
+            timestamp = m.timestamp,
+            modelId = m.modelId,
+            providerId = m.providerId,
+            totalTokens = m.totalTokens,
+            conversationId = newConversationId,
+            reasoningSegmentsJson = m.reasoningSegmentsJson,
+            translation = m.translation,
+            reasoningStartAt = m.reasoningStartAt,
+            reasoningFinishedAt = m.reasoningFinishedAt,
+            groupId = m.groupId,
+            version = m.version,
+            promptTokens = m.promptTokens,
+            completionTokens = m.completionTokens,
+            cachedTokens = m.cachedTokens,
+            durationMs = m.durationMs,
+            updatedAt = m.updatedAt,
+            messageOrder = m.messageOrder,
+        )
     }
 }

@@ -227,10 +227,66 @@ class MessageDao(private val db: SQLiteDatabase) {
 
     fun delete(id: String) {
         db.delete("message_rows", "id = ?", arrayOf(id))
+        // message_part_rows rows cascade via FK, but parts of the deleted
+        // revision are also cleaned explicitly in case foreign_keys is off.
+        db.delete("message_part_rows", "revision_id = ?", arrayOf(id))
     }
 
-    /** Next message_order (count + 1). */
-    fun nextOrder(conversationId: String): Int = count(conversationId)
+    /** Deletes every message strictly after [order] in the conversation (regenerate trailing cut). */
+    fun deleteAfterOrder(conversationId: String, order: Int) {
+        db.delete("message_rows", "conversation_id = ? AND message_order > ?", arrayOf(conversationId, order.toString()))
+    }
+
+    /** Deletes every version of a message group (delete-all-versions action). */
+    fun deleteByGroup(conversationId: String, groupId: String) {
+        val ids = ArrayList<String>()
+        db.query("message_rows", arrayOf("id"), "conversation_id = ? AND group_id = ?", arrayOf(conversationId, groupId), null, null, null).use { cursor ->
+            while (cursor.moveToNext()) ids.add(cursor.getString(0))
+        }
+        for (id in ids) delete(id)
+    }
+
+    /** Highest stored version of a group (-1 when the group has no rows). */
+    fun maxVersionForGroup(conversationId: String, groupId: String): Int {
+        db.rawQuery(
+            "SELECT MAX(version) FROM message_rows WHERE conversation_id = ? AND group_id = ?",
+            arrayOf(conversationId, groupId),
+        ).use { cursor ->
+            return if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else -1
+        }
+    }
+
+    /**
+     * Available versions per group (sorted ASC) for the branch selector.
+     * Groups with a single version are included so the UI can compute counts.
+     */
+    fun groupVersions(conversationId: String): Map<String, List<Int>> {
+        val out = LinkedHashMap<String, MutableSet<Int>>()
+        db.query(
+            "message_rows", arrayOf("group_id", "version"), "conversation_id = ?",
+            arrayOf(conversationId), null, null, "message_order ASC, id ASC",
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val gid = cursor.getString(0) ?: continue
+                out.getOrPut(gid) { LinkedHashSet() }.add(cursor.getInt(1))
+            }
+        }
+        return out.mapValues { (_, vs) -> vs.toSortedSet().toList() }
+    }
+
+    /**
+     * Next message_order. MAX+1 (not count) so mid-timeline deletes
+     * (delete-by-version) can never collide with the UNIQUE
+     * (conversation_id, message_order) constraint.
+     */
+    fun nextOrder(conversationId: String): Int {
+        db.rawQuery(
+            "SELECT MAX(message_order) FROM message_rows WHERE conversation_id = ?",
+            arrayOf(conversationId),
+        ).use { cursor ->
+            return if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) + 1 else 0
+        }
+    }
 
     private fun getOrder(conversationId: String, id: String): Int? {
         db.query(

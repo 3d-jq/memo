@@ -9,6 +9,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
@@ -50,6 +51,7 @@ import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.CircleStop
+import com.composables.icons.lucide.Ellipsis
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Glasses
 import com.composables.icons.lucide.Hammer
@@ -300,6 +302,10 @@ fun HomeScreen(
                 newActionToggleable = temporaryActive || currentIsEmpty(),
                 modifier = modifier,
                 isTemporary = temporaryActive,
+                onOpenConversation = { id ->
+                    selectedConversationId = id
+                    temporaryActive = false
+                },
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
             // Composed only while the drawer presents — a permanently-mounted
@@ -380,6 +386,7 @@ fun ChatContent(
     modifier: Modifier = Modifier,
     isTemporary: Boolean = false,
     newActionToggleable: Boolean = false,
+    onOpenConversation: (String) -> Unit = {},
 ) {
     val vm: ChatViewModel = viewModel(
         key = conversationId,
@@ -390,12 +397,130 @@ fun ChatContent(
     val streaming by vm.streaming.collectAsState()
     val providerId by vm.selectedProviderId.collectAsState()
     val modelId by vm.selectedModelId.collectAsState()
+    val versionInfo by vm.versionInfo.collectAsState()
 
     val cs = MaterialTheme.colorScheme
     var showModelSheet by remember { mutableStateOf(false) }
     var showMiniMap by remember { mutableStateOf(false) }
     val timelineListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    // ---- 消息操作批次状态（more sheet / 编辑 / regenerate 确认） ----
+    var moreFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
+    var editFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
+    var regenerateFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
+
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val copiedText = stringResource(UiR.string.chat_message_widget_copied_to_clipboard)
+    val notImplementedText = stringResource(UiR.string.message_more_sheet_not_implemented)
+    val unsupportedEditText = stringResource(UiR.string.user_message_edit_unsupported_snackbar)
+
+    fun copyMessage(msg: ChatViewModel.UiMessage) {
+        clipboard.setText(androidx.compose.ui.text.AnnotatedString(msg.content))
+        com.psyche.memo.ui.snackbar.SnackbarManager.show(
+            com.psyche.memo.ui.snackbar.AppNotification(
+                message = copiedText,
+                type = com.psyche.memo.ui.snackbar.NotificationType.SUCCESS,
+            ),
+        )
+    }
+
+    // 创建分支 = 复制会话语义定位到该条：新会话仅携带该条及其之前的消息
+    // （drawer duplicateConversation 的事务化复制，按 message_order 截断）。
+    fun forkAt(messageId: String) {
+        if (isTemporary) return
+        coroutineScope.launch {
+            val newId = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val src = container.conversationDao.get(conversationId)
+                    ?: return@withContext null
+                val anchor = container.messageDao.get(messageId)
+                    ?: return@withContext null
+                val dup = Conversation.create(
+                    title = src.title,
+                    assistantId = src.assistantId,
+                )
+                container.conversationDao.insert(dup)
+                val rows = container.messageDao
+                    .getAllForConversation(conversationId)
+                    .filter { it.messageOrder <= anchor.messageOrder }
+                container.messageDao.insertAllInTransaction(rows.map { m ->
+                    ChatViewModel.forkCopy(m, dup.id)
+                })
+                dup.id
+            }
+            if (newId != null) onOpenConversation(newId)
+        }
+    }
+
+    // ---- 助手名称/头像：与抽屉助手卡一致的数据源（assistant_rows） ----
+    var assistantLabel by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(conversationId) {
+        assistantLabel = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val aId = runCatching { container.conversationDao.get(conversationId)?.assistantId }
+                .getOrNull()
+            if (aId.isNullOrEmpty()) return@withContext null
+            runCatching {
+                com.psyche.memo.data.db.PayloadEntityDao(
+                    container.database.readableDatabase,
+                    "assistant_rows",
+                    primaryKey = "assistant_key",
+                ).get(aId)?.let { row ->
+                    com.psyche.memo.data.model.Assistant.fromJsonString(
+                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
+                        row.payload,
+                    ).name.trim().takeIf { it.isNotEmpty() }
+                }
+            }.getOrNull()
+        }
+    }
+    val resolvedAssistantLabel = assistantLabel
+        ?: stringResource(UiR.string.message_export_sheet_assistant)
+
+    // ---- 滚动导航 + 流式跟随（scroll_nav_buttons.dart / scroll_controller.dart） ----
+    var navVisible by remember { mutableStateOf(false) }
+    var autoStick by remember { mutableStateOf(true) }
+    var navHideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    androidx.compose.runtime.LaunchedEffect(timelineListState) {
+        // 用户拖动 → 停止跟随并显示导航按钮；2s 无操作自动隐藏
+        // （源码 scroll_controller.dart:374-425 handleUserScrollIntent /
+        // _resetNavButtonsHideDelayMs=2000）。拖动停在底部则恢复跟随。
+        timelineListState.interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is androidx.compose.foundation.interaction.DragInteraction.Start -> {
+                    autoStick = false
+                    navVisible = true
+                    navHideJob?.cancel()
+                }
+                is androidx.compose.foundation.interaction.DragInteraction.Stop,
+                is androidx.compose.foundation.interaction.DragInteraction.Cancel,
+                -> {
+                    autoStick = !timelineListState.canScrollForward
+                    navHideJob?.cancel()
+                    navHideJob = coroutineScope.launch {
+                        kotlinx.coroutines.delay(2000)
+                        navVisible = false
+                    }
+                }
+            }
+        }
+    }
+    // 流式期间贴底跟随；用户上滑（autoStick=false）后停止。
+    androidx.compose.runtime.LaunchedEffect(messages, streaming, autoStick) {
+        if (streaming && autoStick && messages.isNotEmpty()) {
+            timelineListState.animateScrollToItem(messages.lastIndex)
+        }
+    }
+    fun jumpAdjacentQuestion(previous: Boolean) {
+        val visible = timelineListState.layoutInfo.visibleItemsInfo
+        val current = visible.firstOrNull()?.index ?: return
+        val userIdx = messages.withIndex().filter { it.value.role == "user" }.map { it.index }
+        val target = if (previous) {
+            userIdx.lastOrNull { it < current }
+        } else {
+            userIdx.firstOrNull { it > current }
+        } ?: return
+        coroutineScope.launch { timelineListState.animateScrollToItem(target) }
+    }
 
     // Model choices from provider_rows payloads (kelivo showModelSelectSheet).
     val modelOptions = remember(container) {
@@ -559,16 +684,68 @@ fun ChatContent(
                 }
             }
         } else {
-            LazyColumn(
-                state = timelineListState,
+            Box(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    horizontal = 16.dp, vertical = 8.dp,
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(messages, key = { it.id }) { msg ->
-                    MessageRow(msg)
+                LazyColumn(
+                    state = timelineListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 16.dp, vertical = 8.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(messages, key = { it.id }) { msg ->
+                        MessageRow(
+                            msg = msg,
+                            assistantLabel = resolvedAssistantLabel,
+                            versionCount = versionInfo[msg.groupId]?.size ?: 1,
+                            versionIndex = versionInfo[msg.groupId]
+                                ?.let { it.indexOf(msg.version).coerceAtLeast(0) } ?: 0,
+                            onPrevVersion = versionInfo[msg.groupId]?.let { versions ->
+                                val idx = versions.indexOf(msg.version)
+                                if (idx > 0) {
+                                    { vm.switchVersion(msg.groupId, versions[idx - 1]) }
+                                } else null
+                            },
+                            onNextVersion = versionInfo[msg.groupId]?.let { versions ->
+                                val idx = versions.indexOf(msg.version)
+                                if (idx in 0 until versions.size - 1) {
+                                    { vm.switchVersion(msg.groupId, versions[idx + 1]) }
+                                } else null
+                            },
+                            onCopy = { copyMessage(msg) },
+                            onRegenerate = if (msg.role == "user") {
+                                { regenerateFor = msg }
+                            } else null,
+                            onEdit = { editFor = msg },
+                            onMore = { moreFor = msg },
+                            onDelete = { vm.deleteVersion(msg.id) },
+                        )
+                    }
+                }
+                // 滚动导航面板（scroll_nav_buttons.dart）：贴输入栏上方右侧。
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 12.dp),
+                ) {
+                    com.psyche.memo.ui.chat.ScrollNavButtonsPanel(
+                        visible = navVisible,
+                        onScrollToTop = {
+                            coroutineScope.launch { timelineListState.animateScrollToItem(0) }
+                        },
+                        onPreviousMessage = { jumpAdjacentQuestion(previous = true) },
+                        onNextMessage = { jumpAdjacentQuestion(previous = false) },
+                        onScrollToBottom = {
+                            coroutineScope.launch {
+                                timelineListState.animateScrollToItem(
+                                    (messages.size - 1).coerceAtLeast(0),
+                                )
+                            }
+                            autoStick = true
+                        },
+                    )
                 }
             }
         }
@@ -619,10 +796,88 @@ fun ChatContent(
             },
         )
     }
+
+    // ---- 消息操作批次:more sheet / 编辑 sheet / regenerate 确认 ----
+    moreFor?.let { target ->
+        val versions = versionInfo[target.groupId] ?: listOf(target.version)
+        com.psyche.memo.ui.chat.MessageMoreSheet(
+            isUserMessage = target.role == "user",
+            canDeleteAllVersions = versions.size > 1,
+            canCreateBranch = !isTemporary,
+            onDismiss = { moreFor = null },
+            onAction = { action ->
+                moreFor = null
+                when (action) {
+                    com.psyche.memo.ui.chat.MessageMoreAction.SELECT_COPY,
+                    com.psyche.memo.ui.chat.MessageMoreAction.RENDER_WEB_VIEW,
+                    com.psyche.memo.ui.chat.MessageMoreAction.SHARE,
+                    com.psyche.memo.ui.chat.MessageMoreAction.SELECT_MESSAGES,
+                    -> com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                        com.psyche.memo.ui.snackbar.AppNotification(
+                            message = notImplementedText,
+                            type = com.psyche.memo.ui.snackbar.NotificationType.INFO,
+                        ),
+                    )
+                    com.psyche.memo.ui.chat.MessageMoreAction.EDIT -> editFor = target
+                    com.psyche.memo.ui.chat.MessageMoreAction.FORK -> forkAt(target.id)
+                    com.psyche.memo.ui.chat.MessageMoreAction.DELETE_CURRENT_VERSION ->
+                        vm.deleteVersion(target.id)
+                    com.psyche.memo.ui.chat.MessageMoreAction.DELETE_ALL_VERSIONS ->
+                        vm.deleteAllVersions(target.id)
+                }
+            },
+        )
+    }
+
+    editFor?.let { target ->
+        com.psyche.memo.ui.chat.MessageEditSheet(
+            initialContent = target.content,
+            onDismiss = { editFor = null },
+            onConfirm = { content, shouldSend ->
+                editFor = null
+                if (content.isNotEmpty()) {
+                    coroutineScope.launch {
+                        val ok = vm.editMessage(target.id, content, shouldSend)
+                        if (!ok) {
+                            com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                                com.psyche.memo.ui.snackbar.AppNotification(
+                                    message = unsupportedEditText,
+                                    type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+                                ),
+                            )
+                        }
+                    }
+                }
+            },
+        )
+    }
+
+    regenerateFor?.let { target ->
+        com.psyche.memo.ui.chat.RegenerateConfirmDialog(
+            onDismiss = { regenerateFor = null },
+            onConfirm = {
+                regenerateFor = null
+                vm.regenerate(target.id)
+            },
+        )
+    }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun MessageRow(msg: ChatViewModel.UiMessage) {
+private fun MessageRow(
+    msg: ChatViewModel.UiMessage,
+    assistantLabel: String,
+    versionCount: Int,
+    versionIndex: Int,
+    onPrevVersion: (() -> Unit)?,
+    onNextVersion: (() -> Unit)?,
+    onCopy: () -> Unit,
+    onRegenerate: (() -> Unit)?,
+    onEdit: () -> Unit,
+    onMore: () -> Unit,
+    onDelete: () -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     val isUser = msg.role == "user"
     // User bubble max width = screen width * 0.75
@@ -630,16 +885,18 @@ private fun MessageRow(msg: ChatViewModel.UiMessage) {
     val maxBubbleWidth = with(LocalDensity.current) {
         LocalWindowInfo.current.containerSize.width.toDp() * 0.75f
     }
+    var showContextMenu by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
     ) {
         if (isUser) {
             // Header: name 13px α0.7 + timestamp 11px α0.5 (right-aligned),
-            // matching chat_message_widget.dart.
+            // matching chat_message_widget.dart. Name comes from the user
+            // resource (UserProvider default 'User' in the original).
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "You",
+                    text = stringResource(UiR.string.user_provider_default_user_name),
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
@@ -656,7 +913,8 @@ private fun MessageRow(msg: ChatViewModel.UiMessage) {
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Assistant avatar: 32px primary α0.1 circle with initial.
+                // Assistant avatar: 32px primary α0.1 circle with the current
+                // assistant's initial (drawer assistant-card data source).
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -664,7 +922,7 @@ private fun MessageRow(msg: ChatViewModel.UiMessage) {
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "A",
+                        text = assistantLabel.firstOrNull()?.toString() ?: "?",
                         style = MaterialTheme.typography.labelMedium.copy(
                             color = cs.primary,
                             fontWeight = FontWeight.Medium,
@@ -674,7 +932,7 @@ private fun MessageRow(msg: ChatViewModel.UiMessage) {
                 Spacer(Modifier.width(6.dp))
                 Column {
                     Text(
-                        text = "Assistant",
+                        text = assistantLabel,
                         style = MaterialTheme.typography.labelMedium.copy(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
@@ -692,60 +950,110 @@ private fun MessageRow(msg: ChatViewModel.UiMessage) {
             }
         }
         Spacer(Modifier.height(4.dp))
-        Column(
-            modifier = Modifier
-                .widthIn(max = maxBubbleWidth)
-                .background(
-                    color = if (isUser) cs.primary.copy(alpha = 0.08f)
-                    else Color.Transparent,
-                    shape = RoundedCornerShape(16.dp),
-                )
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-        ) {
-            for (part in msg.parts) {
-                when (part) {
-                    is TextPart -> com.psyche.memo.ui.markdown.MarkdownText(
-                        markdown = part.text,
-                        baseFontSize = 15.7f,
-                        baseLineHeight = 23.55f,
+        // 长按浮层锚定在气泡上（chat_message_widget.dart:1812-1846 mobile
+        // long-press → _showUserContextMenu）。
+        Box {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = maxBubbleWidth)
+                    .background(
+                        color = if (isUser) cs.primary.copy(alpha = 0.08f)
+                        else Color.Transparent,
+                        shape = RoundedCornerShape(16.dp),
                     )
-                    is ReasoningPart -> com.psyche.memo.ui.markdown.ThinkingCard(
-                        thinking = part.text,
-                        modifier = Modifier.padding(top = 4.dp),
+                    .combinedClickable(
+                        enabled = isUser,
+                        onLongClick = { if (isUser) showContextMenu = true },
+                        onClick = {},
                     )
-                    is ToolCallPart -> Text(
-                        "Tool: ${part.payloadJson.take(80)}",
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                for (part in msg.parts) {
+                    when (part) {
+                        is TextPart -> com.psyche.memo.ui.markdown.MarkdownText(
+                            markdown = part.text,
+                            baseFontSize = 15.7f,
+                            baseLineHeight = 23.55f,
+                        )
+                        is ReasoningPart -> com.psyche.memo.ui.markdown.ThinkingCard(
+                            thinking = part.text,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        is ToolCallPart -> Text(
+                            "Tool: ${part.payloadJson.take(80)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onSurfaceVariant,
+                        )
+                        else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                if (msg.parts.isEmpty() && msg.isStreaming) {
+                    CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp).size(20.dp))
+                }
+                if (msg.failed) {
+                    Text(
+                        stringResource(UiR.string.generation_interrupted),
                         style = MaterialTheme.typography.bodySmall,
-                        color = cs.onSurfaceVariant,
+                        color = cs.error,
                     )
-                    else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            if (msg.parts.isEmpty() && msg.isStreaming) {
-                CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp).size(20.dp))
-            }
-            if (msg.failed) {
-                Text(
-                    stringResource(UiR.string.generation_interrupted),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = cs.error,
+            if (showContextMenu) {
+                com.psyche.memo.ui.chat.UserContextMenu(
+                    onCopy = onCopy,
+                    onEdit = onEdit,
+                    onDelete = onDelete,
+                    onDismiss = { showContextMenu = false },
                 )
             }
         }
-        // Message actions (user messages): copy / regenerate / edit — 28px
-        // rounded actions row, right-aligned below the bubble (kelivo).
-        if (isUser) {
+        // Message actions (user messages): copy / regenerate / edit / more —
+        // 28px rounded actions row, right-aligned below the bubble (kelivo
+        // chat_message_widget.dart:1847-1974); assistant rows show the
+        // version selector and token stats.
+        val showVersionSwitcher = versionCount > 1
+        if (isUser || showVersionSwitcher || msg.totalTokens != null) {
             Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MessageActionIcon(Lucide.Copy, "Copy") {}
-                Spacer(Modifier.width(6.dp))
-                MessageActionIcon(Lucide.RefreshCw, "Regenerate") {}
-                Spacer(Modifier.width(6.dp))
-                MessageActionIcon(Lucide.Pencil, "Edit") {}
+                if (isUser) {
+                    MessageActionIcon(Lucide.Copy, "Copy", onClick = onCopy)
+                    Spacer(Modifier.width(6.dp))
+                    MessageActionIcon(
+                        Lucide.RefreshCw,
+                        "Regenerate",
+                        onClick = { onRegenerate?.invoke() },
+                        enabled = onRegenerate != null,
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    MessageActionIcon(Lucide.Pencil, "Edit", onClick = onEdit)
+                    Spacer(Modifier.width(6.dp))
+                    MessageActionIcon(Lucide.Ellipsis, "More", onClick = onMore)
+                }
+                if (showVersionSwitcher) {
+                    if (isUser) Spacer(Modifier.width(6.dp))
+                    com.psyche.memo.ui.chat.BranchSelector(
+                        index = versionIndex,
+                        total = versionCount,
+                        onPrev = onPrevVersion,
+                        onNext = onNextVersion,
+                    )
+                }
+                if (!isUser && msg.totalTokens != null) {
+                    // 源码 chat_message_widget.dart:3395-3405 —— Spacer 后
+                    // 靠右的 TokenDisplayWidget。
+                    Spacer(Modifier.weight(1f))
+                    com.psyche.memo.ui.chat.TokenDisplay(
+                        totalTokens = msg.totalTokens,
+                        promptTokens = msg.promptTokens,
+                        completionTokens = msg.completionTokens,
+                        cachedTokens = msg.cachedTokens,
+                        durationMs = msg.durationMs,
+                    )
+                }
             }
         }
     }
@@ -756,19 +1064,20 @@ private fun MessageActionIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     val cs = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .size(28.dp)
             .background(cs.surfaceVariant, RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             icon,
             contentDescription = label,
-            tint = cs.onSurface,
+            tint = cs.onSurface.copy(alpha = if (enabled) 0.9f else 0.4f),
             modifier = Modifier.size(12.dp),
         )
     }

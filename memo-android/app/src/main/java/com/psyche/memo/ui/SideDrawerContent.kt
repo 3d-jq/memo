@@ -789,6 +789,9 @@ fun SideDrawerContent(
 
     // Single delete confirmation (memo _confirmDeleteConversation).
     deleteTarget?.let { target ->
+        // 源码 side_drawer.dart:389 —— Deleted "title"（回调里取不到
+        // stringResource，先在组合作用域内求值）。
+        val deleteDoneText = stringResource(UiR.string.side_drawer_delete_snackbar, target.title)
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_title)) },
@@ -799,6 +802,14 @@ fun SideDrawerContent(
                     val deletingCurrent = target.id == selectedId
                     container.conversationDao.delete(target.id)
                     reload()
+                    // 源码 side_drawer.dart:387-392 —— 删除成功 snackbar。
+                    com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                        com.psyche.memo.ui.snackbar.AppNotification(
+                            message = deleteDoneText,
+                            type = com.psyche.memo.ui.snackbar.NotificationType.SUCCESS,
+                            durationMs = 3000,
+                        ),
+                    )
                     if (deletingCurrent) onCurrentDeleted()
                 }) { Text(stringResource(UiR.string.side_drawer_menu_delete), color = cs.error) }
             },
