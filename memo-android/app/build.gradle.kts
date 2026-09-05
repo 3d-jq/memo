@@ -84,8 +84,8 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
-    testImplementation("androidx.compose.ui:ui-test-junit4")
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 android {
@@ -93,5 +93,8 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+    }
+    lint {
+        lintConfig = file("lint.xml")
     }
 }
