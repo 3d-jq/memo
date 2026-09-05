@@ -93,6 +93,10 @@ fun SettingsScreen(
     onOpenProviders: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenStorage: () -> Unit,
+    onOpenMemory: () -> Unit,
+    onOpenNetworkProxy: () -> Unit,
+    onOpenToolSchema: () -> Unit,
+    onOpenLogs: () -> Unit,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -259,13 +263,13 @@ fun SettingsScreen(
                     DividerRow()
                     SettingsRow(Lucide.BookOpen, stringResource(UiR.string.settings_page_world_book), onTap = {})
                     DividerRow()
-                    SettingsRow(Lucide.Brain, stringResource(UiR.string.settings_page_memory), onTap = {})
+                    SettingsRow(Lucide.Brain, stringResource(UiR.string.settings_page_memory), onTap = onOpenMemory)
                     DividerRow()
                     SettingsRow(Lucide.Zap, stringResource(UiR.string.settings_page_quick_phrase), onTap = {})
                     DividerRow()
                     SettingsRow(Lucide.Layers, stringResource(UiR.string.settings_page_instruction_injection), onTap = {})
                     DividerRow()
-                    SettingsRow(Lucide.EthernetPort, stringResource(UiR.string.settings_page_network_proxy), onTap = {})
+                    SettingsRow(Lucide.EthernetPort, stringResource(UiR.string.settings_page_network_proxy), onTap = onOpenNetworkProxy)
                 }
             }
 
@@ -316,11 +320,11 @@ fun SettingsScreen(
                     // B6 — Logs row conditional (L383-397).
                     if (logsVisible) {
                         DividerRow()
-                        SettingsRow(Lucide.FileText, stringResource(UiR.string.settings_page_logs), onTap = {})
+                        SettingsRow(Lucide.FileText, stringResource(UiR.string.settings_page_logs), onTap = onOpenLogs)
                     }
                     // B5 — Tool Descriptions row (L398-410).
                     DividerRow()
-                    SettingsRow(Lucide.Wrench, stringResource(UiR.string.tool_schema_settings_page_title), onTap = {})
+                    SettingsRow(Lucide.Wrench, stringResource(UiR.string.tool_schema_settings_page_title), onTap = onOpenToolSchema)
                     // Sponsor row (L411-421) deliberately dropped: the whole
                     // sponsor page is upstream (kelivo afdian / WeChat QR /
                     // kelivo sponsors list) and is Memo-ized away per the

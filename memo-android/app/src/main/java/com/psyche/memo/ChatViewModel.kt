@@ -53,6 +53,8 @@ class ChatViewModel(
         val completionTokens: Int? = null,
         val cachedTokens: Int? = null,
         val durationMs: Long? = null,
+        /** Translated body (chat_message_widget.dart message.translation 显示层)。 */
+        val translation: String? = null,
     ) {
         val content: String
             get() = parts.filterIsInstance<TextPart>().joinToString("") { it.text }
@@ -599,6 +601,7 @@ class ChatViewModel(
         completionTokens = completionTokens,
         cachedTokens = cachedTokens,
         durationMs = durationMs,
+        translation = translation,
     )
 
     companion object {

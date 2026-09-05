@@ -7,6 +7,8 @@ import com.psyche.memo.llm.retry.AutoRetryOptions
 import com.psyche.memo.llm.stream.StreamChunk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -69,6 +71,35 @@ class ClaudeClientIntegrationTest {
 
         val text = chunks.filterIsInstance<StreamChunk.TextDelta>().joinToString("") { it.text }
         assertEquals("Hello world", text)
+    }
+
+    @Test
+    fun finishCarriesMergedUsageFromMessageDelta() = runBlocking {
+        // message_start 携带 input_tokens，message_delta 只带 output/cache
+        // ——Finish 的 usage 应合并两者（cache_read + cache_creation 求和）。
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "text/event-stream")
+                .setBody(
+                    "event: message_start\n" +
+                        "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":12}}}\n\n" +
+                        "event: content_block_delta\n" +
+                        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}\n\n" +
+                        "event: message_delta\n" +
+                        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":7,\"cache_read_input_tokens\":3,\"cache_creation_input_tokens\":2}}\n\n" +
+                        "event: message_stop\n" +
+                        "data: {\"type\":\"message_stop\"}\n\n",
+                ),
+        )
+        val chunks = client().streamChat(request(server.url("/").toString())).toList()
+
+        val finish = chunks.filterIsInstance<StreamChunk.Finish>().single()
+        assertEquals("end_turn", finish.finishReason)
+        val usage = finish.usage!!
+        assertEquals(12, usage["input_tokens"]!!.jsonPrimitive.int)
+        assertEquals(7, usage["output_tokens"]!!.jsonPrimitive.int)
+        // cache_read(3) + cache_creation(2) 合并进 cache_read_input_tokens。
+        assertEquals(5, usage["cache_read_input_tokens"]!!.jsonPrimitive.int)
     }
 
     @Test

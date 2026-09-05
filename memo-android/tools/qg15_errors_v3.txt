@@ -1,0 +1,70 @@
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LegacyMemoryScreen.kt:118:39 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LegacyMemoryScreen.kt:128:29 Overload resolution ambiguity between candidates:
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LegacyMemoryScreen.kt:145:43 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LegacyMemoryScreen.kt:226:51 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LegacyMemoryScreen.kt:299:5 This material API is experimental and is likely to change or to be removed in the future.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LegacyMemoryScreen.kt:330:93 Unresolved reference 'Color'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LegacyMemoryScreen.kt:403:43 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogData.kt:103:22 Unresolved reference 'codeUnitAt'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogData.kt:108:67 Unresolved reference 'codeUnitAt'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogData.kt:119:51 Unresolved reference 'codeUnitAt'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogData.kt:122:51 Unresolved reference 'codeUnitAt'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogData.kt:126:49 Unresolved reference 'codeUnitAt'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogData.kt:150:26 Unresolved reference 'codeUnitAt'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogData.kt:164:26 Unresolved reference 'codeUnitAt'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogData.kt:182:26 Unresolved reference 'codeUnitAt'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:80:37 Unresolved reference 'XCircle'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:495:31 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:712:31 Unresolved reference 'XCircle'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:841:25 Unresolved reference 'XCircle'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:871:21 Unresolved reference 'XCircle'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:905:9 Functions which invoke @Composable functions must be marked with the @Composable annotation
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:908:23 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:1073:25 Unresolved reference 'XCircle'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:1407:35 Argument type mismatch: actual type is 'Alignment.Horizontal', but 'Alignment' was expected.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:1583:84 Unresolved reference 'clipToBounds'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:1594:9 Functions which invoke @Composable functions must be marked with the @Composable annotation
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:1606:23 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/LogViewerScreen.kt:1739:35 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryEntriesScreen.kt:466:5 This material API is experimental and is likely to change or to be removed in the future.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:268:25 No parameter with name 'title' found.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:269:25 No parameter with name 'subtitle' found.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:270:25 No parameter with name 'checked' found.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:271:25 No parameter with name 'onCheckedChange' found.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:271:25 No value passed for parameter 'icon'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:271:25 No value passed for parameter 'label'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:271:25 No value passed for parameter 'value'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:271:25 No value passed for parameter 'onToggle'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:271:64 Unresolved reference 'it'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemorySettingsScreen.kt:463:43 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryTraceScreen.kt:189:9 This material API is experimental and is likely to change or to be removed in the future.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryTraceScreen.kt:211:43 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryUi.kt:476:10 Inapplicable candidate(s): fun then(other: Modifier): Modifier
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryUi.kt:477:44 Unresolved reference 'height'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryUi.kt:477:56 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryUi.kt:477:56 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryUi.kt:477:60 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryUi.kt:494:37 Type parameters must be placed before function name.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryUi.kt:502:5 This material API is experimental and is likely to change or to be removed in the future.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/MemoryUi.kt:700:64 Unresolved reference 'useThisAssistant'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/NetworkProxyScreen.kt:239:21 Unresolved reference 'Box'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/NetworkProxyScreen.kt:240:25 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/NetworkProxyScreen.kt:244:36 @Composable invocations can only happen from the context of a @Composable function
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:55:59 Cannot access 'constructor(): JsonObjectBuilder': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:163:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:181:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:199:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:239:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:259:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:283:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:301:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:319:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:339:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:363:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:391:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServiceData.kt:421:7 Cannot access 'fun build(): JsonObject': it is internal in 'kotlinx.serialization.json.JsonObjectBuilder'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServicesScreen.kt:387:36 Function invocation 'context(...)' expected.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServicesScreen.kt:387:44 Unresolved reference 'getString'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsServicesScreen.kt:771:25 Unresolved reference 'AppNotification'.
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/TtsSettingsScreen.kt:236:13 None of the following candidates is applicable:
+e: file:///D:/program/memo/memo-android/app/src/main/java/com/psyche/memo/ui/chat/ToolResults.kt:114:35 Argument type mismatch: actual type is 'Number & Comparable<CapturedType(*)>', but 'Long' was expected.

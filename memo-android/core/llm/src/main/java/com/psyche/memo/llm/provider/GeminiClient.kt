@@ -115,26 +115,72 @@ class GeminiClient(
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
             val source: BufferedSource = response.body?.source() ?: throw IOException("no body")
             val parser = SseEventParser(recoverAdjacentJsonDataRecords = false)
+            val state = GeminiStreamState()
             while (!source.exhausted()) {
                 val line = source.readUtf8Line() ?: break
                 for (event in parser.add(line + "\n")) {
-                    for (chunk in decodeEvent(event)) onChunk(chunk)
+                    for (chunk in decodeEvent(event, state)) onChunk(chunk)
                 }
             }
             for (event in parser.close()) {
-                for (chunk in decodeEvent(event)) onChunk(chunk)
+                for (chunk in decodeEvent(event, state)) onChunk(chunk)
+            }
+            // 兜底：usageMetadata 出现在最后却没有携带 finishReason（或流被
+            // 服务端提前关闭）时补发 Finish，保证 token 展示不丢。
+            if (!state.finishEmitted) {
+                val usage = state.usageJson
+                val finish = state.finishReason
+                if (usage != null || !finish.isNullOrEmpty()) {
+                    state.finishEmitted = true
+                    onChunk(StreamChunk.Finish(finish, usage))
+                }
             }
         } finally {
             response.close()
         }
     }
 
-    private fun decodeEvent(event: com.psyche.memo.llm.stream.SseEvent): List<StreamChunk> {
+    /** Per-response decode state (usageMetadata accumulates across chunks). */
+    private class GeminiStreamState {
+        var usageJson: JsonObject? = null
+        var finishReason: String? = null
+        var finishEmitted = false
+    }
+
+    /**
+     * usageMetadata → usage object in the field shape ChatViewModel.parseUsage
+     * reads: prompt_tokens / completion_tokens / total_tokens (mirrors
+     * google_decoder._parseEvent which merges promptTokenCount /
+     * candidatesTokenCount / totalTokenCount).
+     */
+    private fun buildGeminiUsageJson(um: JsonObject): JsonObject {
+        fun intOf(key: String): Int? =
+            (um[key] as? JsonPrimitive)?.content?.toIntOrNull()
+        return buildJsonObject {
+            intOf("promptTokenCount")?.let { put("prompt_tokens", it) }
+            intOf("candidatesTokenCount")?.let { put("completion_tokens", it) }
+            intOf("totalTokenCount")?.let { put("total_tokens", it) }
+        }
+    }
+
+    private fun decodeEvent(event: com.psyche.memo.llm.stream.SseEvent, state: GeminiStreamState): List<StreamChunk> {
         val data = event.data
         if (data.isEmpty()) return emptyList()
         val obj = try { json.parseToJsonElement(data).jsonObject } catch (e: Exception) { return emptyList() }
         val out = ArrayList<StreamChunk>()
+        // Usage first so a Finish emitted below carries the freshest counters.
+        (obj["usageMetadata"] as? JsonObject)?.let { um ->
+            state.usageJson = buildGeminiUsageJson(um)
+        }
         obj["candidates"]?.let { it as? JsonArray }?.firstOrNull()?.jsonObject?.let { cand ->
+            val finish = (cand["finishReason"] as? JsonPrimitive)?.content
+            if (!finish.isNullOrEmpty()) {
+                state.finishReason = finish
+                if (!state.finishEmitted) {
+                    state.finishEmitted = true
+                    out.add(StreamChunk.Finish(finish, state.usageJson))
+                }
+            }
             cand["content"]?.jsonObject?.get("parts")?.let { it as? JsonArray }?.forEach { p ->
                 val part = p.jsonObject ?: return@forEach
                 val isThought = (part["thought"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() == true

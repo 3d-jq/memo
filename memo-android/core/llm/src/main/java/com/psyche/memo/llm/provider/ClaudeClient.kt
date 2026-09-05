@@ -100,26 +100,64 @@ class ClaudeClient(
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
             val source: BufferedSource = response.body?.source() ?: throw IOException("no body")
             val parser = SseEventParser(recoverAdjacentJsonDataRecords = false)
+            val state = ClaudeStreamState()
             while (!source.exhausted()) {
                 val line = source.readUtf8Line() ?: break
                 for (event in parser.add(line + "\n")) {
-                    for (chunk in decodeEvent(event)) onChunk(chunk)
+                    for (chunk in decodeEvent(event, state)) onChunk(chunk)
                 }
             }
             for (event in parser.close()) {
-                for (chunk in decodeEvent(event)) onChunk(chunk)
+                for (chunk in decodeEvent(event, state)) onChunk(chunk)
             }
         } finally {
             response.close()
         }
     }
 
-    private fun decodeEvent(event: com.psyche.memo.llm.stream.SseEvent): List<StreamChunk> {
+    /**
+     * Per-response decode state. [startUsage] keeps the message_start usage so
+     * the message_delta Finish can merge input tokens in (the delta usage only
+     * carries output/cache counters, mirroring claude_decoder._onMessageDelta).
+     */
+    private class ClaudeStreamState {
+        var startUsage: JsonObject? = null
+        var finishEmitted = false
+    }
+
+    /**
+     * Merged usage object in the field shape ChatViewModel.parseUsage reads:
+     * input_tokens / output_tokens / cache_read_input_tokens (cache_read +
+     * cache_creation summed, same as claudeUsageFromMap).
+     */
+    private fun buildClaudeUsageJson(start: JsonObject?, delta: JsonObject?): JsonObject? {
+        if (start == null && delta == null) return null
+        fun intOf(o: JsonObject?, key: String): Int? =
+            (o?.get(key) as? JsonPrimitive)?.content?.toIntOrNull()
+        val input = intOf(delta, "input_tokens") ?: intOf(start, "input_tokens")
+        val output = intOf(delta, "output_tokens") ?: intOf(start, "output_tokens")
+        if (input == null && output == null) return null
+        val cached = (intOf(delta, "cache_read_input_tokens")
+            ?: intOf(start, "cache_read_input_tokens")) ?: 0
+        val cacheCreated = (intOf(delta, "cache_creation_input_tokens")
+            ?: intOf(start, "cache_creation_input_tokens")) ?: 0
+        return buildJsonObject {
+            input?.let { put("input_tokens", it) }
+            output?.let { put("output_tokens", it) }
+            if (cached + cacheCreated > 0) put("cache_read_input_tokens", cached + cacheCreated)
+        }
+    }
+
+    private fun decodeEvent(event: com.psyche.memo.llm.stream.SseEvent, state: ClaudeStreamState): List<StreamChunk> {
         val data = event.data
         if (data.isEmpty()) return emptyList()
         val obj = try { json.parseToJsonElement(data).jsonObject } catch (e: Exception) { return emptyList() }
         val out = ArrayList<StreamChunk>()
         when (obj["type"]?.let { (it as? JsonPrimitive)?.content } ?: "") {
+            "message_start" -> {
+                state.startUsage = (obj["message"] as? JsonObject)
+                    ?.get("usage") as? JsonObject
+            }
             "content_block_delta" -> {
                 val delta = obj["delta"]?.jsonObject ?: return out
                 when (delta["type"]?.let { (it as? JsonPrimitive)?.content } ?: "") {
@@ -143,6 +181,21 @@ class ClaudeClient(
                     val id = (cb["id"] as? JsonPrimitive)?.content ?: ""
                     val name = (cb["name"] as? JsonPrimitive)?.content ?: ""
                     if (name.isNotEmpty()) out.add(StreamChunk.ToolCallDelta(id, name, ""))
+                }
+            }
+            "message_delta" -> {
+                // usage may sit on the delta itself or on a nested message
+                // holder (same fallback chain as claude_decoder._onMessageDelta).
+                val deltaUsage = obj["usage"] as? JsonObject
+                val messageUsage = (obj["message"] as? JsonObject)?.get("usage") as? JsonObject
+                val usageJson = buildClaudeUsageJson(state.startUsage, deltaUsage ?: messageUsage)
+                val delta = obj["delta"] as? JsonObject
+                val stopReason = delta
+                    ?.let { (it["stop_reason"] ?: it["stopReason"]) }
+                    ?.let { (it as? JsonPrimitive)?.content }
+                if (!state.finishEmitted && (usageJson != null || !stopReason.isNullOrEmpty())) {
+                    state.finishEmitted = true
+                    out.add(StreamChunk.Finish(stopReason, usageJson))
                 }
             }
         }

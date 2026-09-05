@@ -52,6 +52,17 @@ import com.psyche.memo.ui.ThemeState
 import com.psyche.memo.ui.ThemeSettingsScreen
 import com.psyche.memo.ui.UserProfileScreen
 import com.psyche.memo.ui.SettingsScreen
+import com.psyche.memo.ui.DebugScreen
+import com.psyche.memo.ui.LegacyMemoryScreen
+import com.psyche.memo.ui.LogViewerScreen
+import com.psyche.memo.ui.MemoryEntriesScreen
+import com.psyche.memo.ui.MemorySettingsScreen
+import com.psyche.memo.ui.MemoryTraceScreen
+import com.psyche.memo.ui.NetworkProxyScreen
+import com.psyche.memo.ui.ToolSchemaEditorScreen
+import com.psyche.memo.ui.ToolSchemaSettingsScreen
+import com.psyche.memo.ui.TtsServicesScreen
+import com.psyche.memo.ui.TtsSettingsScreen
 import com.psyche.memo.ui.locale.withAppLocale
 import com.psyche.memo.ui.theme.MemoTheme
 import com.psyche.memo.ui.theme.ProvideSemanticColors
@@ -217,6 +228,10 @@ private fun AppThemeAndContent(
                             onOpenProviders = { navController.navigate("providers") },
                             onOpenAbout = { navController.navigate("about") },
                             onOpenStorage = { navController.navigate("storage") },
+                            onOpenMemory = { navController.navigate("memory_settings") },
+                            onOpenNetworkProxy = { navController.navigate("network_proxy") },
+                            onOpenToolSchema = { navController.navigate("tool_schema_settings") },
+                            onOpenLogs = { navController.navigate("log_viewer") },
                             onBack = { navController.popBackStack() },
                         )
                     }
@@ -347,6 +362,84 @@ private fun AppThemeAndContent(
                             onOpenAutoRetry = { navController.navigate("auto_retry") },
                             onOpenHaptics = { navController.navigate("haptics") },
                             onOpenTheme = { navController.navigate("theme_settings") },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+
+                    // ── Wave-2 settings pages (task #16) ────────────────────
+                    composable("memory_settings") {
+                        MemorySettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenLegacyMemory = { navController.navigate("legacy_memory") },
+                            onOpenMemoryTrace = { navController.navigate("memory_trace") },
+                            onOpenMemoryAbout = { /* memory_about_page.dart — later batch */ },
+                            onOpenMemoryEntries = { navController.navigate("memory_entries") },
+                        )
+                    }
+                    composable("memory_entries") {
+                        MemoryEntriesScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("memory_trace") {
+                        MemoryTraceScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("legacy_memory") {
+                        LegacyMemoryScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("network_proxy") {
+                        NetworkProxyScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("tool_schema_settings") {
+                        ToolSchemaSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenEditor = { entry, _ ->
+                                navController.navigate("tool_schema_editor/${android.net.Uri.encode(entry.name)}")
+                            },
+                        )
+                    }
+                    composable("tool_schema_editor/{toolName}") { entry ->
+                        ToolSchemaEditorScreen(
+                            container = container,
+                            toolName = android.net.Uri.decode(entry.arguments?.getString("toolName") ?: ""),
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("log_viewer") {
+                        LogViewerScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("debug") {
+                        DebugScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    // tts_settings route registered; the settings TTS row stays
+                    // dead until the tts_services batch lands (task #25).
+                    composable("tts_settings") {
+                        TtsSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("tts_services") {
+                        TtsServicesScreen(
+                            container = container,
                             onBack = { navController.popBackStack() },
                         )
                     }

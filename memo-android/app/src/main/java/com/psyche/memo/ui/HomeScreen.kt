@@ -51,11 +51,13 @@ import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.CircleStop
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Ellipsis
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Glasses
 import com.composables.icons.lucide.Hammer
-import com.composables.icons.lucide.List
+import com.composables.icons.lucide.Languages
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Map
 import com.composables.icons.lucide.MessageCircleDashed
@@ -112,6 +114,7 @@ import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ChatViewModel
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.data.model.MessagePart
+import com.psyche.memo.data.model.ImagePart
 import com.psyche.memo.data.model.ReasoningPart
 import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.data.model.ToolCallPart
@@ -886,6 +889,17 @@ private fun MessageRow(
         LocalWindowInfo.current.containerSize.width.toDp() * 0.75f
     }
     var showContextMenu by remember { mutableStateOf(false) }
+    // 全屏图片查看器状态（image_viewer_page.dart 移动端路径）。
+    var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
+    // 引用来源 sheet 状态（citation_sources_sheet.dart）。
+    var showCitations by remember { mutableStateOf(false) }
+    // 翻译区折叠状态（chat_message_widget.dart translationExpanded）。
+    var translationExpanded by remember(msg.id, msg.translation) { mutableStateOf(true) }
+    // search_web / builtin_search 工具结果提取为引用来源
+    // （chat_message_widget.dart _allSearchItems，从后往前、去重）。
+    val searchItems = remember(msg.id, msg.parts) {
+        com.psyche.memo.ui.chat.extractCitationItems(msg.parts)
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
@@ -968,6 +982,14 @@ private fun MessageRow(
                     )
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
+                // 图片附件（chat_message_widget.dart _buildAttachmentPreview
+                // ImagePart 分支）：整组渲染，点击可跨图翻页查看。
+                if (msg.parts.any { it is ImagePart }) {
+                    com.psyche.memo.ui.chat.MessageImageAttachments(
+                        parts = msg.parts,
+                        onOpenViewer = { uris, index -> viewerState = uris to index },
+                    )
+                }
                 for (part in msg.parts) {
                     when (part) {
                         is TextPart -> com.psyche.memo.ui.markdown.MarkdownText(
@@ -979,11 +1001,23 @@ private fun MessageRow(
                             thinking = part.text,
                             modifier = Modifier.padding(top = 4.dp),
                         )
-                        is ToolCallPart -> Text(
-                            "Tool: ${part.payloadJson.take(80)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = cs.onSurfaceVariant,
-                        )
+                        is ToolCallPart -> {
+                            // 工具调用卡（chat_message_widget.dart _ToolCallItem
+                            // 渲染层；解析失败保持原 payload 兜底文本）。
+                            val toolPart = remember(part.payloadJson) {
+                                com.psyche.memo.ui.chat.ToolUiPart.fromPayload(part.payloadJson)
+                            }
+                            if (toolPart != null) {
+                                com.psyche.memo.ui.chat.ToolCallCard(part = toolPart)
+                            } else {
+                                Text(
+                                    "‹tool_call›",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = cs.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        is ImagePart -> Unit // 已整组渲染在气泡顶部
                         else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                     }
                 }
@@ -997,6 +1031,72 @@ private fun MessageRow(
                         color = cs.error,
                     )
                 }
+                // 翻译显示分支（chat_message_widget.dart:3023-3180，显示层；
+                // 翻译动作按钮属输入域批次）：primaryContainer 容器 + 可折叠
+                // Languages 标题行 + 译文。
+                if (!isUser && !msg.translation.isNullOrEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                cs.primaryContainer.copy(alpha = 0.28f),
+                                RoundedCornerShape(16.dp),
+                            )
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { translationExpanded = !translationExpanded }
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                        ) {
+                            Icon(
+                                Lucide.Languages,
+                                contentDescription = null,
+                                tint = cs.onSurface.copy(alpha = 0.88f),
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(UiR.string.chat_message_widget_translation),
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = cs.onSurface.copy(alpha = 0.88f),
+                                ),
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Icon(
+                                if (translationExpanded) Lucide.ChevronDown else Lucide.ChevronRight,
+                                contentDescription = null,
+                                tint = cs.onSurface.copy(alpha = 0.88f),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        if (translationExpanded) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = msg.translation,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontSize = 15.5.sp,
+                                    lineHeight = 21.7.sp,
+                                    color = cs.onSurface.copy(alpha = 0.85f),
+                                ),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+                // 来源摘要卡（chat_message_widget.dart:3182-3189）。
+                if (!isUser && searchItems.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    com.psyche.memo.ui.chat.CitationSourcesSummaryCard(
+                        items = searchItems,
+                        onTap = { showCitations = true },
+                    )
+                }
             }
             if (showContextMenu) {
                 com.psyche.memo.ui.chat.UserContextMenu(
@@ -1006,6 +1106,20 @@ private fun MessageRow(
                     onDismiss = { showContextMenu = false },
                 )
             }
+        }
+        // 全屏图片查看器 + 引用来源 sheet（挂载于消息行级状态）。
+        viewerState?.let { (uris, index) ->
+            com.psyche.memo.ui.chat.ImageViewerOverlay(
+                images = uris,
+                initialIndex = index,
+                onClose = { viewerState = null },
+            )
+        }
+        if (showCitations) {
+            com.psyche.memo.ui.chat.CitationSourcesSheet(
+                items = searchItems,
+                onDismiss = { showCitations = false },
+            )
         }
         // Message actions (user messages): copy / regenerate / edit / more —
         // 28px rounded actions row, right-aligned below the bubble (kelivo
