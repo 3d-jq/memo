@@ -36,7 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,7 +76,9 @@ fun ModelSelectSheet(
     val cs = MaterialTheme.colorScheme
     val providers = remember(options) { options.map { it.providerName }.distinct() }
     // DraggableScrollableSheet initial/maxChildSize = 0.8.
-    val sheetHeight = LocalConfiguration.current.screenHeightDp.dp * 0.8f
+    val sheetHeight = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.height.toDp() * 0.8f
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

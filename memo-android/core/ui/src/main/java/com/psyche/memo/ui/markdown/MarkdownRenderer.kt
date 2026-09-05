@@ -16,12 +16,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
 import org.commonmark.ext.gfm.tables.TablesExtension
 import org.commonmark.node.BlockQuote
@@ -198,18 +207,77 @@ private fun CodeBlockView(code: String?) {
     }
 }
 
-/** Inline formatting: emphasis/strong/code/link/image text (P1 subset). */
-private fun renderInline(node: Node): AnnotatedString = buildAnnotatedString {
+/**
+ * Inline formatting with real styles (gpt_markdown md_widget behavior):
+ * strong (w600), emphasis (italic), strikethrough (line-through), inline code
+ * (code background + monospace) and links (colored, underlined, clickable).
+ * Image nodes remain a placeholder until the image subsystem lands.
+ */
+@Composable
+private fun renderInline(node: Node): AnnotatedString {
+    val cs = MaterialTheme.colorScheme
+    val codeBackground = cs.surfaceVariant
+    val linkColor = cs.primary
+    return buildAnnotatedString {
+        var child = node.firstChild
+        while (child != null) {
+            appendInlineStyled(child, codeBackground, linkColor)
+            child = child.next
+        }
+    }
+}
+
+@Composable
+private fun AnnotatedString.Builder.appendInlineStyled(
+    node: Node,
+    codeBackground: Color,
+    linkColor: Color,
+) {
+    when (node) {
+        is Text -> append(node.literal ?: "")
+        is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight(600))) {
+            appendInlineChildren(node, codeBackground, linkColor)
+        }
+        is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+            appendInlineChildren(node, codeBackground, linkColor)
+        }
+        is Strikethrough -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
+            appendInlineChildren(node, codeBackground, linkColor)
+        }
+        is Code -> withStyle(SpanStyle(background = codeBackground, fontFamily = FontFamily.Monospace)) {
+            append(node.literal ?: "")
+        }
+        is Link -> {
+            val link = LinkAnnotation.Url(
+                node.destination ?: "",
+                TextLinkStyles(
+                    style = SpanStyle(
+                        color = linkColor,
+                        textDecoration = TextDecoration.Underline,
+                    ),
+                ),
+            )
+            withLink(link) {
+                appendInlineChildren(node, codeBackground, linkColor)
+            }
+        }
+        is Image -> withStyle(SpanStyle(color = linkColor)) {
+            append("[image ${node.destination}]")
+        }
+        is SoftLineBreak -> append(" ")
+        else -> appendInlineChildren(node, codeBackground, linkColor)
+    }
+}
+
+@Composable
+private fun AnnotatedString.Builder.appendInlineChildren(
+    node: Node,
+    codeBackground: Color,
+    linkColor: Color,
+) {
     var child = node.firstChild
     while (child != null) {
-        when (child) {
-            is Text -> append(child.literal ?: "")
-            is StrongEmphasis -> append(child.firstChild?.let { (it as? Text)?.literal } ?: "")
-            is Emphasis -> append(child.firstChild?.let { (it as? Text)?.literal } ?: "")
-            is Code -> append(child.literal ?: "")
-            is Link -> append(child.firstChild?.let { (it as? Text)?.literal } ?: "")
-            is SoftLineBreak -> append(" ")
-        }
+        appendInlineStyled(child, codeBackground, linkColor)
         child = child.next
     }
 }

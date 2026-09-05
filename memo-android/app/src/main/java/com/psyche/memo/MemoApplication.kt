@@ -14,6 +14,11 @@ class MemoApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         instance = this
         container = AppContainerImpl(this)
+        // Startup provider seeding (Flutter SettingsProvider.ensureProviderConfig
+        // per-key fill-missing pass): builtin keys without a provider_rows row
+        // get their pristine default config (baseUrl/label/enabled verbatim
+        // from ProviderConfig.defaultsFor). Idempotent.
+        container.providerRepository.ensureBuiltinDefaultsSeeded()
     }
 
     /**

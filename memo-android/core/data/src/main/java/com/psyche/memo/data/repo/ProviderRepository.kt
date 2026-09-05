@@ -7,7 +7,11 @@ import com.psyche.memo.data.model.ProviderGroup
 import com.psyche.memo.data.settings.PreferenceRepository
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Provider data layer — mirrors the provider-facing surface of Flutter
@@ -34,12 +38,29 @@ class ProviderRepository(
 
     init {
         // One-time sweep of empty builtin rows left by earlier test builds
-        // (idempotent: re-running matches nothing once removed).
+        // (idempotent: re-running matches nothing once removed). Pristine
+        // defaults seeded at startup are exempt — see the body.
         cleanupEmptyBuiltinRows()
     }
 
     /** Base provider keys shown before any user-added config (providers_page._providers). */
     val builtinKeys: List<String> get() = BUILTIN_KEYS
+
+    /**
+     * Startup seeding — port of the Flutter per-key fill-missing pass
+     * (SettingsProvider.setProvidersOrder L2271-2291 → ensureProviderConfig):
+     * every built-in key without a provider_rows row gets a pristine default
+     * config (defaultsFor), so the default baseUrl / label / enabled state is
+     * available to row-based consumers. Idempotent; existing rows (user data)
+     * are never overwritten.
+     */
+    fun ensureBuiltinDefaultsSeeded() {
+        val existing = providerDao.getAll().map { it.id }.toSet()
+        for (key in BUILTIN_KEYS) {
+            if (key in existing) continue
+            saveConfig(defaultsFor(key))
+        }
+    }
 
     // ---- provider configs ----
 
@@ -67,7 +88,9 @@ class ProviderRepository(
     /**
      * Remove rows left by earlier test builds: builtin keys whose config has
      * no API key and no models carry no user data (the virtual builtin entry
-     * already renders), so dropping them de-duplicates the list.
+     * already renders), so dropping them de-duplicates the list. Pristine
+     * defaults seeded by [ensureBuiltinDefaultsSeeded] are byte-identical to
+     * [defaultsFor] and are kept — only leftovers that differ are removed.
      */
     fun cleanupEmptyBuiltinRows() {
         val builtinLower = BUILTIN_KEYS.map { it.lowercase() }.toSet()
@@ -75,7 +98,12 @@ class ProviderRepository(
             if (row.id.lowercase() !in builtinLower) continue
             val cfg = runCatching { ProviderConfig.fromJsonString(json, row.payload) }.getOrNull() ?: continue
             if (cfg.apiKey.isBlank() && cfg.models.isEmpty()) {
-                providerDao.delete(row.id)
+                val pristine = runCatching {
+                    json.encodeToString(ProviderConfig.serializer(), defaultsFor(row.id))
+                }.getOrNull()
+                if (pristine == null || pristine != row.payload) {
+                    providerDao.delete(row.id)
+                }
             }
         }
     }
@@ -188,6 +216,261 @@ class ProviderRepository(
             "OpenAI", "SiliconFlow", "Gemini", "OpenRouter", "MemoIN", "Tensdaq",
             "DeepSeek", "AIhubmix", "Aliyun", "Zhipu AI", "Claude", "Grok", "ByteDance",
         )
+
+        /**
+         * Verbatim port of Flutter ProviderConfig.defaultsFor
+         * (settings_provider.dart L6449-6636, incl. _defaultBase /
+         * defaultEnabled / balance defaults) — the pristine first-run config a
+         * built-in key gets when it has no row (ensureProviderConfig
+         * semantics, defaultName = key). KelivoIN is matched under its port
+         * brand MemoIN; its public key and seed models are copied unchanged.
+         */
+        fun defaultsFor(key: String): ProviderConfig {
+            val lowerKey = key.lowercase()
+            val isKelivoIn = lowerKey.contains("kelivoin") || lowerKey == "memoin"
+
+            // settings_provider.dart L6450-6459 defaultEnabled
+            val enabled = lowerKey.contains("tensdaq") ||
+                lowerKey.contains("openai") ||
+                lowerKey.contains("gemini") || lowerKey.contains("google") ||
+                lowerKey.contains("silicon") ||
+                lowerKey.contains("openrouter") ||
+                isKelivoIn
+
+            // settings_provider.dart L6398-6411 classify
+            val kind = when {
+                lowerKey.contains("gemini") || lowerKey.contains("google") -> "google"
+                lowerKey.contains("claude") || lowerKey.contains("anthropic") -> "claude"
+                else -> "openai"
+            }
+            val base = defaultBaseUrl(key)
+            return when (kind) {
+                "google" -> ProviderConfig(
+                    id = key,
+                    enabled = enabled,
+                    name = key,
+                    apiKey = "",
+                    baseUrl = base,
+                    providerType = kind,
+                    vertexAI = false,
+                    location = "",
+                    projectId = "",
+                    serviceAccountJson = "",
+                    models = emptyList(),
+                    modelOverrides = emptyMap(),
+                    proxyEnabled = false,
+                    proxyHost = "",
+                    proxyPort = "8080",
+                    proxyUsername = "",
+                    proxyPassword = "",
+                    multiKeyEnabled = false,
+                    apiKeys = emptyList(),
+                    keyManagement = JsonObject(emptyMap()),
+                    aihubmixAppCodeEnabled = false,
+                    balanceEnabled = false,
+                    balanceApiPath = "/credits",
+                    balanceResultPath = "data.total_usage",
+                    claudePromptCachingEnabled = false,
+                )
+                "claude" -> ProviderConfig(
+                    id = key,
+                    enabled = enabled,
+                    name = key,
+                    apiKey = "",
+                    baseUrl = base,
+                    providerType = kind,
+                    models = emptyList(),
+                    modelOverrides = emptyMap(),
+                    proxyEnabled = false,
+                    proxyHost = "",
+                    proxyPort = "8080",
+                    proxyUsername = "",
+                    proxyPassword = "",
+                    multiKeyEnabled = false,
+                    apiKeys = emptyList(),
+                    keyManagement = JsonObject(emptyMap()),
+                    aihubmixAppCodeEnabled = false,
+                    balanceEnabled = false,
+                    balanceApiPath = "/credits",
+                    balanceResultPath = "data.total_usage",
+                    claudePromptCachingEnabled = false,
+                )
+                else -> when {
+                    // Special-case KelivoIN default models and overrides (L6518-6568)
+                    isKelivoIn -> ProviderConfig(
+                        id = key,
+                        enabled = enabled,
+                        name = key,
+                        apiKey = "kelivo", // _kelivoInPublicApiKey (L6056)
+                        baseUrl = base,
+                        providerType = kind,
+                        chatPath = null, // keep empty in UI; code uses default '/chat/completions'
+                        useResponseApi = false,
+                        models = listOf("mistral", "qwen-coder"),
+                        modelOverrides = mapOf(
+                            "mistral" to chatModelOverride(withReasoning = false),
+                            "qwen-coder" to chatModelOverride(withReasoning = false),
+                        ),
+                        proxyEnabled = false,
+                        proxyHost = "",
+                        proxyPort = "8080",
+                        proxyUsername = "",
+                        proxyPassword = "",
+                        multiKeyEnabled = false,
+                        apiKeys = emptyList(),
+                        keyManagement = JsonObject(emptyMap()),
+                        aihubmixAppCodeEnabled = false,
+                        balanceEnabled = defaultBalanceEnabled(key),
+                        balanceApiPath = defaultBalanceApiPath(key),
+                        balanceResultPath = defaultBalanceResultPath(key),
+                        claudePromptCachingEnabled = false,
+                    )
+                    // Special-case SiliconFlow: prefill two partnered models (L6570-6608)
+                    lowerKey.contains("silicon") -> ProviderConfig(
+                        id = key,
+                        enabled = enabled,
+                        name = key,
+                        apiKey = "",
+                        baseUrl = base,
+                        providerType = kind,
+                        chatPath = "/chat/completions",
+                        useResponseApi = false,
+                        models = listOf("THUDM/GLM-4-9B-0414", "Qwen/Qwen3-8B"),
+                        modelOverrides = mapOf(
+                            "THUDM/GLM-4-9B-0414" to chatModelOverride(withReasoning = false),
+                            "Qwen/Qwen3-8B" to chatModelOverride(withReasoning = true),
+                        ),
+                        proxyEnabled = false,
+                        proxyHost = "",
+                        proxyPort = "8080",
+                        proxyUsername = "",
+                        proxyPassword = "",
+                        multiKeyEnabled = false,
+                        apiKeys = emptyList(),
+                        keyManagement = JsonObject(emptyMap()),
+                        aihubmixAppCodeEnabled = false,
+                        balanceEnabled = defaultBalanceEnabled(key),
+                        balanceApiPath = defaultBalanceApiPath(key),
+                        balanceResultPath = defaultBalanceResultPath(key),
+                        claudePromptCachingEnabled = false,
+                    )
+                    else -> ProviderConfig(
+                        id = key,
+                        enabled = enabled,
+                        name = key,
+                        apiKey = "",
+                        baseUrl = base,
+                        providerType = kind,
+                        chatPath = "/chat/completions",
+                        useResponseApi = false,
+                        models = emptyList(),
+                        modelOverrides = emptyMap(),
+                        proxyEnabled = false,
+                        proxyHost = "",
+                        proxyPort = "8080",
+                        proxyUsername = "",
+                        proxyPassword = "",
+                        multiKeyEnabled = false,
+                        apiKeys = emptyList(),
+                        keyManagement = JsonObject(emptyMap()),
+                        aihubmixAppCodeEnabled = lowerKey.contains("aihubmix"),
+                        balanceEnabled = defaultBalanceEnabled(key),
+                        balanceApiPath = defaultBalanceApiPath(key),
+                        balanceResultPath = defaultBalanceResultPath(key),
+                        claudePromptCachingEnabled = false,
+                    )
+                }
+            }
+        }
+
+        /** chat model override map entry of the KelivoIN / SiliconFlow seeds. */
+        private fun chatModelOverride(withReasoning: Boolean): JsonObject = buildJsonObject {
+            put("type", "chat")
+            put("input", buildJsonArray { add(JsonPrimitive("text")) })
+            put("output", buildJsonArray { add(JsonPrimitive("text")) })
+            put("abilities", buildJsonArray {
+                add(JsonPrimitive("tool"))
+                if (withReasoning) add(JsonPrimitive("reasoning"))
+            })
+        }
+
+        /** Verbatim port of settings_provider.dart L6413-6447 _defaultBase. */
+        fun defaultBaseUrl(key: String): String {
+            val k = key.lowercase()
+            if (k.contains("tensdaq")) return "https://tensdaq-api.x-aio.com/v1"
+            if (k.contains("kelivoin") || k == "memoin") return "https://text.pollinations.ai/openai"
+            if (k.contains("openrouter")) return "https://openrouter.ai/api/v1"
+            if (k.contains("aihubmix")) return "https://aihubmix.com/v1"
+            if (k.contains("随想")) return "https://sui-xiang.com/v1"
+            if (k.contains("marucode") || k.contains("muteki")) {
+                return "https://api.muteki.site/v1"
+            }
+            if (Regex("qwen|aliyun|dashscope").containsMatchIn(k)) {
+                return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            }
+            if (Regex("bytedance|doubao|volces|ark").containsMatchIn(k)) {
+                return "https://ark.cn-beijing.volces.com/api/v3"
+            }
+            if (Regex("kimi|moonshot|月之暗面").containsMatchIn(k)) {
+                return "https://api.moonshot.cn/v1"
+            }
+            if (k.contains("silicon")) return "https://api.siliconflow.cn/v1"
+            if (k.contains("grok") || k.contains("x.ai") || k.contains("xai")) {
+                return "https://api.x.ai/v1"
+            }
+            if (k.contains("deepseek")) return "https://api.deepseek.com/v1"
+            if (Regex("zhipu|智谱|glm").containsMatchIn(k)) {
+                return "https://open.bigmodel.cn/api/paas/v4"
+            }
+            if (k.contains("gemini") || k.contains("google")) {
+                return "https://generativelanguage.googleapis.com/v1beta"
+            }
+            if (k.contains("claude") || k.contains("anthropic")) {
+                return "https://api.anthropic.com/v1"
+            }
+            return "https://api.openai.com/v1"
+        }
+
+        /** Verbatim port of L6638-6649 _defaultBalanceApiPath. */
+        private fun defaultBalanceApiPath(key: String): String {
+            val k = key.lowercase()
+            if (k.contains("aihubmix")) return "/user/balance"
+            if (k.contains("deepseek")) return "/user/balance"
+            if (k.contains("openrouter")) return "/credits"
+            if (k.contains("vercel")) return "/credits"
+            if (k.contains("silicon")) return "/user/info"
+            if (Regex("kimi|moonshot|月之暗面").containsMatchIn(k)) {
+                return "/users/me/balance"
+            }
+            return "/credits"
+        }
+
+        /** Verbatim port of L6651-6664 _defaultBalanceResultPath. */
+        private fun defaultBalanceResultPath(key: String): String {
+            val k = key.lowercase()
+            if (k.contains("aihubmix")) return "balance_infos[0].total_balance"
+            if (k.contains("deepseek")) return "balance_infos[0].total_balance"
+            if (k.contains("openrouter")) {
+                return "data.total_credits - data.total_usage"
+            }
+            if (k.contains("vercel")) return "balance"
+            if (k.contains("silicon")) return "data.totalBalance"
+            if (Regex("kimi|moonshot|月之暗面").containsMatchIn(k)) {
+                return "data.available_balance"
+            }
+            return "data.total_usage"
+        }
+
+        /** Verbatim port of L6666-6674 _defaultBalanceEnabled. */
+        private fun defaultBalanceEnabled(key: String): Boolean {
+            val k = key.lowercase()
+            return k.contains("aihubmix") ||
+                k.contains("deepseek") ||
+                k.contains("openrouter") ||
+                k.contains("vercel") ||
+                k.contains("silicon") ||
+                Regex("kimi|moonshot|月之暗面").containsMatchIn(k)
+        }
 
         /** Pure merge: ordered keys first (only those present), leftovers appended. */
         fun mergeOrder(keys: List<String>, order: List<String>): List<String> {

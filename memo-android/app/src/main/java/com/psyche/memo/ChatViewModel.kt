@@ -11,10 +11,12 @@ import com.psyche.memo.data.model.ToolCallPart
 import com.psyche.memo.llm.client.LlmMessage
 import com.psyche.memo.llm.client.LlmRequest
 import com.psyche.memo.llm.stream.StreamChunk
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Chat state holder for one conversation. Consumes [StreamChunk] into the
@@ -49,8 +51,6 @@ class ChatViewModel(
      * label (temporary title / stored title / localized "New Chat"). */
     val title = MutableStateFlow("")
 
-    fun newConversation() = Unit
-
     private val _messages = MutableStateFlow<List<UiMessage>>(emptyList())
     val messages: StateFlow<List<UiMessage>> = _messages
 
@@ -80,7 +80,11 @@ class ChatViewModel(
             // Home page shows the conversation's stored title; matches the
             // "New Chat" default of home_page_controller._createNewConversation.
             viewModelScope.launch {
-                title.value = container.conversationDao.get(conversationId)?.title?.trim() ?: ""
+                // Room/SQLite access must stay off the main thread.
+                val stored = withContext(Dispatchers.IO) {
+                    container.conversationDao.get(conversationId)
+                }
+                title.value = stored?.title?.trim() ?: ""
             }
         }
         refreshTail()
@@ -97,7 +101,9 @@ class ChatViewModel(
             return
         }
         viewModelScope.launch {
-            val loaded = container.messageDao.getTail(conversationId)
+            val loaded = withContext(Dispatchers.IO) {
+                container.messageDao.getTail(conversationId)
+            }
             _messages.value = loaded.map { it.toUi() }
             _sendEnabled.value = true
         }
@@ -110,14 +116,21 @@ class ChatViewModel(
     fun send() {
         val text = input.value.trim()
         if (text.isEmpty() || _streaming.value) return
-        val userMessage = buildUserMessage(text)
-        append(userMessage)
         input.value = ""
-        // Persist user message best-effort (DAO errors surface in logs).
-        if (!isTemporary) {
-            viewModelScope.launch { container.messageDao.insert(userMessage) }
+        viewModelScope.launch {
+            // nextOrder queries SQLite synchronously, so both the build and
+            // the insert run on Dispatchers.IO; StateFlow updates (append)
+            // stay outside the IO blocks, in the original order.
+            val userMessage = withContext(Dispatchers.IO) { buildUserMessage(text) }
+            append(userMessage)
+            // Persist user message best-effort (DAO errors surface in logs).
+            if (!isTemporary) {
+                withContext(Dispatchers.IO) {
+                    container.messageDao.insert(userMessage)
+                }
+            }
+            startGeneration(userMessage)
         }
-        startGeneration(userMessage)
     }
 
     fun stop() {
@@ -148,6 +161,9 @@ class ChatViewModel(
                     isStreaming = true,
                 ),
             )
+            // Folding handler lives outside the try: the stop path (catch)
+            // reads the accumulated partial parts from it.
+            val handler = com.psyche.memo.llm.stream.StreamChunkHandler()
             try {
                 // Build request from current UI messages (exclude skeleton).
                 val history = _messages.value
@@ -168,7 +184,16 @@ class ChatViewModel(
                     baseUrl = container.baseUrlFor(providerId),
                 )
                 val client = container.clientFor(providerId)
-                val handler = com.psyche.memo.llm.stream.StreamChunkHandler()
+                // First terminal wins (mirrors the original finishHandled /
+                // terminalPersisted flags): a stream that ends with either a
+                // Finish or an Error must not also run the other path.
+                var terminalHandled = false
+                var persisted = false
+                fun persistOnce(parts: List<MessagePart>) {
+                    if (persisted) return
+                    persisted = true
+                    persistAssistant(assistantId, parts)
+                }
                 client.streamChat(request).collect { chunk ->
                     handler.handle(chunk)
                     when (chunk) {
@@ -176,17 +201,34 @@ class ChatViewModel(
                         is StreamChunk.ReasoningDelta,
                         is StreamChunk.ToolCallDelta,
                         -> updateAssistantStreaming(assistantId, handler.parts())
-                        is StreamChunk.Finish -> {
+                        is StreamChunk.Finish -> if (!terminalHandled) {
+                            terminalHandled = true
                             updateAssistantStreaming(assistantId, handler.parts())
                             finishAssistant(assistantId, handler.parts())
+                            // Persist the finished reply (chat_service terminal
+                            // checkpoint in the original).
+                            persistOnce(handler.parts())
                         }
-                        is StreamChunk.Error -> Unit // surfaced as string; P3
+                        is StreamChunk.Error -> if (!terminalHandled && !handler.finished) {
+                            // Mirror the original stream-error path
+                            // (chat_actions._handleStreamError +
+                            // assistantPartsForStreamError): keep any partial
+                            // content, surface the error text when nothing was
+                            // generated, and mark the message failed.
+                            terminalHandled = true
+                            val finalParts =
+                                markFailed(assistantId, chunk.message, handler.parts())
+                            persistOnce(finalParts)
+                        }
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                // user stop
+                // user stop: the partial reply is kept and persisted, exactly
+                // like the original stop path.
+                persistAssistant(assistantId, handler.parts())
             } catch (e: Exception) {
-                markFailed(assistantId)
+                val finalParts = markFailed(assistantId, e.toString(), handler.parts())
+                persistAssistant(assistantId, finalParts)
             } finally {
                 _streaming.value = false
                 container.streamingConversationIds.value =
@@ -240,12 +282,57 @@ class ChatViewModel(
         _messages.value = msgs.toMutableList().apply { set(index, finalUi) }
     }
 
-    private fun markFailed(assistantId: String) {
+    /**
+     * Marks the assistant message failed and returns the parts to persist.
+     * Mirrors the original assistantPartsForStreamError semantics: when no
+     * text was generated the error text becomes the message content; any
+     * partial content is kept as-is.
+     */
+    private fun markFailed(
+        assistantId: String,
+        errorText: String,
+        parts: List<MessagePart>,
+    ): List<MessagePart> {
+        val hasText = parts.any { it is TextPart && it.text.isNotEmpty() }
+        val finalParts = if (hasText) parts else parts + TextPart(errorText)
         val msgs = _messages.value
         val index = msgs.indexOfLast { it.id == assistantId }
-        if (index < 0) return
-        _messages.value = msgs.toMutableList().apply {
-            set(index, msgs[index].copy(isStreaming = false, failed = true))
+        if (index >= 0) {
+            _messages.value = msgs.toMutableList().apply {
+                set(index, msgs[index].copy(parts = finalParts, isStreaming = false, failed = true))
+            }
+        }
+        return finalParts
+    }
+
+    /**
+     * Persists the assistant reply (chat_service terminal checkpoint in the
+     * original). Temporary chats stay purely in memory. Nothing generated yet
+     * → nothing to persist. Idempotent: a Finish plus a late user stop can
+     * both reach here, and a second insert would violate UNIQUE(id).
+     */
+    private fun persistAssistant(assistantId: String, parts: List<MessagePart>) {
+        if (isTemporary || parts.isEmpty()) return
+        val providerId = selectedProviderId.value
+        val modelId = selectedModelId.value
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                if (container.messageDao.get(assistantId) != null) return@withContext
+                container.messageDao.insert(
+                    ChatMessage(
+                        id = assistantId,
+                        role = "assistant",
+                        parts = parts,
+                        timestamp = System.currentTimeMillis(),
+                        modelId = modelId,
+                        providerId = providerId,
+                        conversationId = conversationId,
+                        groupId = assistantId,
+                        version = 0,
+                        messageOrder = container.messageDao.nextOrder(conversationId),
+                    ),
+                )
+            }
         }
     }
 

@@ -48,6 +48,11 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val conversationDao: ConversationDao by lazy { ConversationDao(database.readableDatabase) }
     val messageDao: MessageDao by lazy { MessageDao(database.readableDatabase) }
 
+    /** Provider data layer (provider_rows + ordering + groups). */
+    val providerRepository: com.psyche.memo.data.repo.ProviderRepository by lazy {
+        com.psyche.memo.data.repo.ProviderRepository(database.writableDatabase, preferenceRepository)
+    }
+
     val cancellations: CancellationRegistry = CancellationRegistry()
 
     val retryOptions: AutoRetryOptions = AutoRetryOptions()

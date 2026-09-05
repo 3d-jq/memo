@@ -76,6 +76,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,6 +93,9 @@ import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.ui.R as UiR
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -116,6 +120,7 @@ fun SideDrawerContent(
     forceSelectionMode: Boolean = false,
 ) {
     val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
     var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var query by remember { mutableStateOf("") }
 
@@ -725,36 +730,42 @@ fun SideDrawerContent(
                 ) {
                     menuFor = null
                     // duplicateConversation: copy the row and its messages.
-                    val dup = Conversation.create(
-                        title = target.title,
-                        assistantId = target.assistantId,
-                    )
-                    container.conversationDao.insert(dup)
-                    container.messageDao.getTail(target.id, Int.MAX_VALUE / 2).forEach { m ->
-                        container.messageDao.insert(
-                            ChatMessage(
-                                id = ChatMessage.newId(),
-                                role = m.role,
-                                parts = m.parts,
-                                timestamp = m.timestamp,
-                                modelId = m.modelId,
-                                providerId = m.providerId,
-                                conversationId = dup.id,
-                                reasoningSegmentsJson = m.reasoningSegmentsJson,
-                                translation = m.translation,
-                                reasoningStartAt = m.reasoningStartAt,
-                                reasoningFinishedAt = m.reasoningFinishedAt,
-                                groupId = m.groupId,
-                                promptTokens = m.promptTokens,
-                                completionTokens = m.completionTokens,
-                                cachedTokens = m.cachedTokens,
-                                durationMs = m.durationMs,
-                                updatedAt = m.updatedAt,
-                                messageOrder = m.messageOrder,
-                            ),
+                    // Reads + the bulk insert run off the main thread in one
+                    // transaction (no getTail(Int.MAX_VALUE/2) row-by-row copy).
+                    scope.launch {
+                        val dup = Conversation.create(
+                            title = target.title,
+                            assistantId = target.assistantId,
                         )
+                        withContext(Dispatchers.IO) {
+                            container.conversationDao.insert(dup)
+                            val messages =
+                                container.messageDao.getAllForConversation(target.id)
+                            container.messageDao.insertAllInTransaction(messages.map { m ->
+                                ChatMessage(
+                                    id = ChatMessage.newId(),
+                                    role = m.role,
+                                    parts = m.parts,
+                                    timestamp = m.timestamp,
+                                    modelId = m.modelId,
+                                    providerId = m.providerId,
+                                    conversationId = dup.id,
+                                    reasoningSegmentsJson = m.reasoningSegmentsJson,
+                                    translation = m.translation,
+                                    reasoningStartAt = m.reasoningStartAt,
+                                    reasoningFinishedAt = m.reasoningFinishedAt,
+                                    groupId = m.groupId,
+                                    promptTokens = m.promptTokens,
+                                    completionTokens = m.completionTokens,
+                                    cachedTokens = m.cachedTokens,
+                                    durationMs = m.durationMs,
+                                    updatedAt = m.updatedAt,
+                                    messageOrder = m.messageOrder,
+                                )
+                            })
+                        }
+                        reload()
                     }
-                    reload()
                 }
                 MenuRow(
                     icon = Lucide.Shuffle,

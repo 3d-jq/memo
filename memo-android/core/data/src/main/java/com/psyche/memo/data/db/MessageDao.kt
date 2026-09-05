@@ -68,6 +68,18 @@ class MessageDao(private val db: SQLiteDatabase) {
         }
     }
 
+    /** All messages of a conversation in wall order (parts loaded). */
+    fun getAllForConversation(conversationId: String): List<ChatMessage> {
+        db.query(
+            "message_rows", null, "conversation_id = ?", arrayOf(conversationId),
+            null, null, "message_order ASC, id ASC",
+        ).use { cursor ->
+            val out = ArrayList<ChatMessage>(cursor.count)
+            while (cursor.moveToNext()) out.add(cursor.hydrate())
+            return out
+        }
+    }
+
     /** Messages strictly before [beforeId]'s message_order (older). */
     fun getBefore(conversationId: String, beforeId: String, limit: Int = 40): List<ChatMessage> {
         val anchor = getOrder(conversationId, beforeId) ?: return emptyList()
@@ -138,24 +150,44 @@ class MessageDao(private val db: SQLiteDatabase) {
         db.beginTransaction()
         try {
             db.insertOrThrow("message_rows", null, message.toRow())
-            db.delete("message_part_rows", "revision_id = ?", arrayOf(message.id))
-            message.parts.forEachIndexed { index, part ->
-                db.insertOrThrow(
-                    "message_part_rows", null,
-                    ContentValues().apply {
-                        put("conversation_id", message.conversationId)
-                        put("revision_id", message.id)
-                        put("ordinal", index)
-                        put("kind", part.kind)
-                        put("payload", part.encodePayload())
-                        put("created_at", message.timestamp)
-                        put("updated_at", message.timestamp)
-                    },
-                )
+            insertParts(message)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Inserts messages and their parts in a single transaction. */
+    fun insertAllInTransaction(messages: List<ChatMessage>) {
+        if (messages.isEmpty()) return
+        db.beginTransaction()
+        try {
+            for (message in messages) {
+                db.insertOrThrow("message_rows", null, message.toRow())
+                insertParts(message)
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    /** Replaces the stored parts of [message] (parts ordinal from index). */
+    private fun insertParts(message: ChatMessage) {
+        db.delete("message_part_rows", "revision_id = ?", arrayOf(message.id))
+        message.parts.forEachIndexed { index, part ->
+            db.insertOrThrow(
+                "message_part_rows", null,
+                ContentValues().apply {
+                    put("conversation_id", message.conversationId)
+                    put("revision_id", message.id)
+                    put("ordinal", index)
+                    put("kind", part.kind)
+                    put("payload", part.encodePayload())
+                    put("created_at", message.timestamp)
+                    put("updated_at", message.timestamp)
+                },
+            )
         }
     }
 

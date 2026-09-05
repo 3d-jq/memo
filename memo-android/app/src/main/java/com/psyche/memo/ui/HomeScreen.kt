@@ -1,7 +1,7 @@
 package com.psyche.memo.ui
 
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -138,7 +138,10 @@ fun HomeScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var drawerOpen by remember { mutableStateOf(false) }
-    val drawerWidth = LocalConfiguration.current.screenWidthDp.dp * 0.75f
+    val windowInfo = LocalWindowInfo.current
+    val drawerWidth = with(LocalDensity.current) {
+        windowInfo.containerSize.width.toDp() * 0.75f
+    }
     val drawerWidthPx = with(LocalDensity.current) { drawerWidth.toPx() }
     // Continuous-drag layer (Kelivo InteractiveDrawer): the chat content
     // slides right and the drawer sits flush beside it. The gesture detector
@@ -253,7 +256,7 @@ fun HomeScreen(
         if (selectedConversationId == null) {
             val latest = container.conversationDao.getAll().firstOrNull()
             selectedConversationId = latest?.id ?: run {
-                val conv = Conversation.create(title = "New chat")
+                val conv = Conversation.create(title = newChatTitle)
                 container.conversationDao.insert(conv)
                 conv.id
             }
@@ -418,6 +421,32 @@ fun ChatContent(
         }
     }
 
+    // Top-bar subtitle with friendly names — model_display_helper.dart
+    // getModelDisplayInfo: provider display name first (cfg.name, else the raw
+    // key), model display from override name > apiModelId > raw model id.
+    val modelSubtitle = remember(providerId, modelId) {
+        if (modelId.isEmpty() || providerId.isEmpty()) {
+            ""
+        } else {
+            val cfg = container.providerConfig(providerId)
+            val providerName = cfg?.name?.takeIf { it.isNotEmpty() } ?: providerId
+            var modelDisplay = modelId
+            val ov = cfg?.modelOverrides?.get(modelId) as? kotlinx.serialization.json.JsonObject
+            if (ov != null) {
+                val overrideName = (ov["name"] as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.content?.trim()
+                if (!overrideName.isNullOrEmpty()) {
+                    modelDisplay = overrideName
+                } else {
+                    val apiId = ((ov["apiModelId"] ?: ov["api_model_id"])
+                        as? kotlinx.serialization.json.JsonPrimitive)?.content?.trim()
+                    if (!apiId.isNullOrEmpty()) modelDisplay = apiId
+                }
+            }
+            "$modelDisplay ($providerName)"
+        }
+    }
+
     Column(modifier = modifier) {
         // Transparent-ish AppBar: menu, title+model, new-conversation.
         Row(
@@ -449,7 +478,7 @@ fun ChatContent(
                 )
                 if (modelId.isNotEmpty()) {
                     Text(
-                        text = "$modelId ($providerId)",
+                        text = modelSubtitle,
                         style = MaterialTheme.typography.labelSmall,
                         color = cs.onSurface.copy(alpha = 0.6f),
                         maxLines = 1,
@@ -563,6 +592,7 @@ fun ChatContent(
             },
             onDismiss = { showModelSheet = false },
         )
+    }
 
     if (showMiniMap) {
         MiniMapSheet(
@@ -588,13 +618,18 @@ fun ChatContent(
                 }
             },
         )
-    }    }
+    }
 }
 
 @Composable
 private fun MessageRow(msg: ChatViewModel.UiMessage) {
     val cs = MaterialTheme.colorScheme
     val isUser = msg.role == "user"
+    // User bubble max width = screen width * 0.75
+    // (chat_message_widget.dart L1833/1853).
+    val maxBubbleWidth = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.width.toDp() * 0.75f
+    }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
@@ -659,7 +694,7 @@ private fun MessageRow(msg: ChatViewModel.UiMessage) {
         Spacer(Modifier.height(4.dp))
         Column(
             modifier = Modifier
-                .widthIn(max = 340.dp)
+                .widthIn(max = maxBubbleWidth)
                 .background(
                     color = if (isUser) cs.primary.copy(alpha = 0.08f)
                     else Color.Transparent,
@@ -691,7 +726,7 @@ private fun MessageRow(msg: ChatViewModel.UiMessage) {
             }
             if (msg.failed) {
                 Text(
-                    "⚠ Generation failed",
+                    stringResource(UiR.string.generation_interrupted),
                     style = MaterialTheme.typography.bodySmall,
                     color = cs.error,
                 )
@@ -855,15 +890,16 @@ private fun ChatInputBar(
     val isDark = cs.surface.luminance() < 0.5f
 
     val density = LocalDensity.current
-    val configuration = LocalConfiguration.current
+    val windowInfo = LocalWindowInfo.current
     // 源码 chat_input_bar.dart:2558-2561
     //   size        = MediaQuery.sizeOf(context)
     //   viewInsets  = MediaQuery.viewInsetsOf(context)
     //   visibleHeight = size.height - viewInsets.bottom
-    val visibleHeightDp = configuration.screenHeightDp.toFloat() -
+    val visibleHeightDp = with(density) { windowInfo.containerSize.height.toDp().value } -
         WindowInsets.ime.getBottom(density) / density.density
     // 源码 chat_input_bar.dart:2560 —— isMobileLayout = size.width < AppBreakpoints.tablet
-    val isMobileLayout = configuration.screenWidthDp < BREAKPOINT_TABLET_DP
+    val isMobileLayout =
+        with(density) { windowInfo.containerSize.width.toDp() } < BREAKPOINT_TABLET_DP.dp
 
     // 源码 chat_input_bar.dart:2555-2556 / 2641-2642 —— 附件（图片 / 文档）内联预览。
     // 移植版当前没有附件数据，两个列表恒为空：预览高度按源码公式算得 0，

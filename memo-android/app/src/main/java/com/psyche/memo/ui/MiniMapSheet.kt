@@ -37,8 +37,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -143,7 +143,9 @@ fun MiniMapSheet(
     ) {
         // DraggableScrollableSheet initial 0.55 — approximated with a
         // fixed 55% screen height content area inside the sheet.
-        val screenH = LocalConfiguration.current.screenHeightDp.dp
+        val screenH = with(LocalDensity.current) {
+            LocalWindowInfo.current.containerSize.height.toDp()
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -310,7 +312,9 @@ private fun MiniMapRow(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val screenW = LocalConfiguration.current.screenWidthDp.dp
+    val screenW = with(LocalDensity.current) {
+        LocalWindowInfo.current.containerSize.width.toDp()
+    }
 
     val userBg = cs.primary.copy(alpha = if (isDark) 0.15f else 0.08f)
     val assistantBg = cs.onSurface.copy(alpha = if (isDark) 0.06f else 0.04f)
