@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,6 +73,7 @@ import com.psyche.memo.data.model.ProviderConfig
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
+import com.psyche.memo.ui.reorder.ReorderableColumn
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
@@ -106,7 +108,10 @@ fun ProviderDetailScreen(
         )
     }
     var showDelete by remember { mutableStateOf(false) }
+    var testModel by remember { mutableStateOf<String?>(null) }
+    var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     val deletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_deleted_snackbar)
+    val testOkTemplate = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_test_success_message)
     var showApiKey by remember { mutableStateOf(false) }
 
     // Immediate save (debounced 400ms) whenever the config changes.
@@ -153,7 +158,27 @@ fun ProviderDetailScreen(
             if (tabIndex == 0) {
                 IconActionButton(Lucide.HeartPulse, cs.onSurface, testButtonLabel) {
                     Haptics.light(view)
-                    // Connectivity test: covered with the models tab batch (#10).
+                    val model = cfg.models.firstOrNull()
+                    if (model == null) {
+                        testResult = false to "No models configured"
+                    } else {
+                        scope.launch {
+                            val client = container.clientFor(cfg.classifiedKind())
+                            val ok = runCatching {
+                                client.complete(
+                                    com.psyche.memo.llm.client.LlmRequest(
+                                        providerId = cfg.id,
+                                        modelId = model,
+                                        messages = listOf(com.psyche.memo.llm.client.LlmMessage(role = "user", content = "hi")),
+                                        apiKey = cfg.apiKey,
+                                        baseUrl = container.baseUrlFor(cfg.id),
+                                    ),
+                                )
+                            }
+                            testResult = if (ok.isSuccess) true to model
+                            else false to (ok.exceptionOrNull()?.message ?: "error")
+                        }
+                    }
                 }
             } else {
                 IconActionButton(Lucide.Trash2, cs.onSurface, stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_title)) {
@@ -176,7 +201,12 @@ fun ProviderDetailScreen(
                     onCfgChange = { cfg = it },
                 )
             } else {
-                ModelsTabPlaceholder(providerId = providerId)
+                ModelsTab(
+                    cfg = cfg,
+                    container = container,
+                    onCfgChange = { cfg = it },
+                    onTestModel = { testModel = it },
+                )
             }
         }
 
@@ -192,6 +222,18 @@ fun ProviderDetailScreen(
                 scope.launch { pagerState.animateScrollToPage(i) }
             },
         )
+    }
+
+    testResult?.let { (ok, detail) ->
+        LaunchedEffect(ok, detail) {
+            SnackbarManager.show(
+                AppNotification(
+                    message = if (ok) testOkTemplate + " ($detail)" else detail,
+                    type = if (ok) NotificationType.SUCCESS else NotificationType.ERROR,
+                ),
+            )
+            testResult = null
+        }
     }
 
     // ---- Delete confirmation: clear model refs, remove row, pop ----
@@ -606,14 +648,168 @@ private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDis
     }
 }
 
-/** Models tab placeholder — full model management lands with #10. */
+/** Models tab — list + fetch/add/delete/reorder + connection test (#10). */
 @Composable
-private fun ModelsTabPlaceholder(providerId: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = providerId,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun ModelsTab(
+    cfg: ProviderConfig,
+    container: AppContainerImpl,
+    onCfgChange: (ProviderConfig) -> Unit,
+    onTestModel: (String) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    var showAdd by remember { mutableStateOf(false) }
+    var newModelId by remember { mutableStateOf("") }
+    var fetching by remember { mutableStateOf(false) }
+    val models = cfg.models
+    val modelDeletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_model_deleted_snackbar)
+
+    fun saveModels(next: List<String>) {
+        onCfgChange(cfg.copy(models = next))
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        if (models.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_no_models_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_no_models_subtitle),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = cs.onSurfaceVariant,
+                    )
+                }
+            }
+        } else {
+            ReorderableColumn(
+                items = models,
+                keyOf = { it },
+                onMove = { from, to ->
+                    val next = models.toMutableList()
+                    val moved = next.removeAt(from)
+                    next.add(to, moved)
+                    saveModels(next)
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
+                    .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+            ) { model, isDragging ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onTestModel(model) }
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = model,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        Lucide.Trash2,
+                        contentDescription = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_model_button),
+                        tint = cs.error,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .padding(7.dp)
+                            .clickable {
+                                saveModels(models - model)
+                                SnackbarManager.show(
+                                    AppNotification(message = modelDeletedMessage, type = NotificationType.SUCCESS),
+                                )
+                            },
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
+                    .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                    .clickable(enabled = !fetching) { fetching = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (fetching) {
+                    androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(
+                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_fetch_models_button),
+                        style = MaterialTheme.typography.labelLarge.copy(color = cs.primary),
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp)
+                    .background(cs.primary, RoundedCornerShape(12.dp))
+                    .clickable { showAdd = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_add_new_model_button),
+                    style = MaterialTheme.typography.labelLarge.copy(color = cs.onPrimary, fontWeight = FontWeight.SemiBold),
+                )
+            }
+        }
+    }
+
+    // Fetch executes against the provider's /models endpoint (core:llm).
+    LaunchedEffect(fetching) {
+        if (!fetching) return@LaunchedEffect
+        val client = container.clientFor(cfg.classifiedKind())
+        val fetched = runCatching {
+            client.listModels(container.baseUrlFor(cfg.id), cfg.apiKey)
+        }.getOrNull()
+        val ids = fetched?.map { it.id }.orEmpty()
+        val merged = (models + ids.filter { it !in models }).distinct()
+        if (merged.size > models.size) saveModels(merged)
+        fetching = false
+    }
+
+    if (showAdd) {
+        AlertDialog(
+            onDismissRequest = { showAdd = false },
+            title = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_add_new_model_button)) },
+            text = {
+                TextField(
+                    value = newModelId,
+                    onValueChange = { newModelId = it },
+                    placeholder = { Text("model-id") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = newModelId.trim()
+                    if (id.isNotEmpty() && id !in models) saveModels(models + id)
+                    newModelId = ""
+                    showAdd = false
+                }) { Text(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_add_button)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdd = false }) {
+                    Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_cancel_button))
+                }
+            },
         )
     }
 }
