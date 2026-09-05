@@ -14,8 +14,11 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -63,40 +67,38 @@ fun RenderingSettingsScreen(
 ) {
     val cs = MaterialTheme.colorScheme
 
-    fun readBool(key: String): Boolean =
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: true
+    fun readBool(key: String, default: Boolean): Boolean =
+        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
     fun writeBool(key: String, value: Boolean) {
         container.preferenceRepository.writeLocal(key, if (value) "1" else "0")
     }
 
-    var dollarLatex by remember { mutableStateOf(readBool("display_enable_dollar_latex_v1")) }
-    var mathRendering by remember { mutableStateOf(readBool("display_enable_math_rendering_v1")) }
-    var userMarkdown by remember { mutableStateOf(readBool("display_enable_user_markdown_v1")) }
-    var reasoningMarkdown by remember { mutableStateOf(readBool("display_enable_reasoning_markdown_v1")) }
-    var assistantMarkdown by remember { mutableStateOf(readBool("display_enable_assistant_markdown_v1")) }
-    var autoCollapse by remember { mutableStateOf(readBool("display_auto_collapse_code_block_v1")) }
-    var mobileWrap by remember { mutableStateOf(readBool("display_mobile_code_block_wrap_v1")) }
+    var dollarLatex by remember { mutableStateOf(readBool("display_enable_dollar_latex_v1", true)) }
+    var mathRendering by remember { mutableStateOf(readBool("display_enable_math_rendering_v1", true)) }
+    var userMarkdown by remember { mutableStateOf(readBool("display_enable_user_markdown_v1", true)) }
+    var reasoningMarkdown by remember { mutableStateOf(readBool("display_enable_reasoning_markdown_v1", true)) }
+    var assistantMarkdown by remember { mutableStateOf(readBool("display_enable_assistant_markdown_v1", true)) }
+    // settings_provider.dart:5296/5285 — autoCollapse / mobileWrap default false.
+    var autoCollapse by remember { mutableStateOf(readBool("display_auto_collapse_code_block_v1", false)) }
+    var mobileWrap by remember { mutableStateOf(readBool("display_mobile_code_block_wrap_v1", false)) }
     // 源码 settings_provider.dart:5307 —— int _autoCollapseCodeBlockLines = 2。
-    // 源码 settings_provider.dart:5307 —— int _autoCollapseCodeBlockLines = 2。
+    // 已存值与草稿分离：解析失败回退当前已存值（C4）。
+    var collapseLines by remember { mutableIntStateOf(2) }
     var collapseLinesText by remember { mutableStateOf("2") }
     LaunchedEffect(Unit) {
         val stored = container.preferenceRepository.readLocal("display_auto_collapse_code_block_lines_v1")
-        collapseLinesText = (stored?.toIntOrNull() ?: 2).toString()
+        collapseLines = (stored?.toIntOrNull() ?: 2).coerceIn(1, 999)
+        collapseLinesText = collapseLines.toString()
     }
-    // 源码 L1903-1924 —— _commit：解析失败回落默认 2，clamp 1-999。
+    // 源码 L1903-1924 —— _commit：解析失败回落当前已存值，clamp 1-999。
     fun commitLines(text: String) {
-        val next = (text.toIntOrNull() ?: 2).coerceIn(1, 999)
-        collapseLinesText = next.toString()
+        val parsed = text.toIntOrNull() ?: run { collapseLinesText = collapseLines.toString(); return }
+        collapseLines = parsed.coerceIn(1, 999)
+        collapseLinesText = collapseLines.toString()
         container.preferenceRepository.writeLocal(
             "display_auto_collapse_code_block_lines_v1",
-            next.toString(),
+            collapseLines.toString(),
         )
-    }
-
-    LaunchedEffect(Unit) {
-        // L5307 默认 2；持久化走 int 字符串。
-        val stored = container.preferenceRepository.readLocal("display_auto_collapse_code_block_lines_v1")
-        collapseLinesText = (stored?.toIntOrNull() ?: 2).toString()
     }
 
     Column(
@@ -193,15 +195,21 @@ fun RenderingSettingsScreen(
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                 style = TextStyle(fontSize = 15.sp, color = cs.onSurface),
                             )
-                            // L1958-1987: 44-80dp number field, digits only.
+                            // L1958-1987: 44-80dp number field, digits only;
+                            // commits on blur / IME done (C4).
+                            val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+                            var lineFocused by remember { mutableStateOf(false) }
                             OutlinedTextField(
                                 value = collapseLinesText,
                                 onValueChange = { v ->
-                                    val digits = v.filter { it.isDigit() }.take(3)
-                                    collapseLinesText = digits
-                                    commitLines(digits)
+                                    collapseLinesText = v.filter { it.isDigit() }.take(3)
                                 },
-                                modifier = Modifier.width(64.dp),
+                                modifier = Modifier
+                                    .width(64.dp)
+                                    .onFocusChanged {
+                                        if (lineFocused && !it.hasFocus) commitLines(collapseLinesText)
+                                        lineFocused = it.hasFocus
+                                    },
                                 singleLine = true,
                                 textStyle = TextStyle(
                                     fontSize = 15.sp,
@@ -216,7 +224,9 @@ fun RenderingSettingsScreen(
                                 ),
                                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                                     keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Done,
                                 ),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(

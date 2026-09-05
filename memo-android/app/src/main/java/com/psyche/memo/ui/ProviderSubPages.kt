@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -31,10 +34,13 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronLeft
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Lucide
 import com.psyche.memo.AppContainerImpl
@@ -132,6 +138,7 @@ internal fun SubPageInput(
 
 // ------------------------------------------------------ network proxy page
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProviderNetworkPage(
     container: AppContainerImpl,
@@ -140,6 +147,7 @@ fun ProviderNetworkPage(
 ) {
     var proxyEnabled by remember { mutableStateOf(false) }
     var proxyType by remember { mutableStateOf("http") }
+    var proxyTypeSheetVisible by remember { mutableStateOf(false) }
     var proxyHost by remember { mutableStateOf("") }
     var proxyPort by remember { mutableStateOf("8080") }
     var proxyUsername by remember { mutableStateOf("") }
@@ -190,18 +198,43 @@ fun ProviderNetworkPage(
             SettingsSectionCard {
                 SettingsSwitchRow(
                     icon = Lucide.Globe,
-                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_network_tab),
+                    // provider_network_page.dart:72 — enable proxy label.
+                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_enable_proxy_title),
                     value = proxyEnabled,
                     onToggle = { proxyEnabled = it },
                 )
+                if (proxyEnabled) {
+                    SettingsIosDivider()
+                    // provider_network_page.dart:81-91 — type picker row.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { proxyTypeSheetVisible = true }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(com.psyche.memo.ui.R.string.network_proxy_type),
+                            modifier = Modifier.weight(1f),
+                            style = TextStyle(fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface),
+                        )
+                        Text(
+                            text = stringResource(
+                                if (proxyType == "socks5") com.psyche.memo.ui.R.string.network_proxy_type_socks5
+                                else com.psyche.memo.ui.R.string.network_proxy_type_http,
+                            ),
+                            style = TextStyle(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)),
+                        )
+                        Icon(
+                            Lucide.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
             }
             if (proxyEnabled) {
-                Spacer(Modifier.height(12.dp))
-                SubPageInput(
-                    label = stringResource(com.psyche.memo.ui.R.string.network_proxy_type),
-                    value = proxyType,
-                    onValueChange = { proxyType = it },
-                )
                 Spacer(Modifier.height(12.dp))
                 SubPageInput(
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_host_label),
@@ -215,18 +248,69 @@ fun ProviderNetworkPage(
                     onValueChange = { proxyPort = it },
                 )
                 Spacer(Modifier.height(12.dp))
+                // C12 — labels from ARB (provider_network_page.dart:121-136).
                 SubPageInput(
-                    label = "用户名",
+                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_username_optional_label),
                     value = proxyUsername,
                     onValueChange = { proxyUsername = it },
                 )
                 Spacer(Modifier.height(12.dp))
                 SubPageInput(
-                    label = "密码",
+                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_password_optional_label),
                     value = proxyPassword,
                     onValueChange = { proxyPassword = it },
                 )
             }
+        }
+    }
+
+    // provider_network_page.dart:235-282 — proxy type is a http/socks5
+    // two-option bottom sheet (C12), not a free-text field.
+    if (proxyTypeSheetVisible) {
+        ModalBottomSheet(onDismissRequest = { proxyTypeSheetVisible = false }) {
+            Column(modifier = Modifier.padding(bottom = 20.dp)) {
+                ProxyTypeOption(
+                    labelRes = com.psyche.memo.ui.R.string.network_proxy_type_http,
+                    value = "http",
+                    current = proxyType,
+                ) { v ->
+                    proxyType = v
+                    proxyTypeSheetVisible = false
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))
+                ProxyTypeOption(
+                    labelRes = com.psyche.memo.ui.R.string.network_proxy_type_socks5,
+                    value = "socks5",
+                    current = proxyType,
+                ) { v ->
+                    proxyType = v
+                    proxyTypeSheetVisible = false
+                }
+            }
+        }
+    }
+}
+
+/** provider_network_page.dart:235-282 — http / socks5 sheet option row. */
+@Composable
+private fun ProxyTypeOption(labelRes: Int, value: String, current: String, onSelect: (String) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val selected = value == current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect(value) }
+            .padding(horizontal = 20.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(labelRes),
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+            color = if (selected) cs.primary else cs.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        if (selected) {
+            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -280,13 +364,18 @@ fun ProviderCustomRequestPage(
                 ),
             )
             Spacer(Modifier.height(18.dp))
-            // Headers section.
-            Text("自定义请求头", style = MaterialTheme.typography.titleSmall)
+            // Headers section — ARB labels (provider_custom_request_editor.dart:99-113).
+            Text(
+                text = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_custom_headers_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
             Spacer(Modifier.height(6.dp))
             headers.forEachIndexed { i, row ->
                 RequestRow(
                     name = row["name"] ?: "",
                     value = row["value"] ?: "",
+                    nameHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_header_key_hint),
+                    valueHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_header_value_hint),
                     onChange = { n, v ->
                         headers = headers.toMutableList().also { it[i] = mapOf("name" to n, "value" to v) }
                     },
@@ -294,20 +383,26 @@ fun ProviderCustomRequestPage(
                 )
             }
             Text(
-                text = "+",
-                style = MaterialTheme.typography.titleLarge,
+                text = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_add_header),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier
                     .clickable { headers = headers + mapOf("name" to "", "value" to "") }
                     .padding(8.dp),
             )
             Spacer(Modifier.height(18.dp))
             // Body overrides section.
-            Text("自定义请求体", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_custom_body_title),
+                style = MaterialTheme.typography.titleSmall,
+            )
             Spacer(Modifier.height(6.dp))
             body.forEachIndexed { i, row ->
                 RequestRow(
                     name = row["key"] ?: "",
                     value = row["value"] ?: "",
+                    nameHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_body_key_hint),
+                    valueHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_body_json_hint),
                     onChange = { n, v ->
                         body = body.toMutableList().also { it[i] = mapOf("key" to n, "value" to v) }
                     },
@@ -315,8 +410,9 @@ fun ProviderCustomRequestPage(
                 )
             }
             Text(
-                text = "+",
-                style = MaterialTheme.typography.titleLarge,
+                text = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_add_body),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier
                     .clickable { body = body + mapOf("key" to "", "value" to "") }
                     .padding(8.dp),
@@ -329,6 +425,8 @@ fun ProviderCustomRequestPage(
 private fun RequestRow(
     name: String,
     value: String,
+    nameHint: String,
+    valueHint: String,
     onChange: (String, String) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -339,9 +437,9 @@ private fun RequestRow(
             .background(LocalSemanticColors.current.surfaceCard, RoundedCornerShape(12.dp))
             .padding(8.dp),
     ) {
-        SubPageInput(label = "name", value = name, onValueChange = { onChange(it, value) })
+        SubPageInput(label = nameHint, value = name, onValueChange = { onChange(it, value) })
         Spacer(Modifier.height(6.dp))
-        SubPageInput(label = "value", value = value, onValueChange = { onChange(name, it) })
+        SubPageInput(label = valueHint, value = value, onValueChange = { onChange(name, it) })
         Text(
             text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_button),
             color = MaterialTheme.colorScheme.error,

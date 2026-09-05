@@ -3,23 +3,34 @@ package com.psyche.memo.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,41 +39,185 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Moon
+import com.composables.icons.lucide.RotateCcw
+import com.composables.icons.lucide.Sun
+import com.composables.icons.lucide.User
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.R as UiR
+import kotlin.math.roundToInt
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
- * 1:1 port of message_style_settings_page.dart — style picker
- * (Default / Frosted Glass / Solid) + layout switches
- * (assistantBubbleFitContent / assistantBubbleSplitParagraphs).
- * Style persisted as display_chat_message_background_style_v1
- * (default / frosted / solid — chat_bubble_style.dart values).
+ * 1:1 port of message_style_settings_page.dart — style picker (Default /
+ * Frosted / Solid) with _StyleSwatch colors and subtitles, layout switches,
+ * light/dark + user/assistant segmented toggles, live preview panel, AppBar
+ * reset with confirm dialog, and the per-role parameter card (blur slider
+ * only for frosted + hint, background color / opacity, border color /
+ * opacity / width, text color, corner radius).
+ *
+ * Persistence: style at 'display_chat_message_background_style_v1'; overrides
+ * at 'chat_bubble_style_overrides_v1' (assistant/global) and
+ * 'chat_bubble_style_overrides_user_v1' (user) — JSON of nullable fields
+ * (lib/theme/chat_bubble_style.dart:65-78, settings_provider.dart:312-315).
  */
+
+// --------------------------------------------------------------- overrides
+
+private data class BubbleOverrides(
+    val backgroundArgbLight: Int? = null,
+    val backgroundArgbDark: Int? = null,
+    val borderArgbLight: Int? = null,
+    val borderArgbDark: Int? = null,
+    val textArgbLight: Int? = null,
+    val textArgbDark: Int? = null,
+    val borderWidth: Double? = null,
+    val borderOpacity: Double? = null,
+    val cornerRadius: Double? = null,
+    val blurSigma: Double? = null,
+    val frostedOpacity: Double? = null,
+    val solidOpacity: Double? = null,
+) {
+    fun toJson(): String {
+        val obj = buildJsonObject {
+            backgroundArgbLight?.let { put("backgroundArgbLight", it) }
+            backgroundArgbDark?.let { put("backgroundArgbDark", it) }
+            borderArgbLight?.let { put("borderArgbLight", it) }
+            borderArgbDark?.let { put("borderArgbDark", it) }
+            textArgbLight?.let { put("textArgbLight", it) }
+            textArgbDark?.let { put("textArgbDark", it) }
+            borderWidth?.let { put("borderWidth", it) }
+            borderOpacity?.let { put("borderOpacity", it) }
+            cornerRadius?.let { put("cornerRadius", it) }
+            blurSigma?.let { put("blurSigma", it) }
+            frostedOpacity?.let { put("frostedOpacity", it) }
+            solidOpacity?.let { put("solidOpacity", it) }
+        }
+        return obj.toString()
+    }
+
+    companion object {
+        fun fromJson(raw: String?): BubbleOverrides {
+            if (raw.isNullOrEmpty()) return BubbleOverrides()
+            return runCatching {
+                val obj = Json.parseToJsonElement(raw) as? kotlinx.serialization.json.JsonObject
+                    ?: return BubbleOverrides()
+                fun i(k: String) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt()
+                fun d(k: String) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                BubbleOverrides(
+                    backgroundArgbLight = i("backgroundArgbLight"),
+                    backgroundArgbDark = i("backgroundArgbDark"),
+                    borderArgbLight = i("borderArgbLight"),
+                    borderArgbDark = i("borderArgbDark"),
+                    textArgbLight = i("textArgbLight"),
+                    textArgbDark = i("textArgbDark"),
+                    borderWidth = d("borderWidth"),
+                    borderOpacity = d("borderOpacity"),
+                    cornerRadius = d("cornerRadius"),
+                    blurSigma = d("blurSigma"),
+                    frostedOpacity = d("frostedOpacity"),
+                    solidOpacity = d("solidOpacity"),
+                )
+            }.getOrDefault(BubbleOverrides())
+        }
+    }
+}
+
+private data class ResolvedStyle(
+    val background: Color,
+    val border: Color,
+    val text: Color,
+    val borderWidth: Double,
+    val radius: Double,
+    val blurSigma: Double,
+)
+
+/** Base colors for the *editing* brightness (theme-following fallbacks). */
+private data class PreviewColors(
+    val bgBase: Color,
+    val borderBase: Color,
+    val textBase: Color,
+) {
+    fun background(argb: Int?): Color = argb?.let { Color(it) } ?: bgBase
+    fun border(argb: Int?): Color = argb?.let { Color(it) } ?: borderBase
+    fun text(argb: Int?): Color = argb?.let { Color(it) } ?: textBase
+}
+
+// chat_bubble_style.dart:163-203 — resolve overrides + theme + style.
+private fun resolveStyle(
+    colors: PreviewColors,
+    dark: Boolean,
+    style: String,
+    overrides: BubbleOverrides,
+): ResolvedStyle {
+    val opacity = when (style) {
+        "frosted" -> overrides.frostedOpacity ?: 0.66
+        else -> overrides.solidOpacity ?: 1.0
+    }
+    val borderOpacity = overrides.borderOpacity ?: if (style == "frosted") 0.14 else 0.16
+    return ResolvedStyle(
+        background = colors
+            .background(if (dark) overrides.backgroundArgbDark else overrides.backgroundArgbLight)
+            .copy(alpha = opacity.toFloat()),
+        border = colors
+            .border(if (dark) overrides.borderArgbDark else overrides.borderArgbLight)
+            .copy(alpha = borderOpacity.toFloat()),
+        text = colors.text(if (dark) overrides.textArgbDark else overrides.textArgbLight),
+        borderWidth = overrides.borderWidth ?: 0.8,
+        radius = overrides.cornerRadius ?: 16.0,
+        blurSigma = overrides.blurSigma ?: 14.0,
+    )
+}
+
+// --------------------------------------------------------------- screen
+
 @Composable
 fun MessageStyleSettingsScreen(
     container: AppContainerImpl,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val systemDark = isSystemInDarkTheme()
 
     var style by remember { mutableStateOf("default") }
     var fitContent by remember { mutableStateOf(false) }
     var splitParagraphs by remember { mutableStateOf(false) }
+    var editingDark by remember { mutableStateOf(systemDark) }
+    var editingUser by remember { mutableStateOf(false) }
+    var assistantOverrides by remember { mutableStateOf(BubbleOverrides()) }
+    var userOverrides by remember { mutableStateOf(BubbleOverrides()) }
+    var showResetConfirm by remember { mutableStateOf(false) }
+    var colorPicker by remember { mutableStateOf<String?>(null) } // "bg" | "border" | "text"
 
     LaunchedEffect(Unit) {
         style = container.preferenceRepository.readLocal("display_chat_message_background_style_v1")
             ?.takeIf { it.isNotEmpty() } ?: "default"
         fitContent = container.preferenceRepository.readLocal("display_assistant_bubble_fit_content_v1") == "1"
         splitParagraphs = container.preferenceRepository.readLocal("display_assistant_bubble_split_paragraphs_v1") == "1"
+        assistantOverrides = BubbleOverrides.fromJson(
+            container.preferenceRepository.readLocal("chat_bubble_style_overrides_v1"),
+        )
+        userOverrides = BubbleOverrides.fromJson(
+            container.preferenceRepository.readLocal("chat_bubble_style_overrides_user_v1"),
+        )
     }
+
     fun saveStyle(v: String) {
         style = v
         container.preferenceRepository.writeLocal("display_chat_message_background_style_v1", v)
@@ -70,12 +225,41 @@ fun MessageStyleSettingsScreen(
     fun saveBool(key: String, v: Boolean) {
         container.preferenceRepository.writeLocal(key, if (v) "1" else "0")
     }
+    // settings_provider.dart:2862-2894 — per-role write.
+    fun saveOverrides(v: BubbleOverrides) {
+        if (editingUser) {
+            userOverrides = v
+            container.preferenceRepository.writeLocal("chat_bubble_style_overrides_user_v1", v.toJson())
+        } else {
+            assistantOverrides = v
+            container.preferenceRepository.writeLocal("chat_bubble_style_overrides_v1", v.toJson())
+        }
+    }
+    // settings_provider.dart:2844-2860 — reset clears both roles.
+    fun resetOverrides() {
+        assistantOverrides = BubbleOverrides()
+        userOverrides = BubbleOverrides()
+        container.preferenceRepository.writeLocal("chat_bubble_style_overrides_v1", "{}")
+        container.preferenceRepository.remove("chat_bubble_style_overrides_user_v1")
+    }
 
-    val styles = listOf(
-        Triple("default", stringResource(UiR.string.display_settings_page_chat_message_background_default), cs.surfaceVariant),
-        Triple("frosted", stringResource(UiR.string.display_settings_page_chat_message_background_frosted), cs.primary.copy(alpha = 0.25f)),
-        Triple("solid", stringResource(UiR.string.display_settings_page_chat_message_background_solid), cs.primary.copy(alpha = 0.6f)),
-    )
+    val overrides = if (editingUser) userOverrides else assistantOverrides
+    val isDefault = style == "default"
+    // The preview needs the *editing* brightness's theme colors while only the
+    // current scheme exists; when they differ the theme fallbacks are
+    // approximated by lerping toward white/black. Explicit overrides (what the
+    // sliders act on) always take precedence.
+    val previewColors = if (systemDark == editingDark) {
+        PreviewColors(cs.surfaceContainerHigh, cs.outlineVariant, cs.onSurface)
+    } else {
+        val target = if (editingDark) Color.Black else Color.White
+        PreviewColors(
+            lerp(cs.surfaceContainerHigh, target, 0.85f),
+            lerp(cs.outlineVariant, target, 0.6f),
+            lerp(cs.onSurface, target, 0.9f),
+        )
+    }
+    val resolved = resolveStyle(previewColors, editingDark, style, overrides)
 
     Column(
         modifier = Modifier
@@ -94,70 +278,536 @@ fun MessageStyleSettingsScreen(
             }
             Text(
                 text = stringResource(UiR.string.message_style_settings_page_title),
+                modifier = Modifier.weight(1f),
                 style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
             )
+            // message_style_settings_page.dart:34-45 — AppBar reset action.
+            IconButton(onClick = { showResetConfirm = true }, modifier = Modifier.size(44.dp)) {
+                Icon(
+                    Lucide.RotateCcw,
+                    contentDescription = stringResource(UiR.string.message_style_settings_page_reset),
+                    tint = cs.onSurface,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp,
+                start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp,
             ),
         ) {
             item {
-                Text(
-                    text = stringResource(UiR.string.message_style_settings_page_background_color),
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
-                )
-                styles.forEach { (id, label, swatch) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { saveStyle(id) }
-                            .padding(horizontal = 4.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(swatch, RoundedCornerShape(10.dp))
-                                .border(1.dp, cs.outlineVariant.copy(alpha = 0.3f), RoundedCornerShape(10.dp)),
-                        )
-                        Spacer(Modifier.size(12.dp))
-                        Text(
-                            text = label,
-                            modifier = Modifier.weight(1f),
-                            style = TextStyle(fontSize = 15.sp, color = cs.onSurface),
-                        )
-                        if (style == id) {
-                            Icon(
-                                Lucide.Check,
-                                contentDescription = null,
-                                tint = cs.primary,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
+                SettingsSectionCard {
+                    StyleRow(
+                        styleId = "default",
+                        label = stringResource(UiR.string.display_settings_page_chat_message_background_default),
+                        subtitle = stringResource(UiR.string.message_style_settings_page_style_default_subtitle),
+                        selected = isDefault,
+                        onTap = { saveStyle("default") },
+                    )
+                    SettingsIosDivider()
+                    StyleRow(
+                        styleId = "frosted",
+                        label = stringResource(UiR.string.display_settings_page_chat_message_background_frosted),
+                        subtitle = stringResource(UiR.string.message_style_settings_page_style_frosted_subtitle),
+                        selected = style == "frosted",
+                        onTap = { saveStyle("frosted") },
+                    )
+                    SettingsIosDivider()
+                    StyleRow(
+                        styleId = "solid",
+                        label = stringResource(UiR.string.display_settings_page_chat_message_background_solid),
+                        subtitle = stringResource(UiR.string.message_style_settings_page_style_solid_subtitle),
+                        selected = style == "solid",
+                        onTap = { saveStyle("solid") },
+                    )
                 }
             }
             item {
                 Spacer(Modifier.size(12.dp))
                 SettingsSectionCard {
-                    SettingsSwitchRow(
-                        icon = Lucide.Check,
+                    TextSwitchRow(
                         label = stringResource(UiR.string.message_style_settings_page_assistant_fit_content),
+                        subtitle = stringResource(UiR.string.message_style_settings_page_assistant_fit_content_subtitle),
                         value = fitContent,
                         onToggle = { fitContent = it; saveBool("display_assistant_bubble_fit_content_v1", it) },
                     )
                     SettingsIosDivider()
-                    SettingsSwitchRow(
-                        icon = Lucide.Check,
+                    TextSwitchRow(
                         label = stringResource(UiR.string.message_style_settings_page_assistant_split_paragraphs),
+                        subtitle = stringResource(UiR.string.message_style_settings_page_assistant_split_paragraphs_subtitle),
                         value = splitParagraphs,
                         onToggle = { splitParagraphs = it; saveBool("display_assistant_bubble_split_paragraphs_v1", it) },
                     )
                 }
             }
+            item {
+                Spacer(Modifier.size(12.dp))
+                // L372-383 — light/dark segmented toggle.
+                SegmentedToggle(
+                    leftLabel = stringResource(UiR.string.message_style_settings_page_light),
+                    leftIcon = Lucide.Sun,
+                    rightLabel = stringResource(UiR.string.message_style_settings_page_dark),
+                    rightIcon = Lucide.Moon,
+                    rightSelected = editingDark,
+                    onChanged = { editingDark = it },
+                )
+            }
+            if (!isDefault) {
+                item {
+                    Spacer(Modifier.size(12.dp))
+                    // L384-411 — user/assistant toggle + hint.
+                    SegmentedToggle(
+                        leftLabel = stringResource(UiR.string.message_style_settings_page_role_user),
+                        leftIcon = Lucide.User,
+                        rightLabel = stringResource(UiR.string.message_style_settings_page_role_assistant),
+                        rightIcon = Lucide.Bot,
+                        rightSelected = !editingUser,
+                        onChanged = { right -> editingUser = !right },
+                    )
+                    Text(
+                        text = stringResource(UiR.string.message_style_settings_page_role_assistant_hint),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.56f)),
+                    )
+                }
+            }
+            item {
+                Spacer(Modifier.size(12.dp))
+                // L197-204,412-413 — live preview panel.
+                PreviewPanel(
+                    cs = cs,
+                    editingDark = editingDark,
+                    style = style,
+                    userOverrides = userOverrides,
+                    assistantOverrides = assistantOverrides,
+                    colors = previewColors,
+                )
+            }
+            if (isDefault) {
+                item {
+                    // L414-426 — default hint instead of params.
+                    Text(
+                        text = stringResource(UiR.string.message_style_settings_page_default_hint),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        textAlign = TextAlign.Center,
+                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = cs.onSurface.copy(alpha = 0.56f)),
+                    )
+                }
+            } else {
+                item {
+                    Spacer(Modifier.size(12.dp))
+                    // L206-360 — parameter card.
+                    SettingsSectionCard {
+                        if (style == "frosted") {
+                            SliderRow(
+                                label = stringResource(UiR.string.message_style_settings_page_blur),
+                                valueText = (overrides.blurSigma ?: 14.0).roundToInt().toString(),
+                                value = (overrides.blurSigma ?: 14.0).toFloat(),
+                                range = 0f..30f,
+                                steps = 29,
+                                onChanged = { v -> saveOverrides(overrides.copy(blurSigma = v.toDouble())) },
+                            )
+                            Text(
+                                text = stringResource(UiR.string.message_style_settings_page_blur_hint),
+                                modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+                                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.58f)),
+                            )
+                            SettingsIosDivider()
+                        }
+                        ColorRow(
+                            label = stringResource(UiR.string.message_style_settings_page_background_color),
+                            color = previewColors.background(
+                                if (editingDark) overrides.backgroundArgbDark else overrides.backgroundArgbLight,
+                            ),
+                            onTap = { colorPicker = "bg" },
+                        )
+                        SettingsIosDivider()
+                        val bgOpacity = if (style == "frosted") overrides.frostedOpacity ?: 0.66 else overrides.solidOpacity ?: 1.0
+                        SliderRow(
+                            label = stringResource(UiR.string.message_style_settings_page_background_opacity),
+                            valueText = "${(bgOpacity * 100).roundToInt()}%",
+                            value = (bgOpacity * 100).toFloat(),
+                            range = 0f..100f,
+                            steps = 19,
+                            onChanged = { v ->
+                                val opacity = (v / 100.0)
+                                saveOverrides(
+                                    if (style == "frosted") overrides.copy(frostedOpacity = opacity)
+                                    else overrides.copy(solidOpacity = opacity),
+                                )
+                            },
+                        )
+                        SettingsIosDivider()
+                        ColorRow(
+                            label = stringResource(UiR.string.message_style_settings_page_border_color),
+                            color = previewColors.border(
+                                if (editingDark) overrides.borderArgbDark else overrides.borderArgbLight,
+                            ),
+                            onTap = { colorPicker = "border" },
+                        )
+                        SettingsIosDivider()
+                        val borderOpacity = overrides.borderOpacity ?: if (style == "frosted") 0.14 else 0.16
+                        SliderRow(
+                            label = stringResource(UiR.string.message_style_settings_page_border_opacity),
+                            valueText = "${(borderOpacity * 100).roundToInt()}%",
+                            value = (borderOpacity * 100).toFloat(),
+                            range = 0f..100f,
+                            steps = 19,
+                            onChanged = { v -> saveOverrides(overrides.copy(borderOpacity = v / 100.0)) },
+                        )
+                        SettingsIosDivider()
+                        SliderRow(
+                            label = stringResource(UiR.string.message_style_settings_page_border_width),
+                            valueText = String.format(java.util.Locale.US, "%.1f", overrides.borderWidth ?: 0.8),
+                            value = (overrides.borderWidth ?: 0.8).toFloat(),
+                            range = 0f..3f,
+                            steps = 29,
+                            onChanged = { v -> saveOverrides(overrides.copy(borderWidth = v.toDouble())) },
+                        )
+                        SettingsIosDivider()
+                        ColorRow(
+                            label = stringResource(UiR.string.message_style_settings_page_text_color),
+                            color = previewColors.text(
+                                if (editingDark) overrides.textArgbDark else overrides.textArgbLight,
+                            ),
+                            onTap = { colorPicker = "text" },
+                        )
+                        SettingsIosDivider()
+                        SliderRow(
+                            label = stringResource(UiR.string.message_style_settings_page_corner_radius),
+                            valueText = (overrides.cornerRadius ?: 16.0).roundToInt().toString(),
+                            value = (overrides.cornerRadius ?: 16.0).toFloat(),
+                            range = 0f..28f,
+                            steps = 27,
+                            onChanged = { v -> saveOverrides(overrides.copy(cornerRadius = v.toDouble())) },
+                        )
+                    }
+                }
+            }
         }
+    }
+
+    if (showResetConfirm) {
+        // L503-582 — reset confirmation.
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            text = { Text(stringResource(UiR.string.message_style_settings_page_reset_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetConfirm = false
+                    resetOverrides()
+                }) { Text(stringResource(UiR.string.message_style_settings_page_reset), color = cs.primary) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) {
+                    Text(stringResource(UiR.string.message_style_settings_page_cancel))
+                }
+            },
+        )
+    }
+
+    // Pragmatic color picker: a hex (#RRGGBB / #AARRGGBB) input dialog stands
+    // in for showAppColorPicker, which is not yet ported in this pass.
+    if (colorPicker != null) {
+        val title = when (colorPicker) {
+            "bg" -> stringResource(UiR.string.message_style_settings_page_background_color)
+            "border" -> stringResource(UiR.string.message_style_settings_page_border_color)
+            else -> stringResource(UiR.string.message_style_settings_page_text_color)
+        }
+        val initial = when (colorPicker) {
+            "bg" -> previewColors.background(if (editingDark) overrides.backgroundArgbDark else overrides.backgroundArgbLight)
+            "border" -> previewColors.border(if (editingDark) overrides.borderArgbDark else overrides.borderArgbLight)
+            else -> previewColors.text(if (editingDark) overrides.textArgbDark else overrides.textArgbLight)
+        }
+        // Compose Color has no .rgb — convert to ARGB int first, keep the
+        // low 24 bits for the #RRGGBB field.
+        var hex by remember(colorPicker) {
+            mutableStateOf(String.format(java.util.Locale.US, "%06X", initial.toArgb() and 0xFFFFFF))
+        }
+        AlertDialog(
+            onDismissRequest = { colorPicker = null },
+            title = { Text(title) },
+            text = {
+                OutlinedTextField(
+                    value = hex,
+                    onValueChange = { hex = it },
+                    singleLine = true,
+                    placeholder = { Text("#RRGGBB") },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val argb = parseHexColor(hex)
+                    if (argb != null) {
+                        val next = when (colorPicker) {
+                            "bg" -> if (editingDark) overrides.copy(backgroundArgbDark = argb) else overrides.copy(backgroundArgbLight = argb)
+                            "border" -> if (editingDark) overrides.copy(borderArgbDark = argb) else overrides.copy(borderArgbLight = argb)
+                            else -> if (editingDark) overrides.copy(textArgbDark = argb) else overrides.copy(textArgbLight = argb)
+                        }
+                        saveOverrides(next)
+                    }
+                    colorPicker = null
+                }) { Text(stringResource(UiR.string.model_detail_sheet_confirm_button)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { colorPicker = null }) {
+                    Text(stringResource(UiR.string.message_style_settings_page_cancel))
+                }
+            },
+        )
+    }
+}
+
+// --------------------------------------------------------------- helpers
+
+private fun parseHexColor(hex: String): Int? {
+    val cleaned = hex.trim().removePrefix("#")
+    return when (cleaned.length) {
+        6 -> runCatching { android.graphics.Color.parseColor("#$cleaned") or 0xFF000000.toInt() }.getOrNull()
+        8 -> runCatching { android.graphics.Color.parseColor("#$cleaned") }.getOrNull()
+        else -> null
+    }
+}
+
+// --------------------------------------------------------------- widgets
+
+/** L698-730 — _StyleSwatch colors per style. */
+@Composable
+private fun StyleSwatch(styleId: String) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = isSystemInDarkTheme()
+    val fill = when (styleId) {
+        "default" -> cs.primary.copy(alpha = if (isDark) 0.22f else 0.14f)
+        "frosted" -> cs.surfaceContainerHigh.copy(alpha = 0.62f)
+        else -> cs.surfaceContainerHigh
+    }
+    val border = when (styleId) {
+        "default" -> cs.primary.copy(alpha = 0.18f)
+        "frosted" -> cs.outlineVariant.copy(alpha = 0.42f)
+        else -> cs.outlineVariant.copy(alpha = 0.55f)
+    }
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .background(fill, RoundedCornerShape(8.dp))
+            .border(0.8.dp, border, RoundedCornerShape(8.dp)),
+    )
+}
+
+/** L584-645 — style row: swatch + label + subtitle + check. */
+@Composable
+private fun StyleRow(styleId: String, label: String, subtitle: String, selected: Boolean, onTap: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StyleSwatch(styleId)
+        Spacer(Modifier.size(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)))
+            Spacer(Modifier.height(2.dp))
+            Text(
+                subtitle,
+                style = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = cs.onSurface.copy(alpha = 0.52f)),
+            )
+        }
+        if (selected) {
+            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+/** L647-696 — switch row with subtitle. */
+@Composable
+private fun TextSwitchRow(label: String, subtitle: String, value: Boolean, onToggle: (Boolean) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)))
+            Spacer(Modifier.height(2.dp))
+            Text(
+                subtitle,
+                style = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = cs.onSurface.copy(alpha = 0.52f)),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        IosSwitch(value = value, onValueChanged = onToggle)
+    }
+}
+
+/** L732+ — two-segment toggle. */
+@Composable
+private fun SegmentedToggle(
+    leftLabel: String,
+    leftIcon: ImageVector,
+    rightLabel: String,
+    rightIcon: ImageVector,
+    rightSelected: Boolean,
+    onChanged: (Boolean) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(cs.surfaceCardColorCompat(), RoundedCornerShape(10.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.18f), RoundedCornerShape(10.dp)),
+    ) {
+        SegmentedHalf(leftLabel, leftIcon, !rightSelected) { onChanged(false) }
+        SegmentedHalf(rightLabel, rightIcon, rightSelected) { onChanged(true) }
+    }
+}
+
+@Composable
+private fun RowScope.SegmentedHalf(label: String, icon: ImageVector, selected: Boolean, onTap: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .weight(1f)
+            .clickable(onClick = onTap)
+            .padding(vertical = 9.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (selected) cs.primary else cs.onSurface.copy(alpha = 0.6f),
+            modifier = Modifier.size(15.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            label,
+            style = TextStyle(
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) cs.primary else cs.onSurface.copy(alpha = 0.6f),
+            ),
+        )
+    }
+}
+
+/** Live preview panel — thinking row + assistant bubble + user bubble. */
+@Composable
+private fun PreviewPanel(
+    cs: ColorScheme,
+    editingDark: Boolean,
+    style: String,
+    userOverrides: BubbleOverrides,
+    assistantOverrides: BubbleOverrides,
+    colors: PreviewColors,
+) {
+    val scrim = if (editingDark) Color(0xFF202428) else Color(0xFFF2F3F5)
+    val userResolved = resolveStyle(colors, editingDark, style, userOverrides)
+    val assistantResolved = resolveStyle(colors, editingDark, style, assistantOverrides)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(scrim, RoundedCornerShape(14.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
+            .padding(12.dp),
+    ) {
+        Text(
+            text = stringResource(UiR.string.message_style_settings_page_preview_thinking),
+            style = TextStyle(fontSize = 11.sp, color = assistantResolved.text.copy(alpha = 0.6f)),
+        )
+        Spacer(Modifier.height(6.dp))
+        Bubble(
+            label = stringResource(UiR.string.message_style_settings_page_preview_assistant),
+            resolved = assistantResolved,
+            isUser = false,
+        )
+        Spacer(Modifier.height(8.dp))
+        Bubble(
+            label = stringResource(UiR.string.message_style_settings_page_preview_user),
+            resolved = userResolved,
+            isUser = true,
+        )
+    }
+}
+
+@Composable
+private fun Bubble(label: String, resolved: ResolvedStyle, isUser: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+    ) {
+        Box(
+            modifier = Modifier
+                .background(resolved.background, RoundedCornerShape(resolved.radius.roundToInt().dp))
+                .border(resolved.borderWidth.dp, resolved.border, RoundedCornerShape(resolved.radius.roundToInt().dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = label,
+                style = TextStyle(fontSize = 13.sp, color = resolved.text),
+            )
+        }
+    }
+}
+
+/** L209-222 etc. — labeled slider row. */
+@Composable
+private fun SliderRow(
+    label: String,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    onChanged: (Float) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, modifier = Modifier.weight(1f), style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
+            Text(valueText, style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)))
+        }
+        Slider(
+            value = value.coerceIn(range.start, range.endInclusive),
+            onValueChange = onChanged,
+            valueRange = range,
+            steps = steps,
+        )
+    }
+}
+
+/** L236-252 etc. — color picker row with swatch. */
+@Composable
+private fun ColorRow(label: String, color: Color, onTap: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.weight(1f), style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .background(color, RoundedCornerShape(6.dp))
+                .border(0.8.dp, cs.outlineVariant.copy(alpha = 0.42f), RoundedCornerShape(6.dp)),
+        )
     }
 }

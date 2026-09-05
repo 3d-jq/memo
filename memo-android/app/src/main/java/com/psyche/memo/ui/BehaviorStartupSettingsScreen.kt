@@ -14,25 +14,33 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +48,7 @@ import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.Calendar
+import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Clipboard
 import com.composables.icons.lucide.CornerDownLeft
@@ -71,6 +80,7 @@ import com.psyche.memo.ui.R as UiR
  * chat_*_v1 / suggestion_insert_on_tap_only_v1). Threshold defaults 5000,
  * clamped 1..999999 (settings_provider.dart:4879-4881).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BehaviorStartupSettingsScreen(
     container: AppContainerImpl,
@@ -87,7 +97,8 @@ fun BehaviorStartupSettingsScreen(
         container.preferenceRepository.readLocal(key)?.toIntOrNull() ?: default
 
     var autoCollapseThinking by remember { mutableStateOf(readBool("display_auto_collapse_thinking_v1", true)) }
-    var collapseThinkingSteps by remember { mutableStateOf(readBool("display_collapse_thinking_steps_v1", true)) }
+    // settings_provider.dart:4721 —— _collapseThinkingSteps = false。
+    var collapseThinkingSteps by remember { mutableStateOf(readBool("display_collapse_thinking_steps_v1", false)) }
     var showToolResultSummary by remember { mutableStateOf(readBool("display_show_tool_result_summary_v1", false)) }
     var hideToolResultImages by remember { mutableStateOf(readBool("display_hide_tool_result_images_v1", false)) }
     var insertSuggestionOnTapOnly by remember { mutableStateOf(readBool("suggestion_insert_on_tap_only_v1", false)) }
@@ -97,7 +108,19 @@ fun BehaviorStartupSettingsScreen(
     var keepThinkingAndToolCards by remember { mutableStateOf(readBool("chat_edit_assistant_keep_thinking_tool_cards_v1", false)) }
     var showAppUpdates by remember { mutableStateOf(readBool("display_show_app_updates_v1", true)) }
     var keepScreenOn by remember { mutableStateOf(readBool("display_keep_screen_on_during_generation_v1", false)) }
-    var showMessageNav by remember { mutableStateOf(readBool("display_show_message_nav_v1", true)) }
+    // 源码 display_settings_page.dart:2139-2153 / settings_provider.dart:4933,5008-5024
+    // —— 消息导航为三态（always/scroll/never）；旧 bool 键 display_show_message_nav_v1
+    // 仅作迁移回退（true→scroll / false→never）。
+    val initialNavMode = run {
+        when (container.preferenceRepository.readLocal("display_mobile_message_nav_buttons_mode_v1")) {
+            "always" -> "always"
+            "never" -> "never"
+            "scroll" -> "scroll"
+            else -> if (readBool("display_show_message_nav_v1", true)) "scroll" else "never"
+        }
+    }
+    var showMessageNavMode by remember { mutableStateOf(initialNavMode) }
+    var navModeSheetVisible by remember { mutableStateOf(false) }
     var showChatListDate by remember { mutableStateOf(readBool("display_show_chat_list_date_v1", false)) }
     var keepSidebarOnAssistantTap by remember { mutableStateOf(readBool("display_keep_sidebar_open_on_assistant_tap_v1", false)) }
     var keepSidebarOnTopicTap by remember { mutableStateOf(readBool("display_keep_sidebar_open_on_topic_tap_v1", false)) }
@@ -108,12 +131,20 @@ fun BehaviorStartupSettingsScreen(
     var enterToSend by remember { mutableStateOf(readBool("display_enter_to_send_on_mobile_v1", false)) }
     var longPasteAsFile by remember { mutableStateOf(readBool("display_long_paste_as_file_v1", true)) }
     // 源码 settings_provider.dart:4879-4881 —— 默认 5000，clamp 1..999999。
-    var longPasteThreshold by remember { mutableStateOf(readInt("display_long_paste_as_file_threshold_v1", 5000).toString()) }
+    // 已存值与草稿分离：解析失败回退当前已存值（C4）。
+    var longPasteThreshold by remember { mutableIntStateOf(readInt("display_long_paste_as_file_threshold_v1", 5000)) }
+    var longPasteThresholdText by remember { mutableStateOf(longPasteThreshold.toString()) }
+    var thresholdFocused by remember { mutableStateOf(false) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     fun commitThreshold(text: String) {
-        val next = (text.toIntOrNull() ?: 5000).coerceIn(1, 999999)
-        longPasteThreshold = next.toString()
-        container.preferenceRepository.writeLocal("display_long_paste_as_file_threshold_v1", next.toString())
+        val parsed = text.toIntOrNull() ?: run {
+            longPasteThresholdText = longPasteThreshold.toString()
+            return
+        }
+        longPasteThreshold = parsed.coerceIn(1, 999999)
+        longPasteThresholdText = longPasteThreshold.toString()
+        container.preferenceRepository.writeLocal("display_long_paste_as_file_threshold_v1", longPasteThreshold.toString())
     }
 
     Column(
@@ -218,15 +249,23 @@ fun BehaviorStartupSettingsScreen(
                     SettingsSwitchRow(
                         Lucide.Sun,
                         stringResource(UiR.string.display_settings_page_keep_screen_on_during_generation_title),
+                        tip = stringResource(UiR.string.display_settings_page_keep_screen_on_during_generation_subtitle),
                         value = keepScreenOn,
                         onToggle = { keepScreenOn = it; writeBool("display_keep_screen_on_during_generation_v1", it) },
                     )
                     SettingsIosDivider()
-                    SettingsSwitchRow(
-                        Lucide.ChevronRight,
-                        stringResource(UiR.string.display_settings_page_message_nav_buttons_title),
-                        value = showMessageNav,
-                        onToggle = { showMessageNav = it; writeBool("display_show_message_nav_v1", it) },
+                    // L2139-2153 —— 三态 nav row + 底部弹层（C6）。
+                    SettingsRow(
+                        icon = Lucide.ChevronRight,
+                        label = stringResource(UiR.string.display_settings_page_message_nav_buttons_title),
+                        detailText = stringResource(
+                            when (showMessageNavMode) {
+                                "always" -> UiR.string.display_settings_page_message_nav_buttons_mode_always
+                                "never" -> UiR.string.display_settings_page_message_nav_buttons_mode_never
+                                else -> UiR.string.display_settings_page_message_nav_buttons_mode_scroll
+                            },
+                        ),
+                        onTap = { navModeSheetVisible = true },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
@@ -317,13 +356,16 @@ fun BehaviorStartupSettingsScreen(
                                 style = TextStyle(fontSize = 15.sp, color = cs.onSurface),
                             )
                             OutlinedTextField(
-                                value = longPasteThreshold,
+                                value = longPasteThresholdText,
                                 onValueChange = { v ->
-                                    val digits = v.filter { it.isDigit() }.take(6)
-                                    longPasteThreshold = digits
-                                    commitThreshold(digits)
+                                    longPasteThresholdText = v.filter { it.isDigit() }.take(6)
                                 },
-                                modifier = Modifier.width(72.dp),
+                                modifier = Modifier
+                                    .width(72.dp)
+                                    .onFocusChanged {
+                                        if (thresholdFocused && !it.hasFocus) commitThreshold(longPasteThresholdText)
+                                        thresholdFocused = it.hasFocus
+                                    },
                                 singleLine = true,
                                 textStyle = TextStyle(
                                     fontSize = 15.sp,
@@ -336,7 +378,11 @@ fun BehaviorStartupSettingsScreen(
                                     focusedBorderColor = cs.primary,
                                     unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.18f),
                                 ),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Done,
+                                ),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
@@ -347,6 +393,67 @@ fun BehaviorStartupSettingsScreen(
                     }
                 }
             }
+        }
+    }
+
+    // L1574-1616 —— always / scroll / never 三选弹层。
+    if (navModeSheetVisible) {
+        ModalBottomSheet(onDismissRequest = { navModeSheetVisible = false }) {
+            Column(modifier = Modifier.padding(bottom = 20.dp)) {
+                NavModeOption(
+                    UiR.string.display_settings_page_message_nav_buttons_mode_always,
+                    "always",
+                    showMessageNavMode,
+                ) { mode ->
+                    showMessageNavMode = mode
+                    container.preferenceRepository.writeLocal("display_mobile_message_nav_buttons_mode_v1", mode)
+                    navModeSheetVisible = false
+                }
+                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
+                NavModeOption(
+                    UiR.string.display_settings_page_message_nav_buttons_mode_scroll,
+                    "scroll",
+                    showMessageNavMode,
+                ) { mode ->
+                    showMessageNavMode = mode
+                    container.preferenceRepository.writeLocal("display_mobile_message_nav_buttons_mode_v1", mode)
+                    navModeSheetVisible = false
+                }
+                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
+                NavModeOption(
+                    UiR.string.display_settings_page_message_nav_buttons_mode_never,
+                    "never",
+                    showMessageNavMode,
+                ) { mode ->
+                    showMessageNavMode = mode
+                    container.preferenceRepository.writeLocal("display_mobile_message_nav_buttons_mode_v1", mode)
+                    navModeSheetVisible = false
+                }
+            }
+        }
+    }
+}
+
+/** L1574-1616 三选弹层选项行：选中项着 primary 并带勾。 */
+@Composable
+private fun NavModeOption(labelRes: Int, mode: String, current: String, onSelect: (String) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val selected = mode == current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect(mode) }
+            .padding(horizontal = 20.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(labelRes),
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+            color = if (selected) cs.primary else cs.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+        if (selected) {
+            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
         }
     }
 }

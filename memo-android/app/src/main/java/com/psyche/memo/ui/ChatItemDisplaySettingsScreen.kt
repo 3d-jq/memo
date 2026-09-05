@@ -62,13 +62,17 @@ import com.psyche.memo.ui.R as UiR
  * 1:1 port of display_settings_page.dart L1620-1764 —
  * ChatItemDisplaySettingsPage: 13 switch rows in source order. Keys are the
  * original Flutter prefs keys (settings_provider.dart:178-221) stored as
- * "1"/"0"; all default to true (settings_provider.dart:1068).
+ * "1"/"0"; defaults per settings_provider.dart (useNewAssistantAvatarUx /
+ * showProviderInChatMessage are false, the rest true).
  */
 private data class SwitchItem(
     val icon: ImageVector,
     val labelRes: Int,
     val tipRes: Int? = null,
     val prefsKey: String,
+    // settings_provider.dart default; only the two keys below are false
+    // (settings_provider.dart:4803,4825).
+    val default: Boolean = true,
 )
 
 private val switchRows = listOf(
@@ -77,10 +81,12 @@ private val switchRows = listOf(
     SwitchItem(Lucide.Clock, UiR.string.display_settings_page_show_user_timestamp_title, prefsKey = "display_show_user_timestamp_v1"),
     SwitchItem(Lucide.Ellipsis, UiR.string.display_settings_page_show_user_message_actions_title, prefsKey = "display_show_user_message_actions_v1"),
     SwitchItem(Lucide.Bot, UiR.string.display_settings_page_chat_model_icon_title, prefsKey = "display_show_model_icon_v1"),
-    SwitchItem(Lucide.Bot, UiR.string.display_settings_page_use_new_assistant_avatar_ux_title, prefsKey = "display_use_new_assistant_avatar_ux_v1"),
+    // settings_provider.dart:4803 — _useNewAssistantAvatarUx = false.
+    SwitchItem(Lucide.Bot, UiR.string.display_settings_page_use_new_assistant_avatar_ux_title, prefsKey = "display_use_new_assistant_avatar_ux_v1", default = false),
     SwitchItem(Lucide.MessageSquare, UiR.string.display_settings_page_show_model_name_title, prefsKey = "display_show_model_name_v1"),
     SwitchItem(Lucide.Clock, UiR.string.display_settings_page_show_model_timestamp_title, prefsKey = "display_show_model_timestamp_v1"),
-    SwitchItem(Lucide.Globe, UiR.string.display_settings_page_show_provider_in_chat_message_title, prefsKey = "display_show_provider_in_chat_message_v1"),
+    // settings_provider.dart:4825 — _showProviderInChatMessage = false.
+    SwitchItem(Lucide.Globe, UiR.string.display_settings_page_show_provider_in_chat_message_title, prefsKey = "display_show_provider_in_chat_message_v1", default = false),
     SwitchItem(Lucide.Type, UiR.string.display_settings_page_show_token_stats_title, prefsKey = "display_show_token_stats_v1"),
     SwitchItem(
         Lucide.Sparkles,
@@ -123,13 +129,14 @@ fun ChatItemDisplaySettingsScreen(
 ) {
     val cs = MaterialTheme.colorScheme
 
-    // Boolean prefs persisted as "1"/"0" (defaults all true — L1068).
+    // Boolean prefs persisted as "1"/"0"; defaults per settings_provider.dart
+    // (all true except the two keys flagged above).
     var values by remember {
-        mutableStateOf(switchRows.associate { it.prefsKey to true })
+        mutableStateOf(switchRows.associate { it.prefsKey to it.default })
     }
     LaunchedEffect(Unit) {
         values = switchRows.associate {
-            it.prefsKey to (container.preferenceRepository.readLocal(it.prefsKey)?.let { v -> v == "1" } ?: true)
+            it.prefsKey to (container.preferenceRepository.readLocal(it.prefsKey)?.let { v -> v == "1" } ?: it.default)
         }
     }
     fun writeBool(key: String, value: Boolean) {
@@ -170,7 +177,7 @@ fun ChatItemDisplaySettingsScreen(
                             icon = item.icon,
                             label = stringResource(item.labelRes),
                             tip = item.tipRes?.let { stringResource(it) },
-                            value = values[item.prefsKey] ?: true,
+                            value = values[item.prefsKey] ?: item.default,
                             onToggle = { writeBool(item.prefsKey, it) },
                         )
                         if (index != switchRows.lastIndex) SettingsIosDivider()
