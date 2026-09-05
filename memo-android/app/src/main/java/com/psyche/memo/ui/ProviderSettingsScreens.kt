@@ -80,10 +80,15 @@ internal fun loadProviders(container: AppContainerImpl): List<Pair<String, Provi
     }
 
 internal fun saveProvider(container: AppContainerImpl, id: String, config: ProviderConfig) {
-    providerDao(container).upsert(
+    val dao = providerDao(container)
+    // New rows take max+1; a truncated timestamp could go negative and violate
+    // the schema CHECK(sort_order >= 0).
+    val existing = dao.get(id)
+    val sortOrder = existing?.sortOrder ?: dao.nextSortOrder()
+    dao.upsert(
         id,
         providerJson.encodeToString(ProviderConfig.serializer(), config),
-        sortOrder = System.currentTimeMillis().toInt(),
+        sortOrder = sortOrder,
     )
 }
 

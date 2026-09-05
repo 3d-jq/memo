@@ -139,6 +139,7 @@ private fun AppThemeAndContent(
             Box(
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             ) {
+                com.psyche.memo.ui.snackbar.AppSnackBarOverlay {
                 val navController = rememberNavController()
                 val pendingOpenConversation = remember {
                     androidx.compose.runtime.mutableStateOf<String?>(null)
@@ -251,6 +252,7 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
+                }
                 }
             }
         }
