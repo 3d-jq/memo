@@ -442,6 +442,7 @@ private fun AppThemeAndContent(
                         TtsServicesScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
+                            onOpenSettings = { navController.navigate("tts_settings") },
                         )
                     }
                 }

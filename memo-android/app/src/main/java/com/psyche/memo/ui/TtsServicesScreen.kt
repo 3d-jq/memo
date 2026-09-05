@@ -5,6 +5,9 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -51,10 +55,12 @@ import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Volume2
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -80,6 +86,7 @@ private var systemTtsError: String? = null
 fun TtsServicesScreen(
     container: AppContainerImpl,
     onBack: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val app = LocalSemanticColors.current
@@ -135,8 +142,10 @@ fun TtsServicesScreen(
                 style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
             )
+            // AppBar settings action (tts_services_page.dart L44-56): opens
+            // TtsSettingsPage — NOT the system-TTS config sheet.
             IconButton44(
-                onClick = { systemConfigOpen = true },
+                onClick = onOpenSettings,
                 icon = Lucide.Settings2,
                 tint = cs.onSurface,
                 cd = stringResource(UiR.string.tts_services_page_settings_tooltip),
@@ -151,12 +160,44 @@ fun TtsServicesScreen(
                 .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),
         ) {
             key(rev) {
-                // VoiceServiceSectionHeader (L79-84).
-                Text(
-                    stringResource(UiR.string.tts_services_section_title),
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.8)),
-                    modifier = Modifier.padding(start = 12.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
-                )
+                // VoiceServiceSectionHeader (tts_services_page.dart L79-84 +
+                // voice_service_widgets.dart L15-69): title + trailing "+" add
+                // button (_handleAddNetworkTts opens the editor in add mode).
+                Row(
+                    modifier = Modifier.padding(start = 12.dp, top = 6.dp, end = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(UiR.string.tts_services_section_title),
+                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.8)),
+                        modifier = Modifier.weight(1f),
+                    )
+                    val view = LocalView.current
+                    val addTooltip = stringResource(UiR.string.tts_services_page_add_tooltip)
+                    val addInteraction = remember { MutableInteractionSource() }
+                    val addPressed by addInteraction.collectIsPressedAsState()
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(
+                                withAlpha(cs.onSurface, if (addPressed) 0.10 else 0.0),
+                                RoundedCornerShape(8.dp),
+                            )
+                            .clickable(interactionSource = addInteraction, indication = null) {
+                                Haptics.light(view)
+                                editorExisting = null
+                                editorOpen = true
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Lucide.Plus,
+                            contentDescription = addTooltip,
+                            modifier = Modifier.size(18.dp),
+                            tint = cs.onSurface,
+                        )
+                    }
+                }
 
                 SectionCard {
                     // ── System TTS first row (L88-190) ──────────────────────
@@ -444,17 +485,23 @@ private fun NetworkTtsEditorOverlay(
     val cs = MaterialTheme.colorScheme
     val app = LocalSemanticColors.current
 
-    var kind by remember { mutableStateOf(initial?.kind ?: NetworkTtsKind.openai) }
-    var name by remember { mutableStateOf(initial?.name ?: "") }
-    var apiKey by remember { mutableStateOf(initial?.apiKey ?: "") }
-    var baseUrl by remember { mutableStateOf(initial?.let { baseUrlOf(it) } ?: TtsServicesStore.defaultBaseUrl(NetworkTtsKind.openai)) }
-    var model by remember { mutableStateOf(initial?.let { modelOf(it) } ?: TtsServicesStore.defaultModel(NetworkTtsKind.openai)) }
-    var voice by remember { mutableStateOf(initial?.let { voiceOf(it) } ?: TtsServicesStore.defaultVoice(NetworkTtsKind.openai)) }
-    // Extra kind-specific plain-text fields.
-    var extra1 by remember { mutableStateOf("") }
-    var extra2 by remember { mutableStateOf("") }
-    var languageType by remember { mutableStateOf("Auto") }
-    var stream by remember { mutableStateOf(true) }
+    var kind by remember(initial) { mutableStateOf(initial?.kind ?: NetworkTtsKind.openai) }
+    var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
+    var apiKey by remember(initial) { mutableStateOf(initial?.apiKey ?: "") }
+    var baseUrl by remember(initial) { mutableStateOf(initial?.let { baseUrlOf(it) } ?: TtsServicesStore.defaultBaseUrl(NetworkTtsKind.openai)) }
+    var model by remember(initial) { mutableStateOf(initial?.let { modelOf(it) } ?: TtsServicesStore.defaultModel(NetworkTtsKind.openai)) }
+    var voice by remember(initial) { mutableStateOf(initial?.let { voiceOf(it) } ?: TtsServicesStore.defaultVoice(NetworkTtsKind.openai)) }
+    // Extra kind-specific plain-text fields, re-hydrated from the existing
+    // options when editing (extra1Of/extra2Of/... below mirror initState
+    // L810-922) so saving an edit no longer wipes them:
+    //   extra1 = azure.language | minimax.emotion | qwenAudio.workspaceId |
+    //            xai.language | elevenlabs.outputFormat | mimo.instruction |
+    //            step.responseFormat | fishAudio.latency
+    //   extra2 = minimax.languageBoost | qwenAudio.region | step.instruction
+    var extra1 by remember(initial) { mutableStateOf(extra1Of(initial)) }
+    var extra2 by remember(initial) { mutableStateOf(extra2Of(initial)) }
+    var languageType by remember(initial) { mutableStateOf(languageTypeOf(initial)) }
+    var stream by remember(initial) { mutableStateOf(streamOf(initial)) }
 
     fun applyKindDefaults(k: NetworkTtsKind) {
         kind = k
@@ -690,6 +737,35 @@ private fun voiceLabelFor(k: NetworkTtsKind): Int = when (k) {
         UiR.string.tts_services_field_voice_id_label
     else -> UiR.string.tts_services_field_voice_label
 }
+
+// —— Editor hydration extractors (_NetworkTtsEditorPageState.initState
+// L810-922). Pure so the round-trip "edit -> save keeps values" is unit
+// testable; the editor composables just seed their state from these. ——
+
+internal fun extra1Of(initial: TtsServiceOptions?): String = when (initial) {
+    is AzureTtsOptions -> initial.language
+    is MiniMaxTtsOptions -> initial.emotion
+    is QwenAudioTtsOptions -> initial.workspaceId
+    is XaiTtsOptions -> initial.language
+    is ElevenLabsTtsOptions -> initial.outputFormat
+    is MimoTtsOptions -> initial.instruction
+    is StepTtsOptions -> initial.responseFormat
+    is FishAudioTtsOptions -> initial.latency
+    else -> "" // null / openai / gemini / qwen / groq carry no extra1 field
+}
+
+internal fun extra2Of(initial: TtsServiceOptions?): String = when (initial) {
+    is MiniMaxTtsOptions -> initial.languageBoost
+    is QwenAudioTtsOptions -> initial.region
+    is StepTtsOptions -> initial.instruction
+    else -> ""
+}
+
+internal fun languageTypeOf(initial: TtsServiceOptions?): String =
+    (initial as? QwenTtsOptions)?.languageType ?: "Auto"
+
+internal fun streamOf(initial: TtsServiceOptions?): Boolean =
+    (initial as? MimoTtsOptions)?.stream ?: true
 
 /** _showSystemTtsConfig L1859-2010 — engine/language pickers + rate/pitch sliders. */
 @OptIn(ExperimentalMaterial3Api::class)
