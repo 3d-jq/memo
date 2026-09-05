@@ -3,6 +3,9 @@ package com.psyche.memo.ui
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.platform.LocalContext as LocalContextAlias
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,8 +54,9 @@ import com.psyche.memo.data.repo.ProviderRepository
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
-import io.g00fy2.quickie.ScanQRCode
-import io.g00fy2.quickie.content.QRContent
+import com.psyche.memo.ui.theme.LocalSemanticColors
+import io.github.g00fy2.quickie.ScanQRCode
+import io.github.g00fy2.quickie.content.QRContent
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -225,6 +229,26 @@ internal fun decodeQrFromImage(context: android.content.Context, uri: android.ne
         MultiFormatReader().decode(bitmap).text
     }.getOrNull()
 
+/** Persists decoded providers and bumps each to the top of the order; returns count. */
+internal fun performImport(container: AppContainerImpl, raw: String): Int {
+    val repo = ProviderRepository(container.database.writableDatabase, container.preferenceRepository)
+    val dao = com.psyche.memo.data.db.PayloadEntityDao(
+        container.database.writableDatabase,
+        "provider_rows",
+        primaryKey = "provider_key",
+    )
+    val results = decodeImportPayload(dao.getAll().map { it.id }.toSet(), raw)
+    for (r in results) {
+        val sortOrder = dao.get(r.key)?.sortOrder ?: dao.nextSortOrder()
+        dao.upsert(r.key, importJson.encodeToString(ProviderConfig.serializer(), r.cfg), sortOrder)
+        // Insert at the top of the saved order (kelivo order.remove+insert(0)).
+        val order = repo.order().filterNot { it == r.key }.toMutableList()
+        order.add(0, r.key)
+        repo.setOrder(order)
+    }
+    return results.size
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportProviderSheet(
@@ -235,52 +259,31 @@ fun ImportProviderSheet(
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
     var paste by remember { mutableStateOf("") }
+    val importSuccessTemplate = stringResource(com.psyche.memo.ui.R.string.import_provider_sheet_import_success_message)
+    val importFailedTemplate = stringResource(com.psyche.memo.ui.R.string.import_provider_sheet_import_failed_message)
 
     fun applyImport(raw: String) {
-        try {
-            val repo = ProviderRepository(container.database.writableDatabase, container.preferenceRepository)
-            val dao = com.psyche.memo.data.db.PayloadEntityDao(
-                container.database.writableDatabase,
-                "provider_rows",
-                primaryKey = "provider_key",
-            )
-            val results = decodeImportPayload(dao.getAll().map { it.id }.toSet(), raw)
-            for (r in results) {
-                val sortOrder = dao.get(r.key)?.sortOrder ?: dao.nextSortOrder()
-                dao.upsert(r.key, importJson.encodeToString(ProviderConfig.serializer(), r.cfg), sortOrder)
-                // Insert at the top of the saved order (kelivo order.remove+insert(0)).
-                val order = repo.order().filterNot { it == r.key }.toMutableList()
-                order.add(0, r.key)
-                repo.setOrder(order)
-            }
-            onImported()
-            SnackbarManager.show(
-                AppNotification(
-                    message = stringResource(
-                        com.psyche.memo.ui.R.string.import_provider_sheet_import_success_message,
-                        results.size,
-                    ),
-                    type = NotificationType.SUCCESS,
-                ),
-            )
-            onDismiss()
+        val imported = try {
+            performImport(container, raw)
         } catch (e: Exception) {
             SnackbarManager.show(
                 AppNotification(
-                    message = stringResource(
-                        com.psyche.memo.ui.R.string.import_provider_sheet_import_failed_message,
-                        e.message ?: "error",
-                    ),
+                    message = importFailedTemplate.format(e.message ?: "error"),
                     type = NotificationType.ERROR,
                 ),
             )
+            return
         }
+        onImported()
+        SnackbarManager.show(
+            AppNotification(message = importSuccessTemplate.format(imported), type = NotificationType.SUCCESS),
+        )
+        onDismiss()
     }
 
     // Camera scan (quickie = CameraX + MLKit bundled, permission handled).
     val scanLauncher = rememberLauncherForActivityResult(ScanQRCode()) { result ->
-        val code = (result as? io.g00fy2.quickie.QRResult.QRSuccess)?.result?.rawValue
-            ?.toString(Charsets.UTF_8)
+        val code = (result as? io.github.g00fy2.quickie.QRResult.QRSuccess)?.content?.rawValue
         if (!code.isNullOrBlank()) applyImport(code)
     }
     // Gallery pick + zxing decode.
