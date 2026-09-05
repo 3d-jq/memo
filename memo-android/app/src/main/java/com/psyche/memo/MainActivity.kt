@@ -29,6 +29,7 @@ import androidx.navigation.compose.rememberNavController
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.ui.DisplaySettingsScreen
 import com.psyche.memo.ui.HomeScreen
+import com.psyche.memo.ui.ProviderDetailScreen
 import com.psyche.memo.ui.ProvidersScreen
 import com.psyche.memo.ui.ProviderEditScreen
 import com.psyche.memo.ui.ChatHistoryScreen
@@ -231,11 +232,17 @@ private fun AppThemeAndContent(
                         )
                     }
                     composable("provider_edit?pid={pid}") { entry ->
-                        ProviderEditScreen(
-                            container = container,
-                            providerId = entry.arguments?.getString("pid"),
-                            onBack = { navController.popBackStack() },
-                        )
+                        val pid = entry.arguments?.getString("pid")
+                        if (pid == null) {
+                            // No id: legacy edit entry — open the add sheet from the list instead.
+                            navController.popBackStack()
+                        } else {
+                            ProviderDetailScreen(
+                                container = container,
+                                providerId = pid,
+                                onBack = { navController.popBackStack() },
+                            )
+                        }
                     }
                     composable("display") {
                         DisplaySettingsScreen(
