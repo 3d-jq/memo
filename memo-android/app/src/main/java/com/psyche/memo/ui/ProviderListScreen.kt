@@ -116,6 +116,9 @@ fun ProvidersScreen(
     var selectMode by remember { mutableStateOf(false) }
     val selected = remember { mutableStateListOf<String>() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showAddSheet by remember { mutableStateOf(false) }
+    var showGroupPickerFor by remember { mutableStateOf<String?>(null) }
+    var showExportFor by remember { mutableStateOf<String?>(null) }
 
     // Reload on entry (add/import sheets mutate the store); first sweep drops
     // empty builtin rows left by earlier test builds (KelivoIN / dup Tensdaq).
@@ -198,7 +201,7 @@ fun ProvidersScreen(
                 cs.onSurface,
                 stringResource(com.psyche.memo.ui.R.string.providers_page_add_tooltip),
             ) {
-                onOpenProvider(null)
+                showAddSheet = true
             }
         }
 
@@ -274,11 +277,44 @@ fun ProvidersScreen(
                         selected.clear()
                         items.forEach { selected.add(it.key) }
                     },
-                    onMoveToGroup = { /* group picker lands with #12 */ },
-                    onExport = { /* export sheet lands with #7 */ },
+                    onMoveToGroup = {
+                        if (selected.size == 1) showGroupPickerFor = selected.first()
+                    },
+                    onExport = {
+                        if (selected.size == 1) showExportFor = selected.first()
+                    },
                 )
             }
         }
+    }
+
+    // ---- Add provider sheet (#7) ----
+    if (showAddSheet) {
+        AddProviderSheet(
+            container = container,
+            onAdded = { providers = loadProviders(container) },
+            onDismiss = { showAddSheet = false },
+        )
+    }
+
+    // ---- Group picker for the selected provider ----
+    showGroupPickerFor?.let { key ->
+        val cfg = providers.toMap()[key] ?: ProviderConfig(id = key, name = key)
+        ProviderGroupPickerSheet(
+            container = container,
+            providerKey = key,
+            onDismiss = { showGroupPickerFor = null },
+        )
+    }
+
+    // ---- Share/export sheet for the selected provider ----
+    showExportFor?.let { key ->
+        val cfg = providers.toMap()[key] ?: ProviderConfig(id = key, name = key)
+        ShareProviderSheet(
+            providerKey = key,
+            config = cfg,
+            onDismiss = { showExportFor = null },
+        )
     }
 
     // ---- Delete-selected confirmation ----
