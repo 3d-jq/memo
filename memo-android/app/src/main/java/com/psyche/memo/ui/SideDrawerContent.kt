@@ -54,7 +54,6 @@ import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.X
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -197,7 +196,14 @@ fun SideDrawerContent(
                     },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Checkbox(checked = allSelected, onCheckedChange = null, modifier = Modifier.size(18.dp))
+                    IosCheckbox(
+                        value = allSelected,
+                        onValueChanged = {},
+                        size = 18.dp,
+                        hitTestSize = 32.dp,
+                        enableHaptics = false,
+                        interactive = false,
+                    )
                     Spacer(Modifier.width(2.dp))
                     Text(
                         text = stringResource(
@@ -499,10 +505,13 @@ fun SideDrawerContent(
                                         modifier = Modifier.width(28.dp),
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        Checkbox(
-                                            checked = isChecked,
-                                            onCheckedChange = null,
-                                            modifier = Modifier.size(20.dp),
+                                        IosCheckbox(
+                                            value = isChecked,
+                                            onValueChanged = {},
+                                            size = 20.dp,
+                                            hitTestSize = 20.dp,
+                                            enableHaptics = false,
+                                            interactive = false,
                                         )
                                     }
                                 }

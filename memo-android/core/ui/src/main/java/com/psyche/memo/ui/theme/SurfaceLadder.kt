@@ -4,7 +4,6 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import com.psyche.memo.ui.theme.hct.Hct
-import kotlin.math.roundToInt
 
 /** Shift [base] in HCT tone space, keeping hue and chroma. */
 internal fun shiftTone(base: Color, delta: Double): Color {
@@ -24,23 +23,6 @@ internal fun atTone(base: Color, tone: Double): Color {
 /** Interpolate HCT tone from [from] toward [to], keeping [from]'s hue+chroma. */
 internal fun lerpTone(from: Color, to: Color, t: Double): Color =
     atTone(from, surfaceTone(from) + (surfaceTone(to) - surfaceTone(from)) * t)
-
-/**
- * dart:ui `Color.alphaBlend` over an opaque background. Compose's `lerp` mixes
- * in float32 and lands a channel off the engine's double-precision result
- * (0.05 over 0xFFF7F7F7 gives 235 instead of 236), so the channels are mixed
- * here exactly the way `_floatToInt8` does it.
- */
-private fun alphaBlend(fg: Color, fgAlpha: Double, bg: Color): Color {
-    val f = fg.toArgb()
-    val b = bg.toArgb()
-    val invAlpha = 1.0 - fgAlpha
-    fun mix(shift: Int): Int {
-        val mixed = fgAlpha * ((f shr shift) and 0xFF) + invAlpha * ((b shr shift) and 0xFF)
-        return mixed.roundToInt().coerceIn(0, 255)
-    }
-    return Color((0xFF shl 24) or (mix(16) shl 16) or (mix(8) shl 8) or mix(0))
-}
 
 /**
  * Port of `lib/theme/surface_ladder.dart`.

@@ -2,8 +2,6 @@ package com.psyche.memo.ui
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -308,16 +306,7 @@ fun SettingsSwitchRow(
             )
         }
         Spacer(Modifier.width(12.dp))
-        Switch(
-            checked = value,
-            onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = cs.primary,
-                checkedThumbColor = Color.White,
-                uncheckedThumbColor = Color.White,
-                uncheckedTrackColor = cs.surfaceVariant,
-            ),
-        )
+        IosSwitch(value = value, onValueChanged = onToggle)
     }
 }
 

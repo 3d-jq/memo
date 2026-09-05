@@ -29,8 +29,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -354,16 +352,7 @@ fun ProviderEditScreen(
                             modifier = Modifier.weight(1f),
                             style = TextStyle(fontSize = 15.sp, color = cs.onSurface),
                         )
-                        Switch(
-                            checked = enabled,
-                            onCheckedChange = { enabled = it },
-                            colors = SwitchDefaults.colors(
-                                checkedTrackColor = cs.primary,
-                                checkedThumbColor = Color.White,
-                                uncheckedThumbColor = Color.White,
-                                uncheckedTrackColor = cs.surfaceVariant,
-                            ),
-                        )
+                        IosSwitch(value = enabled, onValueChanged = { enabled = it })
                     }
                 }
             }

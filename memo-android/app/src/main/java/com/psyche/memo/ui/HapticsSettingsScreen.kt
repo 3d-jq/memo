@@ -61,12 +61,12 @@ fun HapticsSettingsScreen(
         container.preferenceRepository.writeLocal(key, if (value) "1" else "0")
     }
 
-    var global by remember { mutableStateOf(readBool("display_haptics_global_enabled_v1", true)) }
-    var iosSwitch by remember { mutableStateOf(readBool("display_haptics_ios_switch_v1", true)) }
-    var onSidebar by remember { mutableStateOf(readBool("display_haptics_on_drawer_v1", false)) }
-    var onListItemTap by remember { mutableStateOf(readBool("display_haptics_on_list_item_tap_v1", true)) }
-    var onCardTap by remember { mutableStateOf(readBool("display_haptics_on_card_tap_v1", true)) }
-    var onGenerate by remember { mutableStateOf(readBool("display_haptics_on_generate_v1", false)) }
+    var global by remember { mutableStateOf(readBool(HapticsSettings.KEY_GLOBAL, true)) }
+    var iosSwitch by remember { mutableStateOf(readBool(HapticsSettings.KEY_IOS_SWITCH, true)) }
+    var onSidebar by remember { mutableStateOf(readBool(HapticsSettings.KEY_DRAWER, true)) }
+    var onListItemTap by remember { mutableStateOf(readBool(HapticsSettings.KEY_LIST_ITEM_TAP, true)) }
+    var onCardTap by remember { mutableStateOf(readBool(HapticsSettings.KEY_CARD_TAP, true)) }
+    var onGenerate by remember { mutableStateOf(readBool(HapticsSettings.KEY_GENERATE, false)) }
 
     Column(
         modifier = Modifier
@@ -100,42 +100,42 @@ fun HapticsSettingsScreen(
                         Lucide.Vibrate,
                         stringResource(UiR.string.display_settings_page_haptics_global_title),
                         value = global,
-                        onToggle = { global = it; writeBool("display_haptics_global_enabled_v1", it) },
+                        onToggle = { global = it; writeBool(HapticsSettings.KEY_GLOBAL, it) },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
                         Lucide.ToggleRight,
                         stringResource(UiR.string.display_settings_page_haptics_ios_switch_title),
                         value = iosSwitch,
-                        onToggle = { iosSwitch = it; writeBool("display_haptics_ios_switch_v1", it) },
+                        onToggle = { iosSwitch = it; writeBool(HapticsSettings.KEY_IOS_SWITCH, it) },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
                         Lucide.PanelRight,
                         stringResource(UiR.string.display_settings_page_haptics_on_sidebar_title),
                         value = onSidebar,
-                        onToggle = { onSidebar = it; writeBool("display_haptics_on_drawer_v1", it) },
+                        onToggle = { onSidebar = it; writeBool(HapticsSettings.KEY_DRAWER, it) },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
                         Lucide.ListOrdered,
                         stringResource(UiR.string.display_settings_page_haptics_on_list_item_tap_title),
                         value = onListItemTap,
-                        onToggle = { onListItemTap = it; writeBool("display_haptics_on_list_item_tap_v1", it) },
+                        onToggle = { onListItemTap = it; writeBool(HapticsSettings.KEY_LIST_ITEM_TAP, it) },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
                         Lucide.Square,
                         stringResource(UiR.string.display_settings_page_haptics_on_card_tap_title),
                         value = onCardTap,
-                        onToggle = { onCardTap = it; writeBool("display_haptics_on_card_tap_v1", it) },
+                        onToggle = { onCardTap = it; writeBool(HapticsSettings.KEY_CARD_TAP, it) },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
                         Lucide.Vibrate,
                         stringResource(UiR.string.display_settings_page_haptics_on_generate_title),
                         value = onGenerate,
-                        onToggle = { onGenerate = it; writeBool("display_haptics_on_generate_v1", it) },
+                        onToggle = { onGenerate = it; writeBool(HapticsSettings.KEY_GENERATE, it) },
                     )
                 }
             }

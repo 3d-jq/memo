@@ -36,6 +36,7 @@ import com.psyche.memo.ui.ImageSettingsScreen
 import com.psyche.memo.ui.MessageStyleSettingsScreen
 import com.psyche.memo.ui.AutoRetrySettingsScreen
 import com.psyche.memo.ui.HapticsSettingsScreen
+import com.psyche.memo.ui.ProvideHapticsSettings
 import com.psyche.memo.ui.ChatItemDisplaySettingsScreen
 import com.psyche.memo.ui.RenderingSettingsScreen
 import com.psyche.memo.ui.BehaviorStartupSettingsScreen
@@ -116,6 +117,9 @@ private fun AppThemeAndContent(
         // Memo paints through semantic tokens (surfaceCard / hairline), not
         // raw Material roles — see lib/theme/app_semantic_colors.dart.
         ProvideSemanticColors(scheme = colorScheme, dark = dark) {
+        // settings_provider.dart L1120-1129: the haptics flags live in prefs and
+        // the global one is pushed into the Haptics service on load.
+        ProvideHapticsSettings(container = container) {
             val view = LocalView.current
             if (!view.isInEditMode) {
                 SideEffect {
@@ -249,6 +253,7 @@ private fun AppThemeAndContent(
                     }
                 }
             }
+        }
         }
         }
     }
