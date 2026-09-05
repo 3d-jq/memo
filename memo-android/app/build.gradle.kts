@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.lucide.icons)
     implementation(libs.coil)
     implementation(libs.zxing.core)
+    implementation(libs.quickie.bundled)
     implementation(libs.coilSvg)
     implementation(libs.accompanistDrawablePainter)
     implementation(libs.androidx.navigation.compose)

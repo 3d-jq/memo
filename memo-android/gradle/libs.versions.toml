@@ -11,6 +11,7 @@ composeIconsExtended = "1.7.8"
 lucideIcons = "1.1.0"
 reorderable = "3.1.0"
 zxing = "3.5.3"
+quickie = "1.11.0"
 okhttp = "4.12.0"
 kotlinxSerializationJson = "1.9.0"
 kotlinxCoroutines = "1.10.2"
@@ -40,6 +41,7 @@ compose-material-icons-extended = { group = "androidx.compose.material", name = 
 lucide-icons = { group = "com.composables", name = "icons-lucide", version.ref = "lucideIcons" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+quickie-bundled = { module = "io.github.g00fy2.quickie", name = "quickie-bundled", version.ref = "quickie" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }

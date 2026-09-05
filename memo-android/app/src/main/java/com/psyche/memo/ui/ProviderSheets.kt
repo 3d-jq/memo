@@ -97,7 +97,7 @@ internal fun encodeProviderConfig(cfg: ProviderConfig): String {
 // ---------------------------------------------------------------- Add sheet
 
 /** Unique provider key: "OpenAI" / "OpenAI - <name>" with (n) suffixes. */
-private fun uniqueKey(existing: Set<String>, prefix: String, display: String): String {
+internal fun uniqueKey(existing: Set<String>, prefix: String, display: String): String {
     if (display.lowercase() == prefix.lowercase()) {
         var i = 1
         var candidate = "$prefix - $i"

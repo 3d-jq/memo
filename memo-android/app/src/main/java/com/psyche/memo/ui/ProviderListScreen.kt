@@ -117,6 +117,7 @@ fun ProvidersScreen(
     val selected = remember { mutableStateListOf<String>() }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showAddSheet by remember { mutableStateOf(false) }
+    var showImportSheet by remember { mutableStateOf(false) }
     var showGroupPickerFor by remember { mutableStateOf<String?>(null) }
     var showExportFor by remember { mutableStateOf<String?>(null) }
 
@@ -194,7 +195,9 @@ fun ProvidersScreen(
                 Lucide.CloudDownload,
                 cs.onSurface,
                 stringResource(com.psyche.memo.ui.R.string.providers_page_import_tooltip),
-            ) { /* import sheet lands with #8 */ }
+            ) {
+                showImportSheet = true
+            }
             // Add.
             IconActionButton(
                 Lucide.Plus,
@@ -286,6 +289,15 @@ fun ProvidersScreen(
                 )
             }
         }
+    }
+
+    // ---- Import provider sheet (#8) ----
+    if (showImportSheet) {
+        ImportProviderSheet(
+            container = container,
+            onImported = { providers = loadProviders(container) },
+            onDismiss = { showImportSheet = false },
+        )
     }
 
     // ---- Add provider sheet (#7) ----
