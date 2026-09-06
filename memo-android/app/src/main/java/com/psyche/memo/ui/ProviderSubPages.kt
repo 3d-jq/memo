@@ -80,7 +80,9 @@ internal fun SubPageScaffold(
     content: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+    // Opaque surface: these pages render as full-screen overlays above the
+    // detail screen, so without a background it shows through.
+    Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,

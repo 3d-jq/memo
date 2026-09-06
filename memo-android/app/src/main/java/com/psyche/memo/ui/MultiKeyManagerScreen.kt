@@ -252,7 +252,9 @@ fun MultiKeyManagerScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+    // Opaque surface: this page renders as a full-screen overlay above the
+    // detail screen, so without a background it shows through.
+    Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
         // ---- AppBar (leading back, title, actions Trash2 / HeartPulse / Plus) ----
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
