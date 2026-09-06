@@ -11,10 +11,13 @@ import com.psyche.memo.llm.retry.backoffDelay
 import com.psyche.memo.llm.retry.shouldRetryError
 import com.psyche.memo.llm.stream.SseEventParser
 import com.psyche.memo.llm.stream.StreamChunk
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -76,13 +79,13 @@ class GeminiClient(
                 delay(delayMs)
             }
         }
-    }
+    }.flowOn(Dispatchers.IO) // 阻塞式 SSE 读必须离开收集者线程（NetworkOnMainThreadException 根因）
 
     override suspend fun complete(request: LlmRequest): LlmTextResult {
         val body = buildBody(request)
         val call = newCall(request, body, stream = false)
         val response = await(call)
-        val text = response.body?.string()
+        val text = withContext(Dispatchers.IO) { response.body?.string() }
         response.close()
         if (!response.isSuccessful) throw IOException("HTTP ${response.code} ${text ?: ""}")
         val obj = json.parseToJsonElement(text ?: "{}").jsonObject ?: return LlmTextResult(emptyList(), null, null)
@@ -96,7 +99,7 @@ class GeminiClient(
         val response = await(call)
         return try {
             if (!response.isSuccessful) return emptyList()
-            val obj = json.parseToJsonElement(response.body?.string() ?: "{}").jsonObject
+            val obj = json.parseToJsonElement(withContext(Dispatchers.IO) { response.body?.string() } ?: "{}").jsonObject
             (obj["models"] as? JsonArray)?.mapNotNull { el ->
                 val id = (el.jsonObject["name"] as? JsonPrimitive)?.content?.substringAfterLast("/")
                     ?: return@mapNotNull null

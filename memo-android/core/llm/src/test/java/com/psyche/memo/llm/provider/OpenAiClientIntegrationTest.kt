@@ -170,4 +170,16 @@ class OpenAiClientIntegrationTest {
 
         assertEquals("/openai/chat/completions", server.takeRequest().path)
     }
+
+    @Test
+    fun urlUsesBaseDirectlyWhenChatPathIsEmptyString() = runBlocking {
+        // Flutter: '$rawBase$path' with path = chatPath ?? '/chat/completions'
+        // — an EMPTY string keeps the base as the full endpoint (e.g.
+        // pollinations POST /openai), only null falls back to the default.
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: [DONE]\n\n"))
+        val req = request(server.url("/openai").toString()).copy(chatPath = "")
+        client().streamChat(req).toList()
+
+        assertEquals("/openai", server.takeRequest().path)
+    }
 }

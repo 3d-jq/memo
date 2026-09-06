@@ -15,7 +15,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -75,14 +77,14 @@ class OpenAiChatCompletionsClient(
                 delay(delayMs)
             }
         }
-    }
+    }.flowOn(Dispatchers.IO) // 阻塞式 SSE 读必须离开收集者线程（NetworkOnMainThreadException 根因）
 
     override suspend fun complete(request: LlmRequest): LlmTextResult {
         // Non-stream: one-shot; no retry requested here (callers handle).
         val body = buildBody(request, stream = false)
         val call = newCall(request, body)
         val response = await(call)
-        val text = response.body?.string()
+        val text = withContext(Dispatchers.IO) { response.body?.string() }
         response.close()
         if (!response.isSuccessful) {
             throw IOException("HTTP ${response.code} ${text ?: ""}")
@@ -124,7 +126,7 @@ class OpenAiChatCompletionsClient(
             if (!response.isSuccessful) {
                 throw IOException("HTTP ${response.code}")
             }
-            val text = response.body?.string() ?: "{}"
+            val text = withContext(Dispatchers.IO) { response.body?.string() } ?: "{}"
             val obj = json.parseToJsonElement(text).jsonObject
             val data = obj["data"] as? JsonArray ?: return emptyList()
             data.mapNotNull { el ->
@@ -227,7 +229,9 @@ class OpenAiChatCompletionsClient(
         // /v1 — hosts like https://text.pollinations.ai/openai or
         // https://open.bigmodel.cn/api/paas/v4 404 with a forced /v1.
         val rawBase = request.baseUrl.trimEnd('/')
-        val url = rawBase + (request.chatPath?.takeIf { it.isNotEmpty() } ?: "/chat/completions")
+        // Flutter 语义（openai_provider.dart:41-42）：null 用默认路径；空字符
+        // 串 = 直接 POST base（如 pollinations /openai），不做 takeIf 折叠。
+        val url = rawBase + (request.chatPath ?: "/chat/completions")
         val builder = Request.Builder()
             .url(url.toHttpUrl())
             .post(body.toRequestBody("application/json".toMediaType()))
