@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -439,14 +440,21 @@ private fun SwipeRevealRow(
     Box(
         Modifier
             .fillMaxWidth()
+            .clipToBounds()
             .onSizeChanged { rowWidthPx = it.width.toFloat() },
     ) {
-        Row(
-            Modifier
-                .matchParentSize()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
+        // Flutter CustomSlidableAction: transparent actions padded 4,
+        // each child fills the pane (width & height infinity) — buttons
+        // ride the full card height, 8px gap between the two actions.
+        Box(Modifier.matchParentSize()) {
+            Row(
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .width(with(density) { maxRevealPx.toDp() })
+                    .fillMaxHeight()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
             actions.forEach { action ->
                 Box(
                     Modifier
@@ -472,6 +480,7 @@ private fun SwipeRevealRow(
                         )
                     }
                 }
+            }
             }
         }
         val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }

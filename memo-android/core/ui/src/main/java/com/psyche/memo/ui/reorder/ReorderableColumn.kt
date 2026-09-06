@@ -6,6 +6,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -51,9 +52,14 @@ fun <T> ReorderableColumn(
             ReorderableItem(
                 state = reorderableState,
                 key = itemKey,
+                // Siblings glide into their new slots while a card is
+                // dragged (without this they teleport, visually piling
+                // up under/over the dragged card).
+                modifier = Modifier.animateItem(),
             ) { isDragging ->
                 androidx.compose.foundation.layout.Column(
                     modifier = Modifier
+                        .zIndex(if (isDragging) 1f else 0f)
                         .alpha(if (isDragging) 0.95f else 1f)
                         .scale(if (isDragging) 0.98f else 1f)
                         .longPressDraggableHandle(enabled = reorderEnabled),
