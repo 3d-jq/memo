@@ -291,8 +291,9 @@ fun TtsServicesScreen(
                     }
                 }
 
-                // AsrServicesSection (asr_services_page.dart) is its own page
-                // batch — placeholder slot kept per L200.
+                // AsrServicesSection (tts_services_page.dart L200) — the
+                // voice-recognition half of the services page.
+                AsrServicesSection(container = container)
             }
         }
     }
@@ -372,9 +373,9 @@ private fun AvatarBadge(letter: String, overlay: Color) {
     }
 }
 
-/** _SmallTactileIcon L368-411. */
+/** _SmallTactileIcon L368-411 (shared with AsrServicesSection). */
 @Composable
-private fun SmallTactileIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, enabled: Boolean = true, onTap: () -> Unit) {
+internal fun SmallTactileIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, enabled: Boolean = true, onTap: () -> Unit) {
     TactileRow(onTap = if (enabled) onTap else null, haptics = false) { pressed ->
         Icon(
             icon,
