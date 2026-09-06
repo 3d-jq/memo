@@ -18,7 +18,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.psyche.memo.common.Haptics
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -29,6 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,14 +45,19 @@ import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Heart
 import com.composables.icons.lucide.Wrench
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
@@ -88,6 +97,26 @@ fun ModelSelectSheet(
     onDismiss: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    // Pinned models — Flutter SettingsProvider.pinnedModels
+    // (pinned_models_v1, "providerKey::modelId" entries).
+    val pinned = remember { mutableStateOf(readPinnedModels(container)) }
+    fun togglePinned(providerId: String, modelId: String) {
+        val key = "$providerId::$modelId"
+        val next = pinned.value.toMutableSet()
+        if (!next.add(key)) next.remove(key)
+        pinned.value = next
+        scope.launch(Dispatchers.IO) {
+            writePinnedModels(container, next)
+        }
+    }
+    // _jumpToFavorites (L1527): clear the search then scroll to the
+    // favorites header, which sits at index 0 whenever it exists.
+    fun jumpToFavorites() {
+        if (query.isNotBlank()) query = ""
+        scope.launch { listState.animateScrollToItem(0) }
+    }
     val cs = MaterialTheme.colorScheme
     val providers = remember(options) { options.map { it.providerName }.distinct() }
     // DraggableScrollableSheet initial/maxChildSize = 0.8.
@@ -122,7 +151,8 @@ fun ModelSelectSheet(
                 Spacer(Modifier.height(8.dp))
             }
 
-            val semanticSearch = LocalSemanticColors.current
+            val semantic = LocalSemanticColors.current
+            val semanticSearch = semantic
             val searchInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
             val searchFocused by searchInteraction.collectIsFocusedAsState()
             // Search field: filled r14, Search prefix, optional Bookmark suffix.
@@ -158,13 +188,17 @@ fun ModelSelectSheet(
                         )
                     },
                     trailingIcon = {
-                        IconButton(onClick = { /* favorites */ }) {
-                            Icon(
-                                Lucide.Bookmark,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = cs.onSurface.copy(alpha = 0.7f),
-                            )
+                        // Bookmark suffix appears only when pins exist and no
+                        // provider limit (L905-933); tap = _jumpToFavorites.
+                        if (pinned.value.isNotEmpty()) {
+                            IconButton(onClick = { jumpToFavorites() }) {
+                                Icon(
+                                    Lucide.Bookmark,
+                                    contentDescription = stringResource(UiR.string.model_select_sheet_favorites_section),
+                                    modifier = Modifier.size(18.dp),
+                                    tint = cs.onSurface.copy(alpha = 0.7f),
+                                )
+                            }
                         }
                     },
                     singleLine = true,
@@ -181,7 +215,6 @@ fun ModelSelectSheet(
                 )
             }
 
-            val chipScope = rememberCoroutineScope()
             // Scrollable grouped model list fills the rest of the sheet.
             val filtered = options.filter {
                 query.isBlank() ||
@@ -189,15 +222,37 @@ fun ModelSelectSheet(
                     it.providerName.contains(query, ignoreCase = true)
             }
             val grouped = filtered.groupBy { it.providerName }
+            // Favorites aggregation (L1016-1082): pins matching the search
+            // ride on top and are removed from their own group while
+            // searching; with no search they show on top AND in place.
+            val favs = filtered.filter { it.providerId + "::" + it.modelId in pinned.value }
+            val favKeys = favs.map { it.providerId + "::" + it.modelId }.toSet()
+            val groupedDisplay = if (query.isBlank()) grouped
+            else grouped
+                .mapValues { (_, models) ->
+                    models.filter { "${it.providerId}::${it.modelId}" !in favKeys }
+                }
+                .filterValues { it.isNotEmpty() }
+            val favOffset = if (favs.isNotEmpty()) 1 + favs.size else 0
 
-            val listState = rememberLazyListState()
-            val headerIndex = remember(grouped) {
+            val headerIndex = remember(groupedDisplay, favOffset) {
                 buildMap {
-                    var i = 0
-                    grouped.forEach { (p, models) ->
+                    var i = favOffset
+                    groupedDisplay.forEach { (p, models) ->
                         put(p, i)
                         i += 1 + models.size
                     }
+                }
+            }
+            // _scrollToFirstSearchGroup: on entering search, jump to the
+            // favorites header when present, else the first matching group.
+            var lastQueryForJump by remember { mutableStateOf("") }
+            LaunchedEffect(query) {
+                val entering = lastQueryForJump.isBlank() && query.isNotBlank()
+                lastQueryForJump = query
+                if (entering) {
+                    val target = if (favs.isNotEmpty()) 0 else headerIndex.values.firstOrNull()
+                    target?.let { listState.scrollToItem(it) }
                 }
             }
             LazyColumn(
@@ -206,7 +261,25 @@ fun ModelSelectSheet(
                     .fillMaxWidth()
                     .weight(1f),
             ) {
-                grouped.forEach { (providerName, models) ->
+                // Favorites group rides on top whenever pins exist
+                // (L1016-1070); rows carry the provider label (L1059).
+                if (favs.isNotEmpty()) {
+                    item(key = "h__favorites") {
+                        Text(
+                            text = stringResource(UiR.string.model_select_sheet_favorites_section),
+                            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = cs.onSurface.copy(alpha = 0.6f),
+                            ),
+                        )
+                    }
+                    items(favs, key = { "fav::${it.providerId}::${it.modelId}" }) { option ->
+                        ModelTile(option, pinned = pinned.value, onTogglePin = ::togglePinned, showProviderLabel = true, onClick = { onSelect(option); onDismiss() })
+                    }
+                }
+                groupedDisplay.forEach { (providerName, models) ->
                     item(key = "h_$providerName") {
                         Text(
                             text = providerName,
@@ -219,7 +292,7 @@ fun ModelSelectSheet(
                         )
                     }
                     items(models, key = { "${it.providerId}::${it.modelId}" }) { option ->
-                        ModelTile(option, onClick = { onSelect(option); onDismiss() })
+                        ModelTile(option, pinned = pinned.value, onTogglePin = ::togglePinned, onClick = { onSelect(option); onDismiss() })
                     }
                 }
             }
@@ -238,7 +311,7 @@ fun ModelSelectSheet(
                         onClick = {
                             // Jump to the provider's group header (sticky header lands with A2c).
                             headerIndex[providerName]?.let { idx ->
-                                chipScope.launch { listState.animateScrollToItem(idx) }
+                                scope.launch { listState.animateScrollToItem(idx) }
                             }
                         },
                     )
@@ -249,7 +322,13 @@ fun ModelSelectSheet(
 }
 
 @Composable
-private fun ModelTile(option: ModelOption, onClick: () -> Unit) {
+private fun ModelTile(
+    option: ModelOption,
+    pinned: Set<String>,
+    onTogglePin: (String, String) -> Unit,
+    showProviderLabel: Boolean = false,
+    onClick: () -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
     val bg = if (option.selected) cs.primary.copy(alpha = 0.08f) else semantic.surfaceCard
@@ -265,30 +344,53 @@ private fun ModelTile(option: ModelOption, onClick: () -> Unit) {
         ProviderAvatarSmall(option.providerId, option.modelId, 28.dp)
         Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = option.modelId,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = cs.onSurface,
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (showProviderLabel) {
+                // Favorites row: name plus " | provider" suffix at 12sp 60%
+                // (model_select_sheet.dart L1403-1425).
+                Text(
+                    text = buildAnnotatedString {
+                        withStyle(SpanStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface)) {
+                            append(option.modelId)
+                        }
+                        withStyle(SpanStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f))) {
+                            append(" | ${option.providerName}")
+                        }
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Text(
+                    text = option.modelId,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cs.onSurface,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Spacer(Modifier.height(4.dp))
             ModelTagRow(modelId = option.modelId)
         }
-        // Favorite toggle (pinned-model system lands with A2c).
+        // Favorite toggle — solid heart when pinned (settings.togglePinModel).
+        val pinKey = option.providerId + "::" + option.modelId
+        val pinnedNow = pinKey in pinned
+        val view = LocalView.current
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .clickable { },
+                .clickable {
+                    onTogglePin(option.providerId, option.modelId)
+                    Haptics.light(view)
+                },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                Lucide.Heart,
-                contentDescription = null,
-                tint = cs.onSurface.copy(alpha = 0.6f),
+                if (pinnedNow) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = stringResource(UiR.string.model_select_sheet_favorite_tooltip),
+                tint = cs.primary,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -367,6 +469,23 @@ private fun ProviderChip(name: String, selected: Boolean, onClick: () -> Unit) {
             text = name,
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp, color = cs.onSurface),
             maxLines = 1,
+        )
+    }
+}
+
+
+/** pinned_models_v1 — StringList of "providerKey::modelId" (settings_provider.dart L838). */
+internal fun readPinnedModels(container: com.psyche.memo.AppContainerImpl): Set<String> =
+    runCatching {
+        val raw = container.preferenceRepository.readJson("pinned_models_v1") ?: return emptySet()
+        kotlinx.serialization.json.Json.decodeFromString<List<String>>(raw).toSet()
+    }.getOrDefault(emptySet())
+
+internal fun writePinnedModels(container: com.psyche.memo.AppContainerImpl, entries: Set<String>) {
+    runCatching {
+        container.preferenceRepository.writeJson(
+            "pinned_models_v1",
+            kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.serializer<List<String>>(), entries.toList()),
         )
     }
 }
