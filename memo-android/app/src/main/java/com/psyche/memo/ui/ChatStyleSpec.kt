@@ -104,6 +104,34 @@ object ChatStyleSpec {
     data class DotState(val scale: Float, val alpha: Float)
 
     // ------------------------------------------------------------------
+    // Foreground palette (CMW:3926-3931) — alpha per brightness, base onSurface
+    // ------------------------------------------------------------------
+
+    /** fg.strong = onSurface α(dark 0.88 / light 0.78). CMW:3926. */
+    const val FG_STRONG_DARK = 0.88f
+    const val FG_STRONG_LIGHT = 0.78f
+
+    /** fg.medium = onSurface α(dark 0.76 / light 0.66). CMW:3927. */
+    const val FG_MEDIUM_DARK = 0.76f
+    const val FG_MEDIUM_LIGHT = 0.66f
+
+    /** fg.muted = onSurface α(dark 0.56 / light 0.46). CMW:3928. */
+    const val FG_MUTED_DARK = 0.56f
+    const val FG_MUTED_LIGHT = 0.46f
+
+    /** fg.body = onSurface α(dark 0.72 / light 0.60). CMW:3929. */
+    const val FG_BODY_DARK = 0.72f
+    const val FG_BODY_LIGHT = 0.60f
+
+    // ------------------------------------------------------------------
+    // Tool loading dots (CMW:5407 — LoadingIndicator height 12, dot 3, gap 2)
+    // ------------------------------------------------------------------
+
+    const val TOOL_LOADING_DOTS_DOT_DP = 3f
+    const val TOOL_LOADING_DOTS_GAP_DP = 2f
+    const val TOOL_LOADING_DOTS_HEIGHT_DP = 12f
+
+    // ------------------------------------------------------------------
     // Input bar (CIB)
     // ------------------------------------------------------------------
 
@@ -133,4 +161,35 @@ object ChatStyleSpec {
 
     /** Trailing 4px tail after the last top-bar action. */
     const val TOP_BAR_TRAILING_GAP_DP = 4f
+
+    // ------------------------------------------------------------------
+    // Voice waveform (chat_input_bar.dart _VoiceWaveformPainter:3400-3459)
+    // ------------------------------------------------------------------
+
+    const val WAVE_BAR_WIDTH_DP = 3f
+    const val WAVE_BAR_GAP_DP = 3.5f
+
+    /** maxH = size.height * 0.92 (CIB:3417). */
+    const val WAVE_MAX_HEIGHT_RATIO = 0.92f
+
+    /** Bars never render shorter than 2px (CIB:3447). */
+    const val WAVE_MIN_BAR_HEIGHT_DP = 2f
+
+    /**
+     * Capsule cross-section envelope (CIB:3433-3446): with r = maxBarHeight/2,
+     * return sqrt(max(0, r² − (r − dCenter)²)) / r when dCenter < r else 1.
+     * [dCenter] is the bar-center distance to the nearest edge in px.
+     */
+    fun voiceWaveformEnvelope(dCenter: Float, maxBarHeightPx: Float): Float {
+        val radius = maxBarHeightPx / 2f
+        if (dCenter >= radius) return 1f
+        val inner = radius * radius - (radius - dCenter) * (radius - dCenter)
+        return kotlin.math.sqrt(kotlin.math.max(0f, inner)) / radius
+    }
+
+    /** Bar height = max(minPx, maxH · level · envelope(dCenter, maxH)) (CIB:3447). */
+    fun voiceWaveformBarHeight(level: Float, dCenter: Float, maxBarHeightPx: Float, minBarHeightPx: Float): Float {
+        val clamped = level.coerceIn(0f, 1f)
+        return kotlin.math.max(minBarHeightPx, maxBarHeightPx * clamped * voiceWaveformEnvelope(dCenter, maxBarHeightPx))
+    }
 }

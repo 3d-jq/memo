@@ -11,12 +11,14 @@ import com.psyche.memo.data.model.ToolCallPart
 import com.psyche.memo.llm.client.LlmMessage
 import com.psyche.memo.llm.client.LlmRequest
 import com.psyche.memo.llm.stream.StreamChunk
+import com.psyche.memo.ui.chat.TranslateLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Chat state holder for one conversation. Consumes [StreamChunk] into the
@@ -84,6 +86,9 @@ class ChatViewModel(
     val streaming: StateFlow<Boolean> = _streaming
 
     private var generationJob: Job? = null
+
+    /** 在途翻译请求（messageId → Job），新请求顶掉旧的（TS _runs 语义）。 */
+    private val translationJobs = mutableMapOf<String, Job>()
 
     init {
         // Start with the first configured provider and its default model;
@@ -206,6 +211,131 @@ class ChatViewModel(
         if (msgs.isNotEmpty()) {
             val last = msgs.last()
             _messages.value = msgs.dropLast(1) + last.copy(isStreaming = false)
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Translation (translation_service.dart 1:1)
+    // ------------------------------------------------------------------
+
+    /**
+     * 翻译模型解析（TS:121-133 回退链）：翻译专用模型 → 当前会话模型。
+     * `translate_model_v1` 存 "provider::model"（PREFERENCE 键，preference_rows
+     * JSON 文本）；为空回退当前选中模型；两者皆无 → null（UI 提示请先设置）。
+     */
+    private fun resolveTranslationModel(): Pair<String, String>? {
+        val stored = runCatching {
+            container.preferenceRepository.readJson("translate_model_v1")
+        }.getOrNull()
+            ?.let { raw ->
+                runCatching {
+                    kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.content
+                }.getOrDefault(raw)
+            }
+            ?.takeIf { it.isNotBlank() }
+        if (!stored.isNullOrEmpty()) {
+            val parts = stored.split("::")
+            if (parts.size >= 2) return parts[0] to parts.subList(1, parts.size).joinToString("::")
+        }
+        val p = selectedProviderId.value
+        val m = selectedModelId.value
+        return if (p.isNotEmpty() && m.isNotEmpty()) p to m else null
+    }
+
+    /** 翻译 prompt 模板（settings_provider.dart:3693 defaultTranslatePrompt）。 */
+    private val defaultTranslatePrompt =
+        "You are a translation expert, skilled in translating various languages, and maintaining accuracy, faithfulness, and elegance in translation.\n" +
+            "Next, I will send you text. Please translate it into {target_lang}, and return the translation result directly, without adding any explanations or other content.\n\n" +
+            "Please translate the <source_text> section:\n<source_text>\n{source_text}\n</source_text>"
+
+    /**
+     * 翻译消息（TS translateMessage 1:1）。[targetLang] null = 用户取消；
+     * [TranslateLanguage.CLEAR_TRANSLATION] = 清除翻译（顶掉在途请求 +
+     * 内存/DB 置空）；否则流式翻译并实时刷内存，完成后存库。
+     * 新请求顶掉同消息的旧请求（supersedeTranslationRun：旧 Job 取消且
+     * 不再写 UI/DB）。
+     */
+    fun translateMessage(
+        messageId: String,
+        targetLang: String?,
+        translatingLabel: String,
+        onResult: (String) -> Unit,
+    ) {
+        translationJobs.remove(messageId)?.cancel()
+        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        if (targetLang == null) return // cancelled
+        if (targetLang == TranslateLanguage.CLEAR_TRANSLATION) {
+            updateTranslationInPlace(messageId, "")
+            viewModelScope.launch {
+                if (!isTemporary) withContext(Dispatchers.IO) {
+                    container.messageDao.updateTranslation(messageId, "")
+                }
+            }
+            onResult("cleared")
+            return
+        }
+        val model = resolveTranslationModel()
+        if (model == null) {
+            onResult("no_model")
+            return
+        }
+        // onTranslationStarted：先写"翻译中"占位（home_page_controller 语义）。
+        updateTranslationInPlace(messageId, translatingLabel)
+        val promptTemplate = runCatching {
+            container.preferenceRepository.readJson("translate_prompt_v1")
+        }.getOrNull()
+            ?.let { raw ->
+                runCatching {
+                    kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.content
+                }.getOrDefault(raw)
+            }
+            ?.takeIf { it.isNotBlank() }
+            ?: defaultTranslatePrompt
+        val prompt = promptTemplate
+            .replace("{source_text}", message.content)
+            .replace("{target_lang}", targetLang)
+        val job = viewModelScope.launch {
+            try {
+                val request = LlmRequest(
+                    providerId = model.first,
+                    modelId = model.second,
+                    messages = listOf(LlmMessage(role = "user", content = prompt)),
+                    apiKey = container.apiKeyFor(model.first) ?: "",
+                    baseUrl = container.baseUrlFor(model.first),
+                    chatPath = container.providerConfig(model.first)?.chatPath,
+                )
+                val client = container.clientFor(model.first)
+                val buffer = StringBuilder()
+                client.streamChat(request).collect { chunk ->
+                    if (chunk is StreamChunk.TextDelta && chunk.text.isNotEmpty()) {
+                        buffer.append(chunk.text)
+                        updateTranslationInPlace(messageId, buffer.toString())
+                    }
+                }
+                if (!isTemporary) withContext(Dispatchers.IO) {
+                    container.messageDao.updateTranslation(messageId, buffer.toString())
+                }
+                onResult("success")
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 出错清除（TS:196-198 shouldApplyTranslationFailure 语义）。
+                updateTranslationInPlace(messageId, "")
+                if (!isTemporary) withContext(Dispatchers.IO) {
+                    container.messageDao.updateTranslation(messageId, "")
+                }
+                onResult("error: ${e.message}")
+            }
+        }
+        translationJobs[messageId] = job
+    }
+
+    private fun updateTranslationInPlace(messageId: String, translation: String) {
+        val msgs = _messages.value
+        val idx = msgs.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        _messages.value = msgs.map {
+            if (it.id == messageId) it.copy(translation = translation) else it
         }
     }
 

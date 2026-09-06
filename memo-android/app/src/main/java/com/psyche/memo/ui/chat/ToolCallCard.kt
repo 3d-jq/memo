@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +50,7 @@ import com.composables.icons.lucide.Clipboard
 import com.composables.icons.lucide.ClipboardCheck
 import com.composables.icons.lucide.ClipboardPen
 import com.composables.icons.lucide.Clock
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CloudSun
 import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.Earth
@@ -64,6 +64,7 @@ import com.composables.icons.lucide.Smartphone
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Volume2
 import com.composables.icons.lucide.Wrench
+import com.psyche.memo.ui.ChatStyleSpec
 import com.psyche.memo.ui.R as UiR
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -267,6 +268,10 @@ fun Modifier.thinkingSheen(color: Color, isDark: Boolean, enabled: Boolean = tru
 fun ToolCallCard(part: ToolUiPart) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
+    val base = cs.onSurface
+    // fg palette (CMW:3926-3931, base onSurface, alpha per brightness).
+    val fgStrong = base.copy(alpha = if (isDark) ChatStyleSpec.FG_STRONG_DARK else ChatStyleSpec.FG_STRONG_LIGHT)
+    val fgMuted = base.copy(alpha = if (isDark) ChatStyleSpec.FG_MUTED_DARK else ChatStyleSpec.FG_MUTED_LIGHT)
     var showDetail by remember { mutableStateOf(false) }
 
     val isResult = !part.loading
@@ -284,25 +289,31 @@ fun ToolCallCard(part: ToolUiPart) {
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 状态位 — loading spinner / 工具图标
-                // (chat_message_widget.dart:5722-5751)。
-                Box(modifier = Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                // 状态位 — loading 三点 / 完成工具图标（CMW:5400-5412 + 4449
+                // _timelineIconColumnWidth = 24）。
+                Box(
+                    modifier = Modifier.size(width = 24.dp, height = 18.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
                     if (part.loading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                            color = cs.primary,
+                        LoadingDotsIndicator(
+                            color = fgStrong,
+                            dotDp = ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP,
+                            gapDp = ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP,
+                            heightDp = ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP,
                         )
                     } else {
                         Icon(
                             toolIconFor(part.toolName, part.arguments),
                             contentDescription = null,
-                            tint = cs.onSurface.copy(alpha = 0.88f),
-                            modifier = Modifier.size(18.dp),
+                            tint = fgStrong,
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
+                // 标题（CMW:5414-5433）— 13sp SemiBold fg.strong，加载时呼吸高光。
+                // ask_user 特判（CMW:5421）本次不做，注释说明。
                 Text(
                     text = title,
                     maxLines = 2,
@@ -310,15 +321,23 @@ fun ToolCallCard(part: ToolUiPart) {
                     style = MaterialTheme.typography.titleSmall.copy(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = cs.onSurface.copy(alpha = 0.88f),
+                        color = fgStrong,
                     ),
                     modifier = Modifier
                         .weight(1f)
                         .thinkingSheen(
-                            cs.onSurface.copy(alpha = 0.88f),
+                            fgStrong,
                             isDark,
-                            enabled = part.loading,
+                            enabled = part.loading && part.toolName != "ask_user",
                         ),
+                )
+                // 行尾 ChevronRight（CMW:5572-5578，非 ask-user 常显）。
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    Lucide.ChevronRight,
+                    contentDescription = null,
+                    tint = fgMuted,
+                    modifier = Modifier.size(16.dp),
                 )
             }
             // TTS 工具卡：播放行在 loading 与完成时都显示

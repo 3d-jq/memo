@@ -112,6 +112,30 @@ class ChatStyleSpecTest {
         assertEquals(0.405f, ChatStyleSpec.ACTION_DISABLED_ALPHA, 1e-6f)
     }
 
+    // ---- Foreground palette (CMW:3926-3931) ----
+
+    @Test
+    fun foregroundPaletteSpec() {
+        // base = onSurface; alpha per brightness (CMW:3926-3929).
+        assertEquals(0.88f, ChatStyleSpec.FG_STRONG_DARK, 0f)
+        assertEquals(0.78f, ChatStyleSpec.FG_STRONG_LIGHT, 0f)
+        assertEquals(0.76f, ChatStyleSpec.FG_MEDIUM_DARK, 0f)
+        assertEquals(0.66f, ChatStyleSpec.FG_MEDIUM_LIGHT, 0f)
+        assertEquals(0.56f, ChatStyleSpec.FG_MUTED_DARK, 0f)
+        assertEquals(0.46f, ChatStyleSpec.FG_MUTED_LIGHT, 0f)
+        assertEquals(0.72f, ChatStyleSpec.FG_BODY_DARK, 0f)
+        assertEquals(0.60f, ChatStyleSpec.FG_BODY_LIGHT, 0f)
+    }
+
+    // ---- Tool loading dots (CMW:5407) ----
+
+    @Test
+    fun toolLoadingDotsSpec() {
+        assertEquals(3f, ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP, 0f)
+        assertEquals(2f, ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP, 0f)
+        assertEquals(12f, ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP, 0f)
+    }
+
     // ---- Input bar (CIB) ----
 
     @Test

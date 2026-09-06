@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -58,6 +59,7 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Loader
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Trash2
 import com.psyche.memo.ui.ChatStyleSpec
@@ -401,16 +403,20 @@ private fun NavGlassButton(
 }
 
 /**
- * 三点波动流式指示器 —— 1:1 移植 chat_message_widget.dart:4105-4196
- * LoadingIndicator/_LoadingDotsPainter：3 个 9dp 圆点、间距 6、画布高 16、
- * 1100ms 线性循环、每点相位差 0.22，wave=(sin(phase)+1)/2，
- * scale=0.85+0.15·wave，alpha=0.45+0.45·wave，颜色 primary。
+ * 三点波动流式指示器 —— 1:1 移植 chat_message_widget.dart:4105-4196 /
+ * 5400-5412 LoadingIndicator/_LoadingDotsPainter：3 个圆点、每点相位差 0.22，
+ * wave=(sin(phase)+1)/2，scale=0.85+0.15·wave，alpha=0.45+0.45·wave，颜色
+ * 由调用方传入。参数化以支持复用：默认 9/6/16 对应消息流式空态
+ * （CMW:4105-4196），工具卡加载用 3/2/12（CMW:5400-5412）。
  * 公式细节在 [ChatStyleSpec.dotState]（可单测），此处只做绘制。
  */
 @Composable
 fun LoadingDotsIndicator(
     color: Color,
     modifier: Modifier = Modifier,
+    dotDp: Float = ChatStyleSpec.DOTS_DOT_DP,
+    gapDp: Float = ChatStyleSpec.DOTS_GAP_DP,
+    heightDp: Float = ChatStyleSpec.DOTS_HEIGHT_DP,
 ) {
     val transition = rememberInfiniteTransition(label = "loadingDots")
     val fraction by transition.animateFloat(
@@ -421,14 +427,12 @@ fun LoadingDotsIndicator(
         ),
         label = "loadingDotsFraction",
     )
+    val widthDp = dotDp * ChatStyleSpec.DOTS_COUNT + gapDp * (ChatStyleSpec.DOTS_COUNT - 1)
     Canvas(
-        modifier = modifier.size(
-            ChatStyleSpec.DOTS_WIDTH_DP.dp,
-            ChatStyleSpec.DOTS_HEIGHT_DP.dp,
-        ),
+        modifier = modifier.size(widthDp.dp, heightDp.dp),
     ) {
-        val dotRadius = ChatStyleSpec.DOTS_DOT_DP.dp.toPx() / 2f
-        val gap = ChatStyleSpec.DOTS_GAP_DP.dp.toPx()
+        val dotRadius = dotDp.dp.toPx() / 2f
+        val gap = gapDp.dp.toPx()
         for (i in 0 until ChatStyleSpec.DOTS_COUNT) {
             val state = ChatStyleSpec.dotState(fraction, i)
             val cx = i * (dotRadius * 2f + gap) + dotRadius
@@ -438,5 +442,85 @@ fun LoadingDotsIndicator(
                 center = Offset(cx, size.height / 2f),
             )
         }
+    }
+}
+
+/**
+ * 语音录音波形 —— 1:1 移植 chat_input_bar.dart `_VoiceWaveformPainter`
+ * (CIB:3400-3459)：条宽 3、条距 3.5，最新样本靠右、旧样本向左滚动；
+ * 振幅 levels[i]∈[0,1] → 高度 max(2, maxH·level·envelope)，maxH = 高·0.92；
+ * envelope 为真胶囊轮廓（到最近边的条中心距 < r=maxH/2 时按圆弧截面收缩）；
+ * 圆角 = 条宽/2（胶囊端）。
+ */
+@Composable
+fun VoiceWaveform(
+    levels: List<Float>,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val barW = ChatStyleSpec.WAVE_BAR_WIDTH_DP.dp.toPx()
+        val barGap = ChatStyleSpec.WAVE_BAR_GAP_DP.dp.toPx()
+        val step = barW + barGap
+        val count = ((size.width + barGap) / step).toInt()
+        if (count <= 0) return@Canvas
+        val centerY = size.height / 2f
+        val maxH = size.height * ChatStyleSpec.WAVE_MAX_HEIGHT_RATIO
+        // 居中条行，两端 inset 对称（CIB:3418-3420）。
+        val leftInset = (size.width - (count * step - barGap)) / 2f
+        // 样本右对齐：最新在右缘，旧样本左滚（CIB:3421-3424）。
+        val visible = kotlin.math.min(count, levels.size)
+        val first = levels.size - visible
+        for (i in 0 until visible) {
+            val level = levels[first + i].coerceIn(0f, 1f)
+            val slot = count - visible + i
+            val x = leftInset + slot * step
+            // 条中心到最近边的距离（CIB:3433-3435）；胶囊 envelope + 高度
+            // 公式抽到 ChatStyleSpec 供单测。
+            val dCenter = kotlin.math.min(x, size.width - (x + barW)) + barW / 2f
+            val h = ChatStyleSpec.voiceWaveformBarHeight(
+                level = level,
+                dCenter = dCenter,
+                maxBarHeightPx = maxH,
+                minBarHeightPx = ChatStyleSpec.WAVE_MIN_BAR_HEIGHT_DP.dp.toPx(),
+            )
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(x, centerY - h / 2f),
+                size = androidx.compose.ui.geometry.Size(barW, h),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f),
+            )
+        }
+    }
+}
+
+/**
+ * 转写中指示器 —— 1:1 移植 `_VoiceTranscribingIndicator`（CIB:3344-3398）：
+ * Lucide.Loader(15) 900ms 匀速旋转 + 7 间距 + 12sp 文案。
+ */
+@Composable
+fun VoiceTranscribingIndicator(
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val transition = rememberInfiniteTransition(label = "voiceTranscribing")
+    val angle by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+        label = "voiceTranscribingAngle",
+    )
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            Lucide.Loader,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier
+                .size(15.dp)
+                .rotate(angle),
+        )
+        Spacer(Modifier.width(7.dp))
+        Text(label, style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = color))
     }
 }

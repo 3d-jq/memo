@@ -30,6 +30,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,9 +55,14 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Bot
+import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.Loader
+import com.composables.icons.lucide.Square
+import com.composables.icons.lucide.X
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.CircleStop
+import com.composables.icons.lucide.Volume2
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Ellipsis
@@ -402,7 +414,14 @@ fun ChatContent(
     val versionInfo by vm.versionInfo.collectAsState()
 
     val cs = MaterialTheme.colorScheme
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showModelSheet by remember { mutableStateOf(false) }
+    // 语音输入执行器（chat_input_bar.dart 的系统 ASR 分支）。应用上下文持有，
+    // 避免持有 Activity 导致的 SpeechRecognizer 泄漏。
+    val voiceAppContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val voiceInput = remember {
+        com.psyche.memo.ui.chat.VoiceInputController(voiceAppContext)
+    }
     var showMiniMap by remember { mutableStateOf(false) }
     val timelineListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -416,6 +435,26 @@ fun ChatContent(
     val copiedText = stringResource(UiR.string.chat_message_widget_copied_to_clipboard)
     val notImplementedText = stringResource(UiR.string.message_more_sheet_not_implemented)
     val unsupportedEditText = stringResource(UiR.string.user_message_edit_unsupported_snackbar)
+    val noTranslateModelText = stringResource(UiR.string.home_page_please_setup_translate_model)
+
+    /**
+     * 翻译结果反馈（translation_service.dart TranslationResult → UI）：
+     * 仅未配置翻译模型时弹提示（home_page_please_setup_translate_model）；
+     * 成功/清除直接反映在翻译区，无额外 toast。
+     */
+    val translateFeedback: (String) -> Unit = { result ->
+        if (result == "no_model") {
+            com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                com.psyche.memo.ui.snackbar.AppNotification(
+                    message = noTranslateModelText,
+                    type = com.psyche.memo.ui.snackbar.NotificationType.INFO,
+                ),
+            )
+        }
+    }
+    // 翻译中占位文案（home_page_controller onTranslationStarted 写入消息的
+    // homePageTranslating）；在 composable 作用域解析一次，供 onTranslate 回调使用。
+    val translatingLabel = stringResource(UiR.string.home_page_translating)
 
     fun copyMessage(msg: ChatViewModel.UiMessage) {
         clipboard.setText(androidx.compose.ui.text.AnnotatedString(msg.content))
@@ -725,6 +764,34 @@ fun ChatContent(
                             onRegenerate = if (msg.role == "user") {
                                 { regenerateFor = msg }
                             } else null,
+                            onRegenerateAssistant = if (msg.role == "assistant") {
+                                {
+                                    // 助手重新生成 = 从它前面最近一条用户消息重发。
+                                    val idx = messages.indexOfFirst { it.id == msg.id }
+                                    val anchor = messages.take(idx).lastOrNull { it.role == "user" }
+                                    if (anchor != null) regenerateFor = anchor
+                                }
+                            } else null,
+                            onSpeak = {
+                                // CMW HPC.speakMessage —— 播放中再点即停止。
+                                if (com.psyche.memo.ui.chat.TtsPlayer.speaking.value) {
+                                    com.psyche.memo.ui.chat.TtsPlayer.stop()
+                                } else {
+                                    com.psyche.memo.ui.chat.TtsPlayer.speak(context, msg.content)
+                                }
+                            },
+                            onTranslate = { code ->
+                                if (code == com.psyche.memo.ui.chat.TranslateLanguage.CLEAR_TRANSLATION) {
+                                    vm.translateMessage(msg.id, code, "", translateFeedback)
+                                } else {
+                                    vm.translateMessage(
+                                        msg.id,
+                                        code,
+                                        translatingLabel,
+                                        translateFeedback,
+                                    )
+                                }
+                            },
                             onEdit = { editFor = msg },
                             onMore = { moreFor = msg },
                             onDelete = { vm.deleteVersion(msg.id) },
@@ -764,6 +831,7 @@ fun ChatContent(
             onSend = vm::send,
             onStop = vm::stop,
             onSelectModel = { showModelSheet = true },
+            voice = voiceInput,
         )
     }
 
@@ -881,6 +949,12 @@ private fun MessageRow(
     onNextVersion: (() -> Unit)?,
     onCopy: () -> Unit,
     onRegenerate: (() -> Unit)?,
+    /** 助手消息的重新生成（CMW:3239-3249 _confirmRegeneration 确认后执行）。 */
+    onRegenerateAssistant: (() -> Unit)? = null,
+    /** Speak 按钮（CMW:3253-3291）：调用方切换 TtsPlayer 播放/停止。 */
+    onSpeak: () -> Unit = {},
+    /** Translate 按钮（CMW:3298-3339）：传入所选语言 code（含 __clear__）。 */
+    onTranslate: (String) -> Unit = {},
     onEdit: () -> Unit,
     onMore: () -> Unit,
     onDelete: () -> Unit,
@@ -904,6 +978,11 @@ private fun MessageRow(
     var showCitations by remember { mutableStateOf(false) }
     // 翻译区折叠状态（chat_message_widget.dart translationExpanded）。
     var translationExpanded by remember(msg.id, msg.translation) { mutableStateOf(true) }
+    // 助手操作行：语言选择 sheet + 重新生成确认（CMW:3298-3339 / 1328-1358）。
+    var showLanguageSheet by remember { mutableStateOf(false) }
+    var showRegenerateConfirm by remember { mutableStateOf(false) }
+    // TTS 播放状态 → Speak/Stop 图标切换（CMW:3253-3291 isActive）。
+    val ttsSpeaking by com.psyche.memo.ui.chat.TtsPlayer.speaking.collectAsState()
     // search_web / builtin_search 工具结果提取为引用来源
     // （chat_message_widget.dart _allSearchItems，从后往前、去重）。
     val searchItems = remember(msg.id, msg.parts) {
@@ -1183,12 +1262,13 @@ private fun MessageRow(
         }
         // Message actions (user messages): copy / regenerate / edit / more —
         // 28px rounded actions row, right-aligned below the bubble (kelivo
-        // chat_message_widget.dart:1847-1974); assistant rows show the
-        // version selector and token stats.
+        // chat_message_widget.dart:1847-1974); assistant rows: copy /
+        // regenerate / speak / translate / more (CMW:3191-3410), version
+        // selector and token stats trail the row.
         val showVersionSwitcher = versionCount > 1
-        if (isUser || showVersionSwitcher || msg.totalTokens != null) {
-            // CMW:1848 —— 用户按钮行上方 8；助手（版本/统计行）6。
-            Spacer(Modifier.height(if (isUser) ChatStyleSpec.ACTIONS_TOP_GAP_DP.dp else 6.dp))
+        if (isUser || showVersionSwitcher || msg.totalTokens != null || !isUser) {
+            // CMW:1848 / 3209 —— 按钮行上方 8（用户与助手一致）。
+            Spacer(Modifier.height(ChatStyleSpec.ACTIONS_TOP_GAP_DP.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -1196,20 +1276,63 @@ private fun MessageRow(
             ) {
                 if (isUser) {
                     MessageActionIcon(Lucide.Copy, "Copy", onClick = onCopy)
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
                     MessageActionIcon(
                         Lucide.RefreshCw,
                         "Regenerate",
                         onClick = { onRegenerate?.invoke() },
                         enabled = onRegenerate != null,
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
                     MessageActionIcon(Lucide.Pencil, "Edit", onClick = onEdit)
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
                     MessageActionIcon(Lucide.Ellipsis, "More", onClick = onMore)
                 }
+                if (!isUser) {
+                    // CMW:3191-3209 —— 生成中整行隐藏（AnimatedSwitcher 220ms
+                    // SizeTransition+FadeTransition）。
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = !msg.isStreaming,
+                        enter = androidx.compose.animation.expandVertically(
+                            animationSpec = androidx.compose.animation.core.tween(220),
+                        ) + androidx.compose.animation.fadeIn(
+                            animationSpec = androidx.compose.animation.core.tween(220),
+                        ),
+                        exit = androidx.compose.animation.shrinkVertically(
+                            animationSpec = androidx.compose.animation.core.tween(220),
+                        ) + androidx.compose.animation.fadeOut(
+                            animationSpec = androidx.compose.animation.core.tween(220),
+                        ),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MessageActionIcon(Lucide.Copy, "Copy", onClick = onCopy)
+                            Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
+                            MessageActionIcon(
+                                Lucide.RefreshCw,
+                                "Regenerate",
+                                onClick = { showRegenerateConfirm = true },
+                                enabled = onRegenerateAssistant != null,
+                            )
+                            Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
+                            // Speak/Stop：播放中切 CircleStop（CMW:3253-3291）。
+                            MessageActionIcon(
+                                if (ttsSpeaking) Lucide.CircleStop else Lucide.Volume2,
+                                if (ttsSpeaking) "Stop" else "Speak",
+                                onClick = onSpeak,
+                            )
+                            Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
+                            MessageActionIcon(
+                                Lucide.Languages,
+                                "Translate",
+                                onClick = { showLanguageSheet = true },
+                            )
+                            Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
+                            MessageActionIcon(Lucide.Ellipsis, "More", onClick = onMore)
+                        }
+                    }
+                }
                 if (showVersionSwitcher) {
-                    if (isUser) Spacer(Modifier.width(6.dp))
+                    if (isUser || !msg.isStreaming) Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
                     com.psyche.memo.ui.chat.BranchSelector(
                         index = versionIndex,
                         total = versionCount,
@@ -1231,6 +1354,40 @@ private fun MessageRow(
                 }
             }
         }
+    }
+    if (showLanguageSheet) {
+        com.psyche.memo.ui.chat.LanguageSelectSheet(
+            onSelect = { lang ->
+                showLanguageSheet = false
+                onTranslate(lang.code)
+            },
+            onDismiss = { showLanguageSheet = false },
+        )
+    }
+    if (showRegenerateConfirm) {
+        // CMW:1328-1358 _confirmRegeneration —— 确认弹窗（标题/正文/取消/确定）。
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRegenerateConfirm = false },
+            title = {
+                Text(stringResource(UiR.string.chat_message_widget_regenerate_confirm_title))
+            },
+            text = {
+                Text(stringResource(UiR.string.chat_message_widget_regenerate_confirm_content))
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showRegenerateConfirm = false
+                        onRegenerateAssistant?.invoke()
+                    },
+                ) { Text(stringResource(UiR.string.chat_message_widget_regenerate_confirm_ok)) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showRegenerateConfirm = false },
+                ) { Text(stringResource(UiR.string.chat_message_widget_regenerate_confirm_cancel)) }
+            },
+        )
     }
 }
 
@@ -1370,12 +1527,36 @@ private fun ChatInputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onSelectModel: () -> Unit,
+    // 语音输入执行器（chat_input_bar.dart asrProvider 的系统分支）；null =
+    // 不可用，麦克风按钮按 CIB:2542-2546 showVoiceInput 条件隐藏。
+    voice: com.psyche.memo.ui.chat.VoiceInputController? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     // 源码 chat_input_bar.dart:2547 —— theme.brightness == Brightness.dark。
     // 移植版没有暴露主题模式的 CompositionLocal，按 Material3 惯例由 surface 亮度判定
     // （浅色 surface 亮度 ≈0.96，深色 ≈0.05）。
     val isDark = cs.surface.luminance() < 0.5f
+
+    // 语音会话状态（CIB:852-932 录音行、2750-2752 readOnly、2542-2546 可见性）。
+    val voiceState: com.psyche.memo.ui.chat.VoiceInputController.State =
+        if (voice != null) {
+            voice.state.collectAsState().value
+        } else {
+            com.psyche.memo.ui.chat.VoiceInputController.State.Idle
+        }
+    val voiceLevels = voice?.levels?.collectAsState()?.value ?: emptyList()
+    val voiceActive = voiceState != com.psyche.memo.ui.chat.VoiceInputController.State.Idle
+    // CIB:2542-2546 showVoiceInput —— asr 可用才显示麦克风。
+    val voiceAvailable = remember(voice) { voice?.canUse() == true }
+    // CIB:_startVoiceInput —— 成功启动后 unfocus。
+    val voiceFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    // CIB onPartialResults —— 实时转写进输入框。
+    LaunchedEffect(voiceState) {
+        val listening = voiceState as? com.psyche.memo.ui.chat.VoiceInputController.State.Listening
+        if (listening != null && listening.partial.isNotEmpty()) {
+            onInputChange(listening.partial)
+        }
+    }
 
     val density = LocalDensity.current
     val windowInfo = LocalWindowInfo.current
@@ -1515,7 +1696,12 @@ private fun ChatInputBar(
                             )
                         },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { if (!streaming) onSend() }),
+                        // CIB:934-938 _handleSend —— 语音会话中不触发发送。
+                        keyboardActions = KeyboardActions(
+                            onSend = { if (!streaming && !voiceActive) onSend() },
+                        ),
+                        // CIB:2750-2752 readOnly —— composerLocked || _ownsVoiceSession。
+                        readOnly = voiceActive,
                         // 源码 chat_input_bar.dart:2741 —— maxLines: 5（未展开状态）
                         maxLines = 5,
                         colors = TextFieldDefaults.colors(
@@ -1542,90 +1728,230 @@ private fun ChatInputBar(
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        // CIB:2891-2926 —— 左侧工具图标间 8。
-                        horizontalArrangement = Arrangement.spacedBy(
-                            ChatStyleSpec.INPUT_ACTIONS_GAP_DP.dp,
-                        ),
-                    ) {
-                        InputIcon(
-                            Lucide.Boxes,
-                            stringResource(UiR.string.chat_input_bar_select_model_tooltip),
-                            onSelectModel,
-                            cs,
-                        )
-                        InputIcon(
-                            Lucide.Globe,
-                            stringResource(UiR.string.chat_input_bar_online_search_tooltip),
-                            {},
-                            cs,
-                        )
-                        InputIcon(
-                            Lucide.Brain,
-                            stringResource(UiR.string.chat_input_bar_reasoning_strength_tooltip),
-                            {},
-                            cs,
-                        )
-                        InputIcon(
-                            Lucide.Hammer,
-                            stringResource(UiR.string.chat_input_bar_mcp_servers_tooltip),
-                            {},
-                            cs,
-                        )
-                        InputIcon(
-                            Lucide.Zap,
-                            stringResource(UiR.string.chat_input_bar_quick_phrase_tooltip),
-                            {},
-                            cs,
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        // CIB:2912/2928 —— 右侧 + 与语音按钮后各 8。
-                        horizontalArrangement = Arrangement.spacedBy(
-                            ChatStyleSpec.INPUT_ACTIONS_GAP_DP.dp,
-                        ),
-                    ) {
-                        InputIcon(
-                            Lucide.Plus,
-                            stringResource(UiR.string.chat_input_bar_more_tooltip),
-                            {},
-                            cs,
-                        )
-                        InputIcon(
-                            Lucide.Mic,
-                            stringResource(UiR.string.chat_input_bar_voice_input_tooltip),
-                            {},
-                            cs,
-                        )
-                        // CIB:3264-3315 _CompactSendButton —— 32 圆（icon 18 +
-                        // pad 7）；可用/流式: primary 底 + onPrimary 图标；
-                        // 禁用: onSurface@0.12 底 + onSurface@0.38 图标。
-                        val canSend = input.isNotBlank()
-                        val sendBg = if (canSend || streaming) cs.primary
-                        else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_BG_ALPHA)
-                        val sendFg = if (canSend || streaming) cs.onPrimary
-                        else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_FG_ALPHA)
-                        Box(
-                            modifier = Modifier
-                                .size(ChatStyleSpec.SEND_BUTTON_DP.dp)
-                                .background(sendBg, CircleShape)
-                                .clickable {
-                                    if (streaming) onStop() else if (canSend) onSend()
+                    // CIB:2837-2853 —— 录音行与常规按钮行经 AnimatedSwitcher
+                    // (260ms) fade + 0.35 高度竖滑切换（入场上滑、出场下滑），
+                    // AnimatedContent 等价实现。
+                    AnimatedContent(
+                        targetState = voiceActive,
+                        transitionSpec = {
+                            (fadeIn(tween(260)) + slideInVertically(tween(260)) { (it * 0.35f).toInt() }) togetherWith
+                                (fadeOut(tween(260)) + slideOutVertically(tween(260)) { (it * 0.35f).toInt() })
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = "inputBottomRowSwitch",
+                    ) { recording ->
+                        if (recording && voice != null) {
+                            ChatVoiceRecordingRow(
+                                state = voiceState,
+                                levels = voiceLevels,
+                                isDark = isDark,
+                                cs = cs,
+                                voice = voice,
+                                onFinalText = { text, send ->
+                                    if (text.isNotEmpty()) {
+                                        onInputChange(text)
+                                        if (send) onSend()
+                                    }
                                 },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = if (streaming) Lucide.CircleStop else Lucide.ArrowUp,
-                                contentDescription = if (streaming) "Stop" else "Send",
-                                tint = sendFg,
-                                modifier = Modifier.size(ChatStyleSpec.SEND_ICON_DP.dp),
                             )
+                        } else {
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    // CIB:2891-2926 —— 左侧工具图标间 8。
+                                    horizontalArrangement = Arrangement.spacedBy(
+                                        ChatStyleSpec.INPUT_ACTIONS_GAP_DP.dp,
+                                    ),
+                                ) {
+                                    InputIcon(
+                                        Lucide.Boxes,
+                                        stringResource(UiR.string.chat_input_bar_select_model_tooltip),
+                                        onSelectModel,
+                                        cs,
+                                    )
+                                    InputIcon(
+                                        Lucide.Globe,
+                                        stringResource(UiR.string.chat_input_bar_online_search_tooltip),
+                                        {},
+                                        cs,
+                                    )
+                                    InputIcon(
+                                        Lucide.Brain,
+                                        stringResource(UiR.string.chat_input_bar_reasoning_strength_tooltip),
+                                        {},
+                                        cs,
+                                    )
+                                    InputIcon(
+                                        Lucide.Hammer,
+                                        stringResource(UiR.string.chat_input_bar_mcp_servers_tooltip),
+                                        {},
+                                        cs,
+                                    )
+                                    InputIcon(
+                                        Lucide.Zap,
+                                        stringResource(UiR.string.chat_input_bar_quick_phrase_tooltip),
+                                        {},
+                                        cs,
+                                    )
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    // CIB:2912/2928 —— 右侧 + 与语音按钮后各 8。
+                                    horizontalArrangement = Arrangement.spacedBy(
+                                        ChatStyleSpec.INPUT_ACTIONS_GAP_DP.dp,
+                                    ),
+                                ) {
+                                    InputIcon(
+                                        Lucide.Plus,
+                                        stringResource(UiR.string.chat_input_bar_more_tooltip),
+                                        {},
+                                        cs,
+                                    )
+                                    // CIB:2542-2546 —— asr 可用才显示麦克风；
+                                    // 点击 _startVoiceInput（unfocus + start）。
+                                    if (voiceAvailable) {
+                                        InputIcon(
+                                            Lucide.Mic,
+                                            stringResource(UiR.string.chat_input_bar_voice_input_tooltip),
+                                            {
+                                                if (!voiceActive) {
+                                                    voiceFocusManager.clearFocus()
+                                                    voice?.start()
+                                                }
+                                            },
+                                            cs,
+                                        )
+                                    }
+                                    // CIB:3264-3315 _CompactSendButton —— 32 圆（icon 18 +
+                                    // pad 7）；可用/流式: primary 底 + onPrimary 图标；
+                                    // 禁用: onSurface@0.12 底 + onSurface@0.38 图标。
+                                    val canSend = input.isNotBlank()
+                                    val sendBg = if (canSend || streaming) cs.primary
+                                    else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_BG_ALPHA)
+                                    val sendFg = if (canSend || streaming) cs.onPrimary
+                                    else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_FG_ALPHA)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(ChatStyleSpec.SEND_BUTTON_DP.dp)
+                                            .background(sendBg, CircleShape)
+                                            .clickable {
+                                                if (streaming) onStop() else if (canSend) onSend()
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = if (streaming) Lucide.CircleStop else Lucide.ArrowUp,
+                                            contentDescription = if (streaming) "Stop" else "Send",
+                                            tint = sendFg,
+                                            modifier = Modifier.size(ChatStyleSpec.SEND_ICON_DP.dp),
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 录音行 —— chat_input_bar.dart `_buildVoiceRecordingRow`（CIB:852-932）1:1：
+ * 取消 X — 波形/转写指示（Expanded）— 停止方块 — 发送 Check。
+ * [onFinalText] 收到 (最终文本, 是否随后发送)。
+ */
+@Composable
+private fun ChatVoiceRecordingRow(
+    state: com.psyche.memo.ui.chat.VoiceInputController.State,
+    levels: List<Float>,
+    isDark: Boolean,
+    cs: androidx.compose.material3.ColorScheme,
+    voice: com.psyche.memo.ui.chat.VoiceInputController,
+    onFinalText: (String, Boolean) -> Unit,
+) {
+    // CIB:854-855 canFinish = isListening && !_finishingVoice。
+    val canFinish = state is com.psyche.memo.ui.chat.VoiceInputController.State.Listening
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // ① 取消（CIB:859-863）—— 收尾中禁用。
+        InputIcon(
+            Lucide.X,
+            stringResource(UiR.string.chat_input_bar_voice_cancel_tooltip),
+            onClick = { voice.cancel() },
+            cs = cs,
+            enabled = canFinish,
+        )
+        // ② 波形 / 转写指示（CIB:864-901：Expanded + 左 8 右 2 + 32 高，
+        // AnimatedSwitcher 180ms fade 切换）。
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 8.dp, end = 2.dp)
+                .height(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            AnimatedContent(
+                targetState = !canFinish,
+                transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(180)) },
+                label = "voiceTranscribingSwitch",
+            ) { transcribing ->
+                if (transcribing) {
+                    com.psyche.memo.ui.chat.VoiceTranscribingIndicator(
+                        label = stringResource(UiR.string.chat_input_bar_voice_transcribing),
+                        color = cs.onSurface.copy(alpha = 0.72f),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    com.psyche.memo.ui.chat.VoiceWaveform(
+                        levels = levels,
+                        color = cs.onSurface.copy(alpha = 0.85f),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+        // ③ 停止（CIB:904-920）：12×12 圆角 3.5 方块，颜色 = 图标前景色。
+        val stopTint = cs.onSurface.copy(
+            alpha = if (isDark) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
+            else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
+        )
+        IconButton(
+            onClick = { voice.finish { text -> onFinalText(text, false) } },
+            enabled = canFinish,
+            modifier = Modifier.size(32.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(stopTint, RoundedCornerShape(3.5f.dp)),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        // ④ 发送（CIB:923-929）：_CompactSendButton —— primary 底 Check 图标，
+        // 禁用态灰底灰字。
+        Box(
+            modifier = Modifier
+                .size(ChatStyleSpec.SEND_BUTTON_DP.dp)
+                .background(
+                    if (canFinish) cs.primary
+                    else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_BG_ALPHA),
+                    CircleShape,
+                )
+                .clickable(enabled = canFinish) {
+                    voice.finish { text -> onFinalText(text, true) }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Lucide.Check,
+                contentDescription = stringResource(UiR.string.chat_input_bar_voice_send_tooltip),
+                tint = if (canFinish) cs.onPrimary
+                else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_FG_ALPHA),
+                modifier = Modifier.size(ChatStyleSpec.SEND_ICON_DP.dp),
+            )
         }
     }
 }
@@ -1636,15 +1962,17 @@ private fun InputIcon(
     label: String,
     onClick: () -> Unit,
     cs: androidx.compose.material3.ColorScheme,
+    enabled: Boolean = true,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(32.dp)) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(32.dp)) {
         Icon(
             icon,
             contentDescription = label,
-            // CIB:3211-3213 —— 非 active 色 onSurface@0.70(dark)/0.54(light)。
+            // CIB:3211-3213 —— 非 active 色 onSurface@0.70(dark)/0.54(light)；
+            // 禁用态 = 原色 ×0.45（ios_tactile.dart:54-59）。
             tint = cs.onSurface.copy(
-                alpha = if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
-                else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
+                alpha = (if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
+                else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT) * if (enabled) 1f else 0.45f,
             ),
             modifier = Modifier.size(20.dp),
         )

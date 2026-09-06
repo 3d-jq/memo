@@ -225,6 +225,14 @@ class MessageDao(private val db: SQLiteDatabase) {
         db.execSQL("UPDATE message_rows SET is_streaming = ? WHERE id = ?", arrayOf<Any>(if (streaming) 1 else 0, id))
     }
 
+    /**
+     * Persists the translated body (chat_service.updateMessage(translation:)
+     * parity). Empty string clears the translation; null keeps it untouched.
+     */
+    fun updateTranslation(id: String, translation: String) {
+        db.execSQL("UPDATE message_rows SET translation = ? WHERE id = ?", arrayOf<Any>(translation, id))
+    }
+
     fun delete(id: String) {
         db.delete("message_rows", "id = ?", arrayOf(id))
         // message_part_rows rows cascade via FK, but parts of the deleted
