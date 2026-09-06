@@ -464,7 +464,10 @@ private fun MemoryEntryEditSheet(
         saving = false
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
+        onDismissRequest = onDismiss,
+    ) {
         Column(
             Modifier
                 .fillMaxWidth()

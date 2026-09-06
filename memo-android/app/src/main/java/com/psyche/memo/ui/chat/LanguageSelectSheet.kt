@@ -83,6 +83,7 @@ fun LanguageSelectSheet(
 ) {
     val cs = MaterialTheme.colorScheme
     ModalBottomSheet(
+        dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = cs.surface,
