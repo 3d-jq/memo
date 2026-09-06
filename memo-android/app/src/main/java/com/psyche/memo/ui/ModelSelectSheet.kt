@@ -32,6 +32,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.lazy.rememberLazyListState
+import com.psyche.memo.ui.theme.LocalSemanticColors
+import com.composables.icons.lucide.Heart
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -107,13 +113,22 @@ fun ModelSelectSheet(
                 Spacer(Modifier.height(8.dp))
             }
 
+            val semanticSearch = LocalSemanticColors.current
+            val searchInteraction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            val searchFocused by searchInteraction.collectIsFocusedAsState()
             // Search field: filled r14, Search prefix, optional Bookmark suffix.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .background(cs.surfaceVariant, RoundedCornerShape(14.dp))
-                    .border(1.dp, cs.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(14.dp)),
+                    // Flutter InputDecoration: filled surfaceFill, r14
+                    // border outlineVariant 40%, focused primary 50%.
+                    .background(semanticSearch.surfaceFill, RoundedCornerShape(14.dp))
+                    .border(
+                        1.dp,
+                        if (searchFocused) cs.primary.copy(alpha = 0.5f) else cs.outlineVariant.copy(alpha = 0.4f),
+                        RoundedCornerShape(14.dp),
+                    ),
             ) {
                 TextField(
                     value = query,
@@ -144,6 +159,7 @@ fun ModelSelectSheet(
                         }
                     },
                     singleLine = true,
+                    interactionSource = searchInteraction,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent,
@@ -156,6 +172,7 @@ fun ModelSelectSheet(
                 )
             }
 
+            val chipScope = rememberCoroutineScope()
             // Scrollable grouped model list fills the rest of the sheet.
             val filtered = options.filter {
                 query.isBlank() ||
@@ -164,7 +181,18 @@ fun ModelSelectSheet(
             }
             val grouped = filtered.groupBy { it.providerName }
 
+            val listState = rememberLazyListState()
+            val headerIndex = remember(grouped) {
+                buildMap {
+                    var i = 0
+                    grouped.forEach { (p, models) ->
+                        put(p, i)
+                        i += 1 + models.size
+                    }
+                }
+            }
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -198,7 +226,12 @@ fun ModelSelectSheet(
                     ProviderChip(
                         name = providerName,
                         selected = providerName == options.firstOrNull { it.selected }?.providerName,
-                        onClick = { /* filter by provider — P2 scroll */ },
+                        onClick = {
+                            // Jump to the provider's group header (sticky header lands with A2c).
+                            headerIndex[providerName]?.let { idx ->
+                                chipScope.launch { listState.animateScrollToItem(idx) }
+                            }
+                        },
                     )
                 }
             }
@@ -209,58 +242,41 @@ fun ModelSelectSheet(
 @Composable
 private fun ModelTile(option: ModelOption, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val bg = if (option.selected) cs.primary.copy(alpha = 0.08f) else Color.Transparent
+    val semantic = LocalSemanticColors.current
+    val bg = if (option.selected) cs.primary.copy(alpha = 0.08f) else semantic.surfaceCard
     Row(
         modifier = Modifier
+            .padding(horizontal = 12.dp, vertical = 6.dp)
             .fillMaxWidth()
-            .background(bg, RoundedCornerShape(16.dp))
+            .background(bg, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Brand avatar 28px, primary α0.1, initial letter.
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .background(cs.primary.copy(alpha = 0.1f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = option.providerName.take(1).uppercase(),
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, color = cs.primary),
-            )
-        }
+        ProviderAvatarSmall(option.providerId, option.modelId, 28.dp)
         Spacer(Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = option.modelId,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "| ${option.providerName}",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 12.sp,
-                    color = cs.onSurface.copy(alpha = 0.6f),
-                ),
-                maxLines = 1,
-            )
-        }
-        // Favorite toggle: 36px touch target.
+        Text(
+            text = option.modelId,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = cs.onSurface,
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        // Favorite toggle (pinned-model system lands with A2c).
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .clickable { /* toggle pinned model */ },
+                .clickable { },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                Icons.Filled.FavoriteBorder,
+                Lucide.Heart,
                 contentDescription = null,
-                tint = cs.primary,
+                tint = cs.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier.size(20.dp),
             )
         }

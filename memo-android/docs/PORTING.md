@@ -78,4 +78,4 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)
 - basic tab：`assistant_settings_edit_basic_tab.dart`（身份卡 L136-161；设置卡 L162-263；聊天模型卡 L264-357：标题+RotateCcw+副标题+选择行[surfaceFill r12 h12v10、BrandAvatar 24、14 semibold，显示 override 名?:modelId，无模型"使用全局默认"]；背景卡 L373-510：Image 标题+12sp 描述、空→居中选图按钮[outlineVariant 35% 边框]、有→两 _IosButton 并排+ClipRRect r10 预览；_pickBackground：gallery maxWidth1920 quality85 存路径）
 - 列表页：`assistant_settings_page.dart`（Slidable endActionPane 0.6、复制命名"xx 副本 N"、最后一个不可删）
-- 模型选择：Flutter `showModelSelector` → Android `ModelSelectSheet`（已对齐）
+- 模型选择：Flutter `showModelSelector`（model_select_sheet.dart 2533 行）→ Android `ModelSelectSheet`。视觉主体已对齐（卡片行 r14、品牌头像 28、单行名、Lucide 心形、搜索框 surfaceFill+r14 边框聚焦 primary 50%、chip 点击滚动分组）。**仍未移植（A2c 待办）**：吸顶 provider 头（_stickyProviderHeader L1185）、ModelTagWrap 能力标签、长按模型详情 sheet、pinnedModels 收藏系统、DraggableScrollableSheet 可拖拽高度（现固定 0.8）、搜索跳转首个匹配组。
