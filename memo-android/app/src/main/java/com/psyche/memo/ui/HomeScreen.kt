@@ -67,9 +67,8 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.User
 import com.composables.icons.lucide.Zap
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.DrawerValue
@@ -625,7 +624,8 @@ fun ChatContent(
                     Lucide.Map,
                     contentDescription = UIStrings.miniMapTooltip(),
                     tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
+                    // home_page.dart —— mini-map 图标 20（新对话保持 22）。
+                    modifier = Modifier.size(ChatStyleSpec.TOP_BAR_MAP_ICON_DP.dp),
                 )
             }
             IconButton(onClick = onNew, modifier = Modifier.size(44.dp)) {
@@ -657,6 +657,8 @@ fun ChatContent(
                     )
                 }
             }
+            // home_page.dart —— 顶栏末尾 4px 尾距。
+            Spacer(Modifier.width(ChatStyleSpec.TOP_BAR_TRAILING_GAP_DP.dp))
         }
 
         // Message timeline: empty temporary conversation shows the hat/glasses
@@ -693,10 +695,12 @@ fun ChatContent(
                 LazyColumn(
                     state = timelineListState,
                     modifier = Modifier.fillMaxSize(),
+                    // MLV:1684-1690 —— 列表自身只留 top 8 / bottom 16；水平与
+                    // 消息间垂直间距由每条消息的 Padding 承担（CMW:1768/2780）。
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 16.dp, vertical = 8.dp,
+                        top = ChatStyleSpec.LIST_TOP_PADDING_DP.dp,
+                        bottom = ChatStyleSpec.LIST_BOTTOM_PADDING_DP.dp,
                     ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(messages, key = { it.id }) { msg ->
                         MessageRow(
@@ -883,10 +887,15 @@ private fun MessageRow(
 ) {
     val cs = MaterialTheme.colorScheme
     val isUser = msg.role == "user"
+    // 暗色判定（chat_input_bar.dart:2547 同款口径）。
+    val isDark = cs.surface.luminance() < 0.5f
+    // 每条消息外边距：用户 h16 / 助手 h20，垂直 12（CMW:1768 / 2780）。
+    val rowHorizontal = if (isUser) ChatStyleSpec.USER_MESSAGE_HORIZONTAL_DP.dp
+    else ChatStyleSpec.ASSISTANT_MESSAGE_HORIZONTAL_DP.dp
     // User bubble max width = screen width * 0.75
     // (chat_message_widget.dart L1833/1853).
     val maxBubbleWidth = with(LocalDensity.current) {
-        LocalWindowInfo.current.containerSize.width.toDp() * 0.75f
+        LocalWindowInfo.current.containerSize.width.toDp() * ChatStyleSpec.USER_MAX_WIDTH_RATIO
     }
     var showContextMenu by remember { mutableStateOf(false) }
     // 全屏图片查看器状态（image_viewer_page.dart 移动端路径）。
@@ -901,29 +910,54 @@ private fun MessageRow(
         com.psyche.memo.ui.chat.extractCitationItems(msg.parts)
     }
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = rowHorizontal,
+                vertical = ChatStyleSpec.MESSAGE_VERTICAL_DP.dp,
+            ),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
     ) {
         if (isUser) {
-            // Header: name 13px α0.7 + timestamp 11px α0.5 (right-aligned),
-            // matching chat_message_widget.dart. Name comes from the user
-            // resource (UserProvider default 'User' in the original).
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = stringResource(UiR.string.user_provider_default_user_name),
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = cs.onSurface.copy(alpha = 0.7f),
-                    ),
-                )
-                Text(
-                    text = timeStr(msg.timestamp),
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.sp,
-                        color = cs.onSurface.copy(alpha = 0.5f),
-                    ),
-                )
+            // Header: name 13px α0.7 + timestamp 11px α0.5 (right-aligned) +
+            // 32 用户头像（CMW:1773-1807 + 1590-1659；默认分支 Lucide.User 18
+            // primary 于 primary@0.1 圆底）。
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = stringResource(UiR.string.user_provider_default_user_name),
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = cs.onSurface.copy(alpha = 0.7f),
+                        ),
+                    )
+                    Spacer(Modifier.height(ChatStyleSpec.NAME_TIME_GAP_DP.dp))
+                    Text(
+                        text = timeStr(msg.timestamp),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            color = cs.onSurface.copy(alpha = 0.5f),
+                        ),
+                    )
+                }
+                Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
+                Box(
+                    modifier = Modifier
+                        .size(ChatStyleSpec.AVATAR_SIZE_DP.dp)
+                        .background(
+                            cs.primary.copy(alpha = ChatStyleSpec.AVATAR_BG_ALPHA),
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Lucide.User,
+                        contentDescription = null,
+                        tint = cs.primary,
+                        modifier = Modifier.size(ChatStyleSpec.AVATAR_ICON_DP.dp),
+                    )
+                }
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -943,7 +977,7 @@ private fun MessageRow(
                         ),
                     )
                 }
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
                 Column {
                     Text(
                         text = assistantLabel,
@@ -953,6 +987,7 @@ private fun MessageRow(
                             color = cs.onSurface.copy(alpha = 0.7f),
                         ),
                     )
+                    Spacer(Modifier.height(ChatStyleSpec.NAME_TIME_GAP_DP.dp))
                     Text(
                         text = timeStr(msg.timestamp),
                         style = MaterialTheme.typography.labelSmall.copy(
@@ -963,24 +998,34 @@ private fun MessageRow(
                 }
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(ChatStyleSpec.HEADER_CONTENT_GAP_DP.dp))
         // 长按浮层锚定在气泡上（chat_message_widget.dart:1812-1846 mobile
         // long-press → _showUserContextMenu）。
         Box {
             Column(
                 modifier = Modifier
-                    .widthIn(max = maxBubbleWidth)
+                    .then(
+                        if (isUser) Modifier.widthIn(max = maxBubbleWidth)
+                        // 助手块默认撑满整行（CMW:2478-2484
+                        // _assistantBlockWidth，assistantBubbleFitContent 默认关）。
+                        else Modifier.fillMaxWidth()
+                    )
                     .background(
-                        color = if (isUser) cs.primary.copy(alpha = 0.08f)
-                        else Color.Transparent,
-                        shape = RoundedCornerShape(16.dp),
+                        // CMW:2394-2398 —— 用户 primary@0.15(dark)/0.08(light)，
+                        // 助手无底色（bareOnDefault）。
+                        color = if (isUser) cs.primary.copy(
+                            alpha = if (isDark) ChatStyleSpec.USER_BUBBLE_ALPHA_DARK
+                            else ChatStyleSpec.USER_BUBBLE_ALPHA_LIGHT,
+                        ) else Color.Transparent,
+                        shape = RoundedCornerShape(ChatStyleSpec.BUBBLE_CORNER_DP.dp),
                     )
                     .combinedClickable(
                         enabled = isUser,
                         onLongClick = { if (isUser) showContextMenu = true },
                         onClick = {},
                     )
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    // CMW:2393 —— 气泡内边距 all 12。
+                    .padding(ChatStyleSpec.BUBBLE_PADDING_DP.dp),
             ) {
                 // 图片附件（chat_message_widget.dart _buildAttachmentPreview
                 // ImagePart 分支）：整组渲染，点击可跨图翻页查看。
@@ -992,11 +1037,21 @@ private fun MessageRow(
                 }
                 for (part in msg.parts) {
                     when (part) {
-                        is TextPart -> com.psyche.memo.ui.markdown.MarkdownText(
-                            markdown = part.text,
-                            baseFontSize = 15.7f,
-                            baseLineHeight = 23.55f,
-                        )
+                        is TextPart -> if (isUser) {
+                            // CMW:2046-2054 —— 用户正文 15.5 / 行高 1.45×15.5。
+                            com.psyche.memo.ui.markdown.MarkdownText(
+                                markdown = part.text,
+                                baseFontSize = ChatStyleSpec.USER_TEXT_SP,
+                                baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
+                            )
+                        } else {
+                            // CMW:2424/2433 —— 助手正文 15.7 / 行高 1.5×15.7。
+                            com.psyche.memo.ui.markdown.MarkdownText(
+                                markdown = part.text,
+                                baseFontSize = 15.7f,
+                                baseLineHeight = 23.55f,
+                            )
+                        }
                         is ReasoningPart -> com.psyche.memo.ui.markdown.ThinkingCard(
                             thinking = part.text,
                             modifier = Modifier.padding(top = 4.dp),
@@ -1022,7 +1077,12 @@ private fun MessageRow(
                     }
                 }
                 if (msg.parts.isEmpty() && msg.isStreaming) {
-                    CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp).size(20.dp))
+                    // CMW:2885-2920 —— 空内容流式时渲染三点 LoadingIndicator
+                    // （4105-4196），非 Material 圆环。
+                    com.psyche.memo.ui.chat.LoadingDotsIndicator(
+                        color = cs.primary,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 }
                 if (msg.failed) {
                     Text(
@@ -1127,7 +1187,8 @@ private fun MessageRow(
         // version selector and token stats.
         val showVersionSwitcher = versionCount > 1
         if (isUser || showVersionSwitcher || msg.totalTokens != null) {
-            Spacer(Modifier.height(4.dp))
+            // CMW:1848 —— 用户按钮行上方 8；助手（版本/统计行）6。
+            Spacer(Modifier.height(if (isUser) ChatStyleSpec.ACTIONS_TOP_GAP_DP.dp else 6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
@@ -1181,18 +1242,22 @@ private fun MessageActionIcon(
     enabled: Boolean = true,
 ) {
     val cs = MaterialTheme.colorScheme
+    // CMW:1859-1959 —— 28×28 槽位内裸 IosIconButton(16, pad4)，无背景，
+    // 色 onSurface@0.9；禁用态 alpha×0.45（ios_tactile.dart:54-59）。
     Box(
         modifier = Modifier
-            .size(28.dp)
-            .background(cs.surfaceVariant, RoundedCornerShape(16.dp))
+            .size(ChatStyleSpec.ACTION_SLOT_DP.dp)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             icon,
             contentDescription = label,
-            tint = cs.onSurface.copy(alpha = if (enabled) 0.9f else 0.4f),
-            modifier = Modifier.size(12.dp),
+            tint = cs.onSurface.copy(
+                alpha = if (enabled) ChatStyleSpec.ACTION_ICON_ALPHA
+                else ChatStyleSpec.ACTION_DISABLED_ALPHA,
+            ),
+            modifier = Modifier.size(ChatStyleSpec.ACTION_ICON_DP.dp),
         )
     }
 }
@@ -1432,7 +1497,23 @@ private fun ChatInputBar(
                         value = input,
                         onValueChange = onInputChange,
                         modifier = textFieldModifier,
-                        placeholder = { Text(stringResource(UiR.string.chat_input_bar_hint)) },
+                        // CIB composer —— 正文 15sp onSurface；hint onSurface@0.45；
+                        // 光标 primary。
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
+                            color = cs.onSurface,
+                        ),
+                        placeholder = {
+                            Text(
+                                stringResource(UiR.string.chat_input_bar_hint),
+                                style = androidx.compose.ui.text.TextStyle(
+                                    fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
+                                    color = cs.onSurface.copy(
+                                        alpha = ChatStyleSpec.INPUT_HINT_ALPHA,
+                                    ),
+                                ),
+                            )
+                        },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         keyboardActions = KeyboardActions(onSend = { if (!streaming) onSend() }),
                         // 源码 chat_input_bar.dart:2741 —— maxLines: 5（未展开状态）
@@ -1442,6 +1523,8 @@ private fun ChatInputBar(
                             unfocusedContainerColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
+                            // CIB —— 光标 primary。
+                            cursorColor = cs.primary,
                         ),
                     )
                 }
@@ -1459,7 +1542,13 @@ private fun ChatInputBar(
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(modifier = Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        // CIB:2891-2926 —— 左侧工具图标间 8。
+                        horizontalArrangement = Arrangement.spacedBy(
+                            ChatStyleSpec.INPUT_ACTIONS_GAP_DP.dp,
+                        ),
+                    ) {
                         InputIcon(
                             Lucide.Boxes,
                             stringResource(UiR.string.chat_input_bar_select_model_tooltip),
@@ -1491,7 +1580,13 @@ private fun ChatInputBar(
                             cs,
                         )
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        // CIB:2912/2928 —— 右侧 + 与语音按钮后各 8。
+                        horizontalArrangement = Arrangement.spacedBy(
+                            ChatStyleSpec.INPUT_ACTIONS_GAP_DP.dp,
+                        ),
+                    ) {
                         InputIcon(
                             Lucide.Plus,
                             stringResource(UiR.string.chat_input_bar_more_tooltip),
@@ -1504,13 +1599,28 @@ private fun ChatInputBar(
                             {},
                             cs,
                         )
-                        FilledIconButton(
-                            onClick = if (streaming) onStop else onSend,
-                            modifier = Modifier.size(38.dp),
+                        // CIB:3264-3315 _CompactSendButton —— 32 圆（icon 18 +
+                        // pad 7）；可用/流式: primary 底 + onPrimary 图标；
+                        // 禁用: onSurface@0.12 底 + onSurface@0.38 图标。
+                        val canSend = input.isNotBlank()
+                        val sendBg = if (canSend || streaming) cs.primary
+                        else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_BG_ALPHA)
+                        val sendFg = if (canSend || streaming) cs.onPrimary
+                        else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_FG_ALPHA)
+                        Box(
+                            modifier = Modifier
+                                .size(ChatStyleSpec.SEND_BUTTON_DP.dp)
+                                .background(sendBg, CircleShape)
+                                .clickable {
+                                    if (streaming) onStop() else if (canSend) onSend()
+                                },
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = if (streaming) Lucide.CircleStop else Lucide.ArrowUp,
                                 contentDescription = if (streaming) "Stop" else "Send",
+                                tint = sendFg,
+                                modifier = Modifier.size(ChatStyleSpec.SEND_ICON_DP.dp),
                             )
                         }
                     }
@@ -1531,7 +1641,11 @@ private fun InputIcon(
         Icon(
             icon,
             contentDescription = label,
-            tint = cs.onSurface.copy(alpha = 0.54f),
+            // CIB:3211-3213 —— 非 active 色 onSurface@0.70(dark)/0.54(light)。
+            tint = cs.onSurface.copy(
+                alpha = if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
+                else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
+            ),
             modifier = Modifier.size(20.dp),
         )
     }

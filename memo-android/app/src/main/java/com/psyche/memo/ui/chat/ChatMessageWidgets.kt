@@ -1,10 +1,16 @@
 package com.psyche.memo.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +36,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +60,7 @@ import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Trash2
+import com.psyche.memo.ui.ChatStyleSpec
 import com.psyche.memo.ui.R as UiR
 import kotlin.math.roundToInt
 
@@ -388,5 +397,46 @@ private fun NavGlassButton(
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(16.dp))
+    }
+}
+
+/**
+ * 三点波动流式指示器 —— 1:1 移植 chat_message_widget.dart:4105-4196
+ * LoadingIndicator/_LoadingDotsPainter：3 个 9dp 圆点、间距 6、画布高 16、
+ * 1100ms 线性循环、每点相位差 0.22，wave=(sin(phase)+1)/2，
+ * scale=0.85+0.15·wave，alpha=0.45+0.45·wave，颜色 primary。
+ * 公式细节在 [ChatStyleSpec.dotState]（可单测），此处只做绘制。
+ */
+@Composable
+fun LoadingDotsIndicator(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val transition = rememberInfiniteTransition(label = "loadingDots")
+    val fraction by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = ChatStyleSpec.DOTS_DURATION_MS, easing = LinearEasing),
+        ),
+        label = "loadingDotsFraction",
+    )
+    Canvas(
+        modifier = modifier.size(
+            ChatStyleSpec.DOTS_WIDTH_DP.dp,
+            ChatStyleSpec.DOTS_HEIGHT_DP.dp,
+        ),
+    ) {
+        val dotRadius = ChatStyleSpec.DOTS_DOT_DP.dp.toPx() / 2f
+        val gap = ChatStyleSpec.DOTS_GAP_DP.dp.toPx()
+        for (i in 0 until ChatStyleSpec.DOTS_COUNT) {
+            val state = ChatStyleSpec.dotState(fraction, i)
+            val cx = i * (dotRadius * 2f + gap) + dotRadius
+            drawCircle(
+                color = color.copy(alpha = state.alpha),
+                radius = dotRadius * state.scale,
+                center = Offset(cx, size.height / 2f),
+            )
+        }
     }
 }
