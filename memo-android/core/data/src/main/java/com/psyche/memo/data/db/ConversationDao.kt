@@ -68,6 +68,24 @@ class ConversationDao(private val db: SQLiteDatabase) {
         )
     }
 
+    /**
+     * 会话级模型选择持久化（model_select_sheet.dart:283-303
+     * `controller.setConversationModel`）：选中的 (provider, model) 写到
+     * conversation_rows，null 表示"跟随默认"。
+     */
+    fun setChatModel(
+        id: String,
+        providerId: String?,
+        modelId: String?,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        db.execSQL(
+            "UPDATE conversation_rows SET chat_model_provider = ?, chat_model_id = ?, " +
+                "updated_at = ? WHERE id = ?",
+            arrayOf<Any?>(providerId, modelId, now, id),
+        )
+    }
+
     fun setAssistant(id: String, assistantId: String?, now: Long = System.currentTimeMillis()) {
         db.execSQL(
             "UPDATE conversation_rows SET assistant_id = ?, updated_at = ? WHERE id = ?",

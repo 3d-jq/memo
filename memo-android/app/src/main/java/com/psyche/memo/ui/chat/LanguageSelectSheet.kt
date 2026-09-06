@@ -100,7 +100,7 @@ fun LanguageSelectSheet(
                     .padding(top = 6.dp, bottom = 6.dp)
                     .align(Alignment.CenterHorizontally)
                     .size(width = 40.dp, height = 4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999)),
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
             )
             for (lang in supportedLanguages) {
                 LanguageRow(lang) { onSelect(lang) }

@@ -113,14 +113,34 @@ class ChatViewModel(
                     container.conversationDao.get(conversationId)
                 }
                 title.value = stored?.title?.trim() ?: ""
+                // resolveChatModel（model_select_sheet.dart:283-303）：会话级
+                // chat_model_* 优先于全局默认——重启后仍保留用户上次的选择。
+                val provider = stored?.chatModelProvider
+                val model = stored?.chatModelId
+                if (!provider.isNullOrEmpty() && !model.isNullOrEmpty()) {
+                    selectedProviderId.value = provider
+                    selectedModelId.value = model
+                }
             }
         }
         refreshTail()
     }
 
+    /**
+     * 选择模型（model_select_sheet.dart:283-303 →
+     * `controller.setConversationModel`）：先更新内存，再持久化到当前会话，
+     * 这样重启后仍是上次选的模型。临时会话不落库（同 regenerate/编辑的
+     * isTemporary 语义）。
+     */
     fun selectProvider(providerId: String, modelId: String) {
         selectedProviderId.value = providerId
         selectedModelId.value = modelId
+        if (isTemporary) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                container.conversationDao.setChatModel(conversationId, providerId, modelId)
+            }
+        }
     }
 
     fun refreshTail() {

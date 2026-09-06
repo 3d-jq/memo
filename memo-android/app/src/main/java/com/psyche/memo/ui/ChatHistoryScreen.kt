@@ -179,7 +179,9 @@ fun ChatHistoryScreen(
                         )
                     },
                     singleLine = true,
-                    shape = RoundedCornerShape(50),
+                    // chat_history_page.dart:166-178 —— circular(50) 是 50 逻辑
+                    // 像素，不是 50%（Compose 的 Int 重载是百分比）。
+                    shape = RoundedCornerShape(50.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = semantic.surfaceCard,
                         unfocusedContainerColor = semantic.surfaceCard,
