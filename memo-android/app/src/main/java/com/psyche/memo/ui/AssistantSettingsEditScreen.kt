@@ -1,6 +1,7 @@
 package com.psyche.memo.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -39,12 +40,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.BitmapFactory
+import java.io.File
 import androidx.compose.material3.Icon
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.ArrowLeft
@@ -52,8 +59,11 @@ import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.CaseSensitive
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Hash
+import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.MessageCircle
 import com.composables.icons.lucide.MessagesSquare
+import com.composables.icons.lucide.RotateCcw
+import com.composables.icons.lucide.X
 import com.composables.icons.lucide.Thermometer
 import com.composables.icons.lucide.User
 import com.composables.icons.lucide.WandSparkles
@@ -161,8 +171,10 @@ fun AssistantSettingsEditScreen(
             when (page) {
                 0 -> BasicSettingsTab(
                     container = container,
+                    assistantId = a.id,
                     assistant = a,
                     onEdit = ::edit,
+                    onReload = { reloadKey++ },
                 )
                 else -> Box(Modifier.fillMaxSize())
             }
@@ -220,8 +232,10 @@ private fun EditSegTabBar(tabs: List<String>, selected: Int, onSelect: (Int) -> 
 @Composable
 private fun BasicSettingsTab(
     container: com.psyche.memo.AppContainerImpl,
+    assistantId: String,
     assistant: Assistant,
     onEdit: ((Assistant) -> Assistant) -> Unit,
+    onReload: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     androidx.compose.foundation.lazy.LazyColumn(
@@ -302,8 +316,35 @@ private fun BasicSettingsTab(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
-        // Chat model card — header row + current selection.
+        // Chat model card (L264-357): header + reset + subtitle + selector row.
         item {
+            val semanticBg = LocalSemanticColors.current
+            // Override display name wins (assistant_settings_edit_basic_tab.dart L343-354).
+            val modelDisplay = remember(assistant.chatModelProvider, assistant.chatModelId) {
+                val p = assistant.chatModelProvider
+                val m = assistant.chatModelId
+                if (p == null || m == null) {
+                    null
+                } else {
+                    runCatching {
+                        val row = com.psyche.memo.data.db.PayloadEntityDao(
+                            container.database.readableDatabase,
+                            "provider_rows",
+                            primaryKey = "provider_key",
+                        ).get(p)
+                        val cfg = row?.let {
+                            com.psyche.memo.data.model.ProviderConfig.fromJsonString(
+                                kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
+                                it.payload,
+                            )
+                        }
+                        val override = cfg?.modelOverrides?.get(m)
+                        val name = (override as? Map<*, *>)?.get("name") as? String
+                        if (!name.isNullOrEmpty()) name else m
+                    }.getOrDefault(m)
+                }
+            }
+            var modelSheet by remember { mutableStateOf(false) }
             Surface16Card {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -313,18 +354,216 @@ private fun BasicSettingsTab(
                             text = stringResource(UiR.string.assistant_edit_chat_model_title),
                             maxLines = 1,
                             style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (assistant.chatModelProvider != null && assistant.chatModelId != null) {
+                            Box(
+                                Modifier
+                                    .size(28.dp)
+                                    .clickable { onEdit { it.copy(chatModelProvider = null, chatModelId = null) } },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Lucide.RotateCcw,
+                                    contentDescription = stringResource(UiR.string.default_model_page_reset_default),
+                                    tint = cs.onSurface,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(UiR.string.assistant_edit_chat_model_subtitle),
+                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val display = modelDisplay
+                        ?: stringResource(UiR.string.assistant_edit_model_use_global_default)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(semanticBg.surfaceFill)
+                            .clickable { modelSheet = true }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ProviderAvatarSmall(assistant.chatModelProvider ?: "", display, 24.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = display,
+                            maxLines = 1,
+                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                         )
                     }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = listOfNotNull(assistant.chatModelProvider, assistant.chatModelId)
-                            .joinToString(" / ")
-                            .ifEmpty { "-" },
-                        style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+                }
+                if (modelSheet) {
+                    val options = remember {
+                        com.psyche.memo.data.db.PayloadEntityDao(
+                            container.database.readableDatabase,
+                            "provider_rows",
+                            primaryKey = "provider_key",
+                        ).getAll().flatMap { row ->
+                            val config = runCatching {
+                                com.psyche.memo.data.model.ProviderConfig.fromJsonString(
+                                    kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
+                                    row.payload,
+                                )
+                            }.getOrNull() ?: return@flatMap emptyList()
+                            config.models.map { id ->
+                                ModelOption(
+                                    providerId = config.id,
+                                    providerName = config.name,
+                                    modelId = id,
+                                    selected = id == assistant.chatModelId && config.id == assistant.chatModelProvider,
+                                )
+                            }
+                        }
+                    }
+                    ModelSelectSheet(
+                        container = container,
+                        options = options,
+                        onSelect = { sel ->
+                            modelSheet = false
+                            onEdit { it.copy(chatModelProvider = sel.providerId, chatModelId = sel.modelId) }
+                        },
+                        onDismiss = { modelSheet = false },
                     )
                 }
             }
         }
+        item { Spacer(Modifier.height(16.dp)) }
+        // Chat background card (L373-510): title + description + pick/clear + preview.
+        item {
+            val semanticBg = LocalSemanticColors.current
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val scope = rememberCoroutineScope()
+            val bgPicker = rememberLauncherForActivityResult(
+                ActivityResultContracts.PickVisualMedia(),
+            ) { uri ->
+                if (uri != null) {
+                    scope.launch(Dispatchers.IO) {
+                        val copied = runCatching {
+                            val dir = File(context.filesDir, "assistant_backgrounds").apply { mkdirs() }
+                            val dest = File(dir, assistantId + "_" + System.currentTimeMillis() + ".jpg")
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                dest.outputStream().use { input.copyTo(it) }
+                            } ?: return@runCatching null
+                            dest.absolutePath
+                        }.getOrNull()
+                        if (copied != null) {
+                            AssistantStore(container.database.writableDatabase)
+                                .update(assistant.copy(background = copied))
+                            launch(kotlinx.coroutines.Dispatchers.Main) { onReload() }
+                        }
+                    }
+                }
+            }
+            Surface16Card {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Lucide.Image, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(UiR.string.assistant_edit_chat_background_title),
+                            maxLines = 1,
+                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(UiR.string.assistant_edit_chat_background_description),
+                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val hasBackground = !assistant.background.isNullOrBlank()
+                    if (!hasBackground) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(semanticBg.surfaceFill)
+                                .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                .clickable {
+                                    bgPicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                    )
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Lucide.Image, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(UiR.string.assistant_edit_choose_image_button),
+                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
+                            )
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            BackgroundActionButton(
+                                label = stringResource(UiR.string.assistant_edit_choose_image_button),
+                                icon = Lucide.Image,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                bgPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                )
+                            }
+                            BackgroundActionButton(
+                                label = stringResource(UiR.string.assistant_edit_clear_button),
+                                icon = Lucide.X,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                onEdit { it.copy(background = null) }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        val preview = remember(assistant.background) {
+                            assistant.background?.let { path ->
+                                runCatching { BitmapFactory.decodeFile(path) }.getOrNull()
+                            }
+                        }
+                        if (preview != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = preview.asImageBitmap(),
+                                contentDescription = null,
+                                contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp)),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Flutter _IosButton (background card): surfaceFill pill, icon + 14sp semibold label. */
+@Composable
+private fun BackgroundActionButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val semanticBg = LocalSemanticColors.current
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(semanticBg.surfaceFill)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label,
+            maxLines = 1,
+            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
+        )
     }
 }
 
