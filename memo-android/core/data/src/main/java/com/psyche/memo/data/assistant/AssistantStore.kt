@@ -33,6 +33,14 @@ class AssistantStore(private val db: SQLiteDatabase) {
 
     fun get(id: String): Assistant? = dao.get(id)?.let { row -> decode(row.payload) }
 
+    /** ensureDefaults guard — seed only when the table has no rows. */
+    fun isEmpty(): Boolean = dao.getAll().isEmpty()
+
+    /** Persists the seeded assistants in list order (sort_order = index). */
+    fun seedAll(items: List<Assistant>) {
+        items.forEachIndexed { index, a -> dao.upsert(a.id, encode(a), index) }
+    }
+
     /** addAssistant L306-322 — appended with a fresh uuid. */
     fun add(name: String): String {
         val id = UUID.randomUUID().toString()

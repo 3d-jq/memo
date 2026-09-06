@@ -1,5 +1,7 @@
 package com.psyche.memo.data.assistant
 
+import com.psyche.memo.data.model.Assistant
+
 /**
  * Pure business rules for the assistant list — 1:1 port of
  * lib/core/providers/assistant_provider.dart (kept free of Android types
@@ -45,3 +47,19 @@ fun reorderMove(ids: List<String>, from: Int, to: Int): List<String>? {
 
 /** assistant_provider.dart L487: never delete the last remaining assistant. */
 fun canDeleteAssistant(count: Int): Boolean = count > 1
+
+/**
+ * assistant_provider.dart L116-142 ensureDefaults — the localized default
+ * assistant plus the sample assistant (its system prompt template keeps the
+ * literal {model_name} placeholder, formatted by the caller). Only the two
+ * constructors; emptiness is the caller's decision.
+ */
+fun buildSeedAssistants(
+    defaultName: String,
+    sampleName: String,
+    samplePrompt: String,
+    newId: () -> String,
+): List<Assistant> = listOf(
+    Assistant(id = newId(), name = defaultName),
+    Assistant(id = newId(), name = sampleName, systemPrompt = samplePrompt),
+)

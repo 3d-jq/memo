@@ -109,4 +109,35 @@ class AssistantStoreLogicTest {
         assertTrue(canDeleteAssistant(2))
         assertTrue(canDeleteAssistant(5))
     }
+
+    // ------------------------------------------------- buildSeedAssistants
+
+    @Test
+    fun seedBuildsDefaultThenSample() {
+        var n = 0
+        val seeds = buildSeedAssistants(
+            defaultName = "默认助手",
+            sampleName = "示例助手",
+            samplePrompt = "你是{model_name}，一位乐于助人的 AI 助手。",
+            newId = { "id-${++n}" },
+        )
+        assertEquals(2, seeds.size)
+        // Default assistant — plain name, everything else model defaults
+        // (assistant_provider.dart L116 _defaultAssistant passes nulls).
+        assertEquals("id-1", seeds[0].id)
+        assertEquals("默认助手", seeds[0].name)
+        assertEquals("", seeds[0].systemPrompt)
+        assertEquals(null, seeds[0].temperature)
+        assertEquals(null, seeds[0].topP)
+        assertEquals(null, seeds[0].thinkingBudget)
+        assertFalse(seeds[0].limitContextMessages)
+        // Sample assistant — prompt template keeps the literal placeholder.
+        assertEquals("id-2", seeds[1].id)
+        assertEquals("示例助手", seeds[1].name)
+        assertEquals("你是{model_name}，一位乐于助人的 AI 助手。", seeds[1].systemPrompt)
+        assertEquals(null, seeds[1].temperature)
+        assertFalse(seeds[1].limitContextMessages)
+        // Unique ids across the two seeds.
+        assertTrue(seeds[0].id != seeds[1].id)
+    }
 }

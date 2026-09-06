@@ -28,7 +28,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.psyche.memo.common.AppLocale
+import com.psyche.memo.data.assistant.AssistantStore
+import com.psyche.memo.data.assistant.buildSeedAssistants
 import com.psyche.memo.ui.AssistantSettingsScreen
+import com.psyche.memo.ui.R as UiR
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.psyche.memo.ui.DefaultModelScreen
 import com.psyche.memo.ui.StatsScreen
 import com.psyche.memo.ui.DisplaySettingsScreen
@@ -126,7 +132,33 @@ private fun AppThemeAndContent(
     // (mirrors Flutter SettingsProvider.themeMode default); Compose
     // isSystemInDarkTheme is Flutter platformBrightness's equivalent.
     val context = LocalContext.current
-    LaunchedEffect(Unit) { ThemeState.load(container) }
+    LaunchedEffect(Unit) {
+        ThemeState.load(container)
+        // assistant_provider.dart ensureDefaults — seed the localized default
+        // + sample assistants exactly once, then default currentAssistantId
+        // to the first seed. Runs after locale resolution (attachBaseContext).
+        launch {
+            withContext(Dispatchers.IO) {
+                val store = AssistantStore(container.database.writableDatabase)
+                if (store.isEmpty()) {
+                    val seeds = buildSeedAssistants(
+                        defaultName = context.getString(UiR.string.assistant_provider_default_assistant_name),
+                        sampleName = context.getString(UiR.string.assistant_provider_sample_assistant_name),
+                        samplePrompt = context.getString(
+                            UiR.string.assistant_provider_sample_assistant_system_prompt,
+                            "{model_name}",
+                        ),
+                        newId = { java.util.UUID.randomUUID().toString() },
+                    )
+                    store.seedAll(seeds)
+                    val pref = container.preferenceRepository
+                    if (pref.readJson("current_assistant_id_v1").isNullOrBlank()) {
+                        pref.writeJson("current_assistant_id_v1", "\"" + seeds.first().id + "\"")
+                    }
+                }
+            }
+        }
+    }
     val themeMode = ThemeState.mode
     val systemDark = isSystemInDarkTheme()
     // MemoTheme.resolve's mode logic (system/light/dark); the palette comes
