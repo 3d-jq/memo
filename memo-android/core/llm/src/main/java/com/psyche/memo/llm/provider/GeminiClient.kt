@@ -261,12 +261,10 @@ class GeminiClient(
     }
 
     private fun newCall(request: LlmRequest, body: String, stream: Boolean): Call {
+        // Mirror Flutter google_common.dart L949: "$base/models/$model:…"
+        // — trimmed base, no injected /v1beta (custom bases already carry it).
         val base = request.baseUrl.trimEnd('/')
-        val url = if (base.endsWith("/v1beta")) {
-            "$base/models/${request.modelId}:${if (stream) "streamGenerateContent" else "generateContent"}?alt=sse"
-        } else {
-            "$base/v1beta/models/${request.modelId}:${if (stream) "streamGenerateContent" else "generateContent"}?alt=sse"
-        }
+        val url = "$base/models/${request.modelId}:${if (stream) "streamGenerateContent" else "generateContent"}?alt=sse"
         return httpClient.newCall(
             Request.Builder()
                 .url(url.toHttpUrl())

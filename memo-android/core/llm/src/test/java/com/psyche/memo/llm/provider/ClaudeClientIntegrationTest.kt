@@ -51,6 +51,31 @@ class ClaudeClientIntegrationTest {
         maxTokens = 1024,
     )
 
+    // ---- URL construction: mirrors Flutter claude_official.dart L64
+    // ("$base/messages", no injected /v1). ----
+
+    @Test
+    fun urlIsBaseUrlPlusMessagesPathWithoutForcedV1() = runBlocking {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("event: message_stop\n" + "data: {\"type\":\"message_stop\"}\n\n"),
+        )
+        client().streamChat(request(server.url("/").toString())).toList()
+
+        assertEquals("/messages", server.takeRequest().path)
+    }
+
+    @Test
+    fun urlKeepsV1WhenBaseCarriesIt() = runBlocking {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("event: message_stop\n" + "data: {\"type\":\"message_stop\"}\n\n"),
+        )
+        client().streamChat(request(server.url("/v1").toString())).toList()
+
+        assertEquals("/v1/messages", server.takeRequest().path)
+    }
+
     @Test
     fun streamsTextAndThinking() = runBlocking {
         server.enqueue(

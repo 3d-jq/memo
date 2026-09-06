@@ -258,8 +258,10 @@ class ClaudeClient(
     }
 
     private fun newCall(request: LlmRequest, body: String): Call {
+        // Mirror Flutter claude_official.dart L64: "$base/messages" — trimmed
+        // base + fixed path, no injected /v1 (custom bases already carry it).
         val base = request.baseUrl.trimEnd('/')
-        val url = if (base.endsWith("/v1")) "$base/messages" else "$base/v1/messages"
+        val url = "$base/messages"
         return httpClient.newCall(
             Request.Builder()
                 .url(url.toHttpUrl())

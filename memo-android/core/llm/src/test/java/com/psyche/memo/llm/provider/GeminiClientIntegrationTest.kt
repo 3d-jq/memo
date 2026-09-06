@@ -52,6 +52,31 @@ class GeminiClientIntegrationTest {
         maxTokens = 256,
     )
 
+    // ---- URL construction: mirrors Flutter google_common.dart L949
+    // ("$base/models/$model:streamGenerateContent", no injected /v1beta). ----
+
+    @Test
+    fun urlIsBaseUrlPlusModelsPathWithoutForcedV1Beta() = runBlocking {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("data: {\"candidates\":[{\"finishReason\":\"STOP\"}]}\n\n"),
+        )
+        client().streamChat(request(server.url("/").toString())).toList()
+
+        assertEquals("/models/gemini-2.0-flash:streamGenerateContent?alt=sse", server.takeRequest().path)
+    }
+
+    @Test
+    fun urlKeepsV1BetaWhenBaseCarriesIt() = runBlocking {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("data: {\"candidates\":[{\"finishReason\":\"STOP\"}]}\n\n"),
+        )
+        client().streamChat(request(server.url("/v1beta").toString())).toList()
+
+        assertEquals("/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse", server.takeRequest().path)
+    }
+
     @Test
     fun streamsTextAndThought() = runBlocking {
         server.enqueue(

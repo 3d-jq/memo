@@ -31,6 +31,12 @@ data class LlmRequest(
     val extraBodyJson: String? = null,
     val apiKey: String,
     val baseUrl: String,
+    /**
+     * OpenAI-compatible override for the chat endpoint path (mirrors Flutter
+     * ProviderConfig.chatPath). Null → client default "/chat/completions".
+     * The final URL is always `baseUrl` + path with no injected /v1.
+     */
+    val chatPath: String? = null,
 )
 
 data class LlmUsage(

@@ -131,4 +131,43 @@ class OpenAiClientIntegrationTest {
             assertTrue(e.message!!.contains("500"))
         }
     }
+
+    // ---- URL construction: mirrors Flutter _openAICompatibleUrl (openai_provider.dart
+    // L25-43): trimmed base + (chatPath ?? "/chat/completions"), never injecting /v1.
+    // Regression for the HTTP 404 reported with bases like
+    // https://text.pollinations.ai/openai and https://open.bigmodel.cn/api/paas/v4. ----
+
+    @Test
+    fun urlIsBaseUrlPlusDefaultPathForNonV1Base() = runBlocking {
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: [DONE]\n\n"))
+        client().streamChat(request(server.url("/openai").toString())).toList()
+
+        assertEquals("/openai/chat/completions", server.takeRequest().path)
+    }
+
+    @Test
+    fun urlKeepsV1WhenBaseCarriesIt() = runBlocking {
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: [DONE]\n\n"))
+        client().streamChat(request(server.url("/v1").toString())).toList()
+
+        assertEquals("/v1/chat/completions", server.takeRequest().path)
+    }
+
+    @Test
+    fun urlUsesConfiguredChatPathOverride() = runBlocking {
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: [DONE]\n\n"))
+        // chatPath replaces the whole path suffix (Flutter: "$rawBase$path").
+        val req = request(server.url("/openai").toString()).copy(chatPath = "/v4/chat/completions")
+        client().streamChat(req).toList()
+
+        assertEquals("/openai/v4/chat/completions", server.takeRequest().path)
+    }
+
+    @Test
+    fun urlTrimsTrailingSlashFromBase() = runBlocking {
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: [DONE]\n\n"))
+        client().streamChat(request(server.url("/openai/").toString())).toList()
+
+        assertEquals("/openai/chat/completions", server.takeRequest().path)
+    }
 }

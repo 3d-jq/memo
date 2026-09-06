@@ -174,6 +174,7 @@ fun ProviderDetailScreen(
                                         messages = listOf(com.psyche.memo.llm.client.LlmMessage(role = "user", content = "hi")),
                                         apiKey = cfg.apiKey,
                                         baseUrl = container.baseUrlFor(cfg.id),
+                                        chatPath = cfg.chatPath,
                                     ),
                                 )
                             }

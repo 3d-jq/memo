@@ -379,6 +379,7 @@ class ChatViewModel(
                     messages = history,
                     apiKey = container.apiKeyFor(providerId) ?: "",
                     baseUrl = container.baseUrlFor(providerId),
+                    chatPath = container.providerConfig(providerId)?.chatPath,
                 )
                 val client = container.clientFor(providerId)
                 // First terminal wins (mirrors the original finishHandled /

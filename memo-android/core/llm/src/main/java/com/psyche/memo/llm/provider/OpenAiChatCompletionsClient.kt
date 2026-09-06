@@ -222,11 +222,12 @@ class OpenAiChatCompletionsClient(
     }
 
     private fun newCall(request: LlmRequest, body: String): Call {
+        // Mirror Flutter _openAICompatibleUrl (openai_provider.dart L25-43):
+        // trimmed base + (chatPath ?? "/chat/completions"), never injecting
+        // /v1 — hosts like https://text.pollinations.ai/openai or
+        // https://open.bigmodel.cn/api/paas/v4 404 with a forced /v1.
         val rawBase = request.baseUrl.trimEnd('/')
-        val url = when {
-            rawBase.endsWith("/v1") -> "$rawBase/chat/completions"
-            else -> "$rawBase/v1/chat/completions"
-        }
+        val url = rawBase + (request.chatPath?.takeIf { it.isNotEmpty() } ?: "/chat/completions")
         val builder = Request.Builder()
             .url(url.toHttpUrl())
             .post(body.toRequestBody("application/json".toMediaType()))
