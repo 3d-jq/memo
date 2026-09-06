@@ -35,13 +35,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.lazy.rememberLazyListState
+import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.LocalSemanticColors
+import com.composables.icons.lucide.Brain
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Heart
+import com.composables.icons.lucide.Wrench
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
@@ -49,8 +56,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Bookmark
+import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Search
+import com.composables.icons.lucide.Type
 import com.psyche.memo.AppContainerImpl
 
 data class ModelOption(
@@ -220,7 +229,7 @@ fun ModelSelectSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = if (providers.size == 1) Arrangement.Center else Arrangement.spacedBy(8.dp),
             ) {
                 items(providers) { providerName ->
                     ProviderChip(
@@ -255,17 +264,20 @@ private fun ModelTile(option: ModelOption, onClick: () -> Unit) {
     ) {
         ProviderAvatarSmall(option.providerId, option.modelId, 28.dp)
         Spacer(Modifier.width(10.dp))
-        Text(
-            text = option.modelId,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = cs.onSurface,
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = option.modelId,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = cs.onSurface,
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            ModelTagRow(modelId = option.modelId)
+        }
         // Favorite toggle (pinned-model system lands with A2c).
         Box(
             modifier = Modifier
@@ -281,6 +293,53 @@ private fun ModelTile(option: ModelOption, onClick: () -> Unit) {
             )
         }
     }
+}
+
+/** model_tag_wrap.dart — chat-type + I/O modality + tools/reasoning pills. */
+@Composable
+private fun ModelTagRow(modelId: String) {
+    val cs = MaterialTheme.colorScheme
+    val traits = remember(modelId) { com.psyche.memo.ModelRegistry.infer(modelId) }
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Pill(color = cs.primary) {
+            Text(
+                text = stringResource(UiR.string.model_select_sheet_chat_type),
+                style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = cs.primary),
+            )
+        }
+        Pill(color = cs.tertiary) {
+            Icon(Lucide.Type, contentDescription = null, tint = cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            if (traits.visionInput) {
+                Icon(Lucide.Image, contentDescription = null, tint = cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            }
+            Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            // Chat output defaults to text (tag_wrap outputMods fallback).
+            Icon(Lucide.Type, contentDescription = null, tint = cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+        }
+        if (traits.tool) {
+            Pill(color = cs.secondary) {
+                Icon(Lucide.Wrench, contentDescription = null, tint = cs.secondary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            }
+        }
+        if (traits.reasoning) {
+            Pill(color = cs.secondary) {
+                Icon(Lucide.Brain, contentDescription = null, tint = cs.secondary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun Pill(color: Color, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(
+        modifier = Modifier
+            .background(color.copy(alpha = 0.15f), RoundedCornerShape(999.dp))
+            .border(0.5.dp, color.copy(alpha = 0.2f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        content = content,
+    )
 }
 
 @Composable
