@@ -30,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.data.assistant.AssistantStore
 import com.psyche.memo.data.assistant.buildSeedAssistants
+import com.psyche.memo.ui.AssistantSettingsEditScreen
 import com.psyche.memo.ui.AssistantSettingsScreen
 import com.psyche.memo.ui.R as UiR
 import kotlinx.coroutines.Dispatchers
@@ -458,6 +459,16 @@ private fun AppThemeAndContent(
                     composable("assistant_settings") {
                         AssistantSettingsScreen(
                             container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenEdit = { id ->
+                                navController.navigate("assistant_settings_edit/$id")
+                            },
+                        )
+                    }
+                    composable("assistant_settings_edit/{assistantId}") { entry ->
+                        AssistantSettingsEditScreen(
+                            container = container,
+                            assistantId = entry.arguments?.getString("assistantId").orEmpty(),
                             onBack = { navController.popBackStack() },
                         )
                     }

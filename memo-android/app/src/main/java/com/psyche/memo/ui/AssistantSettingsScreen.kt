@@ -106,6 +106,7 @@ import kotlinx.coroutines.withContext
 fun AssistantSettingsScreen(
     container: AppContainerImpl,
     onBack: () -> Unit,
+    onOpenEdit: (String) -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -227,7 +228,7 @@ fun AssistantSettingsScreen(
                             },
                         ),
                     ),
-                    onFrontTap = { /* navigation to the edit page lands with batch A2 */ },
+                    onFrontTap = { onOpenEdit(item.id) },
                 ) { pressed ->
                     AssistantCard(item = item, pressed = pressed)
                 }
@@ -346,7 +347,7 @@ private fun AssistantCard(item: Assistant, pressed: Boolean) {
 
 /** _AssistantAvatar L561-654 — http / local file / emoji / initial. */
 @Composable
-private fun AssistantListAvatar(item: Assistant, size: androidx.compose.ui.unit.Dp) {
+internal fun AssistantListAvatar(item: Assistant, size: androidx.compose.ui.unit.Dp) {
     val cs = MaterialTheme.colorScheme
     val av = item.avatar?.trim().orEmpty()
     val bg = cs.primary.copy(alpha = 0.15f)
