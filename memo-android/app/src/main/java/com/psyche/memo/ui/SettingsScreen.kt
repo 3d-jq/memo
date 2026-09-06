@@ -92,6 +92,7 @@ fun SettingsScreen(
     onOpenDisplay: () -> Unit,
     onOpenProviders: () -> Unit,
     onOpenDefaultModel: () -> Unit,
+    onOpenStats: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenStorage: () -> Unit,
     onOpenMemory: () -> Unit,
@@ -308,7 +309,7 @@ fun SettingsScreen(
                 SectionCard {
                     SettingsRow(Lucide.BadgeInfo, stringResource(UiR.string.settings_page_about), onTap = onOpenAbout)
                     DividerRow()
-                    SettingsRow(Lucide.ChartColumnBig, stringResource(UiR.string.settings_page_statistics), onTap = {})
+                    SettingsRow(Lucide.ChartColumnBig, stringResource(UiR.string.settings_page_statistics), onTap = onOpenStats)
                     DividerRow()
                     // B7 — Docs opens the external docs site (L374-382).
                     SettingsRow(
