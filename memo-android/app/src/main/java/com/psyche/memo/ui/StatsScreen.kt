@@ -139,7 +139,7 @@ fun StatsScreen(
                 PayloadEntityDao(
                     container.database.readableDatabase,
                     "assistant_rows",
-                    primaryKey = "assistant_key",
+                    primaryKey = "id",
                 ).getAll()
             }.getOrDefault(emptyList()).mapNotNull { row ->
                 runCatching {

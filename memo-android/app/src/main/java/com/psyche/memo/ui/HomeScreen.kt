@@ -504,7 +504,7 @@ fun ChatContent(
                 com.psyche.memo.data.db.PayloadEntityDao(
                     container.database.readableDatabase,
                     "assistant_rows",
-                    primaryKey = "assistant_key",
+                    primaryKey = "id",
                 ).get(aId)?.let { row ->
                     com.psyche.memo.data.model.Assistant.fromJsonString(
                         kotlinx.serialization.json.Json { ignoreUnknownKeys = true },

@@ -89,6 +89,7 @@ fun SettingsScreen(
     container: AppContainerImpl,
     appLocale: AppLocale,
     onLocaleChange: (AppLocale) -> Unit,
+    onOpenAssistants: () -> Unit,
     onOpenDisplay: () -> Unit,
     onOpenProviders: () -> Unit,
     onOpenDefaultModel: () -> Unit,
@@ -245,7 +246,7 @@ fun SettingsScreen(
                         onTap = onOpenDisplay,
                     )
                     DividerRow()
-                    SettingsRow(Lucide.Bot, stringResource(UiR.string.settings_page_assistant), onTap = {})
+                    SettingsRow(Lucide.Bot, stringResource(UiR.string.settings_page_assistant), onTap = onOpenAssistants)
                 }
             }
 

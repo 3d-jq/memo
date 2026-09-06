@@ -231,7 +231,7 @@ fun MultiKeyManagerScreen(
         if (unique.isEmpty()) {
             SnackbarManager.show(
                 AppNotification(
-                    message = context.getString(R.string.multi_key_page_imported_snackbar, 0),
+                    message = context.getString(R.string.multi_key_page_imported_snackbar, "0"),
                     type = NotificationType.INFO,
                 ),
             )
@@ -241,7 +241,7 @@ fun MultiKeyManagerScreen(
         onCfgChange(base.copy(apiKeys = newKeys, multiKeyEnabled = true))
         SnackbarManager.show(
             AppNotification(
-                message = context.getString(R.string.multi_key_page_imported_snackbar, unique.size),
+                message = context.getString(R.string.multi_key_page_imported_snackbar, unique.size.toString()),
                 type = NotificationType.SUCCESS,
             ),
         )
@@ -445,7 +445,7 @@ fun MultiKeyManagerScreen(
                     onCfgChange(cfg.copy(apiKeys = keys.filter { it.status != ApiKeyStatus.error }))
                     SnackbarManager.show(
                         AppNotification(
-                            message = context.getString(R.string.multi_key_page_deleted_errors_snackbar, errorKeys.size),
+                            message = context.getString(R.string.multi_key_page_deleted_errors_snackbar, errorKeys.size.toString()),
                             type = NotificationType.SUCCESS,
                         ),
                     )

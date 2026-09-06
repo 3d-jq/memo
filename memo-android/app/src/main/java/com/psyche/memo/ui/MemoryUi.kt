@@ -120,7 +120,7 @@ internal fun loadAssistantsSync(container: AppContainerImpl): List<Assistant> =
         PayloadEntityDao(
             container.database.readableDatabase,
             "assistant_rows",
-            primaryKey = "assistant_key",
+            primaryKey = "id",
         ).getAll().mapNotNull { row ->
             runCatching {
                 Assistant.fromJsonString(kotlinx.serialization.json.Json { ignoreUnknownKeys = true }, row.payload)

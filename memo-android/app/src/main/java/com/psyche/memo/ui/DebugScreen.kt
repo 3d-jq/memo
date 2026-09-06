@@ -290,7 +290,7 @@ internal fun currentAssistantId(container: AppContainerImpl): String? {
     return com.psyche.memo.data.db.PayloadEntityDao(
         container.database.readableDatabase,
         "assistant_rows",
-        primaryKey = "assistant_key",
+        primaryKey = "id",
     ).get(storedId)?.let { row ->
         runCatching {
             com.psyche.memo.data.model.Assistant.fromJsonString(

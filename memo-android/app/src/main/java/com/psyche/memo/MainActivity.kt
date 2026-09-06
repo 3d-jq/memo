@@ -28,6 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.psyche.memo.common.AppLocale
+import com.psyche.memo.ui.AssistantSettingsScreen
 import com.psyche.memo.ui.DefaultModelScreen
 import com.psyche.memo.ui.StatsScreen
 import com.psyche.memo.ui.DisplaySettingsScreen
@@ -227,6 +228,7 @@ private fun AppThemeAndContent(
                             container = container,
                             appLocale = appLocale,
                             onLocaleChange = onLocaleChange,
+                            onOpenAssistants = { navController.navigate("assistant_settings") },
                             onOpenDisplay = { navController.navigate("display") },
                             onOpenProviders = { navController.navigate("providers") },
                             onOpenDefaultModel = { navController.navigate("default_model") },
@@ -417,6 +419,12 @@ private fun AppThemeAndContent(
                     }
                     composable("stats") {
                         StatsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("assistant_settings") {
+                        AssistantSettingsScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
                         )
