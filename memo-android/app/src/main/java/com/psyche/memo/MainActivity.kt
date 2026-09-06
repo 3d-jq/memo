@@ -28,6 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.psyche.memo.common.AppLocale
+import com.psyche.memo.ui.DefaultModelScreen
 import com.psyche.memo.ui.DisplaySettingsScreen
 import com.psyche.memo.ui.HomeScreen
 import com.psyche.memo.ui.ProviderDetailScreen
@@ -226,6 +227,7 @@ private fun AppThemeAndContent(
                             onLocaleChange = onLocaleChange,
                             onOpenDisplay = { navController.navigate("display") },
                             onOpenProviders = { navController.navigate("providers") },
+                            onOpenDefaultModel = { navController.navigate("default_model") },
                             onOpenAbout = { navController.navigate("about") },
                             onOpenStorage = { navController.navigate("storage") },
                             onOpenMemory = { navController.navigate("memory_settings") },
@@ -392,6 +394,12 @@ private fun AppThemeAndContent(
                     }
                     composable("legacy_memory") {
                         LegacyMemoryScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("default_model") {
+                        DefaultModelScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
                         )

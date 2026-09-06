@@ -91,6 +91,7 @@ fun SettingsScreen(
     onLocaleChange: (AppLocale) -> Unit,
     onOpenDisplay: () -> Unit,
     onOpenProviders: () -> Unit,
+    onOpenDefaultModel: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenStorage: () -> Unit,
     onOpenMemory: () -> Unit,
@@ -252,7 +253,7 @@ fun SettingsScreen(
             item {
                 SectionCard {
                     // C11 — icons per settings_page.dart:176-323.
-                    SettingsRow(Lucide.Heart, stringResource(UiR.string.settings_page_default_model), onTap = {})
+                    SettingsRow(Lucide.Heart, stringResource(UiR.string.settings_page_default_model), onTap = onOpenDefaultModel)
                     DividerRow()
                     SettingsRow(Lucide.Boxes, stringResource(UiR.string.settings_page_providers), onTap = onOpenProviders)
                     DividerRow()
