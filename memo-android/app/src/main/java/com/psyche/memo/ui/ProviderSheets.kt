@@ -572,6 +572,7 @@ fun ProviderGroupPickerSheet(
     container: AppContainerImpl,
     providerKey: String,
     onDismiss: () -> Unit,
+    onOpenManager: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -614,7 +615,7 @@ fun ProviderGroupPickerSheet(
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .clickable { onDismiss() },
+                        .clickable { onOpenManager() },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Lucide.Settings, contentDescription = "Manage groups", tint = cs.onSurface, modifier = Modifier.size(20.dp))

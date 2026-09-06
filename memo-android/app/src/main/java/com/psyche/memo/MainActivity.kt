@@ -34,6 +34,7 @@ import com.psyche.memo.ui.DisplaySettingsScreen
 import com.psyche.memo.ui.HomeScreen
 import com.psyche.memo.ui.ProviderDetailScreen
 import com.psyche.memo.ui.ProvidersScreen
+import com.psyche.memo.ui.ProviderGroupsScreen
 import com.psyche.memo.ui.ProviderEditScreen
 import com.psyche.memo.ui.ChatHistoryScreen
 import com.psyche.memo.ui.ImageSettingsScreen
@@ -339,6 +340,7 @@ private fun AppThemeAndContent(
                             onOpenProvider = { pid ->
                                 navController.navigate(if (pid == null) "provider_edit" else "provider_edit?pid=$pid")
                             },
+                            onOpenGroups = { navController.navigate("provider_groups") },
                         )
                     }
                     composable("provider_edit?pid={pid}") { entry ->
@@ -350,9 +352,16 @@ private fun AppThemeAndContent(
                             ProviderDetailScreen(
                                 container = container,
                                 providerId = pid,
+                                onOpenGroups = { navController.navigate("provider_groups") },
                                 onBack = { navController.popBackStack() },
                             )
                         }
+                    }
+                    composable("provider_groups") {
+                        ProviderGroupsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                     composable("display") {
                         DisplaySettingsScreen(

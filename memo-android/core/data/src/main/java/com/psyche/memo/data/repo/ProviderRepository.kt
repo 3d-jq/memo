@@ -2,6 +2,7 @@ package com.psyche.memo.data.repo
 
 import android.database.sqlite.SQLiteDatabase
 import com.psyche.memo.data.db.PayloadEntityDao
+import com.psyche.memo.data.model.KeyManagementConfig
 import com.psyche.memo.data.model.ProviderConfig
 import com.psyche.memo.data.model.ProviderGroup
 import com.psyche.memo.data.settings.PreferenceRepository
@@ -134,10 +135,133 @@ class ProviderRepository(
     fun groups(): List<ProviderGroup> =
         groupDao.getAll().mapNotNull { row -> ProviderGroup.fromJsonString(json, row.payload) }
 
+    fun groupById(groupId: String): ProviderGroup? = groups().firstOrNull { it.id == groupId }
+
     fun saveGroup(group: ProviderGroup) {
         val isNew = groupDao.get(group.id) == null
         val sortOrder = if (isNew) groupDao.nextSortOrder() else groupDao.get(group.id)!!.sortOrder
         groupDao.upsert(group.id, group.toJsonString(json), sortOrder)
+    }
+
+    /** Rewrites every group row so sort_order follows the given list order. */
+    private fun replaceGroups(groups: List<ProviderGroup>) {
+        val existing = groupDao.getAll().associateBy { it.id }
+        groups.forEachIndexed { index, group ->
+            groupDao.upsert(group.id, group.toJsonString(json), index)
+        }
+        // Rows for groups no longer in the list (rename/create callers always
+        // pass the full list) are removed to keep the table authoritative.
+        val keep = groups.map { it.id }.toSet()
+        for (row in existing.values) {
+            if (row.id !in keep) groupDao.delete(row.id)
+        }
+    }
+
+    /**
+     * Port of SettingsProvider.createGroup: case-insensitive duplicate names
+     * return the existing id; otherwise the group is inserted at the end and
+     * the ungrouped display index shifts right if it was after the insertion.
+     */
+    fun createGroup(name: String): String {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return ""
+        val key = trimmed.lowercase()
+        for (g in groups()) {
+            if (g.name.trim().lowercase() == key) return g.id
+        }
+        val id = java.util.UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val res = ProviderGroupLogic.insertProviderGroup(
+            groups = groups(),
+            ungroupedIndex = ungroupedPosition(),
+            group = ProviderGroup(id = id, name = trimmed, createdAt = now),
+        )
+        replaceGroups(res.groups)
+        setUngroupedPosition(res.ungroupedIndex)
+        cleanupProviderGrouping()
+        return id
+    }
+
+    /** Port of SettingsProvider.renameGroup (duplicate-name no-op included). */
+    fun renameGroup(groupId: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        val all = groups()
+        val idx = all.indexOfFirst { it.id == groupId }
+        if (idx < 0) return
+        val key = trimmed.lowercase()
+        for (g in all) {
+            if (g.id != groupId && g.name.trim().lowercase() == key) return
+        }
+        if (all[idx].name == trimmed) return
+        val mut = all.toMutableList()
+        mut[idx] = mut[idx].copy(name = trimmed)
+        replaceGroups(mut)
+        cleanupProviderGrouping()
+    }
+
+    /** Port of SettingsProvider.reorderProviderGroupsWithUngrouped. */
+    fun reorderGroupsWithUngrouped(oldIndex: Int, newIndex: Int) {
+        val displayCount = groups().size + 1
+        if (displayCount <= 1) return
+        if (oldIndex < 0 || oldIndex >= displayCount) return
+        if (newIndex < 0 || newIndex > displayCount) return
+        if (oldIndex == newIndex) return
+        val res = ProviderGroupLogic.reorderProviderGroupDisplayWithUngrouped(
+            groups = groups(),
+            ungroupedIndex = ungroupedPosition(),
+            oldIndex = oldIndex,
+            newIndex = newIndex,
+        )
+        replaceGroups(res.groups)
+        setUngroupedPosition(res.ungroupedIndex)
+        cleanupProviderGrouping()
+    }
+
+    /** Port of SettingsProvider.deleteGroup: members fall back to ungrouped. */
+    fun deleteGroupFully(groupId: String) {
+        if (groupById(groupId) == null) return
+        val res = ProviderGroupLogic.deleteProviderGroup(
+            groups = groups(),
+            ungroupedIndex = ungroupedPosition(),
+            providerGroupMap = groupMap(),
+            collapsed = collapsedAll(),
+            groupId = groupId,
+        )
+        replaceGroups(res.groups)
+        setUngroupedPosition(res.ungroupedIndex)
+        setGroupMap(res.providerGroupMap)
+        setCollapsedAll(res.collapsed)
+        cleanupProviderGrouping()
+    }
+
+    /**
+     * Light port of SettingsProvider._cleanupProviderOrderAndGrouping: drop
+     * group-map entries whose provider key or group id no longer resolves.
+     */
+    fun cleanupProviderGrouping() {
+        val knownKeys = providerDao.getAll().map { it.id }.toSet()
+        val validGroupIds = groups().map { it.id }.toSet()
+        val map = groupMap().filter { (k, v) -> k in knownKeys && v in validGroupIds }
+        if (map != groupMap()) setGroupMap(map)
+    }
+
+    /** Full collapsed map (provider_group_collapsed_v1). */
+    fun collapsedAll(): Map<String, Boolean> {
+        val raw = prefs.readJson(COLLAPSED_KEY) ?: return emptyMap()
+        return runCatching {
+            (json.parseToJsonElement(raw) as? kotlinx.serialization.json.JsonObject)
+                ?.entries
+                ?.associate { it.key to ((it.value as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false) }
+                .orEmpty()
+        }.getOrDefault(emptyMap())
+    }
+
+    fun setCollapsedAll(map: Map<String, Boolean>) {
+        prefs.writeJson(
+            COLLAPSED_KEY,
+            JsonObject(map.mapValues { JsonPrimitive(it.value) }).toString(),
+        )
     }
 
     fun deleteGroup(groupId: String) {
@@ -265,7 +389,7 @@ class ProviderRepository(
                     proxyPassword = "",
                     multiKeyEnabled = false,
                     apiKeys = emptyList(),
-                    keyManagement = JsonObject(emptyMap()),
+                    keyManagement = KeyManagementConfig(),
                     aihubmixAppCodeEnabled = false,
                     balanceEnabled = false,
                     balanceApiPath = "/credits",
@@ -288,7 +412,7 @@ class ProviderRepository(
                     proxyPassword = "",
                     multiKeyEnabled = false,
                     apiKeys = emptyList(),
-                    keyManagement = JsonObject(emptyMap()),
+                    keyManagement = KeyManagementConfig(),
                     aihubmixAppCodeEnabled = false,
                     balanceEnabled = false,
                     balanceApiPath = "/credits",
@@ -318,7 +442,7 @@ class ProviderRepository(
                         proxyPassword = "",
                         multiKeyEnabled = false,
                         apiKeys = emptyList(),
-                        keyManagement = JsonObject(emptyMap()),
+                        keyManagement = KeyManagementConfig(),
                         aihubmixAppCodeEnabled = false,
                         balanceEnabled = defaultBalanceEnabled(key),
                         balanceApiPath = defaultBalanceApiPath(key),
@@ -347,7 +471,7 @@ class ProviderRepository(
                         proxyPassword = "",
                         multiKeyEnabled = false,
                         apiKeys = emptyList(),
-                        keyManagement = JsonObject(emptyMap()),
+                        keyManagement = KeyManagementConfig(),
                         aihubmixAppCodeEnabled = false,
                         balanceEnabled = defaultBalanceEnabled(key),
                         balanceApiPath = defaultBalanceApiPath(key),
@@ -372,7 +496,7 @@ class ProviderRepository(
                         proxyPassword = "",
                         multiKeyEnabled = false,
                         apiKeys = emptyList(),
-                        keyManagement = JsonObject(emptyMap()),
+                        keyManagement = KeyManagementConfig(),
                         aihubmixAppCodeEnabled = lowerKey.contains("aihubmix"),
                         balanceEnabled = defaultBalanceEnabled(key),
                         balanceApiPath = defaultBalanceApiPath(key),

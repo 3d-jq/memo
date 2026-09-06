@@ -91,6 +91,7 @@ private val detailJson = Json { ignoreUnknownKeys = true; encodeDefaults = true 
 fun ProviderDetailScreen(
     container: AppContainerImpl,
     providerId: String,
+    onOpenGroups: () -> Unit,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -110,6 +111,8 @@ fun ProviderDetailScreen(
     var showDelete by remember { mutableStateOf(false) }
     var showCustomRequest by remember { mutableStateOf(false) }
     var showNetwork by remember { mutableStateOf(false) }
+    var showMultiKey by remember { mutableStateOf(false) }
+    var showBalance by remember { mutableStateOf(false) }
     var testModel by remember { mutableStateOf<String?>(null) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     val deletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_deleted_snackbar)
@@ -204,6 +207,9 @@ fun ProviderDetailScreen(
                     onCfgChange = { cfg = it },
                     onOpenCustomRequest = { showCustomRequest = true },
                     onOpenNetwork = { showNetwork = true },
+                    onOpenMultiKey = { showMultiKey = true },
+                    onOpenBalance = { showBalance = true },
+                    onOpenGroups = onOpenGroups,
                 )
             } else {
                 ModelsTab(
@@ -256,6 +262,22 @@ fun ProviderDetailScreen(
             onBack = { showNetwork = false },
         )
     }
+    if (showMultiKey) {
+        MultiKeyManagerScreen(
+            container = container,
+            cfg = cfg,
+            onCfgChange = { cfg = it },
+            onBack = { showMultiKey = false },
+        )
+    }
+    if (showBalance) {
+        BalanceScreen(
+            container = container,
+            cfg = cfg,
+            onCfgChange = { cfg = it },
+            onBack = { showBalance = false },
+        )
+    }
 
     // ---- Delete confirmation: clear model refs, remove row, pop ----
     if (showDelete) {
@@ -299,6 +321,9 @@ private fun ConfigTab(
     onCfgChange: (ProviderConfig) -> Unit,
     onOpenCustomRequest: () -> Unit,
     onOpenNetwork: () -> Unit,
+    onOpenMultiKey: () -> Unit,
+    onOpenBalance: () -> Unit,
+    onOpenGroups: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -374,7 +399,7 @@ private fun ConfigTab(
             if (cfg.multiKeyEnabled == true) {
                 SettingsIosDivider()
                 NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_manage_keys_button)) {
-                    // MultiKeyManagerPage lands with #11.
+                    onOpenMultiKey()
                 }
             }
             if (cfg.classifiedKind() == "openai") {
@@ -386,8 +411,34 @@ private fun ConfigTab(
                     onToggle = { onCfgChange(cfg.copy(useResponseApi = it)) },
                 )
                 SettingsIosDivider()
-                NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_balance_title)) {
-                    // ProviderBalancePage lands with #11.
+                // Balance row: label + live badge (max 108dp) when enabled +
+                // chevron — provider_detail_page.dart L1850-1899.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenBalance() }
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_balance_title),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (cfg.balanceEnabled == true) {
+                        ProviderBalanceBadge(
+                            cfg = cfg,
+                            container = container,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = cs.primary,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
                 }
             }
             if (cfg.classifiedKind() == "gemini") {
@@ -464,6 +515,10 @@ private fun ConfigTab(
                 container = container,
                 providerKey = providerId,
                 onDismiss = { showGroupSheet = false },
+                onOpenManager = {
+                    showGroupSheet = false
+                    onOpenGroups()
+                },
             )
         }
         Spacer(Modifier.height(12.dp))

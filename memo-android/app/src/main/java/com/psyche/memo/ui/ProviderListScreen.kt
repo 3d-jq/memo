@@ -96,6 +96,7 @@ fun ProvidersScreen(
     container: AppContainerImpl,
     onBack: () -> Unit,
     onOpenProvider: (String?) -> Unit,
+    onOpenGroups: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -323,6 +324,10 @@ fun ProvidersScreen(
             container = container,
             providerKey = key,
             onDismiss = { showGroupPickerFor = null },
+            onOpenManager = {
+                showGroupPickerFor = null
+                onOpenGroups()
+            },
         )
     }
 

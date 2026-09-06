@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.unit.dp
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
@@ -28,6 +29,7 @@ fun <T> ReorderableColumn(
     onMove: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
     reorderEnabled: Boolean = true,
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp),
     header: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null,
     footer: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null,
     itemContent: @Composable (T, Boolean) -> Unit,
@@ -37,7 +39,11 @@ fun <T> ReorderableColumn(
         onMove(from.index, to.index)
     }
 
-    androidx.compose.foundation.lazy.LazyColumn(state = listState, modifier = modifier) {
+    androidx.compose.foundation.lazy.LazyColumn(
+        state = listState,
+        modifier = modifier,
+        contentPadding = contentPadding,
+    ) {
         header?.let { it() }
         items(items.size, key = { keyOf(items[it]) }) { index ->
             val item = items[index]
