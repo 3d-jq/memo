@@ -1,10 +1,12 @@
 package com.psyche.memo
 
 import android.content.Context
+import com.psyche.memo.data.assistant.AssistantStore
 import com.psyche.memo.data.db.ConversationDao
 import com.psyche.memo.data.db.MemoDatabase
 import com.psyche.memo.data.db.MessageDao
 import com.psyche.memo.data.db.PayloadEntityDao
+import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.data.settings.AppLocaleStore
 import com.psyche.memo.data.settings.PreferenceRepository
 import com.psyche.memo.llm.client.LlmClient
@@ -13,6 +15,12 @@ import com.psyche.memo.llm.provider.ClaudeClient
 import com.psyche.memo.llm.provider.GeminiClient
 import com.psyche.memo.llm.provider.OpenAiChatCompletionsClient
 import com.psyche.memo.llm.retry.AutoRetryOptions
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -52,6 +60,43 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val providerRepository: com.psyche.memo.data.repo.ProviderRepository by lazy {
         com.psyche.memo.data.repo.ProviderRepository(database.writableDatabase, preferenceRepository)
     }
+
+    val assistantStore: AssistantStore by lazy { AssistantStore(database.writableDatabase) }
+
+    /** App-wide IO scope for one-shot persistence (assistant selection writes). */
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /**
+     * assistant_provider.dart currentAssistantId — the globally selected
+     * assistant that the drawer scopes conversations to. Exposed as a
+     * StateFlow so the drawer card + conversation list recompose on switch.
+     */
+    private val _currentAssistantId = MutableStateFlow<String?>(null)
+    val currentAssistantId: StateFlow<String?> = _currentAssistantId
+
+    fun currentAssistant(): Assistant? = _currentAssistantId.value?.let { assistantStore.get(it) }
+
+    /**
+     * assistant_provider.load() 94-100: restore the persisted id only while it
+     * still exists in assistant_rows. Reads prefs + the store — call on IO.
+     */
+    fun refreshCurrentAssistant() {
+        val savedId = preferenceRepository.readJson(currentAssistantKey())
+            ?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() }
+        _currentAssistantId.value = resolveCurrentAssistantId(
+            savedId = savedId,
+            existingIds = assistantStore.getAll().map { it.id },
+        )
+    }
+
+    /** assistant_provider.dart setCurrentAssistant 278-284 — no-op when unchanged. */
+    fun setCurrentAssistant(id: String) {
+        if (_currentAssistantId.value == id) return
+        _currentAssistantId.value = id
+        appScope.launch { preferenceRepository.writeJson(currentAssistantKey(), "\"$id\"") }
+    }
+
+    private fun currentAssistantKey(): String = "current_assistant_id_v1"
 
     val cancellations: CancellationRegistry = CancellationRegistry()
 
@@ -102,3 +147,10 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
             ?: com.psyche.memo.llm.client.LlmDefaults.baseUrlFor(providerId)
     }
 }
+
+/**
+ * assistant_provider.load() 94-100 — the persisted id is restored only while it
+ * still exists among the assistant ids; a stale/deleted id falls back to null.
+ */
+internal fun resolveCurrentAssistantId(savedId: String?, existingIds: List<String>): String? =
+    if (savedId != null && existingIds.contains(savedId)) savedId else null

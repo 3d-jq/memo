@@ -157,6 +157,7 @@ private fun AppThemeAndContent(
                         pref.writeJson("current_assistant_id_v1", "\"" + seeds.first().id + "\"")
                     }
                 }
+                container.refreshCurrentAssistant()
             }
         }
     }
