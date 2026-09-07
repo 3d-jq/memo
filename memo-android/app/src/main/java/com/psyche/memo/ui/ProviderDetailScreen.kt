@@ -76,6 +76,8 @@ import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.reorder.ReorderableColumn
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -217,6 +219,16 @@ fun ProviderDetailScreen(
                     container = container,
                     onCfgChange = { cfg = it },
                     onTestModel = { testModel = it },
+                    onReload = {
+                        // Reload from provider_rows so a detail-sheet save
+                        // (which writes the DB directly) is reflected here.
+                        scope.launch(Dispatchers.IO) {
+                            val fresh = dao.get(providerId)?.let {
+                                detailJson.decodeFromString(ProviderConfig.serializer(), it.payload)
+                            }
+                            withContext(Dispatchers.Main) { if (fresh != null) cfg = fresh }
+                        }
+                    },
                 )
             }
         }
@@ -733,11 +745,12 @@ private fun ModelsTab(
     container: AppContainerImpl,
     onCfgChange: (ProviderConfig) -> Unit,
     onTestModel: (String) -> Unit,
+    onReload: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
-    var showAdd by remember { mutableStateOf(false) }
-    var newModelId by remember { mutableStateOf("") }
+    var showCreate by remember { mutableStateOf(false) }
+    var detailModel by remember { mutableStateOf<String?>(null) }
     var fetching by remember { mutableStateOf(false) }
     val models = cfg.models
     val modelDeletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_model_deleted_snackbar)
@@ -797,6 +810,15 @@ private fun ModelsTab(
                         modifier = Modifier.weight(1f),
                     )
                     Icon(
+                        Lucide.Settings2,
+                        contentDescription = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_edit_tooltip),
+                        tint = cs.onSurface.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .size(34.dp)
+                            .padding(7.dp)
+                            .clickable { detailModel = model },
+                    )
+                    Icon(
                         Lucide.Trash2,
                         contentDescription = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_model_button),
                         tint = cs.error,
@@ -839,7 +861,7 @@ private fun ModelsTab(
                     .weight(1f)
                     .height(44.dp)
                     .background(cs.primary, RoundedCornerShape(12.dp))
-                    .clickable { showAdd = true },
+                    .clickable { showCreate = true },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -863,30 +885,28 @@ private fun ModelsTab(
         fetching = false
     }
 
-    if (showAdd) {
-        AlertDialog(
-            onDismissRequest = { showAdd = false },
-            title = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_add_new_model_button)) },
-            text = {
-                TextField(
-                    value = newModelId,
-                    onValueChange = { newModelId = it },
-                    placeholder = { Text("model-id") },
-                    singleLine = true,
-                )
+    if (showCreate) {
+        // provider_detail_page L2476-2483: add button -> showCreateModelSheet.
+        ModelDetailSheet(
+            container = container,
+            providerKey = cfg.id,
+            modelId = "",
+            isNew = true,
+            onDismiss = { saved ->
+                showCreate = false
+                if (saved) onReload()
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    val id = newModelId.trim()
-                    if (id.isNotEmpty() && id !in models) saveModels(models + id)
-                    newModelId = ""
-                    showAdd = false
-                }) { Text(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_add_button)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAdd = false }) {
-                    Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_cancel_button))
-                }
+        )
+    }
+    detailModel?.let { modelId ->
+        // provider_detail_page L4144-4152: edit button -> showModelDetailSheet.
+        ModelDetailSheet(
+            container = container,
+            providerKey = cfg.id,
+            modelId = modelId,
+            onDismiss = { saved ->
+                detailModel = null
+                if (saved) onReload()
             },
         )
     }

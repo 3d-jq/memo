@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -343,6 +344,7 @@ internal fun SegTabBar(tabs: List<String>, selected: Int, onSelect: (Int) -> Uni
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .fillMaxHeight()
                     .background(
                         if (isSelected) cs.primary.copy(alpha = 0.14f) else Color.Transparent,
                         RoundedCornerShape(14.dp),

@@ -97,6 +97,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -564,7 +565,10 @@ fun ChatContent(
     }
 
     // Model choices from provider_rows payloads (kelivo showModelSelectSheet).
-    val modelOptions = remember(container) {
+    // Detail-sheet saves bump optionsVersion so the list reloads
+    // (model_select_sheet.dart _loadModelsAsync after showModelDetailSheet).
+    var optionsVersion by remember { mutableIntStateOf(0) }
+    val modelOptions = remember(container, optionsVersion) {
         com.psyche.memo.data.db.PayloadEntityDao(
             container.database.readableDatabase,
             "provider_rows",
@@ -843,6 +847,7 @@ fun ChatContent(
                 vm.selectProvider(option.providerId, option.modelId)
             },
             onDismiss = { showModelSheet = false },
+            onOptionsInvalidated = { optionsVersion++ },
         )
     }
 

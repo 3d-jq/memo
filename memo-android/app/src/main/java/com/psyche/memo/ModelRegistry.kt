@@ -77,4 +77,40 @@ object ModelRegistry {
         }
         return Traits(embedding = false, visionInput = visionInput, tool = tool, reasoning = reasoning)
     }
+
+    /**
+     * Full ModelInfo projection (model_provider.dart ModelRegistry.infer):
+     * type/input/output/abilities with the image-model and gemini-3.5-flash
+     * branches the tag-row projection skips. Mirrors ModelInfo defaults
+     * (input [text], output [text], no abilities).
+     */
+    data class FullTraits(
+        val type: String, // "chat" | "embedding"
+        val input: Set<String>, // "text" | "image"
+        val output: Set<String>,
+        val abilities: Set<String>, // "tool" | "reasoning"
+    )
+
+    fun inferFull(modelId: String): FullTraits {
+        val id = modelId.lowercase()
+        val input = mutableSetOf("text")
+        val output = mutableSetOf("text")
+        val abilities = mutableSetOf<String>()
+        if (isLikelyEmbeddingId(id)) {
+            return FullTraits("embedding", setOf("text"), setOf("text"), emptySet())
+        }
+        if (id.contains("image")) {
+            input.add("image")
+            output.add("image")
+            return FullTraits("chat", input, output, emptySet())
+        }
+        if (GEMINI_35_FLASH.containsMatchIn(id)) {
+            input.add("image")
+            return FullTraits("chat", input, setOf("text"), setOf("tool", "reasoning"))
+        }
+        if (VISION.containsMatchIn(id) || isQwenVisionModel(id)) input.add("image")
+        if (TOOL.containsMatchIn(id)) abilities.add("tool")
+        if (REASONING.containsMatchIn(id)) abilities.add("reasoning")
+        return FullTraits("chat", input, output, abilities)
+    }
 }

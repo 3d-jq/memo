@@ -2,6 +2,8 @@ package com.psyche.memo.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +48,7 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Heart
 import com.composables.icons.lucide.Wrench
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,6 +97,7 @@ fun ModelSelectSheet(
     container: AppContainerImpl,
     options: List<ModelOption>,
     onSelect: (ModelOption) -> Unit,
+    onOptionsInvalidated: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -102,6 +106,9 @@ fun ModelSelectSheet(
     // Pinned models — Flutter SettingsProvider.pinnedModels
     // (pinned_models_v1, "providerKey::modelId" entries).
     val pinned = remember { mutableStateOf(readPinnedModels(container)) }
+    // Long-press opens the model detail sheet (model_detail_sheet.dart
+    // _modelTile onLongPress); a successful save refreshes the options.
+    var detailTarget by remember { mutableStateOf<ModelOption?>(null) }
     fun togglePinned(providerId: String, modelId: String) {
         val key = "$providerId::$modelId"
         val next = pinned.value.toMutableSet()
@@ -276,7 +283,7 @@ fun ModelSelectSheet(
                         )
                     }
                     items(favs, key = { "fav::${it.providerId}::${it.modelId}" }) { option ->
-                        ModelTile(option, pinned = pinned.value, onTogglePin = ::togglePinned, showProviderLabel = true, onClick = { onSelect(option); onDismiss() })
+                        ModelTile(option, pinned = pinned.value, onTogglePin = ::togglePinned, showProviderLabel = true, onClick = { onSelect(option); onDismiss() }, onLongClick = { scope.launch { delay(220); detailTarget = option } })
                     }
                 }
                 groupedDisplay.forEach { (providerName, models) ->
@@ -292,9 +299,23 @@ fun ModelSelectSheet(
                         )
                     }
                     items(models, key = { "${it.providerId}::${it.modelId}" }) { option ->
-                        ModelTile(option, pinned = pinned.value, onTogglePin = ::togglePinned, onClick = { onSelect(option); onDismiss() })
+                        ModelTile(option, pinned = pinned.value, onTogglePin = ::togglePinned, onClick = { onSelect(option); onDismiss() }, onLongClick = { scope.launch { delay(220); detailTarget = option } })
                     }
                 }
+            }
+
+            // Model detail sheet stacks on top of the picker (Flutter opens
+            // showModalBottomSheet over the open sheet).
+            detailTarget?.let { target ->
+                ModelDetailSheet(
+                    container = container,
+                    providerKey = target.providerId,
+                    modelId = target.modelId,
+                    onDismiss = { saved ->
+                        detailTarget = null
+                        if (saved) onOptionsInvalidated()
+                    },
+                )
             }
 
             // Bottom provider-chip bar.
@@ -322,12 +343,14 @@ fun ModelSelectSheet(
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun ModelTile(
     option: ModelOption,
     pinned: Set<String>,
     onTogglePin: (String, String) -> Unit,
     showProviderLabel: Boolean = false,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -337,7 +360,7 @@ private fun ModelTile(
             .padding(horizontal = 12.dp, vertical = 6.dp)
             .fillMaxWidth()
             .background(bg, RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
