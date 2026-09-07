@@ -277,9 +277,7 @@ fun TimelineStepShell(
                 isFirst = isFirst,
                 isLast = isLast,
                 lineColor = fg.divider,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxHeight(),
+                modifier = Modifier.matchParentSize(),
             )
         }
         if (hasBody) {
@@ -331,33 +329,39 @@ private fun TimelineIconColumn(
     val iconPx = with(density) { ChatStyleSpec.TIMELINE_ICON_DP.dp.toPx() }
     val gapPx = with(density) { ChatStyleSpec.TIMELINE_LINE_GAP_DP.dp.toPx() }
     val strokePx = with(density) { ChatStyleSpec.TIMELINE_LINE_WIDTH_DP.dp.toPx() }
-    Box(
-        modifier = modifier
-            .width(ChatStyleSpec.TIMELINE_ICON_COLUMN_WIDTH_DP.dp)
-            .drawBehind {
-                val x = size.width / 2f
-                val iconTop = (size.height - iconPx) / 2f
-                val iconBottom = iconTop + iconPx
-                if (!isFirst) {
-                    drawLine(
-                        color = lineColor,
-                        start = Offset(x, 0f),
-                        end = Offset(x, max(0f, iconTop - gapPx)),
-                        strokeWidth = strokePx,
-                    )
-                }
-                if (!isLast) {
-                    drawLine(
-                        color = lineColor,
-                        start = Offset(x, min(size.height, iconBottom + gapPx)),
-                        end = Offset(x, size.height),
-                        strokeWidth = strokePx,
-                    )
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        icon()
+    // modifier = matchParentSize() 让这一层拿到与头行同高的定界，里面再放一条
+    // 24dp 宽的竖向轨道（fillMaxHeight 此时才有界可用），水平靠左。
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .width(ChatStyleSpec.TIMELINE_ICON_COLUMN_WIDTH_DP.dp)
+                .fillMaxHeight()
+                .drawBehind {
+                    val x = size.width / 2f
+                    val iconTop = (size.height - iconPx) / 2f
+                    val iconBottom = iconTop + iconPx
+                    if (!isFirst) {
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(x, 0f),
+                            end = Offset(x, max(0f, iconTop - gapPx)),
+                            strokeWidth = strokePx,
+                        )
+                    }
+                    if (!isLast) {
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(x, min(size.height, iconBottom + gapPx)),
+                            end = Offset(x, size.height),
+                            strokeWidth = strokePx,
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            icon()
+        }
     }
 }
 
@@ -649,7 +653,7 @@ fun Modifier.thinkingSheen(color: Color, isDark: Boolean, enabled: Boolean = tru
         label = "sheen-progress",
     )
     return this.then(
-        Modifier.drawWithContent {
+        Modifier.graphicsLayerOffscreen().drawWithContent {
             val base = color.copy(alpha = 1f)
             val highlight = lerp(base, Color.White, if (isDark) 0.82f else 0.78f)
             val peak = lerp(base, highlight, 0.42f + 0.68f * 0.58f)
