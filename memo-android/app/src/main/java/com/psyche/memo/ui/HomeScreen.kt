@@ -192,7 +192,12 @@ fun HomeScreen(
         ) {
             container.conversationDao.delete(currentId)
         }
-        val conv = Conversation.create(title = newChatTitle)
+        // 新建的会话挂到全局当前助手（chat_service.createDraftConversation 语义），
+        // 否则切换助手后新建的会话会被抽屉按助手过滤掉。
+        val conv = Conversation.create(
+            title = newChatTitle,
+            assistantId = container.currentAssistantId.value,
+        )
         container.conversationDao.insert(conv)
         selectedConversationId = conv.id
     }

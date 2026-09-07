@@ -39,6 +39,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronUp
+import com.composables.icons.lucide.CircleCheck
 import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Copy
 
@@ -90,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.ui.R as UiR
@@ -130,15 +133,55 @@ fun SideDrawerContent(
 
     androidx.compose.runtime.LaunchedEffect(selectedId) { reload() }
 
-    val assistantLabel = assistantName?.takeIf { it.isNotBlank() }
+    // 全局当前助手（assistant_provider.currentAssistantId）：抽屉助手卡显示它，
+    // 会话列表按它过滤；切换即 setCurrentAssistant。
+    val currentAssistantId by container.currentAssistantId.collectAsState()
+    val currentAssistantName = remember(currentAssistantId) {
+        currentAssistantId?.let { id ->
+            runCatching { container.assistantStore.get(id)?.name }.getOrNull()
+        }?.takeIf { it.isNotBlank() }
+    }
+    val assistantLabel = currentAssistantName
+        ?: assistantName?.takeIf { it.isNotBlank() }
         ?: stringResource(UiR.string.home_page_default_assistant)
+    var assistantsExpanded by remember { mutableStateOf(false) }
+    var assistantList by remember { mutableStateOf<List<Assistant>>(emptyList()) }
+    androidx.compose.runtime.LaunchedEffect(assistantsExpanded) {
+        if (assistantsExpanded) {
+            assistantList = runCatching { container.assistantStore.getAll() }.getOrDefault(emptyList())
+        }
+    }
+    fun switchAssistant(a: Assistant) {
+        container.setCurrentAssistant(a.id)
+        assistantsExpanded = false
+        // _handleSelectAssistant 3034-3058：设置开启“切换助手后新建会话”时总是
+        // 新建；否则有该助手的会话就跳到最近一条，没有才新建。
+        val forceNewChat = container.preferenceRepository
+            .readLocal("display_new_chat_on_assistant_switch_v1") == "1"
+        if (forceNewChat) {
+            onNew()
+            return
+        }
+        val recent = conversations
+            .filter { it.assistantId == a.id }
+            .maxByOrNull { it.updatedAt }
+        if (recent != null) onSelect(recent.id) else onNew()
+    }
     val userLabel = userName?.takeIf { it.isNotBlank() }
         ?: stringResource(UiR.string.user_provider_default_user_name)
     val searchHint = stringResource(UiR.string.side_drawer_search_hint)
     val historyCd = stringResource(UiR.string.side_drawer_history)
     val settingsCd = stringResource(UiR.string.side_drawer_settings)
 
-    val filtered = remember(conversations, query) { filterConversations(conversations, query) }
+    // 会话列表按当前助手过滤（side_drawer.dart _sidebarRowsFor assistantId）。
+    val scopedConversations = remember(conversations, currentAssistantId) {
+        if (currentAssistantId != null) {
+            conversations.filter { it.assistantId == currentAssistantId }
+        } else {
+            conversations
+        }
+    }
+    val filtered = remember(scopedConversations, query) { filterConversations(scopedConversations, query) }
     val sections = remember(filtered) { groupedRows(filtered) }
     val isFilteredEmpty = sections.isEmpty()
     val streamingIds by container.streamingConversationIds.collectAsState()
@@ -361,7 +404,7 @@ fun SideDrawerContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
-                .clickable { /* assistant picker not yet ported */ },
+                .clickable { assistantsExpanded = !assistantsExpanded },
         ) {
             Row(
                 modifier = Modifier
@@ -398,11 +441,68 @@ fun SideDrawerContent(
                     ),
                 )
                 Icon(
-                    Lucide.ChevronDown,
+                    if (assistantsExpanded) Lucide.ChevronUp else Lucide.ChevronDown,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                     tint = cs.onSurface.copy(alpha = 0.7f),
                 )
+            }
+        }
+
+        // 展开的助手列表（side_drawer.dart _buildAssistantsList 移动端子集）：
+        // 点击条目切换当前助手。
+        if (assistantsExpanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+            ) {
+                assistantList.forEach { a ->
+                    val selected = a.id == currentAssistantId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { switchAssistant(a) }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(cs.primary.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = a.name.trim().firstOrNull()?.toString() ?: "?",
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = cs.primary,
+                                ),
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = a.name,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = cs.onSurface,
+                            ),
+                        )
+                        if (selected) {
+                            Icon(
+                                Lucide.CircleCheck,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = cs.primary,
+                            )
+                        }
+                    }
+                }
             }
         }
 
