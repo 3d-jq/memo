@@ -42,7 +42,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | `AssistantListAvatar(item,size)` | AssistantSettingsScreen.kt | 助手头像四态（http/本地/emoji/首字母） |
 | `EditSegTabBar(tabs,selected,onSelect)` | AssistantSettingsEditScreen.kt | 44dp 胶囊分段条（88dp 最小宽+滚动）；**ProviderSheets.kt 另有一个 weight 平分版 `SegTabBar`，勿混淆勿重名** |
 | `SwipeRevealRow` | AssistantSettingsScreen.kt | 左滑操作 pane（0.6W 右对齐、按钮撑满高） |
-| `ReorderableColumn` | core/ui/ui/reorder/ | 长按拖拽列表（已带 animateItem+zIndex） |
+| `ReorderableColumn` | core/ui/ui/reorder/ | 长按拖拽列表（已带 animateItem+zIndex）；**LazyColumn，只能当页面根** |
+| `ReorderableInlineColumn` | core/ui/ui/reorder/ | 同款拖拽的非滚动版（库的 Column 版 `ReorderableColumn`），嵌在外层 LazyColumn/滚动容器里用这个（=Flutter `shrinkWrap+NeverScrollableScrollPhysics`） |
 | `Haptics.light(view)` / `SnackbarManager.show(AppNotification(message,type))` | core | 触感/吐司 |
 | Lucide 图标 | `com.composables.icons.lucide.Lucide.*` | **Wand2 叫 `WandSparkles`**；RTL 图标必须 `Icons.AutoMirrored` 变体 |
 
@@ -74,7 +75,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | A2b | basic tab：聊天模型选择 + 聊天背景（选图/清除/预览） | ✅ 本轮 |
 | A2c | basic tab：5 个参数 sheet（Temperature/TopP/上下文/思考预算/MaxTokens 滑块）、头像选择 sheet | ⬜ |
 | A3 | 提示词 tab 1/3：系统提示词卡（全屏编辑 sheet + 文件导入 + 变量表 + 缓存告警）+ 追加当前时间行 + 两弹窗；tab 顺序对齐 `defaultAssistantEditTabIds`；`PromptTransformer.applyMessageTemplate`（core:llm） | ✅ 本轮 |
-| A3b | 提示词 tab 2/3：消息模板卡（4 变量 + 实时预览）+ 预设对话卡（pill/内联输入/_PresetMessageCard/拖拽） | ⬜ |
+| A3b | 提示词 tab 2/3：消息模板卡（4 变量 + 实时预览）+ 预设对话卡（pill/内联输入/_PresetMessageCard/拖拽/编辑 sheet）+ `PresetMessage` 模型 | ✅ 本轮 |
 | B | 记忆/本地工具/MCP tab | ⬜ |
 | C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜ |
 

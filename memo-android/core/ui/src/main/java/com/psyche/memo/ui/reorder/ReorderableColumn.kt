@@ -1,7 +1,10 @@
 package com.psyche.memo.ui.reorder
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
@@ -69,5 +72,43 @@ fun <T> ReorderableColumn(
             }
         }
         footer?.let { it() }
+    }
+}
+
+/**
+ * Non-scrolling twin of [ReorderableColumn] for lists embedded in an outer
+ * scroll container — Flutter does the same with
+ * `ReorderableListView(shrinkWrap: true, physics: NeverScrollableScrollPhysics())`.
+ * Backed by the library's Column-based `ReorderableColumn` (fully qualified here
+ * because it collides with our own name in this package).
+ */
+@Composable
+fun <T> ReorderableInlineColumn(
+    items: List<T>,
+    keyOf: (T) -> Any,
+    onMove: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    itemContent: @Composable (T, Boolean) -> Unit,
+) {
+    sh.calvin.reorderable.ReorderableColumn(
+        list = items,
+        onSettle = { from, to -> onMove(from, to) },
+        modifier = modifier,
+        verticalArrangement = verticalArrangement,
+    ) { _, item, isDragging ->
+        key(keyOf(item)) {
+            ReorderableItem {
+                Column(
+                    modifier = Modifier
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .alpha(if (isDragging) 0.95f else 1f)
+                        .scale(if (isDragging) 0.98f else 1f)
+                        .longPressDraggableHandle(),
+                ) {
+                    itemContent(item, isDragging)
+                }
+            }
+        }
     }
 }
