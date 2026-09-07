@@ -1157,8 +1157,13 @@ private fun MessageRow(
                         onLongClick = { if (isUser) showContextMenu = true },
                         onClick = {},
                     )
-                    // CMW:2393 —— 气泡内边距 all 12。
-                    .padding(ChatStyleSpec.BUBBLE_PADDING_DP.dp),
+                    // CMW:2393 —— 气泡内边距 all 12；助手是 bareOnDefault，
+                    // _buildSharedChatSurface 直接返回无内边距的 child，只有用户
+                    // 气泡才留这 12（CMW:3824-3826），否则助手内容会窄一圈。
+                    .then(
+                        if (isUser) Modifier.padding(ChatStyleSpec.BUBBLE_PADDING_DP.dp)
+                        else Modifier
+                    ),
             ) {
                 // 图片附件（chat_message_widget.dart _buildAttachmentPreview
                 // ImagePart 分支）：整组渲染，点击可跨图翻页查看。
