@@ -340,7 +340,7 @@ object StorageUsage {
                 )
             }
             if (byCat.getValue(StorageCategoryKey.RESTORE_TRACES).count > 0) {
-                val dir = File(File(root, ".kelivo_restore"), "completed")
+                val dir = File(File(root, ".memo_restore"), "completed")
                 add(
                     StorageCategory(
                         StorageCategoryKey.RESTORE_TRACES,
@@ -480,7 +480,7 @@ object StorageUsage {
     }
 
     fun clearRestoreTraces(context: Context) {
-        deleteContents(File(File(context.filesDir, ".kelivo_restore"), "completed"))
+        deleteContents(File(File(context.filesDir, ".memo_restore"), "completed"))
     }
 
     fun clearDisplacedDatabases(context: Context) {

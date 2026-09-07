@@ -1,7 +1,5 @@
 package com.psyche.memo.ui
 
-import android.content.Intent
-import androidx.core.net.toUri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -78,10 +76,11 @@ import kotlinx.coroutines.withContext
  * provider has an active model (L127-153, B1); color mode row shows the mode
  * label and opens the system/light/dark sheet (L52-96,159-165, B2); the chat
  * storage row shows a "N files · size" summary (L332-342,497-545, B4); the
- * Tool Descriptions row (L398-410, B5), the conditional Logs row (L383-397,
- * B6) and the Docs external link (L374-382, B7) are restored.
+ * Tool Descriptions row (L398-410, B5) and the conditional Logs row (L383-397,
+ * B6) are restored. The Docs external link (L374-382, B7) is not ported: it
+ * exists only to open the upstream docs site and Memo has no docs site of its
+ * own, so it is dropped with the sponsor row under the brand rules.
  */
-private val docsUrl = "https://kelivo.psycheas.top/"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -311,17 +310,9 @@ fun SettingsScreen(
                     SettingsRow(Lucide.BadgeInfo, stringResource(UiR.string.settings_page_about), onTap = onOpenAbout)
                     DividerRow()
                     SettingsRow(Lucide.ChartColumnBig, stringResource(UiR.string.settings_page_statistics), onTap = onOpenStats)
-                    DividerRow()
-                    // B7 — Docs opens the external docs site (L374-382).
-                    SettingsRow(
-                        Lucide.Library,
-                        stringResource(UiR.string.settings_page_docs),
-                        onTap = {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, docsUrl.toUri()))
-                            }
-                        },
-                    )
+                    // B7 — Docs row (L374-382) deliberately dropped: it only
+                    // exists to open the upstream docs site, which is not a
+                    // Memo endpoint.
                     // B6 — Logs row conditional (L383-397).
                     if (logsVisible) {
                         DividerRow()

@@ -123,7 +123,7 @@ fun LegacyMemoryScreen(
                     )
                     runCatching {
                         val dir = context.cacheDir
-                        val file = File(dir, "kelivo-legacy-memory-${System.currentTimeMillis()}.txt")
+                        val file = File(dir, "memo-legacy-memory-${System.currentTimeMillis()}.txt")
                         file.writeText(text)
                         val send = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"

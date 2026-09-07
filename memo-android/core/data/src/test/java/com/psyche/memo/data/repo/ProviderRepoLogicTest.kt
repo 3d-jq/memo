@@ -76,6 +76,17 @@ class ProviderRepoLogicTest {
     }
 
     @Test
+    fun memoInSeedKeepsItsEndpointAndCarriesNoKelivoBrand() {
+        val seed = ProviderRepository.defaultsFor("MemoIN")
+        assertEquals("https://text.pollinations.ai/openai", seed.baseUrl)
+        assertTrue(seed.enabled)
+        assertFalse(
+            "seeded api key carries kelivo: ${seed.apiKey}",
+            seed.apiKey.lowercase().contains("kelivo"),
+        )
+    }
+
+    @Test
     fun sponsorSeedEntriesAreRemoved() {
         assertFalse(ProviderRepository.BUILTIN_KEYS.contains("随想AI中转站"))
         assertFalse(ProviderRepository.BUILTIN_KEYS.contains("MaruCode"))

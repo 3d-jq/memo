@@ -346,12 +346,12 @@ class ProviderRepository(
          * (settings_provider.dart L6449-6636, incl. _defaultBase /
          * defaultEnabled / balance defaults) — the pristine first-run config a
          * built-in key gets when it has no row (ensureProviderConfig
-         * semantics, defaultName = key). KelivoIN is matched under its port
-         * brand MemoIN; its public key and seed models are copied unchanged.
+         * semantics, defaultName = key). The upstream KelivoIN seed is ported
+         * as MemoIN and carries the Memo brand throughout.
          */
         fun defaultsFor(key: String): ProviderConfig {
             val lowerKey = key.lowercase()
-            val isKelivoIn = lowerKey.contains("kelivoin") || lowerKey == "memoin"
+            val isMemoIn = lowerKey.contains("memoin")
 
             // settings_provider.dart L6450-6459 defaultEnabled
             val enabled = lowerKey.contains("tensdaq") ||
@@ -359,7 +359,7 @@ class ProviderRepository(
                 lowerKey.contains("gemini") || lowerKey.contains("google") ||
                 lowerKey.contains("silicon") ||
                 lowerKey.contains("openrouter") ||
-                isKelivoIn
+                isMemoIn
 
             // settings_provider.dart L6398-6411 classify
             val kind = when {
@@ -420,12 +420,12 @@ class ProviderRepository(
                     claudePromptCachingEnabled = false,
                 )
                 else -> when {
-                    // Special-case KelivoIN default models and overrides (L6518-6568)
-                    isKelivoIn -> ProviderConfig(
+                    // Special-case MemoIN default models and overrides (L6518-6568)
+                    isMemoIn -> ProviderConfig(
                         id = key,
                         enabled = enabled,
                         name = key,
-                        apiKey = "kelivo", // _kelivoInPublicApiKey (L6056)
+                        apiKey = "memo", // upstream seeds its public token _kelivoInPublicApiKey (L6056)
                         baseUrl = base,
                         providerType = kind,
                         chatPath = null, // keep empty in UI; code uses default '/chat/completions'
@@ -507,7 +507,7 @@ class ProviderRepository(
             }
         }
 
-        /** chat model override map entry of the KelivoIN / SiliconFlow seeds. */
+        /** chat model override map entry of the MemoIN / SiliconFlow seeds. */
         private fun chatModelOverride(withReasoning: Boolean): JsonObject = buildJsonObject {
             put("type", "chat")
             put("input", buildJsonArray { add(JsonPrimitive("text")) })
@@ -522,7 +522,7 @@ class ProviderRepository(
         fun defaultBaseUrl(key: String): String {
             val k = key.lowercase()
             if (k.contains("tensdaq")) return "https://tensdaq-api.x-aio.com/v1"
-            if (k.contains("kelivoin") || k == "memoin") return "https://text.pollinations.ai/openai"
+            if (k.contains("memoin")) return "https://text.pollinations.ai/openai"
             if (k.contains("openrouter")) return "https://openrouter.ai/api/v1"
             if (k.contains("aihubmix")) return "https://aihubmix.com/v1"
             if (k.contains("随想")) return "https://sui-xiang.com/v1"
