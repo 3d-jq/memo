@@ -253,7 +253,7 @@ private fun SystemPromptCard(
                 Text(
                     text = title,
                     modifier = Modifier.weight(1f),
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                 )
                 IosIconButton(
                     icon = Lucide.Maximize2,
@@ -314,7 +314,7 @@ private fun SystemPromptCard(
             Spacer(Modifier.height(8.dp))
             Text(
                 text = stringResource(UiR.string.assistant_edit_available_variables),
-                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
             )
             Spacer(Modifier.height(4.dp))
             VarExplainList(
@@ -401,7 +401,7 @@ private fun VarExplainList(
                     modifier = Modifier.clickable { onTapVar(variable) },
                     style = TextStyle(
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.SemiBold,
                         color = cs.primary,
                         textDecoration = TextDecoration.Underline,
                     ),
@@ -471,7 +471,7 @@ private fun AppendCurrentTimeRow(
                             text = stringResource(UiR.string.assistant_edit_prompt_append_time_title),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = color),
+                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = color),
                         )
                         Spacer(Modifier.height(3.dp))
                         Text(
@@ -671,7 +671,7 @@ private fun SheetTextButton(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             style = TextStyle(
                 fontSize = 13.5.sp,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
                 color = if (pressed) withAlpha(color, 0.8) else color,
             ),
         )
