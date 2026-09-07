@@ -126,6 +126,9 @@ class ClaudeClient(
     private class ClaudeStreamState {
         var startUsage: JsonObject? = null
         var finishEmitted = false
+        /** content-block index -> tool_use id, so input_json_delta fragments
+         * (which carry no id) fold onto the call opened by content_block_start. */
+        val openToolIds = HashMap<Int, String>()
     }
 
     /**
@@ -174,15 +177,21 @@ class ClaudeClient(
                     }
                     "input_json_delta" -> {
                         val args = (delta["partial_json"] as? JsonPrimitive)?.content ?: ""
-                        if (args.isNotEmpty()) out.add(StreamChunk.ToolCallDelta(null, "", args))
+                        val blockIndex = (obj["index"] as? JsonPrimitive)?.content?.toIntOrNull()
+                        val toolId = blockIndex?.let { state.openToolIds[it] }
+                        if (args.isNotEmpty() && toolId != null) {
+                            out.add(StreamChunk.ToolCallDelta(toolId, "", args))
+                        }
                     }
                 }
             }
             "content_block_start" -> {
+                val blockIndex = (obj["index"] as? JsonPrimitive)?.content?.toIntOrNull()
                 val cb = obj["content_block"]?.jsonObject
                 if (cb?.get("type")?.let { (it as? JsonPrimitive)?.content } == "tool_use") {
                     val id = (cb["id"] as? JsonPrimitive)?.content ?: ""
                     val name = (cb["name"] as? JsonPrimitive)?.content ?: ""
+                    if (blockIndex != null && id.isNotEmpty()) state.openToolIds[blockIndex] = id
                     if (name.isNotEmpty()) out.add(StreamChunk.ToolCallDelta(id, name, ""))
                 }
             }

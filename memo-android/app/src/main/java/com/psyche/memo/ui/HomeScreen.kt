@@ -125,11 +125,8 @@ import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ChatViewModel
 import com.psyche.memo.data.model.Conversation
-import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.data.model.ImagePart
-import com.psyche.memo.data.model.ReasoningPart
 import com.psyche.memo.data.model.TextPart
-import com.psyche.memo.data.model.ToolCallPart
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -413,6 +410,13 @@ fun ChatContent(
     val providerId by vm.selectedProviderId.collectAsState()
     val modelId by vm.selectedModelId.collectAsState()
     val versionInfo by vm.versionInfo.collectAsState()
+    // 思考卡 / 工具卡的 6 个显示开关（settings_provider.dart display_*）。走
+    // SharedPreferences 直读，从显示设置页返回时 NavHost 重建本页即拿到新值。
+    val timelineSettings = remember {
+        com.psyche.memo.ui.chat.ChatTimelineSettings.fromPrefs { key ->
+            container.preferenceRepository.readLocal(key)
+        }
+    }
 
     val cs = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -799,6 +803,10 @@ fun ChatContent(
                             onEdit = { editFor = msg },
                             onMore = { moreFor = msg },
                             onDelete = { vm.deleteVersion(msg.id) },
+                            timelineSettings = timelineSettings,
+                            onToggleReasoning = { segmentIndex ->
+                                vm.toggleReasoningSegment(msg.id, segmentIndex)
+                            },
                         )
                     }
                 }
@@ -963,6 +971,10 @@ private fun MessageRow(
     onEdit: () -> Unit,
     onMore: () -> Unit,
     onDelete: () -> Unit,
+    /** 思考卡 / 工具卡的 6 个显示开关（settings_provider.dart display_*）。 */
+    timelineSettings: com.psyche.memo.ui.chat.ChatTimelineSettings,
+    /** 展开/折叠某个思考段（home_page_controller.toggleReasoningSegment）。 */
+    onToggleReasoning: (segmentIndex: Int) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val isUser = msg.role == "user"
@@ -992,6 +1004,43 @@ private fun MessageRow(
     // （chat_message_widget.dart _allSearchItems，从后往前、去重）。
     val searchItems = remember(msg.id, msg.parts) {
         com.psyche.memo.ui.chat.extractCitationItems(msg.parts)
+    }
+    // CMW:3707-3711 的第三分支 _buildToolMessage(1662-1706)：role == tool 的
+    // 消息没有头像/气泡/操作行，正文本身就是 {tool, arguments, result, metadata}，
+    // 渲染成 h16 v6 里的一张工具卡；按显示设置不可见时整条不占位。
+    if (msg.role == "tool") {
+        val toolPart = remember(msg.id, msg.parts) {
+            com.psyche.memo.ui.chat.ToolUiPart.fromToolMessage(msg.id, msg.content)
+        }
+        val visible = toolPart != null && com.psyche.memo.ui.chat.isTimelineToolVisible(
+            toolName = toolPart.toolName,
+            loading = toolPart.loading,
+            showToolCards = timelineSettings.showToolCards,
+            filterBuiltinSearch = false,
+        )
+        if (visible && toolPart != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+            ) {
+                com.psyche.memo.ui.chat.ToolCallCard(part = toolPart)
+            }
+        }
+        return
+    }
+    // CMW:2870-2884 timelineProjection → visibleBlocks：助手气泡里的文本块与思考
+    // 卡按 part 到达顺序排列（用户消息不走投影）。
+    val assistantBlocks = if (isUser) {
+        emptyList()
+    } else {
+        remember(msg.id, msg.parts, msg.reasoningSegmentsJson, msg.isStreaming) {
+            com.psyche.memo.ui.chat.projectAssistantBlocks(
+                parts = msg.parts,
+                segmentsJson = msg.reasoningSegmentsJson,
+                isStreaming = msg.isStreaming,
+            )
+        }
     }
     Column(
         modifier = Modifier
@@ -1119,54 +1168,56 @@ private fun MessageRow(
                         onOpenViewer = { uris, index -> viewerState = uris to index },
                     )
                 }
-                for (part in msg.parts) {
-                    when (part) {
-                        is TextPart -> if (isUser) {
-                            // CMW:2046-2054 —— 用户正文 15.5 / 行高 1.45×15.5。
-                            com.psyche.memo.ui.markdown.MarkdownText(
-                                markdown = part.text,
-                                baseFontSize = ChatStyleSpec.USER_TEXT_SP,
-                                baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
-                            )
-                        } else {
-                            // CMW:2424/2433 —— 助手正文 15.7 / 行高 1.5×15.7。
-                            com.psyche.memo.ui.markdown.MarkdownText(
-                                markdown = part.text,
-                                baseFontSize = 15.7f,
-                                baseLineHeight = 23.55f,
-                            )
-                        }
-                        is ReasoningPart -> com.psyche.memo.ui.markdown.ThinkingCard(
-                            thinking = part.text,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                        is ToolCallPart -> {
-                            // 工具调用卡（chat_message_widget.dart _ToolCallItem
-                            // 渲染层；解析失败保持原 payload 兜底文本）。
-                            val toolPart = remember(part.payloadJson) {
-                                com.psyche.memo.ui.chat.ToolUiPart.fromPayload(part.payloadJson)
-                            }
-                            if (toolPart != null) {
-                                com.psyche.memo.ui.chat.ToolCallCard(part = toolPart)
-                            } else {
-                                Text(
-                                    "‹tool_call›",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = cs.onSurfaceVariant,
+                if (isUser) {
+                    for (part in msg.parts) {
+                        when (part) {
+                            is TextPart ->
+                                // CMW:2046-2054 —— 用户正文 15.5 / 行高 1.45×15.5。
+                                com.psyche.memo.ui.markdown.MarkdownText(
+                                    markdown = part.text,
+                                    baseFontSize = ChatStyleSpec.USER_TEXT_SP,
+                                    baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
                                 )
-                            }
+                            is ImagePart -> Unit // 已整组渲染在气泡顶部
+                            else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                         }
-                        is ImagePart -> Unit // 已整组渲染在气泡顶部
-                        else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
+                    }
+                } else {
+                    // CMW:2951-3009 —— 文本气泡与思考卡按 part 到达顺序交替出现，
+                    // addVisible 在相邻块之间插 8pt；助手正文 15.7 / 行高 1.5×15.7。
+                    assistantBlocks.forEachIndexed { index, block ->
+                        if (index > 0) Spacer(Modifier.height(8.dp))
+                        when (block) {
+                            is com.psyche.memo.ui.chat.AssistantBlock.Text ->
+                                com.psyche.memo.ui.markdown.MarkdownText(
+                                    markdown = block.text,
+                                    baseFontSize = 15.7f,
+                                    baseLineHeight = 23.55f,
+                                )
+                            is com.psyche.memo.ui.chat.AssistantBlock.Thinking ->
+                                com.psyche.memo.ui.chat.ChainOfThoughtCard(
+                                    steps = block.steps,
+                                    settings = timelineSettings,
+                                    onToggleReasoning = onToggleReasoning,
+                                )
+                        }
                     }
                 }
-                if (msg.parts.isEmpty() && msg.isStreaming) {
-                    // CMW:2885-2920 —— 空内容流式时渲染三点 LoadingIndicator
-                    // （4105-4196），非 Material 圆环。
-                    com.psyche.memo.ui.chat.LoadingDotsIndicator(
-                        color = cs.primary,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
+                if (!isUser && msg.isStreaming) {
+                    if (assistantBlocks.isEmpty() && msg.content.isEmpty()) {
+                        // CMW:2885-2925 —— 还没有任何可见内容时的等待气泡：三点
+                        // LoadingIndicator（4105-4196），非 Material 圆环。
+                        com.psyche.memo.ui.chat.LoadingDotsIndicator(
+                            color = cs.primary,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    } else if (msg.content.isNotEmpty()) {
+                        // CMW:3011-3020 —— 已有正文时把指示器挂在最后一个块之后。
+                        com.psyche.memo.ui.chat.LoadingDotsIndicator(
+                            color = cs.primary,
+                            modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+                        )
+                    }
                 }
                 if (msg.failed) {
                     Text(

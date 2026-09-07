@@ -1,6 +1,8 @@
 package com.psyche.memo.data.model
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -51,6 +53,65 @@ class ReasoningPart(val text: String) : MessagePart() {
 class ToolCallPart(val payloadJson: String) : MessagePart() {
     override val kind: String get() = KIND_TOOL_CALL
     override fun encodePayload(): String = payloadJson
+
+    companion object {
+        /**
+         * stream_chunk_handler.dart `_upsertTool` 339-347 — the payload is
+         * always `{id, name, arguments, content, server}` plus `metadata`
+         * when non-empty.
+         */
+        fun encode(
+            id: String,
+            name: String,
+            arguments: JsonElement,
+            content: JsonElement?,
+            server: Boolean,
+            metadata: JsonObject? = null,
+        ): ToolCallPart {
+            val root = LinkedHashMap<String, JsonElement>()
+            root["id"] = JsonPrimitive(id)
+            root["name"] = JsonPrimitive(name)
+            root["arguments"] = arguments
+            root["content"] = content ?: JsonNull
+            root["server"] = JsonPrimitive(server)
+            metadata?.let { root["metadata"] = it }
+            return ToolCallPart(JsonObject(root).toString())
+        }
+
+        /** Reverse of [encode]; null for payloads that predate the contract. */
+        fun decode(payloadJson: String): ToolCallPayload? = try {
+            val obj = Json.parseToJsonElement(payloadJson).jsonObject
+            ToolCallPayload(
+                id = obj.string("id") ?: "",
+                name = obj.string("name") ?: "",
+                arguments = obj.value("arguments") ?: "",
+                content = obj.value("content"),
+                server = obj.string("server")?.toBooleanStrictOrNull() ?: false,
+                metadata = obj["metadata"] as? JsonObject,
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
+/** Decoded tool_call payload. [arguments] keeps the raw JSON fragment. */
+data class ToolCallPayload(
+    val id: String,
+    val name: String,
+    val arguments: String,
+    val content: String?,
+    val server: Boolean,
+    val metadata: JsonObject?,
+)
+
+private fun JsonObject.string(key: String): String? =
+    (this[key] as? JsonPrimitive)?.content
+
+private fun JsonObject.value(key: String): String? {
+    val element = this[key] ?: return null
+    if (element is JsonNull) return null
+    return if (element is JsonPrimitive) element.content else element.toString()
 }
 
 data class ImagePart(

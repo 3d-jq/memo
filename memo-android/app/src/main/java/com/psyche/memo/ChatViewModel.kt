@@ -6,11 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.data.model.ReasoningPart
+import com.psyche.memo.data.model.ReasoningSegment
+import com.psyche.memo.data.model.ReasoningSegmentCodec
 import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.data.model.ToolCallPart
 import com.psyche.memo.llm.client.LlmMessage
 import com.psyche.memo.llm.client.LlmRequest
 import com.psyche.memo.llm.stream.StreamChunk
+import com.psyche.memo.llm.stream.StreamChunkHandler
 import com.psyche.memo.ui.chat.TranslateLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,6 +60,9 @@ class ChatViewModel(
         val durationMs: Long? = null,
         /** Translated body (chat_message_widget.dart message.translation 显示层)。 */
         val translation: String? = null,
+        /** Reasoning segment timings (`reasoning_segments_json`), zipped with
+         * the message's ReasoningParts; the thinking card shows (X.Xs) from it. */
+        val reasoningSegmentsJson: String? = null,
     ) {
         val content: String
             get() = parts.filterIsInstance<TextPart>().joinToString("") { it.text }
@@ -508,7 +514,7 @@ class ChatViewModel(
             )
             // Folding handler lives outside the try: the stop path (catch)
             // reads the accumulated partial parts from it.
-            val handler = com.psyche.memo.llm.stream.StreamChunkHandler()
+            val handler = StreamChunkHandler()
             // Terminal usage reported by the provider (Finish chunk), if any.
             var finishUsage: UsageStats? = null
             try {
@@ -543,6 +549,7 @@ class ChatViewModel(
                     persistAssistant(
                         assistantId,
                         parts,
+                        segments = handler.reasoningSegments,
                         usage = finishUsage,
                         durationMs = System.currentTimeMillis() - generationStartMs,
                     )
@@ -553,15 +560,15 @@ class ChatViewModel(
                         is StreamChunk.TextDelta,
                         is StreamChunk.ReasoningDelta,
                         is StreamChunk.ToolCallDelta,
-                        -> updateAssistantStreaming(assistantId, handler.parts())
+                        -> updateAssistantStreaming(assistantId, handler.parts, handler.segmentsJson())
                         is StreamChunk.Finish -> if (!terminalHandled) {
                             terminalHandled = true
                             finishUsage = parseUsage(chunk.usage)
-                            updateAssistantStreaming(assistantId, handler.parts())
-                            finishAssistant(assistantId, handler.parts())
+                            updateAssistantStreaming(assistantId, handler.parts, handler.segmentsJson())
+                            finishAssistant(assistantId, handler.parts, handler.segmentsJson())
                             // Persist the finished reply (chat_service terminal
                             // checkpoint in the original).
-                            persistOnce(handler.parts())
+                            persistOnce(handler.parts)
                         }
                         is StreamChunk.Error -> if (!terminalHandled && !handler.finished) {
                             // Mirror the original stream-error path
@@ -570,8 +577,12 @@ class ChatViewModel(
                             // content, surface the error text when nothing was
                             // generated, and mark the message failed.
                             terminalHandled = true
-                            val finalParts =
-                                markFailed(assistantId, chunk.message, handler.parts())
+                            val finalParts = markFailed(
+                                assistantId,
+                                chunk.message,
+                                handler.parts,
+                                handler.segmentsJson(),
+                            )
                             persistOnce(finalParts)
                         }
                     }
@@ -579,10 +590,15 @@ class ChatViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // user stop: the partial reply is kept and persisted, exactly
                 // like the original stop path.
-                persistAssistant(assistantId, handler.parts())
+                persistAssistant(assistantId, handler.parts, segments = handler.reasoningSegments)
             } catch (e: Exception) {
-                val finalParts = markFailed(assistantId, e.toString(), handler.parts())
-                persistAssistant(assistantId, finalParts)
+                val finalParts = markFailed(
+                    assistantId,
+                    e.toString(),
+                    handler.parts,
+                    handler.segmentsJson(),
+                )
+                persistAssistant(assistantId, finalParts, segments = handler.reasoningSegments)
             } finally {
                 _streaming.value = false
                 container.streamingConversationIds.value =
@@ -652,23 +668,32 @@ class ChatViewModel(
     private fun updateAssistantStreaming(
         assistantId: String,
         parts: List<MessagePart>,
+        segmentsJson: String? = null,
     ) {
         val msgs = _messages.value
         val index = msgs.indexOfLast { it.id == assistantId }
         if (index < 0) return
         _messages.value = msgs.toMutableList().apply {
-            set(index, msgs[index].copy(parts = parts, isStreaming = true))
+            set(
+                index,
+                msgs[index].copy(parts = parts, isStreaming = true, reasoningSegmentsJson = segmentsJson),
+            )
         }
     }
 
     private fun finishAssistant(
         assistantId: String,
         parts: List<MessagePart>,
+        segmentsJson: String? = null,
     ) {
         val msgs = _messages.value
         val index = msgs.indexOfLast { it.id == assistantId }
         if (index < 0) return
-        val finalUi = msgs[index].copy(parts = parts, isStreaming = false)
+        val finalUi = msgs[index].copy(
+            parts = parts,
+            isStreaming = false,
+            reasoningSegmentsJson = segmentsJson,
+        )
         _messages.value = msgs.toMutableList().apply { set(index, finalUi) }
     }
 
@@ -682,6 +707,7 @@ class ChatViewModel(
         assistantId: String,
         errorText: String,
         parts: List<MessagePart>,
+        segmentsJson: String? = null,
     ): List<MessagePart> {
         val hasText = parts.any { it is TextPart && it.text.isNotEmpty() }
         val finalParts = if (hasText) parts else parts + TextPart(errorText)
@@ -689,10 +715,52 @@ class ChatViewModel(
         val index = msgs.indexOfLast { it.id == assistantId }
         if (index >= 0) {
             _messages.value = msgs.toMutableList().apply {
-                set(index, msgs[index].copy(parts = finalParts, isStreaming = false, failed = true))
+                set(
+                    index,
+                    msgs[index].copy(
+                        parts = finalParts,
+                        isStreaming = false,
+                        failed = true,
+                        reasoningSegmentsJson = segmentsJson,
+                    ),
+                )
             }
         }
         return finalParts
+    }
+
+    /**
+     * stream_controller.dart 771 — a segment starts expanded only when
+     * "auto-collapse thinking" is off; the user's own toggle wins afterwards.
+     */
+    private fun StreamChunkHandler.segmentsJson(): String? {
+        val autoCollapse = readBool("display_auto_collapse_thinking_v1", true)
+        return ReasoningSegmentCodec.encode(
+            reasoningSegments.map { it.copy(expanded = !autoCollapse) },
+        )
+    }
+
+    private fun readBool(key: String, default: Boolean): Boolean =
+        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
+
+    /**
+     * Expand/collapse one reasoning segment
+     * (home_page_controller.toggleReasoningSegment 2268-2287): flip the stored
+     * flag in memory and rewrite `reasoning_segments_json`.
+     */
+    fun toggleReasoningSegment(messageId: String, segmentIndex: Int) {
+        val msgs = _messages.value
+        val idx = msgs.indexOfFirst { it.id == messageId }
+        if (idx < 0) return
+        val segments = ReasoningSegmentCodec.decode(msgs[idx].reasoningSegmentsJson).toMutableList()
+        val segment = segments.getOrNull(segmentIndex) ?: return
+        segments[segmentIndex] = segment.copy(expanded = !segment.expanded)
+        val json = ReasoningSegmentCodec.encode(segments)
+        _messages.value = msgs.map { if (it.id == messageId) it.copy(reasoningSegmentsJson = json) else it }
+        if (isTemporary) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { container.messageDao.updateReasoningSegments(messageId, json) }
+        }
     }
 
     /**
@@ -704,12 +772,20 @@ class ChatViewModel(
     private fun persistAssistant(
         assistantId: String,
         parts: List<MessagePart>,
+        segments: List<com.psyche.memo.data.model.ReasoningSegment> = emptyList(),
         usage: UsageStats? = null,
         durationMs: Long = 0L,
     ) {
         if (isTemporary || parts.isEmpty()) return
         val providerId = selectedProviderId.value
         val modelId = selectedModelId.value
+        // stream_controller.dart 1444 — a segment left open by an interrupted
+        // stream reports start == end so the restored timer never runs forever.
+        val closed = segments.map {
+            it.copy(finishedAt = it.finishedAt ?: it.startAt)
+        }
+        val startAt = closed.firstOrNull()?.startAt
+        val finishedAt = closed.lastOrNull()?.finishedAt
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 if (container.messageDao.get(assistantId) != null) return@withContext
@@ -723,6 +799,9 @@ class ChatViewModel(
                         providerId = providerId,
                         totalTokens = usage?.totalTokens,
                         conversationId = conversationId,
+                        reasoningStartAt = startAt,
+                        reasoningFinishedAt = finishedAt,
+                        reasoningSegmentsJson = ReasoningSegmentCodec.encode(closed),
                         promptTokens = usage?.promptTokens,
                         completionTokens = usage?.completionTokens,
                         cachedTokens = usage?.cachedTokens,
@@ -753,6 +832,7 @@ class ChatViewModel(
         cachedTokens = cachedTokens,
         durationMs = durationMs,
         translation = translation,
+        reasoningSegmentsJson = reasoningSegmentsJson,
     )
 
     companion object {

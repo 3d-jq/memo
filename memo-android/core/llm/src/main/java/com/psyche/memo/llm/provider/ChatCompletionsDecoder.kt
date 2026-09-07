@@ -27,6 +27,8 @@ class ChatCompletionsDecoder(
 
     /** index -> {id, name, args, extra_content} */
     private val toolCalls = LinkedHashMap<Int, JsonObject>()
+    /** index -> series id, so continuation fragments (which omit `id`) still land on the same call. */
+    private val toolIdsByIndex = HashMap<Int, String>()
     private var usageJson: JsonObject? = null
     private var closed = false
     private var completed = false
@@ -120,10 +122,11 @@ class ChatCompletionsDecoder(
                 val name = (func["name"] as? JsonPrimitive)?.content ?: ""
                 val argsStr = (func["arguments"] as? JsonPrimitive)?.content ?: ""
                 if (name.isEmpty()) continue
-                toolCalls[toolCalls.size] = JsonObject(
+                val idx = toolCalls.size
+                toolCalls[idx] = JsonObject(
                     mapOf("id" to JsonPrimitive(id), "name" to JsonPrimitive(name), "args" to JsonPrimitive(argsStr)),
                 )
-                chunks.add(StreamChunk.ToolCallDelta(id.ifEmpty { null }, name, argsStr))
+                chunks.add(StreamChunk.ToolCallDelta(toolSeriesId(idx, id), name, argsStr))
             }
             finishReason = "tool_calls"
         }
@@ -136,6 +139,18 @@ class ChatCompletionsDecoder(
         if (content.isNotEmpty()) {
             chunks.add(StreamChunk.TextDelta(content))
         }
+    }
+
+    /**
+     * chat_completions_decoder.dart `_toolSeriesId` 346-352 — the first id seen
+     * for a stream index wins, so OpenAI fragments that omit `id` fold onto the
+     * same call instead of starting a new one.
+     */
+    private fun toolSeriesId(index: Int, vendorId: String): String {
+        toolIdsByIndex[index]?.let { return it }
+        val id = vendorId.ifEmpty { "tool-${index + 1}" }
+        toolIdsByIndex[index] = id
+        return id
     }
 
     private fun accumulateToolCalls(delta: Any?, chunks: MutableList<StreamChunk>) {
@@ -152,6 +167,7 @@ class ChatCompletionsDecoder(
             val entry = toolCalls.getOrPut(index) {
                 JsonObject(mapOf("id" to JsonPrimitive(id), "name" to JsonPrimitive(""), "args" to JsonPrimitive("")))
             }
+            val eventId = toolSeriesId(index, id)
             toolCalls[index] = JsonObject(
                 mapOf(
                     "id" to JsonPrimitive(if (entry["id"]?.jsonPrimitive?.content.isNullOrEmpty()) id else entry["id"]!!.jsonPrimitive.content),
@@ -159,7 +175,7 @@ class ChatCompletionsDecoder(
                     "args" to JsonPrimitive(entry["args"]!!.jsonPrimitive.content + argsDelta),
                 ),
             )
-            chunks.add(StreamChunk.ToolCallDelta(id.ifEmpty { null }, nameDelta, argsDelta))
+            chunks.add(StreamChunk.ToolCallDelta(eventId, nameDelta, argsDelta))
         }
     }
 
@@ -178,7 +194,7 @@ class ChatCompletionsDecoder(
             toolCalls[idx] = JsonObject(
                 mapOf("id" to JsonPrimitive(id), "name" to JsonPrimitive(name), "args" to JsonPrimitive(argsStr)),
             )
-            chunks.add(StreamChunk.ToolCallDelta(id.ifEmpty { null }, name, argsStr))
+            chunks.add(StreamChunk.ToolCallDelta(toolSeriesId(idx, id), name, argsStr))
         }
     }
 

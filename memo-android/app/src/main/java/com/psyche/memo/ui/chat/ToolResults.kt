@@ -12,15 +12,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.psyche.memo.ui.theme.AppFontWeights
 import com.psyche.memo.ui.R as UiR
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
@@ -39,6 +43,9 @@ data class WeatherToolResult(
     val error: String?,
 ) {
     val isError: Boolean get() = !error.isNullOrEmpty()
+
+    /** weather_tool_ui.dart:29 —— 有温度或有天气描述才算有当前天气。 */
+    val hasCurrent: Boolean get() = temperatureC != null || !condition.isNullOrEmpty()
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
@@ -75,12 +82,39 @@ fun weatherCurrentLine(result: WeatherToolResult): String {
     if (!result.condition.isNullOrEmpty()) parts.add(result.condition)
     result.temperatureC?.let { parts.add("${formatTemp(it)}°C") }
     result.apparentTemperatureC?.let { parts.add("feels ${formatTemp(it)}°C") }
-    result.precipitationChance?.let { parts.add("${(it * 100).toInt()}% precip") }
+    result.precipitationChance?.let {
+        parts.add("${kotlin.math.round(it * 100).toInt()}% precip")
+    }
     return parts.joinToString(" · ")
 }
 
 private fun formatTemp(value: Double): String =
     if (value == kotlin.math.round(value)) "%.0f".format(value) else "%.1f".format(value)
+
+/**
+ * 时间线工具卡里的天气摘要行（weather_tool_ui.dart WeatherToolSummary）。
+ * WeatherKit 归属标签属工具结果图片/归属批次，本批不渲染。
+ */
+@Composable
+fun WeatherToolSummary(
+    result: WeatherToolResult,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    if (!result.hasCurrent) return
+    Text(
+        text = weatherCurrentLine(result),
+        maxLines = 2,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.bodySmall.copy(
+            fontSize = 12.sp,
+            lineHeight = 15.6.sp,
+            fontWeight = AppFontWeights.medium,
+            color = textColor,
+        ),
+        modifier = modifier,
+    )
+}
 
 /** Parsed `get_screen_time` result (screen_time_tool_ui.dart ScreenTimeResult). */
 data class ScreenTimeResult(
@@ -140,10 +174,11 @@ fun formatScreenTimeMinutes(minutes: Int): String {
 
 /** screen_time_tool_ui.dart formatScreenTimeRange — MM-dd HH:mm, raw fallback. */
 fun formatScreenTimeRange(iso: String): String {
-    // 先按带时区的 OffsetDateTime 解析，失败降级 LocalDateTime；统一成
-    // LocalDateTime 后 format 成员才可解析（try/catch 分支混合类型导致
-    // parsed 无法落到具体类型）。
-    val parsed = try { OffsetDateTime.parse(iso).toLocalDateTime() } catch (e: Exception) {
+    // Dart 的 DateTime.parse 总是得到一个本地时区下的瞬时值，所以带偏移的
+    // 输入要先换算到系统时区；无偏移的裸时间才按 LocalDateTime 直接用。
+    val parsed: LocalDateTime = try {
+        OffsetDateTime.parse(iso).atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime()
+    } catch (e: Exception) {
         try { LocalDateTime.parse(iso) } catch (e2: Exception) { return iso }
     }
     return parsed.format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
@@ -154,33 +189,45 @@ fun formatScreenTimeRange(iso: String): String {
  * (screen_time_tool_ui.dart ScreenTimeToolSummary).
  */
 @Composable
-fun ScreenTimeToolSummary(result: ScreenTimeResult) {
-    val cs = MaterialTheme.colorScheme
+fun ScreenTimeToolSummary(
+    result: ScreenTimeResult,
+    textColor: Color,
+    modifier: Modifier = Modifier,
+    maxApps: Int = 3,
+    secondaryColor: Color = textColor.copy(alpha = 0.8f),
+    errorColor: Color = MaterialTheme.colorScheme.error,
+) {
     if (result.isNoPermission) {
         Text(
             text = androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_screen_time_permission_required),
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp, color = cs.error),
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.2.sp,
+                color = errorColor,
+            ),
+            modifier = modifier,
         )
         return
     }
     if (!result.hasApps) return
-    Column {
+    Column(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_screen_time_total),
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.8f)),
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.6.sp, color = secondaryColor),
                 modifier = Modifier.weight(1f),
             )
             Text(
                 text = formatScreenTimeMinutes(result.totalMinutes),
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = cs.onSurface,
+                    lineHeight = 15.6.sp,
+                    fontWeight = AppFontWeights.medium,
+                    color = textColor,
                 ),
             )
         }
-        for (app in result.apps.take(3)) {
+        for (app in result.apps.take(maxApps)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(top = 2.dp),
@@ -189,13 +236,13 @@ fun ScreenTimeToolSummary(result: ScreenTimeResult) {
                     text = app.name,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, color = cs.onSurface),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.6.sp, color = textColor),
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.padding(start = 8.dp))
                 Text(
                     text = formatScreenTimeMinutes(app.totalMinutes),
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.8f)),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 15.6.sp, color = secondaryColor),
                 )
             }
         }
@@ -221,7 +268,7 @@ fun ScreenTimeToolDetailBody(result: ScreenTimeResult) {
                 text = androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_screen_time_total),
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = AppFontWeights.semibold,
                     color = cs.onSurface,
                 ),
                 modifier = Modifier.weight(1f),
@@ -230,7 +277,7 @@ fun ScreenTimeToolDetailBody(result: ScreenTimeResult) {
                 text = formatScreenTimeMinutes(result.totalMinutes),
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = AppFontWeights.semibold,
                     color = cs.primary,
                 ),
             )
@@ -262,7 +309,10 @@ fun ScreenTimeToolDetailBody(result: ScreenTimeResult) {
                 Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(
                     progress = { (app.totalMs.toFloat() / maxAppMs).coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(999.dp)),
                     color = cs.primary,
                     trackColor = cs.onSurface.copy(alpha = 0.08f),
                 )

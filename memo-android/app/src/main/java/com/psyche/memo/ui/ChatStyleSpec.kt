@@ -132,6 +132,45 @@ object ChatStyleSpec {
     const val TOOL_LOADING_DOTS_HEIGHT_DP = 12f
 
     // ------------------------------------------------------------------
+    // Chain-of-thought timeline (CMW:4445-4452 / 4665-4671 / 5148-5167)
+    // ------------------------------------------------------------------
+
+    /** 步骤头行上下内边距 8（_timelineStepPaddingV）。 */
+    const val TIMELINE_STEP_PADDING_V_DP = 8f
+
+    /** 图标 18 放在宽 24 的轨道列里（_timelineIconSize / _timelineIconColumnWidth）。 */
+    const val TIMELINE_ICON_DP = 18f
+    const val TIMELINE_ICON_COLUMN_WIDTH_DP = 24f
+
+    /** 轨道列 → 正文的水平间距 8（_timelineGap）。 */
+    const val TIMELINE_GAP_DP = 8f
+
+    /** 连接线在图标上下各留 3px 缺口，线宽 1，x=(24-1)/2=11.5。 */
+    const val TIMELINE_LINE_GAP_DP = 3f
+    const val TIMELINE_LINE_WIDTH_DP = 1f
+    const val TIMELINE_LINE_X_DP = 11.5f
+
+    /** 正文缩进 = 轨道宽 + 间距（CMW:4913）。 */
+    const val TIMELINE_CONTENT_INSET_DP = 32f
+
+    /** 思考卡容器：r16、h8/v4、primaryContainer α0.25(dark)/0.30(light)。 */
+    const val TIMELINE_CARD_CORNER_DP = 16f
+    const val TIMELINE_CARD_PADDING_H_DP = 8f
+    const val TIMELINE_CARD_PADDING_V_DP = 4f
+    const val TIMELINE_CARD_ALPHA_DARK = 0.25f
+    const val TIMELINE_CARD_ALPHA_LIGHT = 0.30f
+
+    /** 「深度思考 / 工具」标题 13 SemiBold；思考正文 12.5 / 行高 1.32。 */
+    const val TIMELINE_LABEL_SP = 13f
+    const val TIMELINE_BODY_SP = 12.5f
+    const val TIMELINE_BODY_LINE_HEIGHT_SP = 16.5f
+
+    /** 折叠预览高度 100，顶部淡出 12、底部淡出 28（CMW:5167-5173）。 */
+    const val TIMELINE_PREVIEW_MAX_HEIGHT_DP = 100f
+    const val TIMELINE_PREVIEW_FADE_TOP_DP = 12f
+    const val TIMELINE_PREVIEW_FADE_BOTTOM_DP = 28f
+
+    // ------------------------------------------------------------------
     // Input bar (CIB)
     // ------------------------------------------------------------------
 

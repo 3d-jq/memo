@@ -1,15 +1,9 @@
 package com.psyche.memo.ui.chat
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,43 +12,67 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.BookDashed
+import com.composables.icons.lucide.BookHeart
 import com.composables.icons.lucide.Calculator
 import com.composables.icons.lucide.Calendar
 import com.composables.icons.lucide.CalendarPlus
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.ChevronUp
+import com.composables.icons.lucide.CircleCheck
 import com.composables.icons.lucide.Clipboard
 import com.composables.icons.lucide.ClipboardCheck
 import com.composables.icons.lucide.ClipboardPen
 import com.composables.icons.lucide.Clock
-import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CloudSun
 import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.HeartPulse
+import com.composables.icons.lucide.Link
+import com.composables.icons.lucide.ListPlus
 import com.composables.icons.lucide.ListTodo
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MapPin
@@ -64,18 +82,32 @@ import com.composables.icons.lucide.Smartphone
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Volume2
 import com.composables.icons.lucide.Wrench
+import com.composables.icons.lucide.X
+import com.psyche.memo.common.IcuPlural
+import com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames
 import com.psyche.memo.ui.ChatStyleSpec
+import com.psyche.memo.ui.IosIconButton
 import com.psyche.memo.ui.R as UiR
+import com.psyche.memo.ui.theme.AppFontWeights
+import com.psyche.memo.ui.theme.LocalSemanticColors
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 
 /**
- * Tool call card rendering — 1:1 port of the chat_message_widget.dart tool
- * surfaces (_ToolCallItem inline card / _TimelineStepRow summary, _showToolDetail
- * sheet, thinking_sheen.dart breathing sheen). Tool *execution* is a later
- * batch; this file is the rendering layer only.
+ * Tool call rendering — 1:1 port of chat_message_widget.dart tool surfaces:
+ * `_ChainOfThoughtToolStep` (5242-5588) inside the chain-of-thought timeline,
+ * `_ToolCallItem` (5590-5934) as the boxed card used by `role == tool`
+ * messages, and `_showToolDetail` (695-770) + tool_detail_text_section.dart
+ * for the detail sheet.
+ *
+ * Deferred to the tool-execution batch, where the data first becomes
+ * reachable: approval pending state (Shield icon, deny/approve buttons and
+ * `_argsSummary`), `_AskUserInlineBody` / `_AskUserToolCard`, and tool result
+ * image strips (`parseToolResultImages` + ImageViewerPage).
  */
 
 /** UI data for a tool call — mirrors chat_message_widget.dart ToolUIPart. */
@@ -85,9 +117,14 @@ data class ToolUiPart(
     val arguments: JsonObject,
     val content: String?,
     val metadata: JsonObject?,
+    /** Dart 侧是显式字段（默认 false）；流式 payload 没有它，按 content 推断。 */
+    val loading: Boolean = content.isNullOrEmpty(),
 ) {
-    /** content 为 null/空表示仍在执行（chat_message_widget.dart loading 语义）。 */
-    val loading: Boolean get() = content.isNullOrEmpty()
+    /**
+     * chat_message_widget.dart `parseToolResultImages(content).$1`。图片标记
+     * 的剥离随工具结果图片批次落地，当前与 content 等价。
+     */
+    val cleanText: String get() = content.orEmpty()
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
@@ -106,6 +143,23 @@ data class ToolUiPart(
                 metadata = obj["metadata"] as? JsonObject,
             )
         }
+
+        /**
+         * chat_message_widget.dart `_buildToolMessage` 1662-1686：`role == tool`
+         * 的消息正文本身就是 `{tool, arguments, result, metadata}`，且结果已定，
+         * 所以 loading 恒为 false。解析失败返回 null。
+         */
+        fun fromToolMessage(messageId: String, content: String): ToolUiPart? {
+            val obj = try { json.parseToJsonElement(content).jsonObject } catch (e: Exception) { return null }
+            return ToolUiPart(
+                id = messageId,
+                toolName = obj.str("tool") ?: "tool",
+                arguments = obj["arguments"] as? JsonObject ?: JsonObject(emptyMap()),
+                content = obj.str("result").orEmpty(),
+                metadata = obj["metadata"] as? JsonObject,
+                loading = false,
+            )
+        }
     }
 }
 
@@ -114,84 +168,69 @@ private fun JsonObject.str(key: String): String? =
         ?.takeIf { it !is JsonNull }?.content
 
 // ---------------------------------------------------------------------------
-// Icon / title mapping (chat_message_widget.dart _toolIconFor / _toolTitleFor)
+// Icon / title mapping (chat_message_widget.dart 423-640)
 // ---------------------------------------------------------------------------
 
-fun toolIconFor(name: String, args: JsonObject? = null): ImageVector = when (name) {
-    "ask_user" -> Lucide.MessageCircleQuestion
-    "time_info" -> Lucide.Clock
-    "clipboard" -> when (args?.str("action")) {
-        "read" -> Lucide.ClipboardCheck
-        "write" -> Lucide.ClipboardPen
-        else -> Lucide.Clipboard
+/** chat_message_widget.dart _toolIconFor —— 按线上工具名（LocalToolNames）匹配。 */
+fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
+    localToolIconFor(name, args)?.let { return it }
+    return when (name) {
+        "memory_read", "memory_update", "memory_search_profile", "memory_edit",
+        "update_user_profile", "create_memory", "edit_memory",
+        -> Lucide.BookHeart
+        "memory_delete", "delete_memory" -> Lucide.BookDashed
+        "chat_search", "builtin_search" -> Lucide.Search
+        "search_web" -> Lucide.Earth
+        // Provider 内置服务端工具（chat_message_widget.dart:444-453）。
+        "web_fetch" -> Lucide.Link
+        "code_execution", "code_interpreter", "text_editor_code_execution" -> Lucide.Code
+        "bash_code_execution" -> Lucide.Terminal
+        else -> Lucide.Wrench
     }
-    "text_to_speech" -> Lucide.Volume2
-    "calculate" -> Lucide.Calculator
-    "screen_time" -> Lucide.Smartphone
-    "calendar_query" -> Lucide.Calendar
-    "calendar_create" -> Lucide.CalendarPlus
-    "current_location" -> Lucide.MapPin
-    "weather" -> Lucide.CloudSun
-    "health_summary" -> Lucide.HeartPulse
-    "reminders_query" -> Lucide.ListTodo
-    "reminders_create" -> Lucide.CalendarPlus
-    "reminders_complete" -> Lucide.ListTodo
-    // memory_* 家族（chat_message_widget.dart:427-437）
-    "memory_read", "memory_update", "memory_search_profile", "memory_edit",
-    "edit_memory", "create_memory", "update_user_profile",
-    -> Lucide.Search
-    "memory_delete", "delete_memory" -> Lucide.Wrench
-    "chat_search", "builtin_search" -> Lucide.Search
-    "search_web" -> Lucide.Earth
-    // Provider 内置服务端工具（chat_message_widget.dart:446-455）
-    "web_fetch" -> Lucide.Earth
-    "code_execution", "code_interpreter", "text_editor_code_execution" -> Lucide.Code
-    "bash_code_execution" -> Lucide.Terminal
-    else -> Lucide.Wrench
 }
 
-/** chat_message_widget.dart _toolTitleFor（本批覆盖的键；缺失键用通用标题）。 */
-@Composable
-fun toolTitleFor(name: String, args: JsonObject?, isResult: Boolean): String {
-    if (name == "ask_user") {
-        return androidx.compose.ui.res.stringResource(UiR.string.assistant_edit_local_tool_ask_user_title)
-    }
-    val local = when (name) {
-        "time_info" -> UiR.string.assistant_edit_local_tool_time_info_title
-        "clipboard" -> when (args?.str("action")) {
-            "read" -> UiR.string.chat_message_widget_read_clipboard
-            "write" -> UiR.string.chat_message_widget_write_clipboard
-            else -> UiR.string.assistant_edit_local_tool_clipboard_title
+/** chat_message_widget.dart _localToolIconFor。 */
+private fun localToolIconFor(name: String, args: JsonObject?): ImageVector? =
+    when (name) {
+        // icons-lucide 1.1.0 尚未收录 MessageCircleQuestionMark，用同名图标的前代。
+        LocalToolNames.ASK_USER -> Lucide.MessageCircleQuestion
+        LocalToolNames.TIME_INFO -> Lucide.Clock
+        LocalToolNames.CLIPBOARD -> when (args?.str("action")) {
+            "read" -> Lucide.ClipboardCheck
+            "write" -> Lucide.ClipboardPen
+            else -> Lucide.Clipboard
         }
-        "text_to_speech" -> UiR.string.chat_message_widget_speaking_title
-        "calculate" -> UiR.string.assistant_edit_local_tool_calculate_title
-        "screen_time" -> UiR.string.assistant_edit_local_tool_screen_time_title
-        "calendar_query" -> UiR.string.assistant_edit_local_tool_calendar_query_title
-        "calendar_create" -> UiR.string.assistant_edit_local_tool_calendar_create_title
-        "current_location" -> UiR.string.assistant_edit_local_tool_location_title
-        "weather" -> UiR.string.assistant_edit_local_tool_weather_title
-        "health_summary" -> UiR.string.assistant_edit_local_tool_health_title
-        "reminders_query" -> UiR.string.assistant_edit_local_tool_reminders_query_title
-        "reminders_create" -> UiR.string.assistant_edit_local_tool_reminders_create_title
-        "reminders_complete" -> UiR.string.assistant_edit_local_tool_reminders_complete_title
+        LocalToolNames.TEXT_TO_SPEECH -> Lucide.Volume2
+        LocalToolNames.CALCULATE -> Lucide.Calculator
+        LocalToolNames.SCREEN_TIME -> Lucide.Smartphone
+        LocalToolNames.CALENDAR_QUERY -> Lucide.Calendar
+        LocalToolNames.CALENDAR_CREATE -> Lucide.CalendarPlus
+        LocalToolNames.CURRENT_LOCATION -> Lucide.MapPin
+        LocalToolNames.WEATHER -> Lucide.CloudSun
+        LocalToolNames.HEALTH_SUMMARY -> Lucide.HeartPulse
+        LocalToolNames.REMINDERS_QUERY -> Lucide.ListTodo
+        LocalToolNames.REMINDERS_CREATE -> Lucide.ListPlus
+        LocalToolNames.REMINDERS_COMPLETE -> Lucide.CircleCheck
         else -> null
     }
-    if (local != null) return androidx.compose.ui.res.stringResource(local)
+
+/** chat_message_widget.dart _toolTitleFor。 */
+@Composable
+fun toolTitleFor(name: String, args: JsonObject?, isResult: Boolean): String {
+    if (name == LocalToolNames.ASK_USER) return askUserToolTitleFor(args)
+    localToolTitleFor(name, args)?.let { return it }
     return when (name) {
-        "memory_read" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_memory_read)
-        "memory_update" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_memory_update)
-        "memory_search_profile" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_memory_search_profile)
-        "memory_edit", "edit_memory" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_memory_edit)
-        "memory_delete", "delete_memory" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_memory_delete)
-        "update_user_profile" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_update_user_profile)
-        "chat_search" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_chat_search)
-        "create_memory" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_create_memory)
-        "search_web" -> androidx.compose.ui.res.stringResource(
-            UiR.string.chat_message_widget_web_search,
-            args?.str("query").orEmpty(),
-        )
-        "builtin_search" -> androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_builtin_search)
-        else -> androidx.compose.ui.res.stringResource(
+        "memory_read" -> stringResource(UiR.string.chat_message_widget_memory_read)
+        "memory_update" -> stringResource(UiR.string.chat_message_widget_memory_update)
+        "memory_search_profile" -> stringResource(UiR.string.chat_message_widget_memory_search_profile)
+        "memory_edit", "edit_memory" -> stringResource(UiR.string.chat_message_widget_memory_edit)
+        "memory_delete", "delete_memory" -> stringResource(UiR.string.chat_message_widget_memory_delete)
+        "update_user_profile" -> stringResource(UiR.string.chat_message_widget_update_user_profile)
+        "chat_search" -> stringResource(UiR.string.chat_message_widget_chat_search)
+        "create_memory" -> stringResource(UiR.string.chat_message_widget_create_memory)
+        "search_web" -> stringResource(UiR.string.chat_message_widget_web_search, args?.str("query").orEmpty())
+        "builtin_search" -> stringResource(UiR.string.chat_message_widget_builtin_search)
+        else -> stringResource(
             if (isResult) UiR.string.chat_message_widget_tool_result
             else UiR.string.chat_message_widget_tool_call,
             if (name.isEmpty()) "tool" else name,
@@ -199,165 +238,349 @@ fun toolTitleFor(name: String, args: JsonObject?, isResult: Boolean): String {
     }
 }
 
-// ---------------------------------------------------------------------------
-// ThinkingSheen（thinking_sheen.dart 呼吸高光 — srcIn 渐变扫过）
-// ---------------------------------------------------------------------------
-
-/**
- * 呼吸高光修饰符：base→peak 的斜向渐变随 progress 从左向右扫过内容
- * （thinking_sheen.dart ShaderMask srcIn + _SlideGradientTransform）。
- * speed 1.05 / spread 0.52 / intensity 0.68 与 thinkingSheenDefaults 一致。
- */
+/** chat_message_widget.dart _askUserToolTitleFor。 */
 @Composable
-fun Modifier.thinkingSheen(color: Color, isDark: Boolean, enabled: Boolean = true): Modifier {
-    if (!enabled) return this
-    val transition = rememberInfiniteTransition(label = "thinking-sheen")
-    val progress by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2286, easing = LinearEasing), // 2400/1.05
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "sheen-progress",
-    )
-    return this.then(
-        Modifier.drawWithCache {
-            val base = color.copy(alpha = 1f)
-            val highlight = lerp(base, Color.White, if (isDark) 0.82f else 0.78f)
-            val peak = lerp(base, highlight, 0.42f + 0.68f * 0.58f)
-            val mid = lerp(base, peak, 0.5f)
-            val outer = (0.52f.coerceIn(0.2f, 0.9f)) / 2 // 0.26
-            val inner = outer * 0.34f
-            val stops = floatArrayOf(
-                0f,
-                (0.5f - outer).coerceIn(0.02f, 0.42f),
-                (0.5f - inner).coerceIn(0.16f, 0.48f),
-                0.5f,
-                (0.5f + inner).coerceIn(0.52f, 0.84f),
-                (0.5f + outer).coerceIn(0.58f, 0.98f),
-                1f,
-            )
-            val colors = listOf(base, base, mid, peak, mid, base, base)
-            // 源码 _SlideGradientTransform：x 平移 width*(t*2-1)。
-            val tx = size.width * (progress * 2f - 1f)
-            val brush = Brush.linearGradient(
-                *stops.mapIndexed { i, stop -> stop to colors[i] }.toTypedArray(),
-                start = Offset(tx, -0.18f * size.height),
-                end = Offset(tx + size.width, 0.18f * size.height),
-            )
-            onDrawWithContent {
-                drawContent()
-                drawRect(brush, blendMode = BlendMode.SrcIn)
-            }
-        },
-    )
+private fun askUserToolTitleFor(args: JsonObject?): String {
+    val questions = normalizeAskUserQuestions(args ?: JsonObject(emptyMap()))
+    if (questions.isNotEmpty()) {
+        return IcuPlural.format(
+            stringResource(UiR.string.ask_user_card_question_count),
+            mapOf("count" to questions.size),
+        )
+    }
+    return stringResource(UiR.string.assistant_edit_local_tool_ask_user_title)
+}
+
+/** chat_message_widget.dart _localToolTitleFor。 */
+@Composable
+private fun localToolTitleFor(name: String, args: JsonObject?): String? = when (name) {
+    LocalToolNames.TIME_INFO -> stringResource(UiR.string.assistant_edit_local_tool_time_info_title)
+    LocalToolNames.CLIPBOARD -> when (args?.str("action")) {
+        "read" -> stringResource(UiR.string.chat_message_widget_read_clipboard)
+        "write" -> stringResource(UiR.string.chat_message_widget_write_clipboard)
+        else -> stringResource(UiR.string.assistant_edit_local_tool_clipboard_title)
+    }
+    LocalToolNames.TEXT_TO_SPEECH -> stringResource(UiR.string.chat_message_widget_speaking_title)
+    LocalToolNames.CALCULATE -> stringResource(UiR.string.assistant_edit_local_tool_calculate_title)
+    LocalToolNames.SCREEN_TIME -> stringResource(UiR.string.assistant_edit_local_tool_screen_time_title)
+    LocalToolNames.CALENDAR_QUERY -> stringResource(UiR.string.assistant_edit_local_tool_calendar_query_title)
+    LocalToolNames.CALENDAR_CREATE -> stringResource(UiR.string.assistant_edit_local_tool_calendar_create_title)
+    LocalToolNames.CURRENT_LOCATION -> stringResource(UiR.string.assistant_edit_local_tool_location_title)
+    LocalToolNames.WEATHER -> stringResource(UiR.string.assistant_edit_local_tool_weather_title)
+    LocalToolNames.HEALTH_SUMMARY -> stringResource(UiR.string.assistant_edit_local_tool_health_title)
+    LocalToolNames.REMINDERS_QUERY -> stringResource(UiR.string.assistant_edit_local_tool_reminders_query_title)
+    LocalToolNames.REMINDERS_CREATE -> stringResource(UiR.string.assistant_edit_local_tool_reminders_create_title)
+    LocalToolNames.REMINDERS_COMPLETE -> stringResource(UiR.string.assistant_edit_local_tool_reminders_complete_title)
+    else -> null
 }
 
 // ---------------------------------------------------------------------------
-// Inline tool call card (chat_message_widget.dart _ToolCallItem, mobile)
+// Timeline tool step (chat_message_widget.dart _ChainOfThoughtToolStep)
 // ---------------------------------------------------------------------------
 
 /**
- * 消息时间线里的工具卡：18dp 状态位（loading spinner / 完成图标）+ 标题
- * （loading 时呼吸高光）+ 可选摘要（weather / screen_time 专属 UI）。
- * 点击打开详情弹层。审批等待态属工具执行器批次。
+ * 时间线里的一行工具调用：轨道图标（18dp 位，加载态是 3×2/12dp 的呼吸点）、
+ * 13sp 标题（加载态带呼吸高光）、行尾 ChevronRight（ask-user 换成上下箭头），
+ * 正文按 ask-user → TTS → 屏幕时间 → 天气 → 纯文本摘要的优先级取一种。
+ * 点标题打开详情弹层（ask-user 改为折叠/展开）。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChainOfThoughtToolStep(
+    part: ToolUiPart,
+    isFirst: Boolean,
+    isLast: Boolean,
+    showToolResultSummary: Boolean,
+) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.surface.luminance() < 0.5f
+    val fg = chatSurfaceFg(cs, isDark)
+    val isAskUser = part.toolName == LocalToolNames.ASK_USER
+    val loading = part.loading
+    // _askUserExpanded 默认 true（`_askUserExpanded ?? true`）。
+    var askUserExpanded by rememberSaveable { mutableStateOf(true) }
+    var showDetail by remember { mutableStateOf(false) }
+
+    val icon: @Composable () -> Unit = if (isAskUser || !loading) {
+        @Composable {
+            Icon(
+                imageVector = toolIconFor(part.toolName, part.arguments),
+                contentDescription = null,
+                tint = fg.strong,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    } else {
+        @Composable {
+            LoadingDotsIndicator(
+                color = fg.strong,
+                dotDp = ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP,
+                gapDp = ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP,
+                heightDp = ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP,
+            )
+        }
+    }
+
+    val label: @Composable () -> Unit = {
+        Text(
+            text = toolTitleFor(part.toolName, part.arguments, isResult = !loading),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(
+                fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
+                fontWeight = AppFontWeights.semibold,
+                color = fg.strong,
+            ),
+            modifier = Modifier.thinkingSheen(fg.strong, isDark, enabled = loading && !isAskUser),
+        )
+    }
+
+    val summaryContent: (@Composable () -> Unit)? = toolStepSummary(
+        part = part,
+        fg = fg,
+        errorColor = cs.error,
+        isAskUser = isAskUser,
+        showToolResultSummary = showToolResultSummary,
+    )
+
+    val indicator: @Composable () -> Unit = if (isAskUser) {
+        @Composable {
+            Icon(
+                imageVector = if (askUserExpanded) Lucide.ChevronUp else Lucide.ChevronDown,
+                contentDescription = null,
+                tint = fg.muted,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    } else {
+        @Composable {
+            Icon(
+                imageVector = Lucide.ChevronRight,
+                contentDescription = null,
+                tint = fg.muted,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+
+    val onToggleAskUser: () -> Unit = { askUserExpanded = !askUserExpanded }
+    val onOpenDetail: () -> Unit = { showDetail = true }
+
+    TimelineStepShell(
+        icon = icon,
+        label = label,
+        isFirst = isFirst,
+        isLast = isLast,
+        fg = fg,
+        isDark = isDark,
+        onTap = if (isAskUser) onToggleAskUser else onOpenDetail,
+        indicator = indicator,
+        content = summaryContent,
+        contentVisible = summaryContent != null && (!isAskUser || askUserExpanded),
+        expectContent = loading || isAskUser || summaryContent != null,
+    )
+
+    if (showDetail) {
+        ToolDetailSheet(part = part, onDismiss = { showDetail = false })
+    }
+}
+
+/**
+ * CMW:5457-5488 的摘要优先级。ask-user 分支（_AskUserInlineBody）与工具结果
+ * 图片条属工具执行批次，这里按源码顺序留空。
+ */
+@Composable
+private fun toolStepSummary(
+    part: ToolUiPart,
+    fg: ChatSurfaceFg,
+    errorColor: Color,
+    isAskUser: Boolean,
+    showToolResultSummary: Boolean,
+): (@Composable () -> Unit)? {
+    if (isAskUser) return null
+    val cleanText = part.cleanText
+    val ttsText = if (part.toolName == LocalToolNames.TEXT_TO_SPEECH) {
+        textToSpeechToolText(part.arguments)
+    } else {
+        ""
+    }
+    val screenTime = if (part.toolName == LocalToolNames.SCREEN_TIME) {
+        ScreenTimeResult.tryParse(cleanText)
+    } else {
+        null
+    }
+    val weather = if (part.toolName == LocalToolNames.WEATHER) {
+        WeatherToolResult.tryParse(cleanText)
+    } else {
+        null
+    }
+    val summaryText = if (cleanText.isNotEmpty()) {
+        cleanText
+    } else {
+        part.arguments.str("query") ?: part.arguments.str("url") ?: part.arguments.str("text") ?: ""
+    }
+
+    val ttsSummary: (@Composable () -> Unit)? = if (ttsText.isNotEmpty()) {
+        {
+            TextToSpeechReplayRow(
+                text = ttsText,
+                textColor = fg.body,
+                buttonColor = fg.accent,
+            )
+        }
+    } else {
+        null
+    }
+    val screenTimeSummary: (@Composable () -> Unit)? =
+        if (screenTime != null && (screenTime.isNoPermission || screenTime.hasApps)) {
+            {
+                ScreenTimeToolSummary(
+                    result = screenTime,
+                    textColor = fg.body,
+                    secondaryColor = fg.muted,
+                    errorColor = errorColor,
+                )
+            }
+        } else {
+            null
+        }
+    val weatherSummary: (@Composable () -> Unit)? = if (weather != null && !weather.isError) {
+        { WeatherToolSummary(result = weather, textColor = fg.body) }
+    } else {
+        null
+    }
+    val textSummary: (@Composable () -> Unit)? =
+        if (showToolResultSummary && summaryText.isNotBlank()) {
+            {
+                Text(
+                    text = summaryText.trim(),
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        lineHeight = 16.8.sp,
+                        color = fg.body,
+                    ),
+                )
+            }
+        } else {
+            null
+        }
+    return ttsSummary ?: screenTimeSummary ?: weatherSummary ?: textSummary
+}
+
+// ---------------------------------------------------------------------------
+// Boxed inline card (chat_message_widget.dart _ToolCallItem, mobile)
+// ---------------------------------------------------------------------------
+
+/**
+ * `role == tool` 消息里的独立工具卡：18dp 状态位（loading 用 2dp 圆环，颜色
+ * fg.accent）+ 13sp emphasis 标题（加载态呼吸高光）+ TTS / 天气 / 屏幕时间
+ * 专属摘要。整卡 16dp 圆角、按压 260ms、点开详情弹层。
+ */
 @Composable
 fun ToolCallCard(part: ToolUiPart) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val base = cs.onSurface
-    // fg palette (CMW:3926-3931, base onSurface, alpha per brightness).
-    val fgStrong = base.copy(alpha = if (isDark) ChatStyleSpec.FG_STRONG_DARK else ChatStyleSpec.FG_STRONG_LIGHT)
-    val fgMuted = base.copy(alpha = if (isDark) ChatStyleSpec.FG_MUTED_DARK else ChatStyleSpec.FG_MUTED_LIGHT)
+    val fg = chatSurfaceFg(cs, isDark)
     var showDetail by remember { mutableStateOf(false) }
 
-    val isResult = !part.loading
-    val title = toolTitleFor(part.toolName, part.arguments, isResult)
+    val loading = part.loading
+    val ttsText = if (part.toolName == LocalToolNames.TEXT_TO_SPEECH) {
+        textToSpeechToolText(part.arguments)
+    } else {
+        ""
+    }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                cs.primaryContainer.copy(alpha = if (isDark) 0.25f else 0.30f),
-                RoundedCornerShape(16.dp),
-            )
-            .clickable { showDetail = true }
-            .padding(start = 16.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
+    CardPress(
+        onTap = { showDetail = true },
+        isDark = isDark,
+        modifier = Modifier.fillMaxWidth(),
+        radius = 16.dp,
+        durationMs = 260,
     ) {
-        Column {
+        // _buildSharedChatSurface(defaultColor: primaryContainer α .25/.30)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    cs.primaryContainer.copy(
+                        alpha = if (isDark) {
+                            ChatStyleSpec.TIMELINE_CARD_ALPHA_DARK
+                        } else {
+                            ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
+                        },
+                    ),
+                    RoundedCornerShape(16.dp),
+                )
+                .padding(start = 16.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
+            horizontalAlignment = Alignment.Start,
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 状态位 — loading 三点 / 完成工具图标（CMW:5400-5412 + 4449
-                // _timelineIconColumnWidth = 24）。
                 Box(
-                    modifier = Modifier.size(width = 24.dp, height = 18.dp),
+                    modifier = Modifier.size(18.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (part.loading) {
-                        LoadingDotsIndicator(
-                            color = fgStrong,
-                            dotDp = ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP,
-                            gapDp = ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP,
-                            heightDp = ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP,
+                    if (loading) {
+                        CircularProgressIndicator(
+                            color = fg.accent,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp),
                         )
                     } else {
                         Icon(
-                            toolIconFor(part.toolName, part.arguments),
+                            imageVector = toolIconFor(part.toolName, part.arguments),
                             contentDescription = null,
-                            tint = fgStrong,
-                            modifier = Modifier.size(16.dp),
+                            tint = fg.strong,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                // 标题（CMW:5414-5433）— 13sp SemiBold fg.strong，加载时呼吸高光。
-                // ask_user 特判（CMW:5421）本次不做，注释说明。
-                Text(
-                    text = title,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = fgStrong,
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .thinkingSheen(
-                            fgStrong,
-                            isDark,
-                            enabled = part.loading && part.toolName != "ask_user",
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                    Text(
+                        text = toolTitleFor(
+                            part.toolName,
+                            part.arguments,
+                            isResult = !loading,
                         ),
-                )
-                // 行尾 ChevronRight（CMW:5572-5578，非 ask-user 常显）。
-                Spacer(Modifier.width(6.dp))
-                Icon(
-                    Lucide.ChevronRight,
-                    contentDescription = null,
-                    tint = fgMuted,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-            // TTS 工具卡：播放行在 loading 与完成时都显示
-            // （chat_message_widget.dart:5793-5801）。
-            if (part.toolName == "text_to_speech") {
-                val ttsText = textToSpeechToolText(part.arguments)
-                if (ttsText.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    TextToSpeechReplayRow(
-                        text = ttsText,
-                        textColor = cs.onSurface.copy(alpha = 0.72f),
-                        buttonColor = cs.primary,
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = AppFontWeights.emphasis,
+                            color = fg.strong,
+                        ),
+                        modifier = Modifier.thinkingSheen(
+                            fg.strong,
+                            isDark,
+                            enabled = loading,
+                        ),
                     )
                 }
-            } else if (!part.loading) {
-                // 完成后的专属摘要（chat_message_widget.dart:5802-5846）。
-                val summary = toolSummaryOrNull(part)
-                if (summary != null) {
+            }
+            if (ttsText.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                TextToSpeechReplayRow(
+                    text = ttsText,
+                    textColor = fg.body,
+                    buttonColor = fg.accent,
+                )
+            }
+            if (!loading && part.toolName == LocalToolNames.WEATHER) {
+                val weather = WeatherToolResult.tryParse(part.content)
+                if (weather != null && !weather.isError) {
                     Spacer(Modifier.height(8.dp))
-                    summary()
+                    WeatherToolSummary(result = weather, textColor = fg.body)
+                }
+            }
+            if (!loading && part.toolName == LocalToolNames.SCREEN_TIME) {
+                val screenTime = ScreenTimeResult.tryParse(part.content)
+                if (screenTime != null && (screenTime.isNoPermission || screenTime.hasApps)) {
+                    Spacer(Modifier.height(8.dp))
+                    ScreenTimeToolSummary(
+                        result = screenTime,
+                        textColor = fg.body,
+                        secondaryColor = fg.muted,
+                        errorColor = cs.error,
+                    )
                 }
             }
         }
@@ -368,51 +591,6 @@ fun ToolCallCard(part: ToolUiPart) {
     }
 }
 
-/** weather / screen_time / tts 专属摘要，无专属内容时返回 null。 */
-@Composable
-fun toolSummaryOrNull(part: ToolUiPart): (@Composable () -> Unit)? {
-    val summary: (@Composable () -> Unit)? = when (part.toolName) {
-        "weather" -> {
-            val weather = WeatherToolResult.tryParse(part.content)
-            if (weather != null && !weather.isError) {
-                { -> WeatherSummaryLine(weather) }
-            } else null
-        }
-        "screen_time" -> {
-            val screenTime = ScreenTimeResult.tryParse(part.content)
-            if (screenTime != null && (screenTime.isNoPermission || screenTime.hasApps)) {
-                { -> ScreenTimeToolSummary(screenTime) }
-            } else null
-        }
-        // TTS 工具卡的播放行（chat_message_widget.dart:5793-5801）。
-        "text_to_speech" -> {
-            val ttsText = textToSpeechToolText(part.arguments)
-            if (ttsText.isNotEmpty()) {
-                val cs = MaterialTheme.colorScheme
-                { -> TextToSpeechReplayRow(text = ttsText, textColor = cs.onSurface.copy(alpha = 0.72f), buttonColor = cs.primary) }
-            } else null
-        }
-        else -> null
-    }
-    return summary
-}
-
-@Composable
-private fun WeatherSummaryLine(result: WeatherToolResult) {
-    val cs = MaterialTheme.colorScheme
-    Text(
-        text = weatherCurrentLine(result),
-        maxLines = 2,
-        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-        style = MaterialTheme.typography.bodySmall.copy(
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            fontWeight = FontWeight.Medium,
-            color = cs.onSurface,
-        ),
-    )
-}
-
 // ---------------------------------------------------------------------------
 // Detail sheet (chat_message_widget.dart _showToolDetail + tool_detail_text_section)
 // ---------------------------------------------------------------------------
@@ -420,6 +598,11 @@ private fun WeatherSummaryLine(result: WeatherToolResult) {
 private const val LAZY_LINE_THRESHOLD = 120
 private const val LAZY_CHAR_THRESHOLD = 8000
 private const val CHUNK_LINES = 40
+
+// CustomBottomSheet 的档位（custom_bottom_sheet.dart:20-21）：停在 0.60，
+// 上拉到 0.90，下探到 0.60 以下直接关闭。
+private const val SHEET_PARTIAL_FRACTION = 0.60f
+private const val SHEET_EXPANDED_FRACTION = 0.90f
 
 /** tool_detail_text_section.dart shouldChunk — 大文本分块懒加载阈值。 */
 internal fun shouldChunkText(text: String): Boolean {
@@ -454,147 +637,274 @@ private val prettyJson = Json {
 
 /** chat_message_widget.dart _prettyToolJson — 失败时原样返回。 */
 private fun prettyToolJson(raw: String): String = try {
-    prettyJson.encodeToString(
-        kotlinx.serialization.json.JsonElement.serializer(),
-        prettyJson.parseToJsonElement(raw),
-    )
+    prettyJson.encodeToString(JsonElement.serializer(), prettyJson.parseToJsonElement(raw))
 } catch (e: Exception) {
     raw
 }
 
 /**
- * 工具详情弹层（mobile bottom sheet 路径）：标题 + Arguments / Result
- * 两个分块文本区（surfaceFill 10dp 圆角），screen_time 有 apps 时换成
- * 专属详情体。工具结果图片段属工具执行器批次（依赖其 metadata 约定）。
+ * 工具详情弹层：CustomBottomSheet 皮肤（overlaySurface + 顶部 20dp 圆角 +
+ * 32×4 抓手 + 15sp 标题 / 24dp 关闭键），正文 LTRB(16,8,16,24)。
+ * screen_time 有 apps 时整块换成 ScreenTimeToolDetailBody。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ToolDetailSheet(part: ToolUiPart, onDismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    val scope = rememberCoroutineScope()
     val title = toolTitleFor(part.toolName, part.arguments, isResult = !part.loading)
-    val argsLabel = androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_arguments)
-    val resultLabel = androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_result)
-    val argsPretty = prettyJson.encodeToString(
-        kotlinx.serialization.json.JsonElement.serializer(),
-        part.arguments,
-    )
-    val resultText = if (!part.content.isNullOrEmpty()) prettyToolJson(part.content)
-    else androidx.compose.ui.res.stringResource(UiR.string.chat_message_widget_no_result_yet)
-
-    val screenTime = if (part.toolName == "screen_time") ScreenTimeResult.tryParse(part.content) else null
+    val argumentsLabel = stringResource(UiR.string.chat_message_widget_arguments)
+    val resultLabel = stringResource(UiR.string.chat_message_widget_result)
+    val closeLabel = stringResource(UiR.string.mcp_page_close)
+    val cleanText = part.cleanText
+    val argsPretty = prettyJson.encodeToString(JsonElement.serializer(), part.arguments)
+    val resultText = if (cleanText.isNotEmpty()) {
+        prettyToolJson(cleanText)
+    } else {
+        stringResource(UiR.string.chat_message_widget_no_result_yet)
+    }
+    val screenTime = if (part.toolName == LocalToolNames.SCREEN_TIME) {
+        ScreenTimeResult.tryParse(cleanText)
+    } else {
+        null
+    }
     val useScreenTimeDetail = screenTime != null && screenTime.hasApps
+    val listState = rememberLazyListState()
+    val sheetState = rememberModalBottomSheetState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        containerColor = cs.surface,
+        dragHandle = null,
     ) {
-        LazyColumn(
-            modifier = Modifier
+        // 拖拽调高：CustomBottomSheet 的手势在 Compose 里用 nestedScroll 等价
+        // 实现（列表在顶部继续下拉则缩层，缩到 0.60 以下关闭；上拉先扩到
+        // 0.90 再让列表滚动）。
+        val screenHpx = LocalWindowInfo.current.containerSize.height.toFloat()
+        var sheetFraction by remember { mutableFloatStateOf(SHEET_PARTIAL_FRACTION) }
+        var closing by remember { mutableStateOf(false) }
+        val sheetResize = object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val dy = available.y
+                if (dy < 0 && listState.canScrollBackward.not() &&
+                    sheetFraction < SHEET_EXPANDED_FRACTION
+                ) {
+                    val grow = (-dy / screenHpx).coerceAtMost(SHEET_EXPANDED_FRACTION - sheetFraction)
+                    sheetFraction += grow
+                    return Offset(0f, -grow * screenHpx)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                val dy = available.y
+                if (dy > 0 && sheetFraction > SHEET_PARTIAL_FRACTION) {
+                    val remaining = sheetFraction - SHEET_PARTIAL_FRACTION
+                    val shrink = (dy / screenHpx).coerceAtMost(remaining)
+                    sheetFraction -= shrink
+                    if (shrink >= remaining && !closing) {
+                        closing = true
+                        scope.launch { sheetState.hide() }
+                    }
+                    return Offset(0f, shrink * screenHpx)
+                }
+                return Offset.Zero
+            }
+        }
+        val sheetHeight = with(LocalDensity.current) { screenHpx.toDp() } * sheetFraction
+
+        Column(
+            Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .height(sheetHeight)
+                .nestedScroll(sheetResize),
         ) {
-            item {
-                Text(
-                    text = title,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    ),
-                    modifier = Modifier.padding(bottom = 10.dp),
+            // _DragHandle：30dp 命中区内的 32×4 r2 色条，onSurface α0.12。
+            Box(
+                modifier = Modifier.fillMaxWidth().height(30.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .size(width = 32.dp, height = 4.dp)
+                        .background(
+                            cs.onSurface.copy(alpha = 0.12f),
+                            RoundedCornerShape(2.dp),
+                        ),
                 )
             }
-            if (useScreenTimeDetail && screenTime != null) {
-                item {
-                    ScreenTimeToolDetailBody(result = screenTime)
-                    Spacer(Modifier.height(24.dp))
+            // _SheetHeader：LTRB(20,8,16,0) + 15sp emphasis 标题 + 24dp 关闭键。
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, top = 8.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(
+                        color = cs.onSurface,
+                        fontSize = 15.sp,
+                        fontWeight = AppFontWeights.emphasis,
+                        lineHeight = 18.sp,
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+                IosIconButton(
+                    icon = Lucide.X,
+                    onTap = onDismiss,
+                    modifier = Modifier.size(24.dp),
+                    size = 20.dp,
+                    contentPadding = 0.dp,
+                    color = cs.onSurface.copy(alpha = 0.62f),
+                    semanticLabel = closeLabel,
+                )
+            }
+            // SelectionArea（_ToolDetailBody 外层）。
+            SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
+                if (screenTime != null && useScreenTimeDetail) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
+                    ) {
+                        ScreenTimeToolDetailBody(result = screenTime)
+                    }
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            top = 8.dp,
+                            end = 16.dp,
+                            bottom = 24.dp,
+                        ),
+                    ) {
+                        toolDetailTextSection(argumentsLabel, argsPretty)
+                        item { Spacer(Modifier.height(12.dp)) }
+                        toolDetailTextSection(resultLabel, resultText)
+                    }
                 }
-            } else {
-                toolDetailTextSection(
-                    label = argsLabel,
-                    text = argsPretty,
-                )
-                item { Spacer(Modifier.height(12.dp)) }
-                toolDetailTextSection(
-                    label = resultLabel,
-                    text = resultText,
-                )
-                item { Spacer(Modifier.height(24.dp)) }
             }
         }
     }
 }
 
 /**
- * tool_detail_text_section.dart ToolDetailTextSection：12sp 标签 + 10dp
- * 内边距文本块；超阈值文本按 40 行分块挂到外层 LazyColumn 懒加载。
+ * tool_detail_text_section.dart ToolDetailTextSection：12sp 标签（下距 6dp）
+ * + surfaceFill/outlineVariant α0.2 的 10dp 圆角容器；超阈值文本按 40 行
+ * 分块挂到外层 LazyColumn，容器的底色与描边按首/中/末段拆到各 item 上，
+ * 拼出 Dart DecoratedSliver 的一整圈装饰（段间没有横线）。
  */
-private fun androidx.compose.foundation.lazy.LazyListScope.toolDetailTextSection(label: String, text: String) {
-    // 分块决策在 lazy scope 上做（tool_detail_text_section.dart 的
-    // DecoratedSliver + SliverList 等价物）：小文本单个 item，大文本按
-    // 40 行 chunk 逐 item 懒布局。
-    val chunked = shouldChunkText(text)
-    if (!chunked) {
-        item {
-            val cs = MaterialTheme.colorScheme
-            Column {
-                SectionLabel(label, cs.onSurface)
-                TextBlockContainer {
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                    )
-                }
+private fun LazyListScope.toolDetailTextSection(label: String, text: String) {
+    item(key = "tool-detail-label-$label") { SectionLabel(label) }
+    if (!shouldChunkText(text)) {
+        item(key = "tool-detail-text-$label") {
+            TextBlockChunk(first = true, last = true) {
+                Text(text = text, style = TextStyle(fontSize = 12.sp))
             }
         }
-    } else {
-        val chunks = chunkText(text)
-        item { SectionLabel(label, MaterialTheme.colorScheme.onSurface) }
-        items(chunks) { chunk ->
-            val cs = MaterialTheme.colorScheme
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        cs.surfaceVariant.copy(alpha = 0.5f),
-                        RoundedCornerShape(if (chunk == chunks.first() || chunk == chunks.last()) 10.dp else 0.dp),
-                    ),
-            ) {
-                Text(
-                    text = chunk,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                    modifier = Modifier.padding(10.dp),
-                )
-            }
+        return
+    }
+    val chunks = chunkText(text)
+    itemsIndexed(chunks, key = { index, _ -> "tool-detail-text-$label-$index" }) { index, chunk ->
+        TextBlockChunk(first = index == 0, last = index == chunks.lastIndex) {
+            Text(text = chunk, style = TextStyle(fontSize = 12.sp))
         }
     }
 }
 
 @Composable
-private fun SectionLabel(label: String, cs: androidx.compose.ui.graphics.Color) {
+private fun SectionLabel(label: String) {
+    val cs = MaterialTheme.colorScheme
     Text(
         text = label,
-        style = MaterialTheme.typography.labelSmall.copy(
-            fontSize = 12.sp,
-            color = cs.copy(alpha = 0.6f),
-        ),
+        style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f)),
         modifier = Modifier.padding(bottom = 6.dp),
     )
 }
 
 @Composable
-private fun TextBlockContainer(content: @Composable () -> Unit) {
+private fun TextBlockChunk(first: Boolean, last: Boolean, content: @Composable () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    Column(
+    val semantic = LocalSemanticColors.current
+    val line = cs.outlineVariant.copy(alpha = 0.2f)
+    val shape: Shape = RoundedCornerShape(
+        topStart = if (first) 10.dp else 0.dp,
+        topEnd = if (first) 10.dp else 0.dp,
+        bottomStart = if (last) 10.dp else 0.dp,
+        bottomEnd = if (last) 10.dp else 0.dp,
+    )
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                cs.surfaceVariant.copy(alpha = 0.5f),
-                RoundedCornerShape(10.dp),
-            )
-            .padding(10.dp),
+            .background(semantic.surfaceFill, shape)
+            // DecoratedSliver 的描边是整组一圈，分块之间没有横线，所以每块只画
+            // 自己那几段（Modifier.border 四边齐全，画不出这个效果）。
+            .drawBehind {
+                val sw = 1.dp.toPx()
+                val half = sw / 2f
+                val w = size.width
+                val h = size.height
+                val r = 10.dp.toPx().coerceAtMost(minOf(w, h) / 2f - half).coerceAtLeast(0f)
+                val vTop = if (first) half + r else 0f
+                val vBottom = if (last) h - half - r else h
+                drawLine(line, Offset(half, vTop), Offset(half, vBottom), sw)
+                drawLine(line, Offset(w - half, vTop), Offset(w - half, vBottom), sw)
+                val corner = Size(2 * r, 2 * r)
+                val stroke = Stroke(sw)
+                if (first) {
+                    drawLine(line, Offset(half + r, half), Offset(w - half - r, half), sw)
+                    drawArc(line, 180f, 90f, false, Offset(half, half), corner, style = stroke)
+                    drawArc(
+                        line,
+                        270f,
+                        90f,
+                        false,
+                        Offset(w - half - 2 * r, half),
+                        corner,
+                        style = stroke,
+                    )
+                }
+                if (last) {
+                    drawLine(line, Offset(half + r, h - half), Offset(w - half - r, h - half), sw)
+                    drawArc(
+                        line,
+                        90f,
+                        90f,
+                        false,
+                        Offset(half, h - half - 2 * r),
+                        corner,
+                        style = stroke,
+                    )
+                    drawArc(
+                        line,
+                        0f,
+                        90f,
+                        false,
+                        Offset(w - half - 2 * r, h - half - 2 * r),
+                        corner,
+                        style = stroke,
+                    )
+                }
+            }
+            .padding(
+                start = 10.dp,
+                top = if (first) 10.dp else 0.dp,
+                end = 10.dp,
+                bottom = if (last) 10.dp else 0.dp,
+            ),
     ) {
         content()
     }

@@ -233,6 +233,17 @@ class MessageDao(private val db: SQLiteDatabase) {
         db.execSQL("UPDATE message_rows SET translation = ? WHERE id = ?", arrayOf<Any>(translation, id))
     }
 
+    /**
+     * Persists reasoning segment state after an expand/collapse
+     * (home_page_controller.toggleReasoningSegment → updateReasoningSegmentsInDb).
+     */
+    fun updateReasoningSegments(id: String, segmentsJson: String?) {
+        db.execSQL(
+            "UPDATE message_rows SET reasoning_segments_json = ? WHERE id = ?",
+            arrayOf(segmentsJson ?: "", id),
+        )
+    }
+
     fun delete(id: String) {
         db.delete("message_rows", "id = ?", arrayOf(id))
         // message_part_rows rows cascade via FK, but parts of the deleted

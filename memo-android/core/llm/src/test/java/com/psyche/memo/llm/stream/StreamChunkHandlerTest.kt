@@ -1,14 +1,24 @@
 package com.psyche.memo.llm.stream
 
+import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.data.model.ReasoningPart
 import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.data.model.ToolCallPart
+import com.psyche.memo.data.model.ToolCallPayload
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StreamChunkHandlerTest {
+
+    private fun toolAt(parts: List<MessagePart>, index: Int): ToolCallPayload {
+        val decoded = ToolCallPart.decode((parts[index] as ToolCallPart).payloadJson)
+        assertNotNull(decoded)
+        return decoded!!
+    }
 
     @Test
     fun foldsTextDeltasInOrder() {
@@ -16,7 +26,7 @@ class StreamChunkHandlerTest {
         handler.handle(StreamChunk.TextDelta("Hello "))
         handler.handle(StreamChunk.TextDelta("world"))
         assertEquals("Hello world", handler.textContent())
-        val parts = handler.parts()
+        val parts = handler.parts
         assertEquals(1, parts.size)
         assertEquals("Hello world", (parts[0] as TextPart).text)
     }
@@ -26,7 +36,7 @@ class StreamChunkHandlerTest {
         val handler = StreamChunkHandler()
         handler.handle(StreamChunk.ReasoningDelta("think..."))
         handler.handle(StreamChunk.TextDelta("Answer"))
-        val parts = handler.parts()
+        val parts = handler.parts
         assertEquals(2, parts.size)
         assertTrue(parts[0] is ReasoningPart)
         assertTrue(parts[1] is TextPart)
@@ -37,19 +47,80 @@ class StreamChunkHandlerTest {
         val handler = StreamChunkHandler()
         handler.handle(StreamChunk.ToolCallDelta("call_1", "get_weather", "{\"city\":"))
         handler.handle(StreamChunk.ToolCallDelta("call_1", "", "\"NYC\"}"))
-        val parts = handler.parts()
+        val parts = handler.parts
         assertEquals(1, parts.size)
-        val tool = parts[0] as ToolCallPart
-        assertTrue(tool.payloadJson.contains("NYC"))
-        assertTrue(tool.payloadJson.contains("call_1"))
+        val tool = toolAt(parts, 0)
+        assertEquals("call_1", tool.id)
+        assertEquals("get_weather", tool.name)
+        assertEquals("""{"city":"NYC"}""", tool.arguments)
+        assertNull(tool.content)
+        assertFalse(tool.server)
+    }
+
+    /** stream_chunk_handler.dart keeps arrival order, not reasoning→text→tools. */
+    @Test
+    fun keepsArrivalOrderAcrossSeries() {
+        val handler = StreamChunkHandler()
+        handler.handle(StreamChunk.ReasoningDelta("think"))
+        handler.handle(StreamChunk.ToolCallDelta("c1", "get_time_info", "{}"))
+        handler.handle(StreamChunk.TextDelta("Answer"))
+        val parts = handler.parts
+        assertEquals(
+            listOf(ReasoningPart::class, ToolCallPart::class, TextPart::class),
+            parts.map { it::class },
+        )
+    }
+
+    /**
+     * stream_controller.dart 792-807 — reasoning that resumes after a tool
+     * call opens a second segment instead of joining the first one.
+     */
+    @Test
+    fun splitsReasoningAroundToolCallsAndTimesEachSegment() {
+        val handler = StreamChunkHandler()
+        handler.handle(StreamChunk.ReasoningDelta("first"))
+        handler.handle(StreamChunk.ToolCallDelta("c1", "search_web", "{}"))
+        handler.handle(StreamChunk.ReasoningDelta(" second"))
+        val parts = handler.parts
+        assertEquals(3, parts.size)
+        assertEquals("first", (parts[0] as ReasoningPart).text)
+        assertEquals(" second", (parts[2] as ReasoningPart).text)
+
+        val segments = handler.reasoningSegments
+        assertEquals(2, segments.size)
+        assertTrue("first segment closed when the tool started", segments[0].finishedAt != null)
+        assertTrue(segments[0].startAt <= segments[0].finishedAt!!)
+        assertEquals("the segment starts after one tool", 1, segments[1].toolStartIndex)
+        assertNull("still streaming", segments[1].finishedAt)
+    }
+
+    @Test
+    fun finishClosesTheOpenReasoningSegment() {
+        val handler = StreamChunkHandler()
+        handler.handle(StreamChunk.ReasoningDelta("think"))
+        assertNull(handler.reasoningSegments[0].finishedAt)
+        handler.handle(StreamChunk.Finish("stop", null))
+        assertNotNull(handler.reasoningSegments[0].finishedAt)
     }
 
     @Test
     fun multipleToolsAreKeptSeparate() {
         val handler = StreamChunkHandler()
-        handler.handle(StreamChunk.ToolCallDelta("t1", "a", "{}"))
+        handler.handle(StreamChunk.ToolCallDelta("t1", "a", "{\"q\""))
         handler.handle(StreamChunk.ToolCallDelta("t2", "b", "{}"))
-        assertEquals(2, handler.parts().size)
+        handler.handle(StreamChunk.ToolCallDelta("t1", "", ":1}"))
+        val parts = handler.parts
+        assertEquals(2, parts.size)
+        assertEquals("""{"q":1}""", toolAt(parts, 0).arguments)
+        assertEquals("{}", toolAt(parts, 1).arguments)
+    }
+
+    /** Partial JSON must survive as a raw string (Dart `_tryDecode`). */
+    @Test
+    fun keepsUnparsableArgumentsVerbatim() {
+        val handler = StreamChunkHandler()
+        handler.handle(StreamChunk.ToolCallDelta("c1", "bash", "echo hi"))
+        assertEquals("echo hi", toolAt(handler.parts, 0).arguments)
     }
 
     @Test
@@ -65,7 +136,7 @@ class StreamChunkHandlerTest {
     @Test
     fun emptyStreamProducesNoParts() {
         val handler = StreamChunkHandler()
-        assertTrue(handler.parts().isEmpty())
+        assertTrue(handler.parts.isEmpty())
         assertFalse(handler.finished)
     }
 
