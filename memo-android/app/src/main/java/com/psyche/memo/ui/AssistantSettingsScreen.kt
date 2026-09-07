@@ -88,7 +88,6 @@ import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.R as UiR
 import java.io.File
-import java.text.BreakIterator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -391,15 +390,6 @@ internal fun AssistantListAvatar(item: Assistant, size: androidx.compose.ui.unit
             )
         }
     }
-}
-
-/** Dart characters.first equivalent (grapheme cluster). */
-private fun firstGrapheme(value: String): String {
-    if (value.isEmpty()) return value
-    val iterator = BreakIterator.getCharacterInstance()
-    iterator.setText(value)
-    val end = iterator.next()
-    return if (end <= 0) value.substring(0, 1) else value.substring(0, end)
 }
 
 private data class SwipeActionData(

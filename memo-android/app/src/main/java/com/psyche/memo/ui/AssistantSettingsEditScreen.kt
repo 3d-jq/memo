@@ -71,10 +71,14 @@ import com.composables.icons.lucide.Zap
 import com.psyche.memo.data.assistant.AssistantStore
 import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.ui.R as UiR
+import com.psyche.memo.ui.snackbar.AppNotification
+import com.psyche.memo.ui.snackbar.NotificationType
+import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /**
  * assistant_settings_edit_page.dart — edit scaffold: AppBar with back +
@@ -241,6 +245,72 @@ private fun BasicSettingsTab(
     onReload: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    var paramSheet by remember { mutableStateOf<ParamSheet?>(null) }
+    var contextInputDialog by remember { mutableStateOf(false) }
+    var avatarSheet by remember { mutableStateOf(false) }
+    var emojiDialog by remember { mutableStateOf(false) }
+    var urlDialog by remember { mutableStateOf(false) }
+    var qqDialog by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val avatarScope = rememberCoroutineScope()
+    // `_pickLocalImage` L1948-1980 — the gallery path is copied into app storage
+    // because a content:// URI does not survive a reboot.
+    val avatarPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            avatarScope.launch(Dispatchers.IO) {
+                val copied = runCatching {
+                    val dir = File(context.filesDir, "assistant_avatars").apply { mkdirs() }
+                    val dest = File(dir, assistantId + "_" + System.currentTimeMillis() + ".jpg")
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        dest.outputStream().use { output -> input.copyTo(output) }
+                    } ?: return@runCatching null
+                    dest.absolutePath
+                }.getOrNull()
+                withContext(Dispatchers.Main) {
+                    if (copied != null) {
+                        onEdit { it.copy(avatar = copied) }
+                    } else {
+                        SnackbarManager.show(
+                            AppNotification(
+                                message = context.getString(UiR.string.assistant_edit_general_error_message),
+                                type = NotificationType.ERROR,
+                            ),
+                        )
+                        urlDialog = true
+                    }
+                }
+            }
+        }
+    }
+
+    // `_inputQQAvatar` random branch L1874-1907 — 20 tries, first hit wins.
+    fun probeRandomQqAvatar() {
+        avatarScope.launch(Dispatchers.IO) {
+            var found: String? = null
+            var tries = 0
+            while (found == null && tries < 20) {
+                tries++
+                val candidate = qqAvatarUrl(randomQqNumber())
+                if (qqAvatarResolves(candidate)) found = candidate
+            }
+            val url = found
+            withContext(Dispatchers.Main) {
+                if (url != null) {
+                    qqDialog = false
+                    onEdit { it.copy(avatar = url) }
+                } else {
+                    SnackbarManager.show(
+                        AppNotification(
+                            message = context.getString(UiR.string.assistant_edit_q_q_avatar_failed_message),
+                            type = NotificationType.ERROR,
+                        ),
+                    )
+                }
+            }
+        }
+    }
     androidx.compose.foundation.lazy.LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
@@ -249,7 +319,13 @@ private fun BasicSettingsTab(
         item {
             Surface16Card {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AssistantListAvatar(assistant, 64.dp)
+                    Box(
+                        Modifier
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .clickable { avatarSheet = true },
+                    ) {
+                        AssistantListAvatar(assistant, 64.dp)
+                    }
                     Spacer(Modifier.width(14.dp))
                     NameField(
                         initial = assistant.name,
@@ -268,7 +344,7 @@ private fun BasicSettingsTab(
                     label = "Temperature",
                     detailText = assistant.temperature?.let { String.format("%.2f", it) }
                         ?: stringResource(UiR.string.assistant_edit_parameter_disabled),
-                    onTap = {},
+                    onTap = { paramSheet = ParamSheet.Temperature },
                 )
                 DividerRow()
                 EditNavRow(
@@ -276,7 +352,7 @@ private fun BasicSettingsTab(
                     label = "Top P",
                     detailText = assistant.topP?.let { String.format("%.2f", it) }
                         ?: stringResource(UiR.string.assistant_edit_parameter_disabled),
-                    onTap = {},
+                    onTap = { paramSheet = ParamSheet.TopP },
                 )
                 DividerRow()
                 EditNavRow(
@@ -287,9 +363,10 @@ private fun BasicSettingsTab(
                     } else {
                         stringResource(UiR.string.assistant_edit_parameter_disabled)
                     },
-                    onTap = {},
+                    onTap = { paramSheet = ParamSheet.Context },
                 )
                 DividerRow()
+                // TODO(port): opens showReasoningBudgetSheet, not ported yet.
                 EditNavRow(
                     icon = Lucide.Brain,
                     label = stringResource(UiR.string.assistant_edit_thinking_budget_title),
@@ -302,7 +379,7 @@ private fun BasicSettingsTab(
                     label = stringResource(UiR.string.assistant_edit_max_tokens_title),
                     detailText = assistant.maxTokens?.toString()
                         ?: stringResource(UiR.string.assistant_edit_max_tokens_hint),
-                    onTap = {},
+                    onTap = { paramSheet = ParamSheet.MaxTokens },
                 )
                 DividerRow()
                 SwitchRow(icon = Lucide.User, label = stringResource(UiR.string.assistant_edit_use_assistant_avatar_title), checked = assistant.useAssistantAvatar) { v ->
@@ -544,7 +621,166 @@ private fun BasicSettingsTab(
             }
         }
     }
+
+    val temperatureDescription = stringResource(UiR.string.assistant_edit_temperature_description)
+    val topPDescription = stringResource(UiR.string.assistant_edit_top_p_description)
+    val contextTitle = stringResource(UiR.string.assistant_edit_context_messages_title)
+    val contextDescription = stringResource(UiR.string.assistant_edit_context_messages_description)
+    val parameterDisabled = stringResource(UiR.string.assistant_edit_parameter_disabled)
+    val maxTokensTitle = stringResource(UiR.string.assistant_edit_max_tokens_title)
+    val maxTokensHint = stringResource(UiR.string.assistant_edit_max_tokens_hint)
+    val maxTokensDescription = stringResource(UiR.string.assistant_edit_max_tokens_description)
+    val saveLabel = stringResource(UiR.string.assistant_settings_add_sheet_save)
+
+    when (paramSheet) {
+        // _showTemperatureSheet L635-747.
+        ParamSheet.Temperature -> ParamSliderSheet(
+            title = "Temperature",
+            description = temperatureDescription,
+            disabledText = parameterDisabled,
+            enabled = assistant.temperature != null,
+            value = assistant.temperature ?: Assistant.DefaultTemperature,
+            minValue = 0.0,
+            maxValue = 2.0,
+            divisions = 20,
+            labelOf = { String.format("%.2f", it) },
+            onEnabledChange = { v ->
+                onEdit {
+                    if (v) {
+                        it.copy(temperature = Assistant.DefaultTemperature)
+                    } else {
+                        it.copy(temperature = null)
+                    }
+                }
+                paramSheet = null
+            },
+            onValueChange = { v -> onEdit { it.copy(temperature = v) } },
+            onDismiss = { paramSheet = null },
+        )
+        // _showTopPSheet L749-859.
+        ParamSheet.TopP -> ParamSliderSheet(
+            title = "Top P",
+            description = topPDescription,
+            disabledText = parameterDisabled,
+            enabled = assistant.topP != null,
+            value = assistant.topP ?: 1.0,
+            minValue = 0.0,
+            maxValue = 1.0,
+            divisions = 20,
+            labelOf = { String.format("%.2f", it) },
+            onEnabledChange = { v ->
+                onEdit { if (v) it.copy(topP = 1.0) else it.copy(topP = null) }
+                paramSheet = null
+            },
+            onValueChange = { v -> onEdit { it.copy(topP = v) } },
+            onDismiss = { paramSheet = null },
+        )
+        // _showContextMessagesSheet L861-998.
+        ParamSheet.Context -> {
+            ParamSliderSheet(
+                title = contextTitle,
+                description = contextDescription,
+                disabledText = stringResource(UiR.string.assistant_edit_parameter_disabled2),
+                enabled = assistant.limitContextMessages,
+                value = clampContextMessages(assistant.contextMessageSize).toDouble(),
+                minValue = Assistant.MinContextMessageSize.toDouble(),
+                maxValue = Assistant.MaxContextMessageSize.toDouble(),
+                divisions = Assistant.MaxContextMessageSize - Assistant.MinContextMessageSize,
+                labelOf = { it.roundToInt().toString() },
+                customLabelStops = ContextMessageLabelStops,
+                onEnabledChange = { v ->
+                    onEdit {
+                        val bumped = if (v && it.contextMessageSize < Assistant.MinContextMessageSize) {
+                            it.copy(contextMessageSize = Assistant.MinContextMessageSize)
+                        } else {
+                            it
+                        }
+                        bumped.copy(limitContextMessages = v)
+                    }
+                    paramSheet = null
+                },
+                onValueChange = { v ->
+                    onEdit { it.copy(contextMessageSize = clampContextMessages(v.roundToInt())) }
+                },
+                onValuePillTap = { contextInputDialog = true },
+                onDismiss = { paramSheet = null },
+            )
+            if (contextInputDialog) {
+                ContextMessageInputDialog(
+                    initialValue = assistant.contextMessageSize,
+                    minValue = Assistant.MinContextMessageSize,
+                    maxValue = Assistant.MaxContextMessageSize,
+                    onDismiss = { contextInputDialog = false },
+                    onConfirm = { v -> onEdit { it.copy(contextMessageSize = v) } },
+                )
+            }
+        }
+        // _showMaxTokensSheet L1000-1130.
+        ParamSheet.MaxTokens -> MaxTokensSheet(
+            initial = assistant.maxTokens,
+            title = maxTokensTitle,
+            hint = maxTokensHint,
+            description = maxTokensDescription,
+            saveLabel = saveLabel,
+            onDismiss = { paramSheet = null },
+            onSave = { v -> onEdit { it.copy(maxTokens = v) } },
+        )
+        null -> Unit
+    }
+
+    // _showAvatarPicker L517-617.
+    if (avatarSheet) {
+        AvatarPickerSheet(
+            onDismiss = { avatarSheet = false },
+            onChooseImage = {
+                avatarPicker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                )
+            },
+            onChooseEmoji = { emojiDialog = true },
+            onEnterLink = { urlDialog = true },
+            onImportQq = { qqDialog = true },
+            onReset = { onEdit { it.copy(avatar = null) } },
+        )
+    }
+    if (emojiDialog) {
+        EmojiPickerDialog(
+            onDismiss = { emojiDialog = false },
+            onPick = { emoji ->
+                emojiDialog = false
+                onEdit { it.copy(avatar = emoji) }
+            },
+        )
+    }
+    if (urlDialog) {
+        AvatarUrlDialog(
+            onDismiss = { urlDialog = false },
+            onSave = { url ->
+                urlDialog = false
+                onEdit { it.copy(avatar = url) }
+            },
+        )
+    }
+    if (qqDialog) {
+        QQAvatarDialog(
+            onDismiss = { qqDialog = false },
+            onApplyUrl = { url ->
+                qqDialog = false
+                onEdit { it.copy(avatar = url) }
+            },
+            onRandom = { probeRandomQqAvatar() },
+        )
+    }
 }
+
+private enum class ParamSheet { Temperature, TopP, Context, MaxTokens }
+
+/** `_showContextMessagesSheet` customLabelStops L941-950. */
+private val ContextMessageLabelStops = listOf(1.0, 64.0, 128.0, 256.0, 512.0, 1024.0, 2048.0, 4096.0)
+
+/** assistant_settings_edit_page.dart L178-179 `_clampContextMessages`. */
+private fun clampContextMessages(value: Int): Int =
+    value.coerceIn(Assistant.MinContextMessageSize, Assistant.MaxContextMessageSize)
 
 /** SectionCard radius 16 padding 14 (Flutter SectionCard(radius:16, padding:14)). */
 @Composable

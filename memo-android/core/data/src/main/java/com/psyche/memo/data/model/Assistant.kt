@@ -47,6 +47,11 @@ data class Assistant(
     val regexRules: List<JsonElement> = emptyList(),
 ) {
     companion object {
+        /** assistant.dart L20-22. */
+        const val DefaultTemperature: Double = 1.0
+        const val MinContextMessageSize: Int = 1
+        const val MaxContextMessageSize: Int = 4096
+
         fun fromJsonString(json: kotlinx.serialization.json.Json, text: String): Assistant =
             json.decodeFromString(serializer(), text)
     }
