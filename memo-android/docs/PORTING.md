@@ -35,6 +35,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | `SettingsRow(icon,label,onTap,detailText)` | SettingsUi.kt | iOS 行（label 会换行——单行版用 `EditNavRow`@AssistantSettingsEditScreen） |
 | `DividerRow()` | SettingsUi.kt | 0.6dp 居中线 |
 | `IosSwitch(value,onValueChanged)` | IosWidgets.kt | 44×26 iOS 开关 |
+| `IosButton(label,onTap,icon,filled,neutral,dense)` | IosWidgets.kt | Flutter `_IosButton`：r12 描边/填充 + 0.97 按压 + Haptics.soft |
+| `IosIconButton(icon,onTap,color,size,contentPadding,minSize)` | IosWidgets.kt | Flutter `ios_tactile.dart` IosIconButton：按压染底、**不缩放** |
 | `ModelSelectSheet(container,options,onSelect,onDismiss)` + `ModelOption(providerId,providerName,modelId,selected)` | ModelSelectSheet.kt | 模型选择 sheet（provider→model 两级+搜索），DefaultModel/Memory 已用 |
 | `ProviderAvatarSmall(providerKey,displayName,size)` | ProviderListScreen.kt | 品牌头像（=Flutter _BrandAvatarLike） |
 | `AssistantListAvatar(item,size)` | AssistantSettingsScreen.kt | 助手头像四态（http/本地/emoji/首字母） |
@@ -59,6 +61,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 4. 同包重名：新增组件前先 grep 全仓（SegTabBar 撞过车）。
 5. detail 文本会挤压 label 换行：Flutter `_iosNavRow` 是 label maxLines=1 ellipsis——单行行用 EditNavRow。
 6. 深链 `memo://` 不可靠，导航验证用 uiautomator dump + input tap。
+7. **字体权重**：按字面映射——Dart `AppFontWeights.semibold`/`emphasis` → `FontWeight.SemiBold`（全仓 205 处已如此），`medium` → `Medium`。注意 Flutter 侧 `AppFontWeights.normalize()` 在 Android 上把 ≥w600 降为 w500，即原 app 真机其实渲染 w500；要严格视觉一致需全局改 Medium，属未决项，勿在单个页面里混用两种。
+8. `IosButton` 最后一个参数是 `dense: Boolean`，尾随 lambda 会绑错→必须写 `onTap = {}`；`TextFieldValue` 在 `androidx.compose.ui.text.input`（不是 `ui.text`）；`animateColorAsState` 在 `androidx.compose.animation`（不是 `.core`）。
 
 ## 5. 批次进度（收工更新）
 
@@ -69,7 +73,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | A2 | 编辑页骨架 + EditSegTabBar + basic tab 静态行 + 路由 | ✅ cf19bcd |
 | A2b | basic tab：聊天模型选择 + 聊天背景（选图/清除/预览） | ✅ 本轮 |
 | A2c | basic tab：5 个参数 sheet（Temperature/TopP/上下文/思考预算/MaxTokens 滑块）、头像选择 sheet | ⬜ |
-| A3 | 提示词 tab（prompt tab 1728 行） | ⬜ |
+| A3 | 提示词 tab 1/3：系统提示词卡（全屏编辑 sheet + 文件导入 + 变量表 + 缓存告警）+ 追加当前时间行 + 两弹窗；tab 顺序对齐 `defaultAssistantEditTabIds`；`PromptTransformer.applyMessageTemplate`（core:llm） | ✅ 本轮 |
+| A3b | 提示词 tab 2/3：消息模板卡（4 变量 + 实时预览）+ 预设对话卡（pill/内联输入/_PresetMessageCard/拖拽） | ⬜ |
 | B | 记忆/本地工具/MCP tab | ⬜ |
 | C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜ |
 
@@ -78,4 +83,5 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)
 - basic tab：`assistant_settings_edit_basic_tab.dart`（身份卡 L136-161；设置卡 L162-263；聊天模型卡 L264-357：标题+RotateCcw+副标题+选择行[surfaceFill r12 h12v10、BrandAvatar 24、14 semibold，显示 override 名?:modelId，无模型"使用全局默认"]；背景卡 L373-510：Image 标题+12sp 描述、空→居中选图按钮[outlineVariant 35% 边框]、有→两 _IosButton 并排+ClipRRect r10 预览；_pickBackground：gallery maxWidth1920 quality85 存路径）
 - 列表页：`assistant_settings_page.dart`（Slidable endActionPane 0.6、复制命名"xx 副本 N"、最后一个不可删）
+- 提示词 tab：`assistant_settings_edit_prompt_tab.dart`（_PromptTab build L273-912：ListView padding LTRB 16/8/16/20，卡片间距 12，顺序 sysCard→appendTimeCard→tmplCard→presetCard。sysCard L301-457：surfaceCard r14 padding12、标题 15 emphasis + IosIconButton(Maximize2,20,p8,min38,primary)+4+IosButton(import,Icons.file_open,dense,neutral:false)、字段 maxLines8 r12 边框 enabled outlineVariant35/focused primary50 contentPadding12、availableVariables 12 semibold、_VarExplainList L1674-1728（Wrap 16/8，"label: " 12 onSurface75 + 下划线 primary semibold 可点，3 个时间变量带 TriangleAlert14+Tooltip）、AnimatedSize180 告警条 errorContainer30 r12 p12 + TriangleAlert18 + 12/1.35 onSurface80。appendTimeCard=SectionCard(_AppendCurrentTimeRow L915-1004：h12v10、36 槽 Lucide.clock20（开=primary）、标题15 semibold+3+副标题12/1.25 onSurface62、IosIconButton(BadgeInfo,16,p6,min32,onSurface55)+4+IosSwitch）。_SystemPromptMobileSheet L1189-1271：高 0.96 屏、overlaySurface、顶 r18、padding 16/10/16/bottom+16、_HoverTextButton(enableHover:false,dense) 关闭/保存、Expanded surfaceFill r14 边框 outlineVariant20 + expands TextField autofocus contentPadding12。**已移植**=以上全部；**待移植**=tmplCard L470-586（4 变量 {{role}}/{{message}}/{{time}}/{{date}} + 2 条 ChatMessageWidget 预览）、presetCard L589-898（_HoverPillButton User/Bot、内联 AnimatedSize200 输入、_PresetMessageCard L1006-1077、ReorderableColumn）。桌面 `_SystemPromptDesktopDialog` 不移植。两处平台简化：SAF 无法按扩展名过滤（16 种白名单只在读取处兜底）、Compose TextField 无 contentPadding 参数（12dp 内边距用外层 Box border + padding 等价实现）。
 - 模型选择：Flutter `showModelSelector`（model_select_sheet.dart 2533 行）→ Android `ModelSelectSheet`。视觉主体已对齐（卡片行 r14、品牌头像 28、单行名、Lucide 心形、搜索框 surfaceFill+r14 边框聚焦 primary 50%、chip 点击滚动分组）。**仍未移植（A2c 待办）**：ModelSelectSheet 的 DraggableScrollableSheet 可拖拽高度（原版 min 0.4 / initial=max 0.8，现固定 0.8）。已补齐：长按模型详情 sheet（ModelDetailSheet.kt，编辑/创建双模式 + Basic/Advanced/BuiltInTools 三 tab + ModelRegistry.inferFull 完整投影 + 类型切换缓存 + headers/body 覆盖 + 内置工具按 ProviderKind 分类）。已补齐：详情 sheet 可拖拽高度（原版 DraggableScrollableSheet 0.4-0.95 initial 0.8 → Compose 原生 NestedScrollConnection 等价移植：列表在顶下拉压缩高度、到 0.4 即 sheetState.hide() 关闭（对齐 shouldCloseOnMinExtent），顶上推长高到 0.95 后列表接管；头部下拉关闭走 ModalBottomSheet 自带 drag-to-dismiss）。已补齐：ModelTagWrap 能力标签（ModelRegistry 正则推断）、pinnedModels 收藏系统（收藏组置顶 + 书签跳转 + 搜索聚合去重）、搜索跳转首个匹配组；吸顶 provider 头（_stickyProviderHeader）按用户决定不复刻。

@@ -142,15 +142,17 @@ fun AssistantSettingsEditScreen(
             return@Column
         }
 
+        // assistant_edit_tab_layout.dart defaultAssistantEditTabIds — the
+        // displayed order comes from there, not from _assistantEditTabSpecs.
         val tabLabels = listOf(
             stringResource(UiR.string.assistant_edit_page_basic_tab),
             stringResource(UiR.string.assistant_edit_page_prompts_tab),
             stringResource(UiR.string.assistant_edit_page_memory_tab),
-            stringResource(UiR.string.assistant_edit_page_local_tools_tab),
-            stringResource(UiR.string.assistant_edit_page_mcp_tab),
             stringResource(UiR.string.assistant_edit_page_quick_phrase_tab),
             stringResource(UiR.string.assistant_edit_page_custom_tab),
             stringResource(UiR.string.assistant_edit_page_regex_tab),
+            stringResource(UiR.string.assistant_edit_page_local_tools_tab),
+            stringResource(UiR.string.assistant_edit_page_mcp_tab),
         )
         val pagerState = rememberPagerState { tabLabels.size }
         val scope = rememberCoroutineScope()
@@ -176,6 +178,7 @@ fun AssistantSettingsEditScreen(
                     onEdit = ::edit,
                     onReload = { reloadKey++ },
                 )
+                1 -> PromptTab(assistant = a, onEdit = ::edit)
                 else -> Box(Modifier.fillMaxSize())
             }
         }
@@ -503,22 +506,22 @@ private fun BasicSettingsTab(
                         }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            BackgroundActionButton(
+                            IosButton(
                                 label = stringResource(UiR.string.assistant_edit_choose_image_button),
                                 icon = Lucide.Image,
                                 modifier = Modifier.weight(1f),
-                            ) {
-                                bgPicker.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                                )
-                            }
-                            BackgroundActionButton(
+                                onTap = {
+                                    bgPicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                    )
+                                },
+                            )
+                            IosButton(
                                 label = stringResource(UiR.string.assistant_edit_clear_button),
                                 icon = Lucide.X,
                                 modifier = Modifier.weight(1f),
-                            ) {
-                                onEdit { it.copy(background = null) }
-                            }
+                                onTap = { onEdit { it.copy(background = null) } },
+                            )
                         }
                         Spacer(Modifier.height(12.dp))
                         val preview = remember(assistant.background) {
@@ -540,30 +543,6 @@ private fun BasicSettingsTab(
                 }
             }
         }
-    }
-}
-
-/** Flutter _IosButton (background card): surfaceFill pill, icon + 14sp semibold label. */
-@Composable
-private fun BackgroundActionButton(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val semanticBg = LocalSemanticColors.current
-    val cs = MaterialTheme.colorScheme
-    Row(
-        modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(semanticBg.surfaceFill)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.75f), modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = label,
-            maxLines = 1,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
-        )
     }
 }
 

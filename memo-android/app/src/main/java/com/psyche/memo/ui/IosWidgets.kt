@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.EaseOutBack
 import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -40,6 +42,7 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
@@ -583,4 +586,147 @@ internal object IosTileColors {
                 withAlpha(cs.outlineVariant, 0.35)
             }
             )
+}
+
+/**
+ * Port of `_IosButton` (assistant_settings_edit_page.dart L1436-1530): r12
+ * surfaceFill pill (primary when `filled`) with a 0.35 outlineVariant ring, or
+ * 0.45 primary when `neutral` is false; 18dp icon + 8 gap + semibold label at
+ * 14sp (13sp when `dense`, which also tightens padding to 12/8). Press scales to
+ * 0.97 over 110ms easeOutCubic and fires a soft haptic.
+ */
+@Composable
+fun IosButton(
+    label: String,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    filled: Boolean = false,
+    neutral: Boolean = true,
+    dense: Boolean = false,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    val view = LocalView.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = tween(durationMillis = 110, easing = EaseOutCubic),
+        label = "iosButtonScale",
+    )
+    val background = if (filled) cs.primary else semantic.surfaceFill
+    val foreground = if (filled) {
+        cs.onPrimary
+    } else if (neutral) {
+        withAlpha(cs.onSurface, 0.9)
+    } else {
+        cs.primary
+    }
+    val iconColor = if (filled) {
+        cs.onPrimary
+    } else if (neutral) {
+        withAlpha(cs.onSurface, 0.75)
+    } else {
+        cs.primary
+    }
+    val ringColor = if (neutral) withAlpha(cs.outlineVariant, 0.35) else withAlpha(cs.primary, 0.45)
+    var row: Modifier = Modifier
+        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .background(background, RoundedCornerShape(12.dp))
+    if (!filled) row = row.border(BorderStroke(1.dp, ringColor), RoundedCornerShape(12.dp))
+    Row(
+        modifier = row
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = {
+                    Haptics.soft(view)
+                    onTap()
+                },
+            )
+            .padding(
+                horizontal = if (dense) 12.dp else 16.dp,
+                vertical = if (dense) 8.dp else 12.dp,
+            ),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(
+            text = label,
+            maxLines = 1,
+            style = TextStyle(
+                fontSize = if (dense) 13.sp else 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = foreground,
+            ),
+        )
+    }
+}
+
+/**
+ * Port of `IosIconButton` (lib/shared/widgets/ios_tactile.dart L9-160), mobile
+ * subset: the desktop hover ring and mouse cursor are not reachable by touch.
+ *
+ * Press shifts the icon 35% toward onSurface over 200ms easeOutCubic and tints an
+ * r8 background to onSurface 8% (light) / 12% (dark) over 160ms — the source has
+ * no scale transform here, unlike [TactileIconButton].
+ */
+@Composable
+fun IosIconButton(
+    icon: ImageVector,
+    onTap: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    size: Dp = 20.dp,
+    contentPadding: Dp = 6.dp,
+    minSize: Dp? = null,
+    semanticLabel: String? = null,
+) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.surface.luminance() < 0.5f
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val clickable = onTap != null
+    val tint by animateColorAsState(
+        targetValue = if (pressed && clickable) lerpColor(color, cs.onSurface, 0.35) else color,
+        animationSpec = tween(durationMillis = 200, easing = EaseOutCubic),
+        label = "iosIconColor",
+    )
+    val backdrop by animateColorAsState(
+        targetValue = if (pressed && clickable) {
+            withAlpha(cs.onSurface, if (isDark) 0.12 else 0.08)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 160, easing = EaseOutCubic),
+        label = "iosIconBackdrop",
+    )
+    Box(
+        modifier = modifier
+            .then(if (minSize != null) Modifier.defaultMinSize(minWidth = minSize, minHeight = minSize) else Modifier)
+            .background(backdrop, RoundedCornerShape(8.dp))
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                enabled = clickable,
+                onClick = { onTap?.invoke() },
+            )
+            .semantics { this.contentDescription = semanticLabel.orEmpty() }
+            .padding(contentPadding),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size),
+        )
+    }
 }
