@@ -28,9 +28,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,8 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -81,12 +87,23 @@ import kotlinx.serialization.json.put
 
 private val modelDetailJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+// DraggableScrollableSheet sizes (build L268-272): initial 0.8, min 0.4,
+// max 0.95, snap off. Pulling the content down past the min extent closes
+// the sheet immediately (shouldCloseOnMinExtent — material bottom_sheet
+// extentChanged L325-330).
+private const val SHEET_INITIAL_FRACTION = 0.80f
+private const val SHEET_MIN_FRACTION = 0.40f
+private const val SHEET_MAX_FRACTION = 0.95f
+
 /**
  * Port of lib/features/model/widgets/model_detail_sheet.dart — the model
  * edit/create sheet (basic / advanced / built-in-tools tabs) reached via
  * long press in the model select sheet and the provider detail page's add
  * button. The Flutter sheet is a DraggableScrollableSheet (0.4-0.95,
- * initial 0.8); like ModelSelectSheet this port pins the initial 0.8 height.
+ * initial 0.8); the resize effect is ported with the Compose-native
+ * equivalent: a NestedScrollConnection lets the content list drive the
+ * sheet height (list at top + drag down shrinks it, hitting 0.4 closes;
+ * list at top + drag up grows it up to 0.95, then the list scrolls).
  */
 
 // ---- BuiltInToolNames (lib/core/services/api/builtin_tools.dart L15-127) ----
@@ -629,19 +646,60 @@ fun ModelDetailSheet(
         }
     }
 
+    val sheetState = rememberModalBottomSheetState()
     ModalBottomSheet(
         onDismissRequest = { onDismiss(false) },
+        sheetState = sheetState,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = null,
     ) {
-        val sheetHeight = with(LocalDensity.current) {
-            LocalWindowInfo.current.containerSize.height.toDp() * 0.8f
+        // DraggableScrollableSheet port: the content list drives the sheet
+        // height through nested scroll (the Compose-native equivalent of
+        // Flutter's linked scroll). List at top + drag down shrinks the
+        // sheet, hitting the min extent closes it; list at top + drag up
+        // grows it up to the max, then the list scrolls.
+        val screenHpx = LocalWindowInfo.current.containerSize.height.toFloat()
+        var sheetFraction by remember { mutableFloatStateOf(SHEET_INITIAL_FRACTION) }
+        var sheetClosing by remember { mutableStateOf(false) }
+        val listScrollState = rememberScrollState()
+        val sheetResizeConnection = object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val dy = available.y
+                // Finger up + list at top + sheet below max: grow the sheet
+                // first; once at max the list takes over.
+                if (dy < 0 && listScrollState.value <= 0 && sheetFraction < SHEET_MAX_FRACTION) {
+                    val grow = (-dy / screenHpx).coerceAtMost(SHEET_MAX_FRACTION - sheetFraction)
+                    sheetFraction += grow
+                    return Offset(0f, -grow * screenHpx)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                val dy = available.y
+                // Finger down with the list already at its top edge: shrink
+                // the sheet; reaching the min extent closes it at once
+                // (hide() slides the sheet out, onDismissRequest fires after).
+                if (dy > 0 && sheetFraction > SHEET_MIN_FRACTION) {
+                    val remaining = sheetFraction - SHEET_MIN_FRACTION
+                    val shrink = (dy / screenHpx).coerceAtMost(remaining)
+                    sheetFraction -= shrink
+                    if (shrink >= remaining && !sheetClosing) {
+                        sheetClosing = true
+                        scope.launch { sheetState.hide() }
+                    }
+                    return Offset(0f, shrink * screenHpx)
+                }
+                return Offset.Zero
+            }
         }
+        val sheetHeight = with(LocalDensity.current) { screenHpx.toDp() } * sheetFraction
         Column(
             Modifier
                 .fillMaxWidth()
-                .height(sheetHeight),
+                .height(sheetHeight)
+                .nestedScroll(sheetResizeConnection),
         ) {
             Spacer(Modifier.height(8.dp))
             // Drag indicator 40x4 r999 (build L271-278).
@@ -693,7 +751,7 @@ fun ModelDetailSheet(
             Column(
                 Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(listScrollState),
             ) {
                 when (tab) {
                     0 -> BasicTab(
