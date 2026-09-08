@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -222,7 +223,15 @@ fun TranslateScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding().imePadding()) {
+    // SafeArea bottom: keep the language/translate row above the gesture bar.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(cs.surface)
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .imePadding(),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -230,7 +239,7 @@ fun TranslateScreen(
             IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.settings_page_back_button)) { onBack() }
             Text(
                 text = stringResource(R.string.desktop_nav_translate_tooltip),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
             IosIconButton(

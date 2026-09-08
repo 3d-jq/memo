@@ -145,7 +145,7 @@ fun ProviderEditScreen(
                 text = if (isNew) stringResource(UiR.string.providers_page_add_tooltip)
                 else stringResource(UiR.string.settings_page_providers),
                 modifier = Modifier.weight(1f),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
             )
             if (!isNew) {
                 IconButton(onClick = { showDelete = true }, modifier = Modifier.size(44.dp)) {

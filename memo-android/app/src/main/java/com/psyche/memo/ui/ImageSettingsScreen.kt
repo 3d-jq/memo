@@ -105,7 +105,7 @@ fun ImageSettingsScreen(
             }
             Text(
                 text = stringResource(UiR.string.image_settings_page_title),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
             )
         }
         LazyColumn(

@@ -139,7 +139,7 @@ fun TtsServicesScreen(
             IconButton44(onClick = onBack, icon = Lucide.ArrowLeft, tint = cs.onSurface, cd = stringResource(UiR.string.settings_page_back_button))
             Text(
                 text = stringResource(UiR.string.tts_services_page_title),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
             )
             // AppBar settings action (tts_services_page.dart L44-56): opens

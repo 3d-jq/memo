@@ -317,7 +317,7 @@ fun DefaultModelScreen(
             }
             Text(
                 text = stringResource(UiR.string.default_model_page_title),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
             )
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.width(12.dp)) // actions: SizedBox(width: 12)

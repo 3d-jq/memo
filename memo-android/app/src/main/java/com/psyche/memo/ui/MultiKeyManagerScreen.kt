@@ -265,7 +265,7 @@ fun MultiKeyManagerScreen(
             IconActionButton(Lucide.ArrowLeft, cs.onSurface, "Back") { onBack() }
             Text(
                 text = stringResource(R.string.multi_key_page_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
             IconActionButton(Lucide.Trash2, cs.onSurface, deleteLabel) {

@@ -138,7 +138,7 @@ fun BalanceScreen(
             IconActionButton(Lucide.ArrowLeft, cs.onSurface, "Back") { onBack() }
             Text(
                 text = stringResource(R.string.provider_detail_page_balance_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
         }

@@ -96,7 +96,7 @@ internal fun MemoryPromptEditOverlay(
             }
             Text(
                 text = stringResource(entry.titleRes),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
             )

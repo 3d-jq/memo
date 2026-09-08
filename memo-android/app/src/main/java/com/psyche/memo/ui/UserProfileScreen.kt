@@ -140,14 +140,11 @@ fun UserProfileScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(onClick = onBack) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = stringResource(UiR.string.settings_page_back_button),
-                )
+                Icon(Lucide.ArrowLeft, contentDescription = stringResource(UiR.string.settings_page_back_button), modifier = Modifier.size(22.dp))
             }
             Text(
                 text = stringResource(UiR.string.user_profile_page_title),
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
             )
         }
         LazyColumn(

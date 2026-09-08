@@ -541,7 +541,7 @@ fun SearchServiceEditorScreen(
             }
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -1120,7 +1120,7 @@ fun SearchApiKeysScreen(
             }
             Text(
                 text = stringResource(R.string.search_service_editor_multi_key_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
         }

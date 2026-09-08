@@ -280,7 +280,7 @@ fun MessageStyleSettingsScreen(
             Text(
                 text = stringResource(UiR.string.message_style_settings_page_title),
                 modifier = Modifier.weight(1f),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
             )
             // message_style_settings_page.dart:34-45 — AppBar reset action.
             IconButton(onClick = { showResetConfirm = true }, modifier = Modifier.size(44.dp)) {

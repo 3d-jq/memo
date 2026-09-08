@@ -251,7 +251,7 @@ fun MemorySettingsScreen(
             }
             Text(
                 text = stringResource(UiR.string.memory_settings_page_title),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
             )
         }

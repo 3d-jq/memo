@@ -127,7 +127,7 @@ fun ToolSchemaEditorScreen(
             }
             Text(
                 text = stringResource(UiR.string.tool_schema_editor_page_title),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
             )
             // L60-72 — save (check) toolbar action.

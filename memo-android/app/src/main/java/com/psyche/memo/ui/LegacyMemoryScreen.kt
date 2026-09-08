@@ -110,7 +110,7 @@ fun LegacyMemoryScreen(
             }
             Text(
                 text = stringResource(UiR.string.legacy_memory_page_title),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
             )
             IconButton(

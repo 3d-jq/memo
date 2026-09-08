@@ -119,7 +119,7 @@ fun SearchServicesScreen(
             IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.search_services_page_back_tooltip)) { onBack() }
             Text(
                 text = stringResource(R.string.search_services_page_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
             IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.search_services_page_add_provider)) {

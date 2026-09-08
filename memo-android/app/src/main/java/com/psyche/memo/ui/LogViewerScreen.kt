@@ -149,7 +149,7 @@ fun LogViewerScreen(
             }
             Text(
                 text = stringResource(UiR.string.storage_space_category_logs),
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = { loadLogFiles() }, modifier = Modifier.size(44.dp)) {
@@ -572,7 +572,7 @@ private fun OverlayScaffold(
             }
             Text(
                 text = title,
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

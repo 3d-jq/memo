@@ -159,7 +159,7 @@ fun ProviderDetailScreen(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = cfg.name.ifEmpty { providerId },
-                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                     maxLines = 1,
                 )
             }

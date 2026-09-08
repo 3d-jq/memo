@@ -177,7 +177,7 @@ fun WorldBookScreen(
             IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.settings_page_back_button)) { onBack() }
             Text(
                 text = stringResource(R.string.world_book_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
             IconActionButton(

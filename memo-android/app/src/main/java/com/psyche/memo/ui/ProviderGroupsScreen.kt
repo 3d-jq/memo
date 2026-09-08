@@ -116,7 +116,7 @@ fun ProviderGroupsScreen(
             IconActionButton(Lucide.ChevronLeft, cs.onSurface, "Back") { onBack() }
             Text(
                 text = stringResource(R.string.provider_groups_manage_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
             IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.provider_groups_create_new_group_action)) {

@@ -130,7 +130,7 @@ fun AssistantSettingsEditScreen(
                 text = assistant?.name?.takeIf { it.isNotBlank() }
                     ?: stringResource(UiR.string.assistant_edit_page_title),
                 maxLines = 1,
-                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
             )
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.width(12.dp))

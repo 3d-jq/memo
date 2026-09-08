@@ -98,7 +98,7 @@ fun QuickPhrasesScreen(
                     if (assistantId == null) R.string.quick_phrase_global_title
                     else R.string.quick_phrase_assistant_title,
                 ),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
             IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.quick_phrase_add_tooltip)) {

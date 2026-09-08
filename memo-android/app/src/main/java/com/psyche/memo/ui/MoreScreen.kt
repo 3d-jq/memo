@@ -62,10 +62,7 @@ fun MoreScreen(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TextButton(onClick = onBack) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = stringResource(com.psyche.memo.ui.R.string.settings_page_back_button),
-                )
+                Icon(Lucide.ArrowLeft, contentDescription = stringResource(com.psyche.memo.ui.R.string.settings_page_back_button), modifier = Modifier.size(22.dp))
             }
             // Page intentionally has no title upstream (title: null).
         }

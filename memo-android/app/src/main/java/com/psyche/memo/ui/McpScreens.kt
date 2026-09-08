@@ -102,7 +102,7 @@ fun McpServersScreen(
             IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.mcp_page_back_tooltip)) { onBack() }
             Text(
                 text = stringResource(R.string.mcp_assistant_sheet_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
             IconActionButton(Lucide.Timer, cs.onSurface, stringResource(R.string.mcp_timeout_dialog_title)) {
