@@ -127,6 +127,10 @@ import com.psyche.memo.ChatViewModel
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.data.model.ImagePart
 import com.psyche.memo.data.model.TextPart
+import com.psyche.memo.ui.chat.AskUserInteractionService
+import com.psyche.memo.ui.chat.AskUserResult
+import com.psyche.memo.ui.chat.ToolApprovalService
+import com.psyche.memo.ui.chat.ToolUiPart
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -422,6 +426,10 @@ fun ChatContent(
             container.preferenceRepository.readLocal(key)
         }
     }
+    // 工具执行服务（tool_approval_service / ask_user_interaction_service）—— 审批卡、
+    // ask-user 卡与时间线可见性都从这里取状态。
+    val approvalService = container.toolApprovalService
+    val askUserService = container.askUserInteractionService
 
     val cs = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -812,6 +820,12 @@ fun ChatContent(
                             onToggleReasoning = { segmentIndex ->
                                 vm.toggleReasoningSegment(msg.id, segmentIndex)
                             },
+                            conversationId = conversationId,
+                            approvalService = approvalService,
+                            askUserService = askUserService,
+                            onRecoveredAnswer = { part, result ->
+                                vm.resumeAfterToolAnswer(msg.id, part, result.jsonString)
+                            },
                         )
                     }
                 }
@@ -980,6 +994,14 @@ private fun MessageRow(
     timelineSettings: com.psyche.memo.ui.chat.ChatTimelineSettings,
     /** 展开/折叠某个思考段（home_page_controller.toggleReasoningSegment）。 */
     onToggleReasoning: (segmentIndex: Int) -> Unit,
+    /** 当前会话 id（审批卡 / ask-user 卡按会话匹配 pending 请求）。 */
+    conversationId: String?,
+    /** 工具审批服务（tool_approval_service.dart）—— 审批卡与时间线可见性。 */
+    approvalService: ToolApprovalService?,
+    /** ask-user 交互服务（ask_user_interaction_service.dart）。 */
+    askUserService: AskUserInteractionService?,
+    /** 恢复已持久化 ask-user 回答（home_page_controller.submitRecoveredAskUserAnswer）。 */
+    onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)?,
 ) {
     val cs = MaterialTheme.colorScheme
     val isUser = msg.role == "user"
@@ -1032,6 +1054,10 @@ private fun MessageRow(
                 com.psyche.memo.ui.chat.ToolCallCard(
                     part = toolPart,
                     hideToolResultImages = timelineSettings.hideToolResultImages,
+                    conversationId = conversationId,
+                    approval = approvalService,
+                    askUser = askUserService,
+                    onRecoveredAnswer = onRecoveredAnswer,
                 )
             }
         }
@@ -1211,6 +1237,10 @@ private fun MessageRow(
                                 com.psyche.memo.ui.chat.ChainOfThoughtCard(
                                     steps = block.steps,
                                     settings = timelineSettings,
+                                    conversationId = conversationId,
+                                    approval = approvalService,
+                                    askUser = askUserService,
+                                    onRecoveredAnswer = onRecoveredAnswer,
                                     onToggleReasoning = onToggleReasoning,
                                 )
                         }

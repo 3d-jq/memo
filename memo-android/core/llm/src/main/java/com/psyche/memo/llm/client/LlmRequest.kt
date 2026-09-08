@@ -9,8 +9,18 @@ data class LlmMessage(
     val content: String? = null,
     /** Conversation part payloads: text/reasoning/tool_call come as JSON strings. */
     val parts: List<String> = emptyList(),
+    /** Assistant transcript for a tool-followup round (openai tool_calls). */
+    val toolCalls: List<LlmToolCall> = emptyList(),
     val toolCallId: String? = null,
     val toolName: String? = null,
+)
+
+/** openai_tool_transcript.dart `openaiToolCallMaps` 单条 —— 上行 assistant tool_call。 */
+data class LlmToolCall(
+    val id: String,
+    val name: String,
+    /** jsonEncode(arguments) 形态：对象 JSON 字符串。 */
+    val argumentsJson: String,
 )
 
 data class LlmToolSpec(

@@ -138,6 +138,25 @@ class StreamChunkHandler {
     fun textContent(): String =
         folded.filterIsInstance<TextPart>().joinToString("") { it.text }
 
+    /**
+     * stream_chunk_handler.dart `_upsertTool` — fold an executed tool's result
+     * into its ToolCallPart (the ToolCallResult emit path of the round loop).
+     * Keeps id/name/arguments/server/metadata; only `content` is replaced.
+     */
+    fun foldToolResult(id: String, content: JsonElement) {
+        val index = toolIndex[id] ?: return
+        val existing = folded.getOrNull(index) as? ToolCallPart ?: return
+        val payload = ToolCallPart.decode(existing.payloadJson) ?: return
+        folded[index] = ToolCallPart.encode(
+            id = payload.id,
+            name = payload.name,
+            arguments = tryDecode(payload.arguments),
+            content = content,
+            server = payload.server,
+            metadata = payload.metadata,
+        )
+    }
+
     private class ToolBuffer {
         var name = ""
         val input = StringBuilder()

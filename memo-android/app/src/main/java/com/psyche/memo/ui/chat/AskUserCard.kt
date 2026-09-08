@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,7 @@ import com.psyche.memo.ui.ChatStyleSpec
 import com.psyche.memo.ui.IosCheckbox
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.AppFontWeights
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -222,6 +224,7 @@ private fun JsonElement.scalarText(): String = when (this) {
 fun AskUserToolCard(
     part: ToolUiPart,
     onSubmit: ((AskUserResult) -> Unit)? = null,
+    askUser: AskUserInteractionService? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
@@ -301,7 +304,7 @@ fun AskUserToolCard(
                         animationSpec = tween(durationMillis = 240, easing = EaseOutCubic),
                     ),
             ) {
-                AskUserInlineBody(part = part, onSubmit = onSubmit)
+                AskUserInlineBody(part = part, onSubmit = onSubmit, askUser = askUser)
             }
         }
     }
@@ -320,11 +323,20 @@ fun AskUserToolCard(
 internal fun AskUserInlineBody(
     part: ToolUiPart,
     onSubmit: ((AskUserResult) -> Unit)? = null,
+    askUser: AskUserInteractionService? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
     val fg = chatSurfaceFg(cs, isDark)
-    val questions = remember(part.arguments) { normalizeAskUserQuestions(part.arguments) }
+    // ask_user_interaction_service.dart pendingRequests[part.id] —— 进行中的提问
+    // 请求给出权威问题集；无请求时退回到参数的存储问题（Dart 6273-6277）。
+    val pendingMap by remember(askUser) {
+        askUser?.pendingRequests ?: MutableStateFlow<Map<String, AskUserRequest>>(emptyMap())
+    }.collectAsState()
+    val pendingRequest = pendingMap[part.id]
+    val questions = remember(part.arguments, pendingRequest) {
+        pendingRequest?.questions ?: normalizeAskUserQuestions(part.arguments)
+    }
     val answered = part.content?.trim()?.isNotEmpty() == true
     val invalid = questions.isEmpty() && !answered
     val answeredValues = remember(part.content) {
@@ -416,21 +428,26 @@ internal fun AskUserInlineBody(
                         enabled = questions.isNotEmpty() &&
                             questions.all { hasAnswer(it) } &&
                             !submitting &&
-                            onSubmit != null,
+                            (pendingRequest != null || onSubmit != null),
                         onTap = {
-                            if (onSubmit != null) {
+                            val answers = buildAskUserAnswers(
+                                questions,
+                                singleAnswers,
+                                multiAnswers,
+                                textValues,
+                                skipped,
+                            )
+                            if (pendingRequest != null && askUser != null) {
+                                // 进行中：直接回调服务完成 deferred（Dart 6243-6245）。
+                                askUser.answer(part.id, answers)
+                            } else if (onSubmit != null) {
+                                // 恢复路径（无进行中请求）：走 recovered 提交回调。
                                 submitting = true
-                                onSubmit(
-                                    AskUserResult.answer(
-                                        buildAskUserAnswers(
-                                            questions,
-                                            singleAnswers,
-                                            multiAnswers,
-                                            textValues,
-                                            skipped,
-                                        ),
-                                    ),
-                                )
+                                try {
+                                    onSubmit(AskUserResult.answer(answers))
+                                } finally {
+                                    submitting = false
+                                }
                             }
                         },
                     )

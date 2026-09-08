@@ -2,11 +2,17 @@ package com.psyche.memo.llm.provider
 
 import com.psyche.memo.llm.client.LlmMessage
 import com.psyche.memo.llm.client.LlmRequest
+import com.psyche.memo.llm.client.LlmToolCall
 import com.psyche.memo.llm.core.CancellationRegistry
 import com.psyche.memo.llm.retry.AutoRetryOptions
 import com.psyche.memo.llm.stream.StreamChunk
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -130,6 +136,91 @@ class OpenAiClientIntegrationTest {
         } catch (e: Exception) {
             assertTrue(e.message!!.contains("500"))
         }
+    }
+
+    // ---- Tool-followup transcript serialization (chat_completions_api.dart
+    // buildOpenAIChatCompletionMessages 25-66 + openai_tool_transcript.dart) ----
+
+    private fun bodyOf(req: LlmRequest): JsonObject = runBlocking {
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: [DONE]\n\n"))
+        client().streamChat(req).toList()
+        Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
+    }
+
+    private fun messagesOf(body: JsonObject): List<JsonObject> =
+        (body["messages"] as JsonArray).map { it.jsonObject }
+
+    @Test
+    fun assistantWithToolCalls_serializesToolCallsAndContent() {
+        val req = request(server.url("/").toString()).copy(
+            messages = listOf(
+                LlmMessage(role = "user", content = "hi"),
+                LlmMessage(
+                    role = "assistant",
+                    content = "",
+                    toolCalls = listOf(
+                        LlmToolCall(
+                            id = "call_1",
+                            name = "get_weather",
+                            argumentsJson = """{"city":"Beijing"}""",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val assistant = messagesOf(bodyOf(req))[1]
+        assertEquals("assistant", assistant["role"]?.jsonPrimitive?.content)
+        assertEquals("", assistant["content"]?.jsonPrimitive?.content)
+        val calls = assistant["tool_calls"] as JsonArray
+        val call = calls[0].jsonObject
+        assertEquals("call_1", call["id"]?.jsonPrimitive?.content)
+        assertEquals("function", call["type"]?.jsonPrimitive?.content)
+        val fn = call["function"]?.jsonObject!!
+        assertEquals("get_weather", fn["name"]?.jsonPrimitive?.content)
+        assertEquals("""{"city":"Beijing"}""", fn["arguments"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun assistantWithoutToolCalls_hasNoToolCallsKey() {
+        val req = request(server.url("/").toString()).copy(
+            messages = listOf(
+                LlmMessage(role = "assistant", content = "Hello!"),
+            ),
+        )
+        val assistant = messagesOf(bodyOf(req)).single()
+        assertTrue(assistant.containsKey("content"))
+        assertTrue(!assistant.containsKey("tool_calls"))
+    }
+
+    @Test
+    fun toolRoleMessage_serializesLinkageFields() {
+        val req = request(server.url("/").toString()).copy(
+            messages = listOf(
+                LlmMessage(
+                    role = "tool",
+                    toolCallId = "call_1",
+                    toolName = "get_weather",
+                    content = """{"temp":21}""",
+                ),
+            ),
+        )
+        val tool = messagesOf(bodyOf(req)).single()
+        assertEquals("tool", tool["role"]?.jsonPrimitive?.content)
+        assertEquals("call_1", tool["tool_call_id"]?.jsonPrimitive?.content)
+        assertEquals("get_weather", tool["name"]?.jsonPrimitive?.content)
+        assertEquals("""{"temp":21}""", tool["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun toolRoleWithoutName_omitsNameKey() {
+        val req = request(server.url("/").toString()).copy(
+            messages = listOf(
+                LlmMessage(role = "tool", toolCallId = "call_1", content = "ok"),
+            ),
+        )
+        val tool = messagesOf(bodyOf(req)).single()
+        assertEquals("call_1", tool["tool_call_id"]?.jsonPrimitive?.content)
+        assertTrue(!tool.containsKey("name"))
     }
 
     // ---- URL construction: mirrors Flutter _openAICompatibleUrl (openai_provider.dart

@@ -5,6 +5,7 @@ import com.psyche.memo.data.model.ReasoningPart
 import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.data.model.ToolCallPart
 import com.psyche.memo.data.model.ToolCallPayload
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -138,6 +139,30 @@ class StreamChunkHandlerTest {
         val handler = StreamChunkHandler()
         assertTrue(handler.parts.isEmpty())
         assertFalse(handler.finished)
+    }
+
+    /** stream_chunk_handler.dart ToolCallResult path — content folds in, rest stays. */
+    @Test
+    fun foldToolResultWritesContentIntoTheToolPart() {
+        val handler = StreamChunkHandler()
+        handler.handle(StreamChunk.ToolCallDelta("c1", "get_time_info", "{}"))
+        assertNull(toolAt(handler.parts, 0).content)
+        handler.foldToolResult("c1", JsonPrimitive("""{"year":2026}"""))
+        val tool = toolAt(handler.parts, 0)
+        assertEquals("c1", tool.id)
+        assertEquals("get_time_info", tool.name)
+        assertEquals("{}", tool.arguments)
+        assertEquals("""{"year":2026}""", tool.content)
+        assertFalse(tool.server)
+    }
+
+    @Test
+    fun foldToolResultIsNoOpForUnknownOrEmptyId() {
+        val handler = StreamChunkHandler()
+        handler.handle(StreamChunk.ToolCallDelta("c1", "get_time_info", "{}"))
+        handler.foldToolResult("missing", JsonPrimitive("x"))
+        handler.foldToolResult("", JsonPrimitive("x"))
+        assertNull(toolAt(handler.parts, 0).content)
     }
 
     @Test

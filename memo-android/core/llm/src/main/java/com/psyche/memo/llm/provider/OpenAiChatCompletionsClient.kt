@@ -211,11 +211,32 @@ class OpenAiChatCompletionsClient(
         return obj.toString()
     }
 
+    /**
+     * chat_completions_api.dart `buildOpenAIChatCompletionMessages` 消息重建
+     * (25-66)：assistant 带 tool_calls（openaiToolCallMaps 形态）、tool role 带
+     * tool_call_id + name（仅在非空时输出）。
+     */
     private fun messageToJson(m: LlmMessage): JsonObject = buildJsonObject {
         put("role", m.role)
         when {
+            m.role == "assistant" && m.toolCalls.isNotEmpty() -> {
+                put("content", m.content ?: "")
+                put("tool_calls", buildJsonArray {
+                    for (call in m.toolCalls) {
+                        add(buildJsonObject {
+                            put("id", call.id)
+                            put("type", "function")
+                            putJsonObject("function") {
+                                put("name", call.name)
+                                put("arguments", call.argumentsJson)
+                            }
+                        })
+                    }
+                })
+            }
             m.toolCallId != null -> {
                 put("tool_call_id", m.toolCallId)
+                if (!m.toolName.isNullOrEmpty()) put("name", m.toolName)
                 put("content", m.content ?: "")
             }
             m.content != null -> put("content", m.content)

@@ -221,6 +221,40 @@ class MessageDao(private val db: SQLiteDatabase) {
         }
     }
 
+    /**
+     * Replaces the stored parts of an existing revision and sets its streaming
+     * flag (home_page_controller.submitRecoveredAskUserAnswer → upsertToolEvent
+     * path: fold the tool answer into the persisted message, then stream the
+     * follow-up). Mirrors [replaceTextPart]'s transaction shape.
+     */
+    fun replaceParts(message: ChatMessage, streaming: Boolean) {
+        db.beginTransaction()
+        try {
+            db.delete("message_part_rows", "revision_id = ?", arrayOf(message.id))
+            message.parts.forEachIndexed { index, part ->
+                db.insertOrThrow(
+                    "message_part_rows", null,
+                    ContentValues().apply {
+                        put("conversation_id", message.conversationId)
+                        put("revision_id", message.id)
+                        put("ordinal", index)
+                        put("kind", part.kind)
+                        put("payload", part.encodePayload())
+                        put("created_at", message.timestamp)
+                        put("updated_at", System.currentTimeMillis())
+                    },
+                )
+            }
+            db.execSQL(
+                "UPDATE message_rows SET updated_at = ?, is_streaming = ? WHERE id = ?",
+                arrayOf<Any>(System.currentTimeMillis(), if (streaming) 1 else 0, message.id),
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun setStreaming(id: String, streaming: Boolean) {
         db.execSQL("UPDATE message_rows SET is_streaming = ? WHERE id = ?", arrayOf<Any>(if (streaming) 1 else 0, id))
     }

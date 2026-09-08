@@ -10,10 +10,15 @@ import com.psyche.memo.data.model.ReasoningSegment
 import com.psyche.memo.data.model.ReasoningSegmentCodec
 import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.data.model.ToolCallPart
+import com.psyche.memo.data.model.ToolCallPayload
 import com.psyche.memo.llm.client.LlmMessage
 import com.psyche.memo.llm.client.LlmRequest
+import com.psyche.memo.llm.client.LlmToolCall
+import com.psyche.memo.llm.client.LlmToolSpec
 import com.psyche.memo.llm.stream.StreamChunk
 import com.psyche.memo.llm.stream.StreamChunkHandler
+import com.psyche.memo.ui.chat.ToolHandler
+import com.psyche.memo.ui.chat.ToolUiPart
 import com.psyche.memo.ui.chat.TranslateLanguage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,6 +26,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
@@ -232,6 +242,11 @@ class ChatViewModel(
     fun stop() {
         generationJob?.cancel()
         container.cancellations.cancel(conversationId)
+        // chat_actions.dart _cancelStreamingByIdOnce 1924-1941 — cancel pending
+        // tool approvals / askUser requests for this conversation so the
+        // handler's await resolves instead of deadlocking the round loop.
+        container.toolApprovalService.cancelForConversation(conversationId)
+        container.askUserInteractionService.cancelForConversation(conversationId)
         _streaming.value = false
         val msgs = _messages.value
         if (msgs.isNotEmpty()) {
@@ -512,11 +527,23 @@ class ChatViewModel(
                     isStreaming = true,
                 ),
             )
-            // Folding handler lives outside the try: the stop path (catch)
-            // reads the accumulated partial parts from it.
-            val handler = StreamChunkHandler()
-            // Terminal usage reported by the provider (Finish chunk), if any.
-            var finishUsage: UsageStats? = null
+            // Parts accumulated across rounds; each round folds into its own
+            // handler, then its parts/segments merge here (the original's single
+            // UI handler folds every round into one parts list).
+            val allParts = mutableListOf<MessagePart>()
+            val allSegments = mutableListOf<ReasoningSegment>()
+            var persisted = false
+            fun persistOnce(parts: List<MessagePart>, usage: UsageStats?) {
+                if (persisted) return
+                persisted = true
+                persistAssistant(
+                    assistantId,
+                    parts,
+                    segments = allSegments,
+                    usage = usage,
+                    durationMs = System.currentTimeMillis() - generationStartMs,
+                )
+            }
             try {
                 // Build request from current UI messages (exclude skeleton).
                 val history = _messages.value
@@ -527,84 +554,388 @@ class ChatViewModel(
                         if (content.isEmpty()) null
                         else LlmMessage(role = msg.role, content = content)
                     }
-                val providerId = selectedProviderId.value
-                val modelId = selectedModelId.value
-                val request = LlmRequest(
-                    providerId = providerId,
-                    modelId = modelId,
-                    messages = history,
-                    apiKey = container.apiKeyFor(providerId) ?: "",
-                    baseUrl = container.baseUrlFor(providerId),
-                    chatPath = container.providerConfig(providerId)?.chatPath,
+                    .toMutableList()
+                // Only tools with a native dispatch path are offered:
+                // get_time_info has an executor, ask_user_input_v0 routes to the
+                // interaction service, calendar_create exercises the approval
+                // gate (its executor is unported → honest execution_error after
+                // approval). MCP/search/memory executors are unported, so their
+                // tools are not offered. Deviation from the original's full
+                // LocalToolsService.buildToolDefinitions set.
+                val tools = offeredTools()
+                runGenerationLoop(
+                    assistantId = assistantId,
+                    history = history,
+                    tools = tools,
+                    allParts = allParts,
+                    allSegments = allSegments,
+                    updateStreaming = { parts, segments ->
+                        updateAssistantStreaming(assistantId, parts, segments)
+                    },
+                    onPersist = { parts, usage -> persistOnce(parts, usage) },
                 )
-                val client = container.clientFor(providerId)
-                // First terminal wins (mirrors the original finishHandled /
-                // terminalPersisted flags): a stream that ends with either a
-                // Finish or an Error must not also run the other path.
-                var terminalHandled = false
-                var persisted = false
-                fun persistOnce(parts: List<MessagePart>) {
-                    if (persisted) return
-                    persisted = true
-                    persistAssistant(
-                        assistantId,
-                        parts,
-                        segments = handler.reasoningSegments,
-                        usage = finishUsage,
-                        durationMs = System.currentTimeMillis() - generationStartMs,
-                    )
-                }
-                client.streamChat(request).collect { chunk ->
-                    handler.handle(chunk)
-                    when (chunk) {
-                        is StreamChunk.TextDelta,
-                        is StreamChunk.ReasoningDelta,
-                        is StreamChunk.ToolCallDelta,
-                        -> updateAssistantStreaming(assistantId, handler.parts, handler.segmentsJson())
-                        is StreamChunk.Finish -> if (!terminalHandled) {
-                            terminalHandled = true
-                            finishUsage = parseUsage(chunk.usage)
-                            updateAssistantStreaming(assistantId, handler.parts, handler.segmentsJson())
-                            finishAssistant(assistantId, handler.parts, handler.segmentsJson())
-                            // Persist the finished reply (chat_service terminal
-                            // checkpoint in the original).
-                            persistOnce(handler.parts)
-                        }
-                        is StreamChunk.Error -> if (!terminalHandled && !handler.finished) {
-                            // Mirror the original stream-error path
-                            // (chat_actions._handleStreamError +
-                            // assistantPartsForStreamError): keep any partial
-                            // content, surface the error text when nothing was
-                            // generated, and mark the message failed.
-                            terminalHandled = true
-                            val finalParts = markFailed(
-                                assistantId,
-                                chunk.message,
-                                handler.parts,
-                                handler.segmentsJson(),
-                            )
-                            persistOnce(finalParts)
-                        }
-                    }
-                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // user stop: the partial reply is kept and persisted, exactly
                 // like the original stop path.
-                persistAssistant(assistantId, handler.parts, segments = handler.reasoningSegments)
+                persistAssistant(assistantId, allParts, segments = allSegments)
             } catch (e: Exception) {
                 val finalParts = markFailed(
                     assistantId,
                     e.toString(),
-                    handler.parts,
-                    handler.segmentsJson(),
+                    allParts,
+                    encodeSegments(allSegments),
                 )
-                persistAssistant(assistantId, finalParts, segments = handler.reasoningSegments)
+                persistAssistant(assistantId, finalParts, segments = allSegments)
             } finally {
                 _streaming.value = false
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
             }
         }
+    }
+
+    /**
+     * 工具轮询循环主体（tool_loop_runner.dart runClientToolFollowUps）——
+     * [startGeneration] 与 [resumeAfterToolAnswer] 共用同一执行体。每个 HTTP 流用
+     * 一个 StreamChunkHandler（Dart 的 handler 也是一响应一实例），把结果折回 part、
+     * 追加 assistant tool_calls + tool 记录进 [history]，直到模型不再宣告工具。
+     *
+     * [updateStreaming] 收到「已累积 part + 当前 round 的 part」的合并结果与编码后的
+     * 段，用于刷新流式 UI；[onPersist] 在流程终止/出错时落库（调用方自带去重守卫）。
+     */
+    private suspend fun runGenerationLoop(
+        assistantId: String,
+        history: MutableList<LlmMessage>,
+        tools: List<LlmToolSpec>,
+        allParts: MutableList<MessagePart>,
+        allSegments: MutableList<ReasoningSegment>,
+        updateStreaming: (List<MessagePart>, String?) -> Unit,
+        onPersist: (List<MessagePart>, UsageStats?) -> Unit,
+    ) {
+        var finishUsage: UsageStats? = null
+        val toolHandler = ToolHandler(
+            approvalService = container.toolApprovalService,
+            askUserService = container.askUserInteractionService,
+            conversationId = conversationId,
+            assistant = container.currentAssistant(),
+        )
+        val providerId = selectedProviderId.value
+        val modelId = selectedModelId.value
+        while (true) {
+            val request = LlmRequest(
+                providerId = providerId,
+                modelId = modelId,
+                messages = history,
+                tools = tools,
+                apiKey = container.apiKeyFor(providerId) ?: "",
+                baseUrl = container.baseUrlFor(providerId),
+                chatPath = container.providerConfig(providerId)?.chatPath,
+            )
+            val client = container.clientFor(providerId)
+            // Fresh handler per round: each HTTP stream ends with its own
+            // Finish, which would otherwise block later chunks (the Dart
+            // handler is likewise one instance per response).
+            val roundHandler = StreamChunkHandler()
+            var failed = false
+            fun roundUpdate() {
+                updateStreaming(
+                    allParts + roundHandler.parts,
+                    encodeSegments(allSegments + roundHandler.reasoningSegments),
+                )
+            }
+            client.streamChat(request).collect { chunk ->
+                roundHandler.handle(chunk)
+                when (chunk) {
+                    is StreamChunk.TextDelta,
+                    is StreamChunk.ReasoningDelta,
+                    is StreamChunk.ToolCallDelta,
+                    -> roundUpdate()
+                    is StreamChunk.Finish -> {
+                        finishUsage = accumulateUsage(finishUsage, parseUsage(chunk.usage))
+                        roundUpdate()
+                    }
+                    is StreamChunk.Error -> if (!failed && !roundHandler.finished) {
+                        // Mirror the original stream-error path
+                        // (chat_actions._handleStreamError +
+                        // assistantPartsForStreamError): keep any partial
+                        // content, surface the error text when nothing was
+                        // generated, and mark the message failed.
+                        failed = true
+                        val finalParts = markFailed(
+                            assistantId,
+                            chunk.message,
+                            allParts + roundHandler.parts,
+                            encodeSegments(allSegments + roundHandler.reasoningSegments),
+                        )
+                        onPersist(finalParts, finishUsage)
+                    }
+                }
+            }
+            if (failed) break
+            val calls = takeCallsAfterRound(roundHandler)
+            if (calls.isEmpty()) {
+                // The model is done: finalize the reply. A clean stream end
+                // without a Finish chunk still finalizes (the round loop's
+                // `finish()`).
+                val finalParts = allParts + roundHandler.parts
+                updateStreaming(
+                    finalParts,
+                    encodeSegments(allSegments + roundHandler.reasoningSegments),
+                )
+                finishAssistant(
+                    assistantId,
+                    finalParts,
+                    encodeSegments(allSegments + roundHandler.reasoningSegments),
+                )
+                onPersist(finalParts, finishUsage)
+                break
+            }
+            // Execute each announced tool and fold its result into the
+            // part (stream_chunk_handler.dart ToolCallResult path).
+            val results = calls.map { call ->
+                val result = toolHandler.handle(
+                    call.name,
+                    parseToolArguments(call.arguments),
+                    call.id,
+                )
+                roundHandler.foldToolResult(call.id, JsonPrimitive(result))
+                result
+            }
+            allParts += roundHandler.parts
+            allSegments += roundHandler.reasoningSegments
+            updateStreaming(allParts, encodeSegments(allSegments)) // folded results now visible
+            // Append the assistant tool_calls + tool result transcript
+            // (chat_completions_api.dart _buildAssistantToolCallMessage;
+            // empty assistant text normalizes to "\n\n").
+            history.add(
+                LlmMessage(
+                    role = "assistant",
+                    content = allParts.filterIsInstance<TextPart>()
+                        .joinToString("") { it.text }
+                        .ifEmpty { "\n\n" },
+                    toolCalls = calls.map { LlmToolCall(it.id, it.name, it.arguments) },
+                ),
+            )
+            for ((index, call) in calls.withIndex()) {
+                history.add(
+                    LlmMessage(
+                        role = "tool",
+                        toolCallId = call.id,
+                        toolName = call.name,
+                        content = results[index],
+                    ),
+                )
+            }
+        }
+    }
+
+    /**
+     * 恢复已持久化的 ask-user 工具回答（home_page_controller.submitRecoveredAskUserAnswer
+     * 1017-1066 + chat_actions.continueAssistantMessageAfterToolAnswer 1766+）：把答案折回
+     * 目标消息的工具 part（upsertToolEvent 等价）并置为流式，再跑 [runGenerationLoop] 续答。
+     * 在途发送时忽略（Dart isSendInFlight 守卫）。目标是继续同一消息，不新建骨架。
+     */
+    fun resumeAfterToolAnswer(messageId: String, part: ToolUiPart, resultJson: String) {
+        if (_streaming.value) return
+        val targetUi = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val updatedParts = targetUi.parts.map { p ->
+            if (p is ToolCallPart) {
+                val payload = ToolCallPart.decode(p.payloadJson)
+                if (payload != null &&
+                    (payload.id == part.id || (payload.id.isEmpty() && payload.name == part.toolName))
+                ) {
+                    ToolCallPart.encode(
+                        id = payload.id,
+                        name = payload.name,
+                        arguments = runCatching { Json.parseToJsonElement(payload.arguments) }
+                            .getOrElse { JsonNull },
+                        content = JsonPrimitive(resultJson),
+                        server = payload.server,
+                        metadata = payload.metadata,
+                    )
+                } else p
+            } else p
+        }
+        _messages.value = _messages.value.map {
+            if (it.id == messageId) it.copy(parts = updatedParts, isStreaming = true) else it
+        }
+        generationJob?.cancel()
+        _streaming.value = true
+        generationJob = viewModelScope.launch {
+            container.streamingConversationIds.value =
+                container.streamingConversationIds.value + conversationId
+            val allParts = updatedParts.toMutableList()
+            val allSegments = ReasoningSegmentCodec.decode(targetUi.reasoningSegmentsJson).toMutableList()
+            var persisted = false
+            fun persistFinal(parts: List<MessagePart>) {
+                if (persisted) return
+                persisted = true
+                if (isTemporary) return
+                viewModelScope.launch {
+                    val dbMsg = withContext(Dispatchers.IO) { container.messageDao.get(messageId) }
+                        ?: return@launch
+                    withContext(Dispatchers.IO) {
+                        container.messageDao.replaceParts(
+                            dbMsg.withParts(
+                                parts = parts,
+                                reasoningSegmentsJson = encodeSegments(allSegments),
+                                isStreaming = false,
+                            ),
+                            streaming = false,
+                        )
+                    }
+                }
+            }
+            // 先把已答内容写库（replaceParts 与 upsertToolEvent 等价），再进入流式。
+            if (!isTemporary) {
+                val initial = container.messageDao.get(messageId)
+                if (initial != null) {
+                    withContext(Dispatchers.IO) {
+                        container.messageDao.replaceParts(
+                            initial.withParts(parts = updatedParts, isStreaming = true),
+                            streaming = true,
+                        )
+                    }
+                }
+            }
+            try {
+                // 历史 = 目标之前的消息正文 + assistant tool_calls 记录 + 工具回答
+                // （chat_completions_api.dart _buildAssistantToolCallMessage 形状）。
+                val history = _messages.value
+                    .takeWhile { it.id != messageId }
+                    .mapNotNull { msg ->
+                        val content = msg.parts.filterIsInstance<TextPart>()
+                            .joinToString("") { it.text }
+                        if (content.isEmpty()) null
+                        else LlmMessage(role = msg.role, content = content)
+                    }
+                    .toMutableList()
+                history.add(
+                    LlmMessage(
+                        role = "assistant",
+                        content = targetUi.content.ifEmpty { "\n\n" },
+                        toolCalls = listOf(LlmToolCall(part.id, part.toolName, part.arguments.toString())),
+                    ),
+                )
+                history.add(
+                    LlmMessage(
+                        role = "tool",
+                        toolCallId = part.id,
+                        toolName = part.toolName,
+                        content = resultJson,
+                    ),
+                )
+                runGenerationLoop(
+                    assistantId = messageId,
+                    history = history,
+                    tools = offeredTools(),
+                    allParts = allParts,
+                    allSegments = allSegments,
+                    updateStreaming = { parts, segments ->
+                        updateAssistantStreaming(messageId, parts, segments)
+                    },
+                    onPersist = { parts, _ -> persistFinal(parts) },
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                persistFinal(allParts)
+            } catch (e: Exception) {
+                persistFinal(markFailed(messageId, e.toString(), allParts, encodeSegments(allSegments)))
+            } finally {
+                _streaming.value = false
+                container.streamingConversationIds.value =
+                    container.streamingConversationIds.value - conversationId
+            }
+        }
+    }
+
+    /** chat_message 无 data class copy —— 手工重建一条保留其余字段的消息。 */
+    private fun ChatMessage.withParts(
+        parts: List<MessagePart>,
+        reasoningSegmentsJson: String? = this.reasoningSegmentsJson,
+        isStreaming: Boolean = this.isStreaming,
+        updatedAt: Long? = System.currentTimeMillis(),
+    ): ChatMessage = ChatMessage(
+        id = id,
+        role = role,
+        parts = parts,
+        timestamp = timestamp,
+        modelId = modelId,
+        providerId = providerId,
+        totalTokens = totalTokens,
+        conversationId = conversationId,
+        isStreaming = isStreaming,
+        reasoningStartAt = reasoningStartAt,
+        reasoningFinishedAt = reasoningFinishedAt,
+        translation = translation,
+        reasoningSegmentsJson = reasoningSegmentsJson,
+        groupId = groupId,
+        version = version,
+        promptTokens = promptTokens,
+        completionTokens = completionTokens,
+        cachedTokens = cachedTokens,
+        durationMs = durationMs,
+        updatedAt = updatedAt,
+        messageOrder = messageOrder,
+    )
+
+    /**
+     * Local tools offered to the model (see startGeneration for the subset
+     * rationale). Mirrors LocalToolsService.buildToolDefinitions 419-449:
+     * only names in the assistant's localToolIds that are available on this
+     * platform, definitions from the catalog.
+     */
+    private fun offeredTools(): List<LlmToolSpec> {
+        val assistant = container.currentAssistant() ?: return emptyList()
+        val names = com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames
+        val offered = setOf(
+            names.TIME_INFO,
+            names.ASK_USER,
+            names.CALENDAR_CREATE,
+        )
+        val out = mutableListOf<LlmToolSpec>()
+        for (name in assistant.localToolIds) {
+            if (name !in offered) continue
+            if (!com.psyche.memo.ui.BuiltInToolCatalog.isAvailableOnThisPlatform(name)) continue
+            val definition = com.psyche.memo.ui.BuiltInToolCatalog.localDefinition(name)
+            val fn = definition["function"] as? JsonObject ?: continue
+            val specName = (fn["name"] as? JsonPrimitive)?.content ?: name
+            val description = (fn["description"] as? JsonPrimitive)?.content ?: ""
+            val parameters = fn["parameters"] as? JsonObject
+            out.add(LlmToolSpec(specName, description, parameters?.toString() ?: "{}"))
+        }
+        return out
+    }
+
+    /** takeCallsAfterRound 的 Native 等价 —— 本轮新增（未执行）的工具调用。 */
+    private fun takeCallsAfterRound(roundHandler: StreamChunkHandler): List<ToolCallPayload> =
+        roundHandler.parts
+            .filterIsInstance<ToolCallPart>()
+            .mapNotNull { ToolCallPart.decode(it.payloadJson) }
+            .filter { it.content == null }
+
+    /** 工具调用参数解析：非法 JSON 落到空对象（handler 收不到对象参数时）。 */
+    private fun parseToolArguments(raw: String): JsonObject = try {
+        Json.parseToJsonElement(raw).jsonObject
+    } catch (e: Exception) {
+        JsonObject(emptyMap())
+    }
+
+    /** accumulate 各轮 Finish 的 usage（openai_provider 对 roundUsage 累加）。 */
+    private fun accumulateUsage(a: UsageStats?, b: UsageStats?): UsageStats? {
+        if (b == null) return a
+        if (a == null) return b
+        fun sum(x: Int?, y: Int?): Int? = when {
+            x == null && y == null -> null
+            x == null -> y
+            y == null -> x
+            else -> x + y
+        }
+        return UsageStats(
+            promptTokens = sum(a.promptTokens, b.promptTokens),
+            completionTokens = sum(a.completionTokens, b.completionTokens),
+            cachedTokens = sum(a.cachedTokens, b.cachedTokens),
+            totalTokens = sum(a.totalTokens, b.totalTokens),
+        )
     }
 
     /**
@@ -733,10 +1064,10 @@ class ChatViewModel(
      * stream_controller.dart 771 — a segment starts expanded only when
      * "auto-collapse thinking" is off; the user's own toggle wins afterwards.
      */
-    private fun StreamChunkHandler.segmentsJson(): String? {
+    private fun encodeSegments(segments: List<ReasoningSegment>): String? {
         val autoCollapse = readBool("display_auto_collapse_thinking_v1", true)
         return ReasoningSegmentCodec.encode(
-            reasoningSegments.map { it.copy(expanded = !autoCollapse) },
+            segments.map { it.copy(expanded = !autoCollapse) },
         )
     }
 

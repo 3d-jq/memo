@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -76,6 +77,7 @@ import com.psyche.memo.ui.markdown.MarkdownText
 import com.psyche.memo.ui.theme.AppFontWeights
 import com.psyche.memo.ui.R as UiR
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
 import java.util.Locale
 import kotlin.math.max
@@ -102,14 +104,22 @@ import kotlin.math.min
 fun ChainOfThoughtCard(
     steps: List<TimelineStep>,
     settings: ChatTimelineSettings,
+    conversationId: String? = null,
+    approval: ToolApprovalService? = null,
+    askUser: AskUserInteractionService? = null,
+    onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)? = null,
     onToggleReasoning: (segmentIndex: Int) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
     val fg = chatSurfaceFg(cs, isDark)
 
-    // _visibleChatTimelineSteps 4406-4443
-    val filteredSteps = remember(steps, settings.showThinkingCards, settings.showToolCards) {
+    // _visibleChatTimelineSteps 4406-4443。审批态驱动可见性：未执行完的工具卡只在
+    // 等待审批时保留（timeline_visibility.isTimelineToolVisible pendingApproval）。
+    val pendingRequests by remember(approval) {
+        approval?.pendingRequests ?: MutableStateFlow<List<ToolApprovalRequest>>(emptyList())
+    }.collectAsState()
+    val filteredSteps = remember(steps, settings.showThinkingCards, settings.showToolCards, pendingRequests) {
         steps.filter { step ->
             when (step) {
                 is TimelineStep.Reasoning -> settings.showThinkingCards
@@ -117,6 +127,11 @@ fun ChainOfThoughtCard(
                     toolName = step.part.toolName,
                     loading = step.part.loading,
                     showToolCards = settings.showToolCards,
+                    pendingApproval = matchingApprovalRequest(
+                        pendingRequests,
+                        conversationId,
+                        step.part.id,
+                    ) != null,
                 )
             }
         }
@@ -209,6 +224,10 @@ fun ChainOfThoughtCard(
                         isLast = isLast,
                         showToolResultSummary = settings.showToolResultSummary,
                         hideToolResultImages = settings.hideToolResultImages,
+                        conversationId = conversationId,
+                        approval = approval,
+                        askUser = askUser,
+                        onSubmitAskUser = onRecoveredAnswer?.let { cb -> { result -> cb(step.part, result) } },
                     )
                 }
             }

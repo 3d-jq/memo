@@ -63,6 +63,14 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
 
     val assistantStore: AssistantStore by lazy { AssistantStore(database.writableDatabase) }
 
+    /** tool_approval_service.dart / ask_user_interaction_service.dart 服务对。 */
+    val toolApprovalService: com.psyche.memo.ui.chat.ToolApprovalService by lazy {
+        com.psyche.memo.ui.chat.ToolApprovalService()
+    }
+    val askUserInteractionService: com.psyche.memo.ui.chat.AskUserInteractionService by lazy {
+        com.psyche.memo.ui.chat.AskUserInteractionService()
+    }
+
     /** App-wide IO scope for one-shot persistence (assistant selection writes). */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
