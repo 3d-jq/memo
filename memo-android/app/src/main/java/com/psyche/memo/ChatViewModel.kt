@@ -51,6 +51,32 @@ class ChatViewModel(
 
     val input = MutableStateFlow("")
 
+    /** 待发送附件（图片/文件），发送后并入用户消息的 parts 并清空。 */
+    data class PendingAttachment(
+        val uri: String,
+        val mime: String?,
+        val name: String,
+        val isImage: Boolean,
+    )
+
+    private val _attachments = MutableStateFlow<List<PendingAttachment>>(emptyList())
+    val attachments: StateFlow<List<PendingAttachment>> = _attachments
+
+    fun addAttachments(items: List<PendingAttachment>) {
+        if (items.isEmpty()) return
+        _attachments.value = _attachments.value + items
+    }
+
+    fun removeAttachment(index: Int) {
+        val list = _attachments.value
+        if (index !in list.indices) return
+        _attachments.value = list.filterIndexed { i, _ -> i != index }
+    }
+
+    fun clearAttachments() {
+        _attachments.value = emptyList()
+    }
+
     data class UiMessage(
         val id: String,
         val role: String,
@@ -221,13 +247,15 @@ class ChatViewModel(
 
     fun send() {
         val text = input.value.trim()
-        if (text.isEmpty() || _streaming.value) return
+        val pending = _attachments.value
+        if ((text.isEmpty() && pending.isEmpty()) || _streaming.value) return
         input.value = ""
+        _attachments.value = emptyList()
         viewModelScope.launch {
             // nextOrder queries SQLite synchronously, so both the build and
             // the insert run on Dispatchers.IO; StateFlow updates (append)
             // stay outside the IO blocks, in the original order.
-            val userMessage = withContext(Dispatchers.IO) { buildUserMessage(text) }
+            val userMessage = withContext(Dispatchers.IO) { buildUserMessage(text, pending) }
             append(userMessage)
             // Persist user message best-effort (DAO errors surface in logs).
             if (!isTemporary) {
@@ -1032,12 +1060,22 @@ class ChatViewModel(
         return UsageStats(prompt, completion, cached, total)
     }
 
-    private fun buildUserMessage(text: String): ChatMessage {
+    private fun buildUserMessage(text: String, attachments: List<PendingAttachment> = emptyList()): ChatMessage {
         val id = ChatMessage.newId()
+        val parts = buildList {
+            for (a in attachments) {
+                if (a.isImage) {
+                    add(com.psyche.memo.data.model.ImagePart(uri = a.uri, mime = a.mime))
+                } else {
+                    add(com.psyche.memo.data.model.FilePart(uri = a.uri, name = a.name, mime = a.mime))
+                }
+            }
+            if (text.isNotEmpty()) add(TextPart(text))
+        }
         return ChatMessage(
             id = id,
             role = "user",
-            parts = listOf(TextPart(text)),
+            parts = parts,
             timestamp = System.currentTimeMillis(),
             conversationId = conversationId,
             groupId = id,

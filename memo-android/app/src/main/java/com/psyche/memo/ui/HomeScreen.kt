@@ -438,6 +438,47 @@ fun ChatContent(
     val context = androidx.compose.ui.platform.LocalContext.current
     var showModelSheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
+    var showToolsSheet by remember { mutableStateOf(false) }
+    val attachments by vm.attachments.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // 附件选取（bottom_tools_sheet → file_upload_service）：URI 先拷进 upload
+    // 目录再进待发列表，发送后并入用户消息 parts。
+    val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(10),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            coroutineScope.launch {
+                val imported = uris.mapNotNull {
+                    com.psyche.memo.provider.AttachmentStore.import(context, it)
+                }
+                vm.addAttachments(imported)
+            }
+        }
+    }
+    var cameraFile by remember { mutableStateOf<java.io.File?>(null) }
+    val cameraUri = remember { mutableStateOf<android.net.Uri?>(null) }
+    val cameraPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.TakePicture(),
+    ) { ok ->
+        val file = cameraFile
+        cameraFile = null
+        if (ok && file != null && file.length() > 0) {
+            vm.addAttachments(listOf(com.psyche.memo.provider.AttachmentStore.fromCapturedFile(file)))
+        }
+    }
+    val filePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            coroutineScope.launch {
+                val imported = uris.mapNotNull {
+                    com.psyche.memo.provider.AttachmentStore.import(context, it)
+                }
+                vm.addAttachments(imported)
+            }
+        }
+    }
     // 语音输入执行器（chat_input_bar.dart 的系统 ASR 分支）。应用上下文持有，
     // 避免持有 Activity 导致的 SpeechRecognizer 泄漏。
     val voiceAppContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -446,7 +487,6 @@ fun ChatContent(
     }
     var showMiniMap by remember { mutableStateOf(false) }
     val timelineListState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
 
     // ---- 消息操作批次状态（more sheet / 编辑 / regenerate 确认） ----
     var moreFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
@@ -867,6 +907,9 @@ fun ChatContent(
             onStop = vm::stop,
             onSelectModel = { showModelSheet = true },
             onOpenSearch = { showSearchSheet = true },
+            onOpenTools = { showToolsSheet = true },
+            attachments = attachments,
+            onRemoveAttachment = { index -> vm.removeAttachment(index) },
             voice = voiceInput,
         )
     }
@@ -880,6 +923,36 @@ fun ChatContent(
             },
             onDismiss = { showModelSheet = false },
             onOptionsInvalidated = { optionsVersion++ },
+        )
+    }
+
+    if (showToolsSheet) {
+        BottomToolsSheet(
+            onCamera = {
+                showToolsSheet = false
+                val file = com.psyche.memo.provider.AttachmentStore.captureFile(context)
+                cameraFile = file
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    context.packageName + ".fileprovider",
+                    file,
+                )
+                cameraUri.value = uri
+                cameraPicker.launch(uri)
+            },
+            onPhotos = {
+                showToolsSheet = false
+                photoPicker.launch(
+                    androidx.activity.result.PickVisualMediaRequest(
+                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly,
+                    ),
+                )
+            },
+            onUpload = {
+                showToolsSheet = false
+                filePicker.launch(arrayOf("*/*"))
+            },
+            onDismiss = { showToolsSheet = false },
         )
     }
 
@@ -1643,6 +1716,9 @@ private fun ChatInputBar(
     onStop: () -> Unit,
     onSelectModel: () -> Unit,
     onOpenSearch: () -> Unit = {},
+    onOpenTools: () -> Unit = {},
+    attachments: List<ChatViewModel.PendingAttachment> = emptyList(),
+    onRemoveAttachment: (Int) -> Unit = {},
     // 语音输入执行器（chat_input_bar.dart asrProvider 的系统分支）；null =
     // 不可用，麦克风按钮按 CIB:2542-2546 showVoiceInput 条件隐藏。
     voice: com.psyche.memo.ui.chat.VoiceInputController? = null,
@@ -1775,8 +1851,11 @@ private fun ChatInputBar(
                         shape = InputContainerShape,
                     ),
             ) {
-                // ① 附件内联预览区（源码 chat_input_bar.dart:2641-2642）。
-                //    移植版暂无附件数据（hasImages / hasDocs 恒为 false），该分支不渲染。
+                // ① 附件内联预览区（源码 chat_input_bar.dart:2641-2642）
+                AttachmentPreviewStrip(
+                    attachments = attachments,
+                    onRemove = onRemoveAttachment,
+                )
 
                 // ② 输入区（源码 chat_input_bar.dart:2646-2654）
                 //    Padding.fromLTRB(md, xxs, md, xs) + ConstrainedBox(maxHeight)
@@ -1920,7 +1999,7 @@ private fun ChatInputBar(
                                     InputIcon(
                                         Lucide.Plus,
                                         stringResource(UiR.string.chat_input_bar_more_tooltip),
-                                        {},
+                                        onOpenTools,
                                         cs,
                                     )
                                     // CIB:2542-2546 —— asr 可用才显示麦克风；
