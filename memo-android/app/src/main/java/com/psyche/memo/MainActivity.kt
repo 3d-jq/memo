@@ -26,8 +26,8 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -256,26 +256,36 @@ private fun AppThemeAndContent(
                     navController = navController,
                     startDestination = "home",
                     modifier = Modifier.fillMaxSize(),
-                    // Flutter's default Android page transition
-                    // (ZoomPageTransitionsBuilder, page_transitions_theme.dart
-                    // L470-500): 450ms; the incoming page scales 0.85→1.0 while
-                    // fading in over interval 0.125-0.25, the page behind
-                    // scales 1.0→1.05 and fades out over 0.0825-0.2075;
-                    // popping mirrors it (1.10→1.0 in, 1.0→0.90 out).
+                    // Flutter's current Android default page transition
+                    // (PredictiveBackPageTransitionsBuilder falls back to
+                    // FadeForwardsPageTransitionsBuilder,
+                    // page_transitions_theme.dart L451-510): 450ms; the new
+                    // page slides in from 25% of its width while fading in
+                    // over the first 75%, the page behind slides 25% left and
+                    // fades out over the first 25%; popping mirrors both.
                     enterTransition = {
-                        scaleIn(initialScale = 0.85f, animationSpec = tween(ZOOM_TRANSITION_MS, easing = ZoomScaleEasing)) +
-                            fadeIn(animationSpec = tween(57, delayMillis = 56, easing = LinearEasing))
+                        slideInHorizontally(
+                            initialOffsetX = { it / 4 },
+                            animationSpec = tween(FADE_FORWARDS_MS, easing = EmphasizedEasing),
+                        ) + fadeIn(animationSpec = tween(337, easing = LinearEasing))
                     },
                     exitTransition = {
-                        scaleOut(targetScale = 1.05f, animationSpec = tween(ZOOM_TRANSITION_MS, easing = ZoomScaleEasing)) +
-                            fadeOut(animationSpec = tween(56, delayMillis = 37, easing = LinearEasing))
+                        slideOutHorizontally(
+                            targetOffsetX = { -it / 4 },
+                            animationSpec = tween(FADE_FORWARDS_MS, easing = EmphasizedEasing),
+                        ) + fadeOut(animationSpec = tween(112, easing = LinearEasing))
                     },
                     popEnterTransition = {
-                        scaleIn(initialScale = 1.10f, animationSpec = tween(ZOOM_TRANSITION_MS, easing = ZoomScaleEasing))
+                        slideInHorizontally(
+                            initialOffsetX = { -it / 4 },
+                            animationSpec = tween(FADE_FORWARDS_MS, easing = EmphasizedEasing),
+                        ) + fadeIn(animationSpec = tween(337, easing = LinearEasing))
                     },
                     popExitTransition = {
-                        scaleOut(targetScale = 0.90f, animationSpec = tween(ZOOM_TRANSITION_MS, easing = ZoomScaleEasing)) +
-                            fadeOut(animationSpec = tween(56, delayMillis = 37, easing = LinearEasing))
+                        slideOutHorizontally(
+                            targetOffsetX = { it / 4 },
+                            animationSpec = tween(FADE_FORWARDS_MS, easing = EmphasizedEasing),
+                        ) + fadeOut(animationSpec = tween(112, easing = LinearEasing))
                     },
                 ) {
                     composable("home") {
@@ -623,20 +633,20 @@ private fun rememberAppContainer(context: android.content.Context): AppContainer
     return app.container
 }
 
-/** ZoomPageTransitionsBuilder.kTransitionMilliseconds. */
-private const val ZOOM_TRANSITION_MS = 450
+/** FadeForwardsPageTransitionsBuilder.kTransitionMilliseconds. */
+private const val FADE_FORWARDS_MS = 450
 
 /**
- * `_ZoomPageTransition._scaleCurveSequence` — the two-segment
- * fastOutExtraSlowIn tween (0→0.4 at 1/6 of the timeline with
- * Cubic(0.05, 0, 0.133333, 0.06), then 0.4→1 with
- * Cubic(0.208333, 0.82, 0.25, 1)).
+ * `Curves.easeInOutCubicEmphasized` — Flutter's ThreePointCubic
+ * (0.05,0) (0.133333,0.06) mid (0.166666,0.4) (0.208333,0.82) (0.25,1),
+ * evaluated as two cubic segments joined at the midpoint.
  */
-private val ZoomScaleEasing = Easing { t ->
-    val firstWeight = 1f / 6f
-    if (t < firstWeight) {
-        0.4f * CubicBezierEasing(0.05f, 0f, 0.133333f, 0.06f).transform(t / firstWeight)
+private val EmphasizedEasing = Easing { t ->
+    val midX = 0.166666f
+    val midY = 0.4f
+    if (t < midX) {
+        CubicBezierEasing(0.05f, 0f, 0.133333f, 0.06f).transform(t / midX) * midY
     } else {
-        0.4f + 0.6f * CubicBezierEasing(0.208333f, 0.82f, 0.25f, 1f).transform((t - firstWeight) / (1f - firstWeight))
+        CubicBezierEasing(0.208333f, 0.82f, 0.25f, 1f).transform((t - midX) / (1f - midX)) * (1f - midY) + midY
     }
 }
