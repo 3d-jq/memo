@@ -86,6 +86,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | S4 | 搜索收尾：用量查询卡（Tavily 余额/进度条 + LinkUp 余额 + 自动查询；`SearchUsageService` 纯解析带测试） | ✅ 本轮 |
 | S5 | 搜索剩余：kelivo 内置搜索（上游端点 + 内置令牌，按品牌规则不移植）、启动自动测试（原版移动端也只有存盘开关，无执行路径） | ⬜（低优先/不移植） |
 | F1 | 多模态输入引擎：`MessageContent`（图片 part → OpenAI content 数组 / Claude image block / Gemini inline_data+file_data；data:/本地文件 base64、远端 URL 分协议处理、去重、file part 暂跳过）+ 三客户端接入 + ChatViewModel 历史带图片 | ✅ 本轮 |
+| M1 | 记忆工具执行：`MemoryTools`（memory_read / memory_update / memory_search_profile / memory_edit / memory_delete / update_user_profile 六个定义 zh/en 逐字对齐 + 执行；写入走 assistant.memoryWriteScope 解析，临时会话拒写，重复内容 SKIP/NEW 回退路径；未移植 Smart Add LLM 合并与 chat_search）+ ChatViewModel 在 enableMemory 时提供工具 + ToolHandler 分派 + AppContainer.memoryProviderV2 单例 | ✅ 本轮 |
+| M2 | 记忆收尾：`<user_memory>` 摘要注入（memory_block_builder）、Smart Add LLM 去重合并、chat_search（会话搜索）、助手编辑页记忆 tab、legacy 记忆模式工具 | ⬜ |
 | F4 | 图片 OCR：`OcrService`（读 ocr_enabled/ocr_model/ocr_prompt/thinking 设置；OCR 模型跑图 → 文本；`<image_file_ocr>` 块前置；SHA-256 内容哈希 + LRU 缓存）+ 底部面板 OCR 行（开关 + 长按提示词 sheet） | ✅ 本轮 |
 | F3 | 文档文本抽取：`DocumentTextExtractor`（PDF=PDFBox-Android、DOCX=zip+document.xml、.doc 不支持、其余 UTF-8 兜底；path+stat 缓存）+ `UnicodeSanitizer` 移植 + 用户消息把文件文本按 `## user sent a file` / `<content>` 块前置进请求 | ✅ 本轮 |
 | F2 | 附件选择 UI：底部工具面板（bottom_tools_sheet.dart 三张 72dp 卡：相机/相册/文件）+ `AttachmentStore`（URI 拷贝到 filesDir/upload）+ 附件预览条（64dp 图缩略图 r10+scrim 删除角标 / 48dp 文档 chip）+ ChatViewModel 待发附件并入用户消息 parts；相机走 FileProvider（新增 provider + file_paths.xml）；原版面板里的指令注入/世界书/OCR/上下文管理行因功能未移植暂不渲染 | ✅ 本轮 |

@@ -63,6 +63,11 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
 
     val assistantStore: AssistantStore by lazy { AssistantStore(database.writableDatabase) }
 
+    /** 长期记忆数据层（memory_entry_rows 以 preference JSON 承载）。 */
+    val memoryProviderV2: com.psyche.memo.ui.MemoryProviderV2 by lazy {
+        com.psyche.memo.ui.MemoryProviderV2(preferenceRepository)
+    }
+
     /** Search service settings (search_service_rows + preference keys). */
     val searchSettingsRepository: com.psyche.memo.data.repo.SearchSettingsRepository by lazy {
         com.psyche.memo.data.repo.SearchSettingsRepository(database.writableDatabase, preferenceRepository)

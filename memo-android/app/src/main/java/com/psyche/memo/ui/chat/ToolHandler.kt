@@ -25,6 +25,8 @@ class ToolHandler(
     private val searchService: com.psyche.memo.data.model.SearchServiceOptions? = null,
     private val searchCommonOptions: com.psyche.memo.data.model.SearchCommonOptions =
         com.psyche.memo.data.model.SearchCommonOptions(),
+    private val container: com.psyche.memo.AppContainerImpl? = null,
+    private val isTemporary: Boolean = false,
 ) {
 
     /** 处理一个工具调用，返回写回模型的内容（tool_error 为 JSON 字符串）。 */
@@ -68,6 +70,18 @@ class ToolHandler(
                         tool = name,
                     )
                 }
+            }
+
+            // Memory tools (memory_tools.dart handle)：enableMemory 才生效。
+            container?.let { c ->
+                com.psyche.memo.provider.MemoryTools.handle(
+                    container = c,
+                    assistant = assistant,
+                    conversationId = conversationId,
+                    isTemporary = isTemporary,
+                    name = name,
+                    args = args,
+                )?.let { return it }
             }
 
             // Local tools (local_tools_service.dart tryHandleToolCall 451-529):

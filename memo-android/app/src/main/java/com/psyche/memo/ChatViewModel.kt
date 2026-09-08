@@ -728,6 +728,8 @@ class ChatViewModel(
             searchEngine = container.searchEngine,
             searchService = container.searchSettingsRepository.selectedService(),
             searchCommonOptions = container.searchSettingsRepository.commonOptions(),
+            container = container,
+            isTemporary = isTemporary,
         )
         val providerId = selectedProviderId.value
         val modelId = selectedModelId.value
@@ -1014,6 +1016,15 @@ class ChatViewModel(
                 ),
             )
         }
+        // 记忆工具（memory_tools.dart buildDefinitions）：enableMemory 才提供，
+        // 临时会话只读不写。
+        out.addAll(
+            com.psyche.memo.provider.MemoryTools.buildDefinitions(
+                assistant = assistant,
+                lang = com.psyche.memo.ui.MemorySettingsState(container).resolvedPromptLang(),
+                allowMemoryWrites = !isTemporary,
+            ),
+        )
         for (name in assistant.localToolIds) {
             if (name !in offered) continue
             if (!com.psyche.memo.ui.BuiltInToolCatalog.isAvailableOnThisPlatform(name)) continue
