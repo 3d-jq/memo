@@ -57,6 +57,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +80,7 @@ import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.model.WorldBook
 import com.psyche.memo.data.model.WorldBookEntry
 import com.psyche.memo.data.model.WorldBookInjectionPosition
@@ -106,6 +108,7 @@ fun WorldBookScreen(
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
+    val view = LocalView.current
     val repo = remember(container) {
         WorldBookRepository(container.database.writableDatabase, container.preferenceRepository)
     }
@@ -221,20 +224,35 @@ fun WorldBookScreen(
                         dragHandle = dragHandle,
                         collapsed = repo.isCollapsed(book.id),
                         onToggleCollapsed = {
+                            Haptics.light(view)
                             repo.toggleCollapsed(book.id)
                             reload++
                         },
-                        onAddEntry = { entryTarget = book to null },
+                        onAddEntry = {
+                            Haptics.light(view)
+                            entryTarget = book to null
+                        },
                         onExport = {
+                            Haptics.light(view)
                             exportBook = book
                             exportLauncher.launch(
                                 WorldBookRepository.safeFileName(book.name.trim().ifEmpty { "lorebook" }) + ".json",
                             )
                         },
-                        onConfig = { editingBook = book },
-                        onDelete = { deletingBook = book },
-                        onEditEntry = { entryTarget = book to it },
+                        onConfig = {
+                            Haptics.light(view)
+                            editingBook = book
+                        },
+                        onDelete = {
+                            Haptics.light(view)
+                            deletingBook = book
+                        },
+                        onEditEntry = {
+                            Haptics.light(view)
+                            entryTarget = book to it
+                        },
                         onDeleteEntry = { entry ->
+                            Haptics.light(view)
                             repo.update(book.copy(entries = book.entries.filterNot { it.id == entry.id }))
                             reload++
                         },
@@ -325,6 +343,7 @@ private fun BookSection(
     onReorderEntries: (Int, Int) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val view = LocalView.current
     val title = book.name.trim().ifEmpty { stringResource(R.string.world_book_unnamed) }
     val subtitle = book.description.trim()
     var actionEntry by remember { mutableStateOf<WorldBookEntry?>(null) }
@@ -339,7 +358,10 @@ private fun BookSection(
             Row(
                 modifier = dragHandle
                     .weight(1f)
-                    .clickable { onToggleCollapsed() }
+                    .clickable {
+                        Haptics.light(view)
+                        onToggleCollapsed()
+                    }
                     .padding(horizontal = 6.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -421,7 +443,10 @@ private fun BookSection(
                                 enabled = entry.enabled,
                                 detailText = detail,
                                 onTap = { onEditEntry(entry) },
-                                onLongPress = { actionEntry = entry },
+                                onLongPress = {
+                                    Haptics.medium(view)
+                                    actionEntry = entry
+                                },
                                 leadingModifier = handle,
                             )
                             if (entry.id != book.entries.last().id) {
@@ -444,10 +469,12 @@ private fun BookSection(
         EntryActionSheet(
             onDismiss = { actionEntry = null },
             onEdit = {
+                Haptics.light(view)
                 actionEntry = null
                 onEditEntry(entry)
             },
             onDelete = {
+                Haptics.light(view)
                 actionEntry = null
                 onDeleteEntry(entry)
             },

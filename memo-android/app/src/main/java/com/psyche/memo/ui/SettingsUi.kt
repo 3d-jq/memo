@@ -42,7 +42,9 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lightbulb
 import com.composables.icons.lucide.Lucide
+import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.common.AppLocale
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.LocalSemanticColors
 
@@ -98,10 +100,17 @@ internal fun SettingsRow(
     detailText: String? = null,
 ) {
     val cs = MaterialTheme.colorScheme
+    val view = LocalView.current
+    val haptics = LocalHapticsSettings.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onTap)
+            .clickable {
+                // settings_page.dart L645-651: soft tick on row taps when
+                // "list item tap" haptics are on.
+                if (haptics.onListItemTap) Haptics.soft(view)
+                onTap()
+            }
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -262,10 +271,15 @@ fun SettingsSwitchRow(
     onToggle: (Boolean) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val view = LocalView.current
+    val haptics = LocalHapticsSettings.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle(!value) }
+            .clickable {
+                if (haptics.onListItemTap) Haptics.soft(view)
+                onToggle(!value)
+            }
             .padding(horizontal = 12.dp, vertical = if (tip == null) 2.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

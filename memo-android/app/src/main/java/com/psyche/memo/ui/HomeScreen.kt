@@ -121,7 +121,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ChatViewModel
 import com.psyche.memo.data.model.Conversation
@@ -243,7 +245,12 @@ fun HomeScreen(
         }
     }
 
+    val drawerHaptics = LocalHapticsSettings.current
+    val drawerView = LocalView.current
     fun settleDrawer(open: Boolean, velocityPx: Float = 0f) {
+        // home_page_controller.dart L2364-2382: pulse when the drawer finishes
+        // opening or closing, gated by the "on sidebar" switch.
+        if (drawerHaptics.onDrawer) Haptics.drawerPulse(drawerView)
         presenting = true
         dragJob?.cancel()
         dragJob = scope.launch {
@@ -444,6 +451,8 @@ fun ChatContent(
     // ask-user 卡与时间线可见性都从这里取状态。
     val approvalService = container.toolApprovalService
     val askUserService = container.askUserInteractionService
+    val chatHaptics = LocalHapticsSettings.current
+    val chatView = LocalView.current
 
     val cs = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -903,7 +912,12 @@ fun ChatContent(
             input = input,
             streaming = streaming,
             onInputChange = vm::updateInput,
-            onSend = vm::send,
+            onSend = {
+                // home_page_controller.dart L532-537: generation start fires a
+                // light tick when "haptics on generate" is enabled.
+                if (chatHaptics.onGenerate) Haptics.light(chatView)
+                vm.send()
+            },
             onStop = vm::stop,
             onSelectModel = { showModelSheet = true },
             onOpenSearch = { showSearchSheet = true },
@@ -1132,6 +1146,7 @@ fun ChatContent(
             onDismiss = { regenerateFor = null },
             onConfirm = {
                 regenerateFor = null
+                if (chatHaptics.onGenerate) Haptics.light(chatView)
                 vm.regenerate(target.id)
             },
         )
@@ -1172,6 +1187,7 @@ private fun MessageRow(
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)?,
 ) {
     val cs = MaterialTheme.colorScheme
+    val rowView = LocalView.current
     val isUser = msg.role == "user"
     // 暗色判定（chat_input_bar.dart:2547 同款口径）。
     val isDark = cs.surface.luminance() < 0.5f
@@ -1356,7 +1372,12 @@ private fun MessageRow(
                     )
                     .combinedClickable(
                         enabled = isUser,
-                        onLongClick = { if (isUser) showContextMenu = true },
+                        onLongClick = {
+                            if (isUser) {
+                                Haptics.light(rowView)
+                                showContextMenu = true
+                            }
+                        },
                         onClick = {},
                     )
                     // CMW:2393 —— 气泡内边距 all 12；助手是 bareOnDefault，
@@ -1668,10 +1689,15 @@ private fun MessageActionIcon(
     val cs = MaterialTheme.colorScheme
     // CMW:1859-1959 —— 28×28 槽位内裸 IosIconButton(16, pad4)，无背景，
     // 色 onSurface@0.9；禁用态 alpha×0.45（ios_tactile.dart:54-59）。
+    val view = LocalView.current
     Box(
         modifier = Modifier
             .size(ChatStyleSpec.ACTION_SLOT_DP.dp)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled) {
+                // chat_message_widget.dart L3961: menu-row taps tick.
+                Haptics.light(view)
+                onClick()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Icon(

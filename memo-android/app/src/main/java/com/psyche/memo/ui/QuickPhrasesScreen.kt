@@ -58,7 +58,9 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Zap
+import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.model.QuickPhrase
 import com.psyche.memo.data.repo.QuickPhraseRepository
 import com.psyche.memo.ui.reorder.ReorderableColumn
@@ -79,6 +81,7 @@ fun QuickPhrasesScreen(
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
+    val view = LocalView.current
     val repo = remember(container) { QuickPhraseRepository(container.database.writableDatabase) }
     var reload by remember { mutableIntStateOf(0) }
     val phrases = remember(reload, assistantId) {
@@ -93,6 +96,7 @@ fun QuickPhrasesScreen(
                     onBack = onBack,
                 ) {
                     IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.quick_phrase_add_tooltip)) {
+                        Haptics.light(view)
                         adding = true
                     }
                     Spacer(Modifier.width(12.dp))
@@ -129,10 +133,17 @@ fun QuickPhrasesScreen(
                 contentPadding = PaddingValues(16.dp),
                 itemContent = { phrase, _ ->
                     SwipeDeleteRow(onDelete = {
+                        Haptics.light(view)
                         repo.delete(phrase.id)
                         reload++
                     }) {
-                        QuickPhraseCard(phrase = phrase, onClick = { editing = phrase })
+                        QuickPhraseCard(
+                            phrase = phrase,
+                            onClick = {
+                                Haptics.light(view)
+                                editing = phrase
+                            },
+                        )
                     }
                     Spacer(Modifier.height(12.dp))
                 },

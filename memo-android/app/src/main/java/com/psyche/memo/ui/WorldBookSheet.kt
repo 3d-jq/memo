@@ -39,7 +39,9 @@ import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lucide
+import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.repo.WorldBookRepository
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.theme.withAlpha
@@ -58,6 +60,7 @@ fun WorldBookSheet(
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
+    val view = LocalView.current
     val repo = remember(container) {
         WorldBookRepository(container.database.writableDatabase, container.preferenceRepository)
     }
@@ -126,6 +129,7 @@ fun WorldBookSheet(
                                 RoundedCornerShape(14.dp),
                             )
                             .clickable(enabled = !disabled || selected) {
+                                Haptics.light(view)
                                 repo.toggleActive(book.id, assistantId)
                                 reload++
                             }

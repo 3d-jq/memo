@@ -47,7 +47,9 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
+import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.model.InstructionInjection
 import com.psyche.memo.data.repo.InstructionInjectionRepository
 import com.psyche.memo.ui.theme.LocalSemanticColors
@@ -63,6 +65,7 @@ fun InstructionInjectionScreen(
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
+    val view = LocalView.current
     val repo = remember(container) {
         InstructionInjectionRepository(container.database.writableDatabase, container.preferenceRepository)
     }
@@ -84,6 +87,7 @@ fun InstructionInjectionScreen(
                     onBack = onBack,
                 ) {
                     IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.instruction_injection_add_title)) {
+                        Haptics.light(view)
                         adding = true
                     }
                     Spacer(Modifier.width(12.dp))
@@ -100,6 +104,7 @@ fun InstructionInjectionScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
+                                Haptics.light(view)
                                 repo.toggleCollapsed(group)
                                 reload++
                             }
@@ -129,8 +134,14 @@ fun InstructionInjectionScreen(
                         Spacer(Modifier.height(if (index == groupItems.lastIndex) 12.dp else 8.dp))
                         InstructionCard(
                             item = item,
-                            onClick = { editing = item },
-                            onDelete = { deleting = item },
+                            onClick = {
+                                Haptics.light(view)
+                                editing = item
+                            },
+                            onDelete = {
+                                Haptics.light(view)
+                                deleting = item
+                            },
                         )
                     }
                 }

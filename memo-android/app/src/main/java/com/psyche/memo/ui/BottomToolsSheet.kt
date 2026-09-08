@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -35,6 +36,7 @@ import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.theme.LocalSemanticColors
 
 /**
@@ -61,6 +63,7 @@ fun BottomToolsSheet(
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
+    val view = LocalView.current
     val maxHeight = with(androidx.compose.ui.platform.LocalDensity.current) {
         androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height.toDp() * 0.8f
     }
@@ -92,6 +95,7 @@ fun BottomToolsSheet(
                     label = stringResource(R.string.bottom_tools_sheet_camera),
                     modifier = Modifier.weight(1f),
                 ) {
+                    Haptics.light(view)
                     onCamera()
                 }
                 ToolAction(
@@ -99,6 +103,7 @@ fun BottomToolsSheet(
                     label = stringResource(R.string.bottom_tools_sheet_photos),
                     modifier = Modifier.weight(1f),
                 ) {
+                    Haptics.light(view)
                     onPhotos()
                 }
                 ToolAction(
@@ -106,6 +111,7 @@ fun BottomToolsSheet(
                     label = stringResource(R.string.bottom_tools_sheet_upload),
                     modifier = Modifier.weight(1f),
                 ) {
+                    Haptics.light(view)
                     onUpload()
                 }
             }
@@ -116,7 +122,10 @@ fun BottomToolsSheet(
                     .fillMaxWidth()
                     .height(48.dp)
                     .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-                    .clickable { onOpenInstructionInjection() }
+                    .clickable {
+                        Haptics.light(view)
+                        onOpenInstructionInjection()
+                    }
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -137,7 +146,16 @@ fun BottomToolsSheet(
                         .fillMaxWidth()
                         .height(48.dp)
                         .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-                        .combinedClickable(onClick = onOpenWorldBook, onLongClick = onOpenWorldBookPage)
+                        .combinedClickable(
+                            onClick = {
+                                Haptics.light(view)
+                                onOpenWorldBook()
+                            },
+                            onLongClick = {
+                                Haptics.light(view)
+                                onOpenWorldBookPage()
+                            },
+                        )
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -159,7 +177,16 @@ fun BottomToolsSheet(
                         .fillMaxWidth()
                         .height(48.dp)
                         .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-                        .combinedClickable(onClick = onToggleOcr, onLongClick = onOpenOcrPrompt)
+                        .combinedClickable(
+                            onClick = {
+                                Haptics.light(view)
+                                onToggleOcr()
+                            },
+                            onLongClick = {
+                                Haptics.light(view)
+                                onOpenOcrPrompt()
+                            },
+                        )
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

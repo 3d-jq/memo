@@ -91,7 +91,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.Conversation
@@ -124,6 +126,7 @@ fun SideDrawerContent(
     forceSelectionMode: Boolean = false,
 ) {
     val cs = MaterialTheme.colorScheme
+    val view = LocalView.current
     val scope = rememberCoroutineScope()
     var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
     var query by remember { mutableStateOf("") }
@@ -166,6 +169,7 @@ fun SideDrawerContent(
         val recent = conversations
             .filter { it.assistantId == a.id }
             .maxByOrNull { it.updatedAt }
+        Haptics.light(view)
         if (recent != null) onSelect(recent.id) else onNew()
     }
     val userLabel = userName?.takeIf { it.isNotBlank() }
@@ -379,7 +383,7 @@ fun SideDrawerContent(
                 contentAlignment = Alignment.Center,
             ) {
                 IconButton(
-                    onClick = onOpenHistory,
+                    onClick = { Haptics.light(view); onOpenHistory() },
                     modifier = Modifier.size(44.dp),
                 ) {
                     Icon(
@@ -523,6 +527,7 @@ fun SideDrawerContent(
                     globalHasRun = ran
                 },
                 onOpenConversation = { id ->
+                    Haptics.light(view)
                     onSelect(id)
                 },
             )
@@ -598,6 +603,7 @@ fun SideDrawerContent(
                                             if (selectionMode) {
                                                 if (isChecked) selectedIds.remove(conv.id) else selectedIds.add(conv.id)
                                             } else {
+                                                Haptics.light(view)
                                                 onSelect(conv.id)
                                             }
                                         },
@@ -742,7 +748,7 @@ fun SideDrawerContent(
             Spacer(Modifier.width(8.dp))
             Box(modifier = Modifier.size(45.dp), contentAlignment = Alignment.Center) {
                 IconButton(
-                    onClick = onOpenTranslate,
+                    onClick = { Haptics.light(view); onOpenTranslate() },
                     modifier = Modifier.size(45.dp),
                 ) {
                     Icon(
@@ -756,7 +762,7 @@ fun SideDrawerContent(
             Spacer(Modifier.width(4.dp))
             Box(modifier = Modifier.size(45.dp), contentAlignment = Alignment.Center) {
                 IconButton(
-                    onClick = onOpenSettings,
+                    onClick = { Haptics.light(view); onOpenSettings() },
                     modifier = Modifier.size(45.dp),
                 ) {
                     Icon(
