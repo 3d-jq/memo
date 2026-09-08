@@ -190,6 +190,11 @@ fun AssistantSettingsEditScreen(
                     onEdit = ::edit,
                     onOpenMemorySettings = onOpenMemorySettings,
                 )
+                6 -> AssistantEditLocalToolsTab(
+                    container = container,
+                    assistant = a,
+                    onEdit = ::edit,
+                )
                 else -> Box(Modifier.fillMaxSize())
             }
         }

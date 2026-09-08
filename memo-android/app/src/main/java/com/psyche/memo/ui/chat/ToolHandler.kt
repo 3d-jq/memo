@@ -85,12 +85,21 @@ class ToolHandler(
             }
 
             // Local tools (local_tools_service.dart tryHandleToolCall 451-529):
-            // get_time_info is the only one with a native executor so far.
+            // time_info + the executor subset in LocalToolExecutors.
             if (name == LocalToolNames.TIME_INFO &&
                 assistant != null &&
                 assistant.localToolIds.contains(name)
             ) {
                 return timeInfoJson()
+            }
+            if (assistant != null &&
+                assistant.localToolIds.contains(name) &&
+                name in com.psyche.memo.provider.LocalToolExecutors.EXECUTABLE &&
+                container != null
+            ) {
+                com.psyche.memo.provider.LocalToolExecutors
+                    .execute(container.appContext, name, args)
+                    ?.let { return it }
             }
 
             if (name == AskUserToolNames.ASK_USER &&

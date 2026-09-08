@@ -30,7 +30,8 @@ import java.util.concurrent.TimeUnit
  */
 class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
 
-    private val appContext = context.applicationContext
+    /** App context for tool executors (clipboard / TTS / usage stats). */
+    val appContext: Context = context.applicationContext
 
     override val appName: String = "Memo"
     override val platform: com.psyche.memo.common.Platform = com.psyche.memo.common.Platform.ANDROID

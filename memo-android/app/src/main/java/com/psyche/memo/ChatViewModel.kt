@@ -1012,6 +1012,10 @@ class ChatViewModel(
             names.TIME_INFO,
             names.ASK_USER,
             names.CALENDAR_CREATE,
+            names.CLIPBOARD,
+            names.TEXT_TO_SPEECH,
+            names.CALCULATE,
+            names.SCREEN_TIME,
         )
         val out = mutableListOf<LlmToolSpec>()
         // Web search tool (tool_handler_service.dart L241-245): offered

@@ -89,6 +89,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | M1 | 记忆工具执行：`MemoryTools`（memory_read / memory_update / memory_search_profile / memory_edit / memory_delete / update_user_profile 六个定义 zh/en 逐字对齐 + 执行；写入走 assistant.memoryWriteScope 解析，临时会话拒写，重复内容 SKIP/NEW 回退路径；未移植 Smart Add LLM 合并与 chat_search）+ ChatViewModel 在 enableMemory 时提供工具 + ToolHandler 分派 + AppContainer.memoryProviderV2 单例 | ✅ 本轮 |
 | M2a | 记忆摘要注入：`MemoryBlockBuilder`（`<user_profile>`/`<user_memory>` 块、summary 模式 mode/total/shown + moreHint、global 优先排序、escape/flatten、SHA-256 前 16 位哈希）+ ChatViewModel 把快照前缀加到本轮最后一条用户消息（enableMemory 且有内容时） | ✅ 本轮 |
 | M2b | 助手编辑页记忆 tab（`AssistantEditMemoryTab`：总开关 + 自动整理/整理频率/去重模式/写入范围 + 过往回忆/生成摘要/摘要频率 + 记忆设置入口；选择 sheet 与数字弹窗）+ 路由接线 | ✅ 本轮 |
+| L1 | 本地工具执行 + tab：`LocalToolExecutors`（clipboard 读/写、calculate=exp4j、text_to_speech=TtsPlayer、get_screen_time=UsageStats 前台时长算法）+ `DeviceLocalTools`（前台时长纯算法 + Usage Access 权限探测/跳转）+ 助手本地工具 tab（8 行 Android 工具 + 日历权限流 + 屏幕时间权限提示）；iOS-only 行按平台隐藏 | ✅ 本轮 |
+| L2 | 本地工具收尾：日历 query/create 执行器（CalendarContract）、chat 时间线里的 screen_time/weather 工具卡补全、本地工具 tab 的日历数据权限持久化 | ⬜ |
 | M2c | `chat_search` 工具：定义（zh/en）+ MessageDao.searchMessagesForAssistant（按助手范围/排除当前会话/指定会话、tokens AND、按时间倒序）+ 片段窗口 + 记忆规则注入（`MemorySettingsState.prompt(RULES)` 与 `rulesPastConversationRecallFor`，各自独立门控） | ✅ 本轮 |
 | M2d | 记忆收尾：哈希冻结/自愈（§7.6）、Smart Add LLM 去重合并、tab 内记忆条目列表与整理按钮、legacy 记忆模式工具 | ⬜ |
 | F4 | 图片 OCR：`OcrService`（读 ocr_enabled/ocr_model/ocr_prompt/thinking 设置；OCR 模型跑图 → 文本；`<image_file_ocr>` 块前置；SHA-256 内容哈希 + LRU 缓存）+ 底部面板 OCR 行（开关 + 长按提示词 sheet） | ✅ 本轮 |
