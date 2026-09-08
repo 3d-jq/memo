@@ -242,7 +242,11 @@ class ClaudeClient(
                 if (m.role == "system") continue // handled as system field
                 add(buildJsonObject {
                     put("role", if (m.role == "assistant") "assistant" else "user")
-                    put("content", m.content ?: "")
+                    if (m.role == "user") {
+                        put("content", com.psyche.memo.llm.client.MessageContent.claudeContent(m))
+                    } else {
+                        put("content", m.content ?: "")
+                    }
                 })
             }
         }

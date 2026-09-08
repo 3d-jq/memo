@@ -239,7 +239,10 @@ class OpenAiChatCompletionsClient(
                 if (!m.toolName.isNullOrEmpty()) put("name", m.toolName)
                 put("content", m.content ?: "")
             }
-            m.content != null -> put("content", m.content)
+            // Multimodal user turns: text-only messages stay plain strings,
+            // attachments switch the field to the content-part array shape.
+            m.content != null || m.parts.isNotEmpty() ->
+                put("content", com.psyche.memo.llm.client.MessageContent.openAiContent(m))
             else -> put("content", "")
         }
     }

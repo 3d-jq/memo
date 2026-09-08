@@ -551,8 +551,21 @@ class ChatViewModel(
                     .mapNotNull { msg ->
                         val content = msg.parts.filterIsInstance<TextPart>()
                             .joinToString("") { it.text }
-                        if (content.isEmpty()) null
-                        else LlmMessage(role = msg.role, content = content)
+                        // Attachments ride along as part payloads; only user
+                        // turns may carry images (assistant media is stashed by
+                        // the original OpenAI builder instead of replayed).
+                        val attachments = if (msg.role == "user") {
+                            msg.parts.filterIsInstance<com.psyche.memo.data.model.ImagePart>()
+                                .map { it.encodePayload() }
+                        } else {
+                            emptyList()
+                        }
+                        if (content.isEmpty() && attachments.isEmpty()) null
+                        else LlmMessage(
+                            role = msg.role,
+                            content = content.ifEmpty { null },
+                            parts = attachments,
+                        )
                     }
                     .toMutableList()
                 // System prompt injection (message_builder_service.dart): the

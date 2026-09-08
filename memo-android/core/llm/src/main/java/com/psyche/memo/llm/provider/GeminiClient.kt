@@ -239,9 +239,7 @@ class GeminiClient(
                     val role = if (msg.role == "assistant") "model" else "user"
                     add(buildJsonObject {
                         put("role", role)
-                        putJsonArray("parts") {
-                            add(buildJsonObject { put("text", msg.content ?: "") })
-                        }
+                        put("parts", com.psyche.memo.llm.client.MessageContent.geminiParts(msg))
                     })
                 }
             }
