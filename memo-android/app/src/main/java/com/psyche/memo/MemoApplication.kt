@@ -19,6 +19,8 @@ class MemoApplication : Application(), ImageLoaderFactory {
         // get their pristine default config (baseUrl/label/enabled verbatim
         // from ProviderConfig.defaultsFor). Idempotent.
         container.providerRepository.ensureBuiltinDefaultsSeeded()
+        // PDFBox needs its resource loader before the first PDF extraction.
+        com.psyche.memo.provider.DocumentTextExtractor.init(this)
     }
 
     /**

@@ -574,14 +574,34 @@ class ChatViewModel(
             }
             try {
                 // Build request from current UI messages (exclude skeleton).
-                val history = _messages.value
-                    .dropLast(1)
+                val rawMessages = _messages.value.dropLast(1)
+                // message_builder_service.readDocument: file attachments become
+                // a text block prepended to the user turn, cached by path+stat.
+                val fileBlocks = withContext(Dispatchers.IO) {
+                    rawMessages.filter { it.role == "user" }.associate { msg ->
+                        val block = StringBuilder()
+                        for (part in msg.parts.filterIsInstance<com.psyche.memo.data.model.FilePart>()) {
+                            if (part.unavailable == true) continue
+                            val mime = part.mime?.takeIf { it.isNotBlank() }
+                                ?: com.psyche.memo.provider.DocumentTextExtractor.mimeForName(part.name)
+                            val text = com.psyche.memo.provider.DocumentTextExtractor
+                                .extractCached(part.uri, mime)
+                            if (text.isNullOrBlank()) continue
+                            block.append("## user sent a file: ").append(part.name).append('\n')
+                            block.append("<content>\n```\n")
+                            block.append(text)
+                            block.append("\n```\n</content>\n\n")
+                        }
+                        msg.id to block.toString()
+                    }.filterValues { it.isNotEmpty() }
+                }
+                val history = rawMessages
                     .mapNotNull { msg ->
-                        val content = msg.parts.filterIsInstance<TextPart>()
-                            .joinToString("") { it.text }
-                        // Attachments ride along as part payloads; only user
-                        // turns may carry images (assistant media is stashed by
-                        // the original OpenAI builder instead of replayed).
+                        val content = (fileBlocks[msg.id] ?: "") +
+                            msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+                        // Images ride along as part payloads; only user turns may
+                        // carry them (assistant media is stashed by the original
+                        // OpenAI builder instead of replayed).
                         val attachments = if (msg.role == "user") {
                             msg.parts.filterIsInstance<com.psyche.memo.data.model.ImagePart>()
                                 .map { it.encodePayload() }
