@@ -309,15 +309,18 @@ internal fun InstructionEditSheet(
             Spacer(Modifier.height(16.dp))
             Row {
                 Box(modifier = Modifier.weight(1f)) {
-                    IosButton(label = stringResource(R.string.quick_phrase_cancel_button), onTap = onDismiss)
+                    IosButton(
+                        label = stringResource(R.string.quick_phrase_cancel_button),
+                        onTap = onDismiss,
+                        neutral = false,
+                    )
                 }
                 Spacer(Modifier.width(12.dp))
                 Box(modifier = Modifier.weight(1f)) {
-                    IosTileButton(
+                    IosButton(
                         label = stringResource(R.string.quick_phrase_save_button),
-                        icon = Lucide.Check,
-                        backgroundColor = cs.primary,
-                        onClick = {
+                        filled = true,
+                        onTap = {
                             if (title.isNotBlank() && prompt.isNotBlank()) {
                                 onSave(title.trim(), prompt.trim(), group.trim())
                             }
