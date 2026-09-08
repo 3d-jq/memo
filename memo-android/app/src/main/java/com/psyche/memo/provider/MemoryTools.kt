@@ -41,6 +41,11 @@ object MemoryTools {
     const val UPDATE_USER_PROFILE = "update_user_profile"
     const val CHAT_SEARCH = "chat_search"
 
+    val ALL_TOOL_NAMES = setOf(
+        MEMORY_READ, MEMORY_UPDATE, MEMORY_SEARCH_PROFILE,
+        MEMORY_EDIT, MEMORY_DELETE, UPDATE_USER_PROFILE, CHAT_SEARCH,
+    )
+
     val ENABLE_MEMORY_TOOL_NAMES = setOf(
         MEMORY_READ, MEMORY_UPDATE, MEMORY_SEARCH_PROFILE,
         MEMORY_EDIT, MEMORY_DELETE, UPDATE_USER_PROFILE,
@@ -63,15 +68,19 @@ object MemoryTools {
         lang: MemoryPromptLang,
         allowMemoryWrites: Boolean = true,
     ): List<LlmToolSpec> {
-        if (!assistant.enableMemory) return emptyList()
         val out = mutableListOf<LlmToolSpec>()
-        out.add(spec(MEMORY_READ, defMemoryRead(lang)))
-        out.add(spec(MEMORY_SEARCH_PROFILE, defMemorySearchProfile(lang)))
-        if (allowMemoryWrites) {
-            out.add(spec(MEMORY_UPDATE, defMemoryUpdate(lang, assistant.memoryWriteScope)))
-            out.add(spec(MEMORY_EDIT, defMemoryEdit(lang)))
-            out.add(spec(MEMORY_DELETE, defMemoryDelete(lang)))
-            out.add(spec(UPDATE_USER_PROFILE, defUpdateUserProfile(lang)))
+        if (assistant.enableMemory) {
+            out.add(spec(MEMORY_READ, defMemoryRead(lang)))
+            out.add(spec(MEMORY_SEARCH_PROFILE, defMemorySearchProfile(lang)))
+            if (allowMemoryWrites) {
+                out.add(spec(MEMORY_UPDATE, defMemoryUpdate(lang, assistant.memoryWriteScope)))
+                out.add(spec(MEMORY_EDIT, defMemoryEdit(lang)))
+                out.add(spec(MEMORY_DELETE, defMemoryDelete(lang)))
+                out.add(spec(UPDATE_USER_PROFILE, defUpdateUserProfile(lang)))
+            }
+        }
+        if (assistant.allowPastConversationRecall) {
+            out.add(spec(CHAT_SEARCH, defChatSearch(lang)))
         }
         return out
     }
@@ -333,6 +342,51 @@ object MemoryTools {
         }
     }
 
+    private fun defChatSearch(lang: MemoryPromptLang): JsonObject {
+        val zh = lang == MemoryPromptLang.zh
+        return buildJsonObject {
+            put("type", "function")
+            put("function", buildJsonObject {
+                put("name", CHAT_SEARCH)
+                put(
+                    "description",
+                    if (zh) {
+                        "在历史对话中按关键词搜索消息内容（仅当前助手的会话，以及没有归属助手的旧会话）。需要回忆之前聊过什么，或者用户提到「上次」「之前说的」「我们讨论过」时，优先使用这个工具。默认不搜索当前对话，因为当前对话的内容已经在上下文里。"
+                    } else {
+                        "Search message content in this assistant's past conversations (and unowned older chats) by keywords. Prefer this when recalling prior discussion, or when the user mentions \"last time\", \"earlier\", or \"we discussed\". By default the current conversation is excluded because it is already in context."
+                    },
+                )
+                put("parameters", buildJsonObject {
+                    put("type", "object")
+                    put("properties", buildJsonObject {
+                        put("query", buildJsonObject {
+                            put("type", "string")
+                            put("description", if (zh) "关键词，多个用空格分隔。" else "Keywords separated by spaces.")
+                        })
+                        put("limit", buildJsonObject {
+                            put("type", "integer")
+                            put("minimum", 1)
+                            put("maximum", 20)
+                            put("description", if (zh) "最多返回多少条，默认 10。" else "Maximum number of results. Default 10.")
+                        })
+                        put("conversation_id", buildJsonObject {
+                            put("type", "string")
+                            put(
+                                "description",
+                                if (zh) {
+                                    "只在指定会话内搜索。省略则搜索除当前会话外、当前助手可见的会话。"
+                                } else {
+                                    "Search only within this conversation. Omit to search this assistant's visible conversations except the current one."
+                                },
+                            )
+                        })
+                    })
+                    put("required", buildJsonArray { add(JsonPrimitive("query")) })
+                })
+            })
+        }
+    }
+
     // ------------------------------------------------------------------ dispatch
 
     /**
@@ -348,6 +402,19 @@ object MemoryTools {
         args: JsonObject,
     ): String? {
         if (assistant == null) return null
+        if (name == CHAT_SEARCH) {
+            if (!assistant.allowPastConversationRecall) return null
+            return try {
+                chatSearch(container, assistant, conversationId, args)
+            } catch (e: Exception) {
+                toolError(
+                    error = "memory_execution_error",
+                    message = e.toString(),
+                    tool = name,
+                    instruction = "The memory tool failed. Retry only after correcting the parameters, or inform the user about the issue.",
+                )
+            }
+        }
         if (name !in ENABLE_MEMORY_TOOL_NAMES) return null
         if (!assistant.enableMemory) return null
 
@@ -576,6 +643,81 @@ object MemoryTools {
             put("cleared", buildJsonArray { cleared.forEach { add(JsonPrimitive(it)) } })
             put("rejected", JsonArray(rejected))
         }.toString()
+    }
+
+    private fun chatSearch(
+        container: AppContainerImpl,
+        assistant: Assistant,
+        conversationId: String?,
+        args: JsonObject,
+    ): String {
+        val query = args.string("query") ?: ""
+        if (query.trim().isEmpty()) {
+            return toolError(error = "invalid_query", message = "query must not be empty.", tool = CHAT_SEARCH)
+        }
+        val limit = (args.int("limit") ?: 10).coerceIn(1, 20)
+        val filterConversationId = args.string("conversation_id")?.trim()
+        val scoped = !filterConversationId.isNullOrEmpty()
+        val tokens = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (tokens.isEmpty()) {
+            return buildJsonObject {
+                put("query", query)
+                put("results", JsonArray(emptyList()))
+            }.toString()
+        }
+        val hits = container.messageDao.searchMessagesForAssistant(
+            tokens = tokens,
+            assistantId = assistant.id,
+            onlyConversationId = if (scoped) filterConversationId else null,
+            excludeConversationId = if (scoped) null else conversationId,
+            limit = limit * 8,
+        )
+        val results = mutableListOf<JsonObject>()
+        for (hit in hits) {
+            if (hit.role != "user" && hit.role != "assistant") continue
+            val content = hit.content.trim()
+            if (content.isEmpty()) continue
+            val summary = hit.summary?.trim()?.takeIf { it.isNotEmpty() }
+            results.add(buildJsonObject {
+                put("conversationId", hit.conversationId)
+                put("title", hit.conversationTitle)
+                if (summary != null) put("summary", summary)
+                put("role", hit.role)
+                put("date", fmtDate(hit.timestamp * 1000))
+                put("snippet", snippet(content, tokens))
+            })
+            if (results.size >= limit) break
+        }
+        return buildJsonObject {
+            put("query", query)
+            put("results", JsonArray(results))
+        }.toString()
+    }
+
+    /** memory_tools._snippet: 40-char window around the first token hit. */
+    private fun snippet(content: String, tokens: List<String>): String {
+        val lower = content.lowercase()
+        var idx = -1
+        var hitLen = 0
+        for (token in tokens) {
+            val i = lower.indexOf(token)
+            if (i >= 0) {
+                idx = i
+                hitLen = token.length
+                break
+            }
+        }
+        val radius = 40
+        if (idx < 0) {
+            val cut = if (content.length <= 80) content else content.substring(0, 80)
+            return "……$cut……"
+        }
+        val start = (idx - radius).coerceIn(0, content.length)
+        val end = (idx + hitLen + radius).coerceIn(0, content.length)
+        var snip = content.substring(start, end)
+        if (start > 0) snip = "……$snip"
+        if (end < content.length) snip = "$snip……"
+        return snip
     }
 
     // ------------------------------------------------------------------- helpers

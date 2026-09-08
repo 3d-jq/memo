@@ -1055,10 +1055,26 @@ class ChatViewModel(
     private fun buildSystemPrompt(assistant: com.psyche.memo.data.model.Assistant?): String {
         val parts = mutableListOf<String>()
         assistant?.systemPrompt?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
+        // 记忆规则（message_builder.injectMemoryAndRecentChats L1610-1643）：
+        // 长期记忆规则与过往回忆规则各自独立门控。
+        if (assistant != null && (assistant.enableMemory || assistant.allowPastConversationRecall)) {
+            val lang = com.psyche.memo.ui.MemorySettingsState(container).resolvedPromptLang()
+            val zh = lang == com.psyche.memo.ui.MemoryPromptLang.zh
+            if (assistant.enableMemory) {
+                parts.add(
+                    com.psyche.memo.ui.MemorySettingsState(container)
+                        .prompt(com.psyche.memo.ui.MemoryPromptKind.RULES, zh)
+                        .trim(),
+                )
+            }
+            if (assistant.allowPastConversationRecall) {
+                parts.add(com.psyche.memo.ui.MemoryPrompts.rulesPastConversationRecallFor(lang).trim())
+            }
+        }
         if (assistant?.searchEnabled == true) {
             parts.add(com.psyche.memo.provider.search.SearchToolService.SYSTEM_PROMPT)
         }
-        return parts.joinToString("\n\n")
+        return parts.filter { it.isNotEmpty() }.joinToString("\n\n")
     }
 
     /** takeCallsAfterRound 的 Native 等价 —— 本轮新增（未执行）的工具调用。 */

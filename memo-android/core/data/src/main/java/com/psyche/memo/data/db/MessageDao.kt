@@ -145,6 +145,68 @@ class MessageDao(private val db: SQLiteDatabase) {
         return hits
     }
 
+    /** One message match for the chat_search tool (memory_tools._handleChatSearch). */
+    data class MessageHit(
+        val conversationId: String,
+        val conversationTitle: String,
+        val summary: String?,
+        val role: String,
+        val content: String,
+        val timestamp: Long,
+    )
+
+    /**
+     * Per-message search scoped to the assistant's conversations (plus unowned
+     * older chats). [tokens] are ANDed; pass [onlyConversationId] to search one
+     * conversation, or [excludeConversationId] to skip the current one.
+     */
+    fun searchMessagesForAssistant(
+        tokens: List<String>,
+        assistantId: String,
+        onlyConversationId: String? = null,
+        excludeConversationId: String? = null,
+        limit: Int = 40,
+    ): List<MessageHit> {
+        if (tokens.isEmpty()) return emptyList()
+        val clauses = StringBuilder("m.role IN ('user','assistant') AND (c.assistant_id = ? OR c.assistant_id IS NULL)")
+        val args = mutableListOf(assistantId)
+        if (!onlyConversationId.isNullOrEmpty()) {
+            clauses.append(" AND m.conversation_id = ?")
+            args.add(onlyConversationId)
+        } else if (!excludeConversationId.isNullOrEmpty()) {
+            clauses.append(" AND m.conversation_id != ?")
+            args.add(excludeConversationId)
+        }
+        for (token in tokens) {
+            clauses.append(" AND p.payload LIKE ?")
+            args.add("%" + token.replace("'", "''") + "%")
+        }
+        args.add(limit.toString())
+        val out = ArrayList<MessageHit>()
+        db.rawQuery(
+            "SELECT m.conversation_id, c.title, c.summary, m.role, m.timestamp, p.payload " +
+                "FROM message_rows m " +
+                "JOIN conversation_rows c ON c.id = m.conversation_id " +
+                "JOIN message_part_rows p ON p.revision_id = m.id AND p.kind = 'text' " +
+                "WHERE $clauses ORDER BY m.timestamp DESC LIMIT ?",
+            args.toTypedArray(),
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                out.add(
+                    MessageHit(
+                        conversationId = cursor.getString(0) ?: "",
+                        conversationTitle = cursor.getString(1) ?: "",
+                        summary = cursor.getString(2),
+                        role = cursor.getString(3) ?: "",
+                        timestamp = cursor.getLong(4),
+                        content = cursor.getString(5) ?: "",
+                    ),
+                )
+            }
+        }
+        return out
+    }
+
     /** Inserts message and its parts transactionally; parts ordinal from index. */
     fun insert(message: ChatMessage) {
         db.beginTransaction()

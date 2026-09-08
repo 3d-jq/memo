@@ -89,7 +89,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | M1 | 记忆工具执行：`MemoryTools`（memory_read / memory_update / memory_search_profile / memory_edit / memory_delete / update_user_profile 六个定义 zh/en 逐字对齐 + 执行；写入走 assistant.memoryWriteScope 解析，临时会话拒写，重复内容 SKIP/NEW 回退路径；未移植 Smart Add LLM 合并与 chat_search）+ ChatViewModel 在 enableMemory 时提供工具 + ToolHandler 分派 + AppContainer.memoryProviderV2 单例 | ✅ 本轮 |
 | M2a | 记忆摘要注入：`MemoryBlockBuilder`（`<user_profile>`/`<user_memory>` 块、summary 模式 mode/total/shown + moreHint、global 优先排序、escape/flatten、SHA-256 前 16 位哈希）+ ChatViewModel 把快照前缀加到本轮最后一条用户消息（enableMemory 且有内容时） | ✅ 本轮 |
 | M2b | 助手编辑页记忆 tab（`AssistantEditMemoryTab`：总开关 + 自动整理/整理频率/去重模式/写入范围 + 过往回忆/生成摘要/摘要频率 + 记忆设置入口；选择 sheet 与数字弹窗）+ 路由接线 | ✅ 本轮 |
-| M2c | 记忆收尾：哈希冻结/自愈（§7.6 只在快照变化时重写）、Smart Add LLM 去重合并、chat_search（会话搜索）、tab 内记忆条目列表与整理按钮、legacy 记忆模式工具 | ⬜ |
+| M2c | `chat_search` 工具：定义（zh/en）+ MessageDao.searchMessagesForAssistant（按助手范围/排除当前会话/指定会话、tokens AND、按时间倒序）+ 片段窗口 + 记忆规则注入（`MemorySettingsState.prompt(RULES)` 与 `rulesPastConversationRecallFor`，各自独立门控） | ✅ 本轮 |
+| M2d | 记忆收尾：哈希冻结/自愈（§7.6）、Smart Add LLM 去重合并、tab 内记忆条目列表与整理按钮、legacy 记忆模式工具 | ⬜ |
 | F4 | 图片 OCR：`OcrService`（读 ocr_enabled/ocr_model/ocr_prompt/thinking 设置；OCR 模型跑图 → 文本；`<image_file_ocr>` 块前置；SHA-256 内容哈希 + LRU 缓存）+ 底部面板 OCR 行（开关 + 长按提示词 sheet） | ✅ 本轮 |
 | F3 | 文档文本抽取：`DocumentTextExtractor`（PDF=PDFBox-Android、DOCX=zip+document.xml、.doc 不支持、其余 UTF-8 兜底；path+stat 缓存）+ `UnicodeSanitizer` 移植 + 用户消息把文件文本按 `## user sent a file` / `<content>` 块前置进请求 | ✅ 本轮 |
 | F2 | 附件选择 UI：底部工具面板（bottom_tools_sheet.dart 三张 72dp 卡：相机/相册/文件）+ `AttachmentStore`（URI 拷贝到 filesDir/upload）+ 附件预览条（64dp 图缩略图 r10+scrim 删除角标 / 48dp 文档 chip）+ ChatViewModel 待发附件并入用户消息 parts；相机走 FileProvider（新增 provider + file_paths.xml）；原版面板里的指令注入/世界书/OCR/上下文管理行因功能未移植暂不渲染 | ✅ 本轮 |
