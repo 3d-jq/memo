@@ -1978,44 +1978,55 @@ private fun ChatInputBar(
                         ),
                 ) {
                     // CIB:2779-2782 —— 原版是 border:none + contentPadding
-                    // (vertical:2, horizontal:0) 的裸输入框；M3 TextField 自带
-                    // 16dp 横向内边距会把打字区左右收窄，改用 BasicTextField
-                    // 完全复刻（hint 0.45 / 光标 primary / maxLines 5 / Send）。
-                    BasicTextField(
-                        value = input,
-                        onValueChange = onInputChange,
-                        modifier = textFieldModifier,
-                        textStyle = androidx.compose.ui.text.TextStyle(
-                            fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
-                            color = cs.onSurface,
-                        ),
-                        cursorBrush = SolidColor(cs.primary),
-                        // CIB:2750-2752 readOnly —— composerLocked || _ownsVoiceSession。
-                        readOnly = voiceActive,
-                        // 源码 chat_input_bar.dart:2741 —— maxLines: 5（未展开状态）
-                        maxLines = 5,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        // CIB:934-938 _handleSend —— 语音会话中不触发发送。
-                        keyboardActions = KeyboardActions(
-                            onSend = { if (!streaming && !voiceActive) onSend() },
-                        ),
-                        decorationBox = { inner ->
-                            Box {
-                                if (input.isEmpty()) {
-                                    Text(
-                                        stringResource(UiR.string.chat_input_bar_hint),
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
-                                            color = cs.onSurface.copy(
-                                                alpha = ChatStyleSpec.INPUT_HINT_ALPHA,
+                    // (vertical:2, horizontal:0) 的裸输入框：M3 TextField 自带
+                    // 16dp 横向内边距（会把打字区左右收窄）与 56dp 最小高，改用
+                    // BasicTextField 复刻——横向零内边距；最小高 48dp =
+                    // InputDecorator 的 kMinInteractiveDimension（非 dense 字段
+                    // 的 minContainerHeight，input_decorator.dart L1120-1123），
+                    // 单行时文本垂直居中（interactiveAdjustment 语义），多行时
+                    // 内容撑高。
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        BasicTextField(
+                            value = input,
+                            onValueChange = onInputChange,
+                            modifier = textFieldModifier,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
+                                color = cs.onSurface,
+                            ),
+                            cursorBrush = SolidColor(cs.primary),
+                            // CIB:2750-2752 readOnly —— composerLocked || _ownsVoiceSession。
+                            readOnly = voiceActive,
+                            // 源码 chat_input_bar.dart:2741 —— maxLines: 5（未展开状态）
+                            maxLines = 5,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            // CIB:934-938 _handleSend —— 语音会话中不触发发送。
+                            keyboardActions = KeyboardActions(
+                                onSend = { if (!streaming && !voiceActive) onSend() },
+                            ),
+                            decorationBox = { inner ->
+                                Box {
+                                    if (input.isEmpty()) {
+                                        Text(
+                                            stringResource(UiR.string.chat_input_bar_hint),
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
+                                                color = cs.onSurface.copy(
+                                                    alpha = ChatStyleSpec.INPUT_HINT_ALPHA,
+                                                ),
                                             ),
-                                        ),
-                                    )
+                                        )
+                                    }
+                                    inner()
                                 }
-                                inner()
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
                 }
 
                 // ③ 底部按钮行（源码 chat_input_bar.dart:2830-2949）
