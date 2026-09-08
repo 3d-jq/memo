@@ -48,6 +48,7 @@ import com.psyche.memo.ui.SearchServicesScreen
 import com.psyche.memo.ui.McpServersScreen
 import com.psyche.memo.ui.InstructionInjectionScreen
 import com.psyche.memo.ui.QuickPhrasesScreen
+import com.psyche.memo.ui.TranslateScreen
 import com.psyche.memo.ui.WorldBookScreen
 import com.psyche.memo.ui.ProviderEditScreen
 import com.psyche.memo.ui.ChatHistoryScreen
@@ -257,6 +258,7 @@ private fun AppThemeAndContent(
                             onOpenProviders = { navController.navigate("providers") },
                             onOpenSearchServices = { navController.navigate("search_services") },
                             onOpenWorldBookPage = { navController.navigate("world_book") },
+                            onOpenTranslate = { navController.navigate("translate") },
                             pendingOpenConversation = pendingOpenConversation,
                         )
                     }
@@ -425,6 +427,12 @@ private fun AppThemeAndContent(
                     }
                     composable("world_book") {
                         WorldBookScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("translate") {
+                        TranslateScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
                         )

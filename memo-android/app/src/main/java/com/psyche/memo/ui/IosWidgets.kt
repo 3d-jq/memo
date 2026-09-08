@@ -813,3 +813,54 @@ fun IosIconButton(
         )
     }
 }
+
+/**
+ * IosIconButton's `builder:` variant (ios_tactile.dart L9-160): identical press
+ * feedback, but the caller draws the content — used by the translate app bar's
+ * model brand logo, which is an asset rather than a vector icon.
+ */
+@Composable
+fun IosIconContentButton(
+    onTap: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    contentPadding: Dp = 6.dp,
+    semanticLabel: String? = null,
+    content: @Composable (Color) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.surface.luminance() < 0.5f
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val clickable = onTap != null
+    val tint by animateColorAsState(
+        targetValue = if (pressed && clickable) lerpColor(color, cs.onSurface, 0.35) else color,
+        animationSpec = tween(durationMillis = 200, easing = EaseOutCubic),
+        label = "iosIconContentColor",
+    )
+    val backdrop by animateColorAsState(
+        targetValue = if (pressed && clickable) {
+            withAlpha(cs.onSurface, if (isDark) 0.12 else 0.08)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = tween(durationMillis = 160, easing = EaseOutCubic),
+        label = "iosIconContentBackdrop",
+    )
+    Box(
+        modifier = modifier
+            .background(backdrop, RoundedCornerShape(8.dp))
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                enabled = clickable,
+                onClick = { onTap?.invoke() },
+            )
+            .semantics { this.contentDescription = semanticLabel.orEmpty() }
+            .padding(contentPadding),
+        contentAlignment = Alignment.Center,
+    ) {
+        content(tint)
+    }
+}

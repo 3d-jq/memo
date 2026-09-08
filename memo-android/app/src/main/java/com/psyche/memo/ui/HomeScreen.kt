@@ -153,6 +153,7 @@ fun HomeScreen(
     onOpenProviders: () -> Unit,
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
+    onOpenTranslate: () -> Unit = {},
     pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -396,6 +397,7 @@ fun HomeScreen(
                     onOpenSettings = onOpenSettings,
                     onOpenHistory = onOpenHistory,
                     onCurrentDeleted = ::onCurrentDeleted,
+                    onOpenTranslate = onOpenTranslate,
                 )
             }
         }
@@ -646,27 +648,8 @@ fun ChatContent(
     // Detail-sheet saves bump optionsVersion so the list reloads
     // (model_select_sheet.dart _loadModelsAsync after showModelDetailSheet).
     var optionsVersion by remember { mutableIntStateOf(0) }
-    val modelOptions = remember(container, optionsVersion) {
-        com.psyche.memo.data.db.PayloadEntityDao(
-            container.database.readableDatabase,
-            "provider_rows",
-            primaryKey = "provider_key",
-        ).getAll().flatMap { row ->
-            val config = runCatching {
-                com.psyche.memo.data.model.ProviderConfig.fromJsonString(
-                    kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
-                    row.payload,
-                )
-            }.getOrNull() ?: return@flatMap emptyList()
-            config.models.map { id ->
-                ModelOption(
-                    providerId = config.id,
-                    providerName = config.name,
-                    modelId = id,
-                    selected = id == modelId && config.id == providerId,
-                )
-            }
-        }
+    val modelOptions = remember(container, optionsVersion, providerId, modelId) {
+        loadModelOptions(container, providerId, modelId)
     }
 
     // Top-bar subtitle with friendly names — model_display_helper.dart

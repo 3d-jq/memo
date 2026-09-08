@@ -118,6 +118,7 @@ fun SideDrawerContent(
     onOpenSettings: () -> Unit,
     onOpenHistory: () -> Unit,
     onCurrentDeleted: () -> Unit,
+    onOpenTranslate: () -> Unit = {},
     assistantName: String? = null,
     userName: String? = null,
     forceSelectionMode: Boolean = false,
@@ -741,7 +742,7 @@ fun SideDrawerContent(
             Spacer(Modifier.width(8.dp))
             Box(modifier = Modifier.size(45.dp), contentAlignment = Alignment.Center) {
                 IconButton(
-                    onClick = { /* Translate page not yet ported */ },
+                    onClick = onOpenTranslate,
                     modifier = Modifier.size(45.dp),
                 ) {
                     Icon(

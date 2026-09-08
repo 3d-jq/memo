@@ -81,6 +81,32 @@ data class ModelOption(
     val selected: Boolean = false,
 )
 
+/** provider_rows → picker options (kelivo showModelSelector's option list). */
+fun loadModelOptions(
+    container: AppContainerImpl,
+    selectedProviderId: String?,
+    selectedModelId: String?,
+): List<ModelOption> = com.psyche.memo.data.db.PayloadEntityDao(
+    container.database.readableDatabase,
+    "provider_rows",
+    primaryKey = "provider_key",
+).getAll().flatMap { row ->
+    val config = runCatching {
+        com.psyche.memo.data.model.ProviderConfig.fromJsonString(
+            kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
+            row.payload,
+        )
+    }.getOrNull() ?: return@flatMap emptyList()
+    config.models.map { id ->
+        ModelOption(
+            providerId = config.id,
+            providerName = config.name,
+            modelId = id,
+            selected = id == selectedModelId && config.id == selectedProviderId,
+        )
+    }
+}
+
 /**
  * Mirrors memo's model_select_sheet.dart: the mobile picker is a
  * showModalBottomSheet(isScrollControlled: true) whose body is a
