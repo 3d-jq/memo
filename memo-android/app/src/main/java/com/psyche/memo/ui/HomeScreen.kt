@@ -1029,7 +1029,10 @@ private fun MessageRow(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
             ) {
-                com.psyche.memo.ui.chat.ToolCallCard(part = toolPart)
+                com.psyche.memo.ui.chat.ToolCallCard(
+                    part = toolPart,
+                    hideToolResultImages = timelineSettings.hideToolResultImages,
+                )
             }
         }
         return

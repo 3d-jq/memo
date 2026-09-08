@@ -132,6 +132,22 @@ object ChatStyleSpec {
     const val TOOL_LOADING_DOTS_HEIGHT_DP = 12f
 
     // ------------------------------------------------------------------
+    // Tool result image strips (CMW:107-109)
+    // ------------------------------------------------------------------
+
+    /** kToolImageCardHeight = 180 —— boxed 工具卡图片条高度。 */
+    const val TOOL_IMAGE_CARD_HEIGHT_DP = 180f
+
+    /** kToolImageCardMaxWidth = 320 —— boxed 工具卡单图最大宽度。 */
+    const val TOOL_IMAGE_CARD_MAX_WIDTH_DP = 320f
+
+    /** kToolImageTimelineHeight = 120 —— 时间线工具步图片条高度。 */
+    const val TOOL_IMAGE_TIMELINE_HEIGHT_DP = 120f
+
+    /** kToolImageTimelineMaxWidth = 240 —— 时间线工具步单图最大宽度。 */
+    const val TOOL_IMAGE_TIMELINE_MAX_WIDTH_DP = 240f
+
+    // ------------------------------------------------------------------
     // Chain-of-thought timeline (CMW:4445-4452 / 4665-4671 / 5148-5167)
     // ------------------------------------------------------------------
 

@@ -27,6 +27,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -104,10 +105,12 @@ import kotlinx.serialization.json.jsonObject
  * messages, and `_showToolDetail` (695-770) + tool_detail_text_section.dart
  * for the detail sheet.
  *
- * Deferred to the tool-execution batch, where the data first becomes
- * reachable: approval pending state (Shield icon, deny/approve buttons and
- * `_argsSummary`), `_AskUserInlineBody` / `_AskUserToolCard`, and tool result
- * image strips (`parseToolResultImages` + ImageViewerPage).
+ * Tool result image strips (`parseToolResultImages` + ImageViewerPage) and
+ * the ask-user surfaces (`_AskUserToolCard` / `_AskUserInlineBody`) are
+ * ported (AskUserCard.kt / ToolResultImageStrip.kt). Still deferred to the
+ * tool-execution batch, where the data first becomes reachable: approval
+ * pending state (Shield icon, deny/approve buttons, `_argsSummary` — the
+ * pure helper itself is ported in ToolResultImages.kt).
  */
 
 /** UI data for a tool call — mirrors chat_message_widget.dart ToolUIPart. */
@@ -120,11 +123,11 @@ data class ToolUiPart(
     /** Dart 侧是显式字段（默认 false）；流式 payload 没有它，按 content 推断。 */
     val loading: Boolean = content.isNullOrEmpty(),
 ) {
-    /**
-     * chat_message_widget.dart `parseToolResultImages(content).$1`。图片标记
-     * 的剥离随工具结果图片批次落地，当前与 content 等价。
-     */
-    val cleanText: String get() = content.orEmpty()
+    /** chat_message_widget.dart `parseToolResultImages(content).$1` —— 剥离整行图片标记后的正文。 */
+    val cleanText: String by lazy { parseToolResultImages(content).first }
+
+    /** chat_message_widget.dart `parseToolResultImages(content).$2` —— 首见去重后的图片路径。 */
+    val imagePaths: List<String> by lazy { parseToolResultImages(content).second }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
@@ -240,7 +243,7 @@ fun toolTitleFor(name: String, args: JsonObject?, isResult: Boolean): String {
 
 /** chat_message_widget.dart _askUserToolTitleFor。 */
 @Composable
-private fun askUserToolTitleFor(args: JsonObject?): String {
+internal fun askUserToolTitleFor(args: JsonObject?): String {
     val questions = normalizeAskUserQuestions(args ?: JsonObject(emptyMap()))
     if (questions.isNotEmpty()) {
         return IcuPlural.format(
@@ -290,6 +293,8 @@ fun ChainOfThoughtToolStep(
     isFirst: Boolean,
     isLast: Boolean,
     showToolResultSummary: Boolean,
+    hideToolResultImages: Boolean = false,
+    onSubmitAskUser: ((AskUserResult) -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
@@ -299,6 +304,7 @@ fun ChainOfThoughtToolStep(
     // _askUserExpanded 默认 true（`_askUserExpanded ?? true`）。
     var askUserExpanded by rememberSaveable { mutableStateOf(true) }
     var showDetail by remember { mutableStateOf(false) }
+    var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
     val icon: @Composable () -> Unit = if (isAskUser || !loading) {
         @Composable {
@@ -334,13 +340,56 @@ fun ChainOfThoughtToolStep(
         )
     }
 
-    val summaryContent: (@Composable () -> Unit)? = toolStepSummary(
+    // CMW:5282-5286 —— 未答 → 已答 时自动重新展开（didUpdateWidget 等价）。
+    val answered = part.content?.trim()?.isNotEmpty() == true && !loading
+    var wasAnswered by remember(part.id) { mutableStateOf(answered) }
+    LaunchedEffect(answered) {
+        if (isAskUser && !wasAnswered && answered) askUserExpanded = true
+        wasAnswered = answered
+    }
+
+    // CMW:5457-5526 —— ask-user 时正文整块换成 _AskUserInlineBody；否则按摘要
+    // 优先级链取一种，再在摘要下方挂工具结果图片横滚条（120/240 常量）。
+    val askUserBody: (@Composable () -> Unit)? = if (isAskUser) {
+        { AskUserInlineBody(part = part, onSubmit = onSubmitAskUser) }
+    } else {
+        null
+    }
+    val summaryContent: (@Composable () -> Unit)? = askUserBody ?: toolStepSummary(
         part = part,
         fg = fg,
         errorColor = cs.error,
         isAskUser = isAskUser,
         showToolResultSummary = showToolResultSummary,
     )
+    val imageStrip: (@Composable () -> Unit)? =
+        if (!isAskUser && !hideToolResultImages && part.imagePaths.isNotEmpty()) {
+            {
+                ToolResultImageStrip(
+                    paths = part.imagePaths,
+                    height = ChatStyleSpec.TOOL_IMAGE_TIMELINE_HEIGHT_DP.dp,
+                    maxWidth = ChatStyleSpec.TOOL_IMAGE_TIMELINE_MAX_WIDTH_DP.dp,
+                    // CMW:5501 / 667-672 —— 点击只开单张（ImageViewerPage(images: [path])）。
+                    onOpenViewer = { paths, index -> viewerState = listOf(paths[index]) to 0 },
+                )
+            }
+        } else {
+            null
+        }
+    val content: (@Composable () -> Unit)? =
+        if (summaryContent == null && imageStrip == null) {
+            null
+        } else {
+            {
+                Column(horizontalAlignment = Alignment.Start) {
+                    if (summaryContent != null) summaryContent()
+                    if (summaryContent != null && imageStrip != null) {
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (imageStrip != null) imageStrip()
+                }
+            }
+        }
 
     val indicator: @Composable () -> Unit = if (isAskUser) {
         @Composable {
@@ -374,19 +423,26 @@ fun ChainOfThoughtToolStep(
         isDark = isDark,
         onTap = if (isAskUser) onToggleAskUser else onOpenDetail,
         indicator = indicator,
-        content = summaryContent,
-        contentVisible = summaryContent != null && (!isAskUser || askUserExpanded),
-        expectContent = loading || isAskUser || summaryContent != null,
+        content = content,
+        contentVisible = content != null && (!isAskUser || askUserExpanded),
+        expectContent = loading || isAskUser || content != null,
     )
 
     if (showDetail) {
         ToolDetailSheet(part = part, onDismiss = { showDetail = false })
     }
+    viewerState?.let { (paths, index) ->
+        ImageViewerOverlay(
+            images = paths,
+            initialIndex = index,
+            onClose = { viewerState = null },
+        )
+    }
 }
 
 /**
- * CMW:5457-5488 的摘要优先级。ask-user 分支（_AskUserInlineBody）与工具结果
- * 图片条属工具执行批次，这里按源码顺序留空。
+ * CMW:5457-5488 的摘要优先级（ask-user 分支在 ChainOfThoughtToolStep 里先被
+ * 替换成 _AskUserInlineBody，这里的 isAskUser 分支只是兜底）。
  */
 @Composable
 private fun toolStepSummary(
@@ -478,11 +534,19 @@ private fun toolStepSummary(
  * 专属摘要。整卡 16dp 圆角、按压 260ms、点开详情弹层。
  */
 @Composable
-fun ToolCallCard(part: ToolUiPart) {
+fun ToolCallCard(part: ToolUiPart, hideToolResultImages: Boolean = false) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
     val fg = chatSurfaceFg(cs, isDark)
     var showDetail by remember { mutableStateOf(false) }
+    var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
+
+    // CMW:5686-5688 —— ask-user 整卡换 _AskUserToolCard（无 onSubmit：审批/服务
+    // 批次才会接 AskUserInteractionService）。
+    if (part.toolName == LocalToolNames.ASK_USER) {
+        AskUserToolCard(part = part)
+        return
+    }
 
     val loading = part.loading
     val ttsText = if (part.toolName == LocalToolNames.TEXT_TO_SPEECH) {
@@ -583,11 +647,28 @@ fun ToolCallCard(part: ToolUiPart) {
                     )
                 }
             }
+            // CMW:5905-5929 —— 工具结果图片横滚条（180/320 常量），点击只开单张。
+            if (!hideToolResultImages && part.imagePaths.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                ToolResultImageStrip(
+                    paths = part.imagePaths,
+                    height = ChatStyleSpec.TOOL_IMAGE_CARD_HEIGHT_DP.dp,
+                    maxWidth = ChatStyleSpec.TOOL_IMAGE_CARD_MAX_WIDTH_DP.dp,
+                    onOpenViewer = { paths, index -> viewerState = listOf(paths[index]) to 0 },
+                )
+            }
         }
     }
 
     if (showDetail) {
         ToolDetailSheet(part = part, onDismiss = { showDetail = false })
+    }
+    viewerState?.let { (paths, index) ->
+        ImageViewerOverlay(
+            images = paths,
+            initialIndex = index,
+            onClose = { viewerState = null },
+        )
     }
 }
 

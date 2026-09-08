@@ -208,6 +208,7 @@ fun ChainOfThoughtCard(
                         isFirst = isFirst,
                         isLast = isLast,
                         showToolResultSummary = settings.showToolResultSummary,
+                        hideToolResultImages = settings.hideToolResultImages,
                     )
                 }
             }
