@@ -46,6 +46,7 @@ import com.psyche.memo.ui.ProvidersScreen
 import com.psyche.memo.ui.ProviderGroupsScreen
 import com.psyche.memo.ui.SearchServicesScreen
 import com.psyche.memo.ui.McpServersScreen
+import com.psyche.memo.ui.InstructionInjectionScreen
 import com.psyche.memo.ui.QuickPhrasesScreen
 import com.psyche.memo.ui.ProviderEditScreen
 import com.psyche.memo.ui.ChatHistoryScreen
@@ -285,6 +286,7 @@ private fun AppThemeAndContent(
                             onOpenToolSchema = { navController.navigate("tool_schema_settings") },
                             onOpenMcp = { navController.navigate("mcp") },
                             onOpenQuickPhrases = { navController.navigate("quick_phrases") },
+                            onOpenInstructionInjection = { navController.navigate("instruction_injection") },
                             onOpenTtsServices = { navController.navigate("tts_services") },
                             onOpenLogs = { navController.navigate("log_viewer") },
                             onBack = { navController.popBackStack() },
@@ -405,6 +407,12 @@ private fun AppThemeAndContent(
                                 onBack = { navController.popBackStack() },
                             )
                         }
+                    }
+                    composable("instruction_injection") {
+                        InstructionInjectionScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                     composable("quick_phrases") {
                         QuickPhrasesScreen(

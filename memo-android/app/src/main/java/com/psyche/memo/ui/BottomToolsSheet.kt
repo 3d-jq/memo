@@ -28,7 +28,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Camera
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Eye
+import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
@@ -51,6 +53,7 @@ fun BottomToolsSheet(
     ocrEnabled: Boolean = false,
     onToggleOcr: () -> Unit = {},
     onOpenOcrPrompt: () -> Unit = {},
+    onOpenInstructionInjection: () -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -101,6 +104,26 @@ fun BottomToolsSheet(
                 ) {
                     onUpload()
                 }
+            }
+            // 指令注入行（bottom_tools_sheet.dart：点击打开选择 sheet）。
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .clickable { onOpenInstructionInjection() }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Layers, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.instruction_injection_title),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
             }
             // OCR 行（bottom_tools_sheet.dart：配置了 OCR 模型才显示；长按改提示词）。
             if (ocrAvailable) {

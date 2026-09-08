@@ -101,6 +101,7 @@ fun SettingsScreen(
     onOpenToolSchema: () -> Unit,
     onOpenMcp: () -> Unit,
     onOpenQuickPhrases: () -> Unit,
+    onOpenInstructionInjection: () -> Unit,
     onOpenTtsServices: () -> Unit,
     onOpenLogs: () -> Unit,
     onBack: () -> Unit,
@@ -274,7 +275,7 @@ fun SettingsScreen(
                     DividerRow()
                     SettingsRow(Lucide.Zap, stringResource(UiR.string.settings_page_quick_phrase), onTap = onOpenQuickPhrases)
                     DividerRow()
-                    SettingsRow(Lucide.Layers, stringResource(UiR.string.settings_page_instruction_injection), onTap = {})
+                    SettingsRow(Lucide.Layers, stringResource(UiR.string.settings_page_instruction_injection), onTap = onOpenInstructionInjection)
                     DividerRow()
                     SettingsRow(Lucide.EthernetPort, stringResource(UiR.string.settings_page_network_proxy), onTap = onOpenNetworkProxy)
                 }

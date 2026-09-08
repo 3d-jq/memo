@@ -446,6 +446,7 @@ fun ChatContent(
     var showSearchSheet by remember { mutableStateOf(false) }
     var showToolsSheet by remember { mutableStateOf(false) }
     var quickPhrases by remember { mutableStateOf<List<com.psyche.memo.data.model.QuickPhrase>?>(null) }
+    var showInstructionSheet by remember { mutableStateOf(false) }
     var showOcrPrompt by remember { mutableStateOf(false) }
     var ocrSettings by remember {
         mutableStateOf(com.psyche.memo.provider.OcrService.settingsOf(container.preferenceRepository))
@@ -996,6 +997,18 @@ fun ChatContent(
                 showToolsSheet = false
                 showOcrPrompt = true
             },
+            onOpenInstructionInjection = {
+                showToolsSheet = false
+                showInstructionSheet = true
+            },
+        )
+    }
+
+    if (showInstructionSheet) {
+        com.psyche.memo.ui.InstructionInjectionSheet(
+            container = container,
+            assistantId = container.currentAssistant()?.id,
+            onDismiss = { showInstructionSheet = false },
         )
     }
 
