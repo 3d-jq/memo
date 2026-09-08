@@ -91,7 +91,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | M2b | 助手编辑页记忆 tab（`AssistantEditMemoryTab`：总开关 + 自动整理/整理频率/去重模式/写入范围 + 过往回忆/生成摘要/摘要频率 + 记忆设置入口；选择 sheet 与数字弹窗）+ 路由接线 | ✅ 本轮 |
 | L1 | 本地工具执行 + tab：`LocalToolExecutors`（clipboard 读/写、calculate=exp4j、text_to_speech=TtsPlayer、get_screen_time=UsageStats 前台时长算法）+ `DeviceLocalTools`（前台时长纯算法 + Usage Access 权限探测/跳转）+ 助手本地工具 tab（8 行 Android 工具 + 日历权限流 + 屏幕时间权限提示）；iOS-only 行按平台隐藏 | ✅ 本轮 |
 | MCP-1 | MCP 基础：`McpServerConfig/McpToolConfig/McpParamSpec` DTO（JSON 键对齐 mcp_provider）+ `McpRepository`（mcp_server_rows）+ `McpClient`（JSON-RPC over Streamable HTTP 与 SSE：initialize 握手、`mcp-session-id` 捕获、2025-06-18+ 的 `MCP-Protocol-Version` 头、tools/list、tools/call 文本拼接与 isError、会话过期 404 重握手、SSE `endpoint` 事件与消息队列） | ✅ 本轮 |
-| MCP-2 | MCP 收尾：服务器管理页（mcp_page）+ 编辑/JSON/超时 sheet、助手 MCP tab 绑定、工具并入请求与 ToolHandler 调用、OAuth 流程、会话内 MCP sheet | ⬜ |
+| MCP-2 | 连接管理器（`McpConnectionManager`：连接/重连/断开、状态与工具缓存、启动连接已启用服务器）+ 助手 MCP tab（已连接服务器绑定、工具计数标签、全选/清空）+ 服务器管理页（列表状态点/错误/工具计数、编辑 sheet 双 tab（基础/工具，含自定义 Header 与工具启停/审批开关）、JSON 导入（mcpServers/裸 map/数组）、超时 sheet）+ 工具并入请求与 ToolHandler 调用（含 needsApproval 审批门）+ 设置页入口与 `mcp` 路由 | ✅ 本轮 |
+| MCP-3 | MCP 收尾：OAuth 授权流程、会话内 MCP sheet（mcp_conversation_sheet）、STDIO 传输（桌面专属，不移植） | ⬜ |
 | L2 | 日历执行器：`calendar_query`（Instances 区间查询、today/week/month/自定义、标题 LIKE 转义、全天事件按 UTC 日期输出）与 `calendar_create`（必填校验、全天 UTC 毫秒、默认可写日历、提醒写入 + HAS_ALARM + 部分提醒被拒的 warning、MISSING_REQUIRED/INVALID_TIME/INVALID_RANGE/NO_CALENDAR/INSERT_FAILED 错误码）+ 时间解析链（epoch/offset/instant/local） | ✅ 本轮 |
 | M2c | `chat_search` 工具：定义（zh/en）+ MessageDao.searchMessagesForAssistant（按助手范围/排除当前会话/指定会话、tokens AND、按时间倒序）+ 片段窗口 + 记忆规则注入（`MemorySettingsState.prompt(RULES)` 与 `rulesPastConversationRecallFor`，各自独立门控） | ✅ 本轮 |
 | M2d | 记忆收尾：哈希冻结/自愈（§7.6）、Smart Add LLM 去重合并、tab 内记忆条目列表与整理按钮、legacy 记忆模式工具 | ⬜ |
