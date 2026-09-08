@@ -4,23 +4,32 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
+import android.provider.CalendarContract
 import com.psyche.memo.ui.chat.TtsPlayer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import net.objecthunter.exp4j.ExpressionBuilder
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 /**
  * Executors for the Android local tools — the Flutter side implements these in
  * local_tools_service.dart (clipboard / calculate / text_to_speech) and in the
- * host's DeviceLocalToolsHandler.kt (screen time). Unported tools keep
- * returning the honest execution_error from ToolHandler.
+ * host's DeviceLocalToolsHandler.kt (screen time / calendar). Unported tools
+ * keep returning the honest execution_error from ToolHandler.
  */
 object LocalToolExecutors {
 
@@ -29,15 +38,21 @@ object LocalToolExecutors {
     const val TEXT_TO_SPEECH = "text_to_speech"
     const val CALCULATE = "calculate"
     const val SCREEN_TIME = "get_screen_time"
+    const val CALENDAR_QUERY = "calendar_query"
+    const val CALENDAR_CREATE = "calendar_create"
 
     /** Names this object can execute; the rest fall through. */
-    val EXECUTABLE = setOf(CLIPBOARD, TEXT_TO_SPEECH, CALCULATE, SCREEN_TIME)
+    val EXECUTABLE = setOf(
+        CLIPBOARD, TEXT_TO_SPEECH, CALCULATE, SCREEN_TIME, CALENDAR_QUERY, CALENDAR_CREATE,
+    )
 
     fun execute(context: Context, name: String, args: JsonObject): String? = when (name) {
         CLIPBOARD -> clipboard(context, args)
         TEXT_TO_SPEECH -> textToSpeech(context, args)
         CALCULATE -> calculate(args)
         SCREEN_TIME -> screenTime(context, args)
+        CALENDAR_QUERY -> queryCalendar(context, args)
+        CALENDAR_CREATE -> createCalendarEvent(context, args)
         else -> null
     }
 
@@ -130,8 +145,6 @@ object LocalToolExecutors {
 
     // ---------------------------------------------------------------- screen time
 
-    private val iso: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
-
     /** handleScreenTime / computeScreenTime of DeviceLocalToolsHandler.kt. */
     fun screenTime(context: Context, args: JsonObject): String {
         if (!DeviceLocalTools.hasUsageStatsPermission(context)) {
@@ -190,23 +203,22 @@ object LocalToolExecutors {
         val totalMs = sorted.sumOf { it.value }
         return buildJsonObject {
             put("range", if (isCustom) "custom" else rangePreset)
-            put("start", startTime.withNano(0).format(iso))
-            put("end", endTime.withNano(0).format(iso))
+            put("start", startTime.withNano(0).toString())
+            put("end", endTime.withNano(0).toString())
             put("total_ms", totalMs)
             put("total_minutes", totalMs / 60000)
-            put("apps", JsonArray(sorted.take(top).map { entry ->
-                buildJsonObject {
-                    put("package", entry.key)
-                    put("app_name", resolveAppName(pm, entry.key))
-                    put("total_ms", entry.value)
-                    put("total_minutes", entry.value / 60000)
+            put("apps", buildJsonArray {
+                sorted.take(top).forEach { entry ->
+                    add(buildJsonObject {
+                        put("package", entry.key)
+                        put("app_name", resolveAppName(pm, entry.key))
+                        put("total_ms", entry.value)
+                        put("total_minutes", entry.value / 60000)
+                    })
                 }
-            }))
+            })
         }.toString()
     }
-
-    private fun parseTime(raw: String, zone: ZoneId): ZonedDateTime =
-        ZonedDateTime.parse(raw, DateTimeFormatter.ISO_DATE_TIME.withZone(zone))
 
     @Suppress("DEPRECATION")
     private fun computeForegroundFromUsage(
@@ -241,9 +253,321 @@ object LocalToolExecutors {
         runCatching { pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString() }
             .getOrDefault(packageName)
 
+    // ------------------------------------------------------------------- calendar
+
+    /** queryCalendar of DeviceLocalToolsHandler.kt. */
+    fun queryCalendar(context: Context, args: JsonObject): String {
+        val limit = (args.string("limit")?.toIntOrNull() ?: args.int("limit") ?: 20).coerceIn(1, 100)
+        val query = args.string("query")?.takeIf { it.isNotBlank() }
+
+        val now = ZonedDateTime.now()
+        val zone = now.zone
+        val beginRaw = args.string("begin")?.takeIf { it.isNotBlank() }
+        val endRaw = args.string("end")?.takeIf { it.isNotBlank() }
+        val rangePreset = args.string("range")?.takeIf { it.isNotBlank() } ?: "today"
+
+        val startTime: ZonedDateTime
+        val endTime: ZonedDateTime
+        try {
+            startTime = if (beginRaw != null) {
+                parseTime(beginRaw, zone)
+            } else {
+                when (rangePreset) {
+                    "week" -> now.toLocalDate().atStartOfDay(zone).minusDays(now.dayOfWeek.value.toLong() - 1)
+                    "month" -> now.toLocalDate().withDayOfMonth(1).atStartOfDay(zone)
+                    else -> now.toLocalDate().atStartOfDay(zone)
+                }
+            }
+            endTime = if (endRaw != null) {
+                parseTime(endRaw, zone)
+            } else if (beginRaw != null) {
+                // Custom interval: 'range' is ignored per the tool contract, and
+                // the end defaults to now (matches iOS).
+                now
+            } else {
+                when (rangePreset) {
+                    "week" -> startTime.plusDays(7)
+                    "month" -> startTime.plusMonths(1)
+                    else -> now.toLocalDate().plusDays(1).atStartOfDay(zone)
+                }
+            }
+        } catch (e: Exception) {
+            return errorPayload("INVALID_TIME", e.message ?: "Invalid time format for begin/end.")
+        }
+        if (!startTime.isBefore(endTime)) {
+            return errorPayload("INVALID_RANGE", "begin must be earlier than end.")
+        }
+
+        val startMs = startTime.toInstant().toEpochMilli()
+        val endMs = endTime.toInstant().toEpochMilli()
+
+        val projection = arrayOf(
+            CalendarContract.Instances.EVENT_ID,
+            CalendarContract.Instances.TITLE,
+            CalendarContract.Instances.DESCRIPTION,
+            CalendarContract.Instances.EVENT_LOCATION,
+            CalendarContract.Instances.BEGIN,
+            CalendarContract.Instances.END,
+            CalendarContract.Instances.ALL_DAY,
+            CalendarContract.Instances.CALENDAR_DISPLAY_NAME,
+        )
+        // Escape LIKE wildcards so the keyword matches literally as a substring.
+        val selection = if (query != null) "${CalendarContract.Instances.TITLE} LIKE ? ESCAPE '\\'" else null
+        val selectionArgs = if (query != null) {
+            val escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            arrayOf("%$escaped%")
+        } else null
+
+        val uri = CalendarContract.Instances.CONTENT_URI.buildUpon()
+            .appendPath(startMs.toString())
+            .appendPath(endMs.toString())
+            .build()
+
+        val events = mutableListOf<JsonObject>()
+        context.contentResolver.query(
+            uri,
+            projection,
+            selection,
+            selectionArgs,
+            "${CalendarContract.Instances.BEGIN} ASC",
+        )?.use { cursor ->
+            while (cursor.moveToNext() && events.size < limit) {
+                val dtStart = cursor.getLong(4)
+                val dtEnd = cursor.getLong(5)
+                val allDay = cursor.getInt(6) == 1
+                events.add(buildJsonObject {
+                    put("id", cursor.getLong(0))
+                    put("title", cursor.getString(1) ?: "")
+                    put("description", cursor.getString(2) ?: "")
+                    put("location", cursor.getString(3) ?: "")
+                    if (allDay) {
+                        put("start", Instant.ofEpochMilli(dtStart).atZone(ZoneOffset.UTC).toLocalDate().toString())
+                        put(
+                            "end",
+                            if (dtEnd > 0) {
+                                Instant.ofEpochMilli(dtEnd).atZone(ZoneOffset.UTC).toLocalDate().toString()
+                            } else "",
+                        )
+                    } else {
+                        put("start", Instant.ofEpochMilli(dtStart).atZone(zone).withNano(0).toString())
+                        put("end", if (dtEnd > 0) Instant.ofEpochMilli(dtEnd).atZone(zone).withNano(0).toString() else "")
+                    }
+                    put("all_day", allDay)
+                    put("calendar", cursor.getString(7) ?: "")
+                })
+            }
+        }
+
+        return buildJsonObject {
+            put("range_start", startTime.withNano(0).toString())
+            put("range_end", endTime.withNano(0).toString())
+            put("count", events.size)
+            put("events", JsonArray(events))
+        }.toString()
+    }
+
+    /** createCalendarEvent of DeviceLocalToolsHandler.kt. */
+    fun createCalendarEvent(context: Context, args: JsonObject): String {
+        val title = args.string("title")?.takeIf { it.isNotBlank() }
+        val startRaw = args.string("start")?.takeIf { it.isNotBlank() }
+        val endRaw = args.string("end")?.takeIf { it.isNotBlank() }
+        val allDay = args.bool("all_day") ?: false
+
+        if (title == null || startRaw == null) {
+            return errorPayload("MISSING_REQUIRED", "Both 'title' and 'start' are required.")
+        }
+
+        val zone = ZoneId.systemDefault()
+        val startTime: ZonedDateTime
+        val endTime: ZonedDateTime
+        try {
+            startTime = parseTime(startRaw, zone)
+            endTime = if (endRaw != null) {
+                parseTime(endRaw, zone)
+            } else if (allDay) {
+                startTime.toLocalDate().plusDays(1).atStartOfDay(zone)
+            } else {
+                startTime.plusHours(1)
+            }
+        } catch (e: Exception) {
+            return errorPayload("INVALID_TIME", e.message ?: "Invalid time format.")
+        }
+        if (!startTime.isBefore(endTime)) {
+            return errorPayload("INVALID_RANGE", "end must be later than start.")
+        }
+
+        val description = args.string("description") ?: ""
+        val location = args.string("location") ?: ""
+        val reminderMinutes = parseReminderMinutes(args["reminders"])
+
+        val eventStartMillis: Long
+        val eventEndMillis: Long
+        val eventTimeZone: String
+        if (allDay) {
+            val startDate = startTime.toLocalDate()
+            val endDate = endTime.toLocalDate()
+            if (!startDate.isBefore(endDate)) {
+                return errorPayload("INVALID_RANGE", "all-day event end date must be later than start date.")
+            }
+            eventStartMillis = startDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            eventEndMillis = endDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            eventTimeZone = "UTC"
+        } else {
+            eventStartMillis = startTime.toInstant().toEpochMilli()
+            eventEndMillis = endTime.toInstant().toEpochMilli()
+            eventTimeZone = zone.id
+        }
+
+        val calendarId = getDefaultCalendarId(context)
+            ?: return errorPayload(
+                "NO_CALENDAR",
+                "No calendar account found on this device. Please add a calendar account first.",
+            )
+
+        val values = ContentValues().apply {
+            put(CalendarContract.Events.CALENDAR_ID, calendarId)
+            put(CalendarContract.Events.TITLE, title)
+            put(CalendarContract.Events.DESCRIPTION, description)
+            put(CalendarContract.Events.EVENT_LOCATION, location)
+            put(CalendarContract.Events.DTSTART, eventStartMillis)
+            put(CalendarContract.Events.DTEND, eventEndMillis)
+            put(CalendarContract.Events.EVENT_TIMEZONE, eventTimeZone)
+            if (allDay) put(CalendarContract.Events.ALL_DAY, 1)
+        }
+
+        val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+            ?: return errorPayload("INSERT_FAILED", "Failed to insert calendar event.")
+
+        val eventId = ContentUris.parseId(uri)
+        val savedReminders = insertReminders(context, eventId, reminderMinutes)
+        if (savedReminders.isNotEmpty()) {
+            // Only claim an alarm when a reminder row really landed.
+            runCatching {
+                context.contentResolver.update(
+                    ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId),
+                    ContentValues().apply { put(CalendarContract.Events.HAS_ALARM, 1) },
+                    null,
+                    null,
+                )
+            }
+        }
+
+        return buildJsonObject {
+            put("success", true)
+            put("event_id", eventId)
+            put("title", title)
+            put("start", startTime.withNano(0).toString())
+            put("end", endTime.withNano(0).toString())
+            put("all_day", allDay)
+            put("location", location)
+            put("reminders", buildJsonArray { savedReminders.forEach { add(JsonPrimitive(it)) } })
+            if (savedReminders.size < reminderMinutes.size) {
+                // The event exists but some reminders were rejected; the model
+                // must see this instead of telling the user they were set.
+                put("reminders_requested", buildJsonArray { reminderMinutes.forEach { add(JsonPrimitive(it)) } })
+                put(
+                    "warning",
+                    "The event was created, but the calendar account rejected some reminders. " +
+                        "Tell the user which reminders were actually saved.",
+                )
+            }
+        }.toString()
+    }
+
+    /**
+     * Reminder offsets (minutes before the event). Accepts an array or a single
+     * number/string; negatives use their absolute value, deduped, max 5, capped
+     * at 4 weeks.
+     */
+    fun parseReminderMinutes(raw: kotlinx.serialization.json.JsonElement?): List<Int> {
+        if (raw == null || raw is kotlinx.serialization.json.JsonNull) return emptyList()
+        val items: List<kotlinx.serialization.json.JsonElement> = when (raw) {
+            is JsonArray -> raw.toList()
+            else -> listOf(raw)
+        }
+        val minutes = LinkedHashSet<Int>()
+        for (item in items) {
+            val primitive = item as? JsonPrimitive ?: continue
+            val value = primitive.content.trim().toDoubleOrNull() ?: continue
+            if (value.isNaN() || value.isInfinite()) continue
+            // Double intermediate: abs(Int.MIN_VALUE) is still negative.
+            minutes.add(Math.abs(value).coerceAtMost(40320.0).toInt())
+            if (minutes.size == 5) break
+        }
+        return minutes.toList()
+    }
+
+    private fun insertReminders(context: Context, eventId: Long, minutes: List<Int>): List<Int> {
+        if (minutes.isEmpty()) return emptyList()
+        val saved = mutableListOf<Int>()
+        for (minute in minutes) {
+            val values = ContentValues().apply {
+                put(CalendarContract.Reminders.EVENT_ID, eventId)
+                put(CalendarContract.Reminders.MINUTES, minute)
+                put(CalendarContract.Reminders.METHOD, CalendarContract.Reminders.METHOD_ALERT)
+            }
+            val inserted = runCatching {
+                context.contentResolver.insert(CalendarContract.Reminders.CONTENT_URI, values)
+            }.getOrNull()
+            if (inserted != null) saved.add(minute)
+        }
+        return saved
+    }
+
+    private fun getDefaultCalendarId(context: Context): Long? {
+        val projection = arrayOf(CalendarContract.Calendars._ID)
+        val writableSelection =
+            "${CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL} >= ? AND ${CalendarContract.Calendars.SYNC_EVENTS} = 1"
+        val writableArgs = arrayOf(CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR.toString())
+        context.contentResolver.query(
+            CalendarContract.Calendars.CONTENT_URI,
+            projection,
+            "$writableSelection AND ${CalendarContract.Calendars.IS_PRIMARY} = 1",
+            writableArgs,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) return cursor.getLong(0)
+        }
+        context.contentResolver.query(
+            CalendarContract.Calendars.CONTENT_URI,
+            projection,
+            writableSelection,
+            writableArgs,
+            "${CalendarContract.Calendars.VISIBLE} DESC",
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) return cursor.getLong(0)
+        }
+        return null
+    }
+
+    // --------------------------------------------------------------- time parsing
+
+    /**
+     * Tries, in order: epoch millis, offset date-time, instant, local date-time,
+     * local date (midnight).
+     */
+    private fun parseTime(raw: String, zone: ZoneId): ZonedDateTime {
+        val text = raw.trim()
+        text.toLongOrNull()?.let { return Instant.ofEpochMilli(it).atZone(zone) }
+        runCatching { return OffsetDateTime.parse(text).atZoneSameInstant(zone) }
+        runCatching { return Instant.parse(text).atZone(zone) }
+        runCatching { return LocalDateTime.parse(text).atZone(zone) }
+        runCatching { return LocalDate.parse(text).atStartOfDay(zone) }
+        error("Invalid time format: '$text'. Use ISO-8601 date/date-time or epoch milliseconds.")
+    }
+
+    private fun errorPayload(error: String, message: String): String =
+        buildJsonObject {
+            put("error", error)
+            put("message", message)
+        }.toString()
+
     private fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content
 
     private fun JsonObject.int(key: String): Int? =
         (this[key] as? JsonPrimitive)?.content?.toIntOrNull()
+
+    private fun JsonObject.bool(key: String): Boolean? =
+        (this[key] as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
 }

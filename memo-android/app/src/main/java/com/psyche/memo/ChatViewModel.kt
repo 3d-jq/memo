@@ -1012,6 +1012,7 @@ class ChatViewModel(
             names.TIME_INFO,
             names.ASK_USER,
             names.CALENDAR_CREATE,
+            names.CALENDAR_QUERY,
             names.CLIPBOARD,
             names.TEXT_TO_SPEECH,
             names.CALCULATE,

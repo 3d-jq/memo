@@ -89,6 +89,23 @@ class LocalToolExecutorsTest {
         assertEquals(1_000L, result["app"])
     }
 
+    // ---- calendar reminders parsing ----
+
+    @Test
+    fun `reminder minutes accept arrays strings negatives and dedupe`() {
+        val raw = Json.parseToJsonElement("[10,\"20\",10,-30,\"abc\",null,40320,99999]")
+        assertEquals(listOf(10, 20, 30, 40320), LocalToolExecutors.parseReminderMinutes(raw))
+    }
+
+    @Test
+    fun `reminder minutes accept a single scalar and cap at five entries`() {
+        assertEquals(listOf(15), LocalToolExecutors.parseReminderMinutes(JsonPrimitive(15)))
+        assertEquals(listOf(15), LocalToolExecutors.parseReminderMinutes(JsonPrimitive("15")))
+        val many = Json.parseToJsonElement("[1,2,3,4,5,6,7]")
+        assertEquals(listOf(1, 2, 3, 4, 5), LocalToolExecutors.parseReminderMinutes(many))
+        assertEquals(emptyList<Int>(), LocalToolExecutors.parseReminderMinutes(null))
+    }
+
     @Test
     fun `an unterminated segment is settled at the window end`() {
         val result = DeviceLocalTools.computeForegroundTime(
