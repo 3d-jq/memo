@@ -1,6 +1,21 @@
 package com.psyche.memo.provider.search
 
+import com.psyche.memo.data.model.AnySearchOptions
 import com.psyche.memo.data.model.BingLocalOptions
+import com.psyche.memo.data.model.DoubaoOptions
+import com.psyche.memo.data.model.ExaOptions
+import com.psyche.memo.data.model.FirecrawlOptions
+import com.psyche.memo.data.model.GrokOptions
+import com.psyche.memo.data.model.JinaOptions
+import com.psyche.memo.data.model.LinkUpOptions
+import com.psyche.memo.data.model.MetasoOptions
+import com.psyche.memo.data.model.OllamaOptions
+import com.psyche.memo.data.model.ParallelOptions
+import com.psyche.memo.data.model.PerplexityOptions
+import com.psyche.memo.data.model.QueritOptions
+import com.psyche.memo.data.model.StepFunOptions
+import com.psyche.memo.data.model.TinyFishOptions
+import com.psyche.memo.data.model.YouSearchOptions
 import com.psyche.memo.data.model.BochaOptions
 import com.psyche.memo.data.model.BraveOptions
 import com.psyche.memo.data.model.DuckDuckGoOptions
@@ -15,7 +30,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -57,6 +74,21 @@ class HttpSearchEngine(private val client: OkHttpClient) : SearchEngine {
             is BochaOptions -> bocha(query, options, common)
             is ZhipuOptions -> zhipu(query, options, common)
             is DuckDuckGoOptions -> duckduckgo(query, options, common)
+            is ExaOptions -> exa(query, options, common)
+            is LinkUpOptions -> linkUp(query, options, common)
+            is MetasoOptions -> metaso(query, options, common)
+            is OllamaOptions -> ollama(query, options, common)
+            is JinaOptions -> jina(query, options, common)
+            is PerplexityOptions -> perplexity(query, options, common)
+            is QueritOptions -> querit(query, options, common)
+            is StepFunOptions -> stepFun(query, options, common)
+            is FirecrawlOptions -> firecrawl(query, options, common)
+            is TinyFishOptions -> tinyFish(query, options, common)
+            is AnySearchOptions -> anySearch(query, options, common)
+            is DoubaoOptions -> doubao(query, options, common)
+            is ParallelOptions -> parallel(query, options, common)
+            is YouSearchOptions -> you(query, options, common)
+            is GrokOptions -> grok(query, options, common)
             else -> throw SearchException(
                 "Search service type '${options.toJson()["type"]}' has no engine on this platform.",
             )
@@ -250,5 +282,295 @@ class HttpSearchEngine(private val client: OkHttpClient) : SearchEngine {
             common.timeout,
         )
         return SearchParsers.parseDuckDuckGoHtml(html, common.resultSize)
+    }
+
+    // ---- second batch: exa / linkup / metaso / ollama / jina / perplexity /
+    //      querit / stepfun / firecrawl / tinyfish / anysearch / doubao /
+    //      parallel / you / grok ----
+
+    private fun exa(query: String, options: ExaOptions, common: SearchCommonOptions): SearchResult {
+        val body = buildJsonObject {
+            put("query", query)
+            put("numResults", common.resultSize)
+            putJsonObject("contents") { put("text", true) }
+        }
+        val response = postJson(
+            options.resolvedUrl,
+            mapOf("Authorization" to "Bearer ${effectiveKey(options)}", "Content-Type" to "application/json"),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parseExa(response, common.resultSize)
+            ?: throw SearchException("Exa search failed: invalid response")
+    }
+
+    private fun linkUp(query: String, options: LinkUpOptions, common: SearchCommonOptions): SearchResult {
+        val body = buildJsonObject {
+            put("q", query)
+            put("depth", "standard")
+            put("outputType", "sourcedAnswer")
+            put("includeImages", "false")
+        }
+        val response = postJson(
+            "https://api.linkup.so/v1/search",
+            mapOf("Authorization" to "Bearer ${effectiveKey(options)}", "Content-Type" to "application/json"),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parseLinkUp(response, common.resultSize)
+            ?: throw SearchException("LinkUp search failed: invalid response")
+    }
+
+    private fun metaso(query: String, options: MetasoOptions, common: SearchCommonOptions): SearchResult {
+        val body = buildJsonObject {
+            put("q", query)
+            put("scope", "webpage")
+            put("size", common.resultSize)
+            put("includeSummary", false)
+        }
+        val response = postJson(
+            "https://metaso.cn/api/v1/search",
+            mapOf(
+                "Authorization" to "Bearer ${effectiveKey(options)}",
+                "Accept" to "application/json",
+                "Content-Type" to "application/json",
+            ),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parseMetaso(response, common.resultSize)
+            ?: throw SearchException("Metaso search failed: invalid response")
+    }
+
+    private fun ollama(query: String, options: OllamaOptions, common: SearchCommonOptions): SearchResult {
+        val body = buildJsonObject {
+            put("query", query)
+            put("max_results", common.resultSize.coerceIn(1, 10))
+        }
+        val response = postJson(
+            "https://ollama.com/api/web_search",
+            mapOf("Authorization" to "Bearer ${effectiveKey(options)}", "Content-Type" to "application/json"),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parseOllama(response, common.resultSize)
+            ?: throw SearchException("Ollama search failed: invalid response")
+    }
+
+    private fun jina(query: String, options: JinaOptions, common: SearchCommonOptions): SearchResult {
+        val body = buildJsonObject { put("q", query) }
+        val response = postJson(
+            "https://s.jina.ai/",
+            mapOf(
+                "Authorization" to "Bearer ${effectiveKey(options)}",
+                "Accept" to "application/json",
+                "Content-Type" to "application/json",
+            ),
+            body,
+            maxOf(15000, common.timeout),
+        )
+        return SearchProviderParsers.parseJina(response, common.resultSize)
+            ?: throw SearchException("Jina search failed: invalid response")
+    }
+
+    private fun perplexity(query: String, options: PerplexityOptions, common: SearchCommonOptions): SearchResult {
+        val body = buildJsonObject {
+            put("query", query)
+            put("max_results", common.resultSize.coerceIn(1, 20))
+            options.country?.trim()?.takeIf { it.isNotEmpty() }?.let { put("country", it) }
+            options.searchDomainFilter?.takeIf { it.isNotEmpty() }?.let { list ->
+                put("search_domain_filter", buildJsonArray { list.forEach { add(JsonPrimitive(it)) } })
+            }
+            options.maxTokensPerPage?.let { put("max_tokens_per_page", it) }
+        }
+        val response = postJson(
+            "https://api.perplexity.ai/search",
+            mapOf("Authorization" to "Bearer ${effectiveKey(options)}", "Content-Type" to "application/json"),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parsePerplexity(response, common.resultSize)
+            ?: throw SearchException("Perplexity search failed: invalid response")
+    }
+
+    private fun querit(query: String, options: QueritOptions, common: SearchCommonOptions): SearchResult {
+        val key = effectiveKey(options).trim()
+        if (key.isEmpty()) throw SearchException("Querit API key is required")
+        val body = buildJsonObject {
+            put("query", query)
+            put("count", common.resultSize)
+            SearchProviderParsers.queritFilters(options)?.let { put("filters", it) }
+        }
+        val response = postJson(
+            "https://api.querit.ai/v1/search",
+            mapOf("Authorization" to "Bearer $key", "Content-Type" to "application/json"),
+            body,
+            common.timeout,
+        )
+        val parsed = SearchProviderParsers.parseQuerit(response, common.resultSize)
+        parsed.error?.let { throw SearchException(it) }
+        return SearchResult(items = parsed.items)
+    }
+
+    private fun stepFun(query: String, options: StepFunOptions, common: SearchCommonOptions): SearchResult {
+        val key = effectiveKey(options).trim()
+        if (key.isEmpty()) throw SearchException("StepFun API key is required")
+        val body = buildJsonObject {
+            put("query", query)
+            put("n", common.resultSize.coerceIn(1, 20))
+            options.category.trim().takeIf { it.isNotEmpty() }?.let { put("category", it) }
+        }
+        val response = postJson(
+            options.resolvedUrl,
+            mapOf("Authorization" to "Bearer $key", "Content-Type" to "application/json; charset=utf-8"),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parseStepFun(response, common.resultSize)
+            ?: throw SearchException("StepFun search failed: invalid response")
+    }
+
+    private fun firecrawl(query: String, options: FirecrawlOptions, common: SearchCommonOptions): SearchResult {
+        val key = effectiveKey(options).trim()
+        val body = buildJsonObject {
+            put("query", query)
+            put("limit", common.resultSize.coerceIn(1, 100))
+            if (options.sources.isNotEmpty()) {
+                put("sources", buildJsonArray { options.sources.forEach { add(buildJsonObject { put("type", it) }) } })
+            }
+            if (options.categories.isNotEmpty()) {
+                put("categories", buildJsonArray { options.categories.forEach { add(buildJsonObject { put("type", it) }) } })
+            }
+            options.country.trim().takeIf { it.isNotEmpty() }?.let { put("country", it) }
+            options.location.trim().takeIf { it.isNotEmpty() }?.let { put("location", it) }
+        }
+        val headers = HashMap<String, String>()
+        headers["Content-Type"] = "application/json"
+        if (key.isNotEmpty()) headers["Authorization"] = "Bearer $key"
+        val response = postJson(options.resolvedUrl, headers, body, common.timeout)
+        return SearchProviderParsers.parseFirecrawl(response, common.resultSize)
+            ?: throw SearchException("Firecrawl search failed: invalid response")
+    }
+
+    private fun tinyFish(query: String, options: TinyFishOptions, common: SearchCommonOptions): SearchResult {
+        val key = effectiveKey(options).trim()
+        if (key.isEmpty()) throw SearchException("TinyFish API key is required")
+        val params = LinkedHashMap<String, String>()
+        params["query"] = query
+        options.location.trim().takeIf { it.isNotEmpty() }?.let { params["location"] = it }
+        options.language.trim().takeIf { it.isNotEmpty() }?.let { params["language"] = it }
+        options.includeDomains.trim().takeIf { it.isNotEmpty() }?.let { params["include_domains"] = it }
+        options.excludeDomains.trim().takeIf { it.isNotEmpty() }?.let { params["exclude_domains"] = it }
+        val url = options.resolvedUrl + "?" + params.entries.joinToString("&") {
+            java.net.URLEncoder.encode(it.key, "UTF-8") + "=" + java.net.URLEncoder.encode(it.value, "UTF-8")
+        }
+        val response = get(url, mapOf("X-API-Key" to key), common.timeout)
+        return SearchProviderParsers.parseTinyFish(response, common.resultSize)
+            ?: throw SearchException("TinyFish search failed: invalid response")
+    }
+
+    private fun anySearch(query: String, options: AnySearchOptions, common: SearchCommonOptions): SearchResult {
+        val key = effectiveKey(options).trim()
+        val body = buildJsonObject {
+            put("query", query)
+            put("max_results", common.resultSize.coerceIn(1, 20))
+            put("format", "json")
+        }
+        val headers = HashMap<String, String>()
+        headers["Content-Type"] = "application/json"
+        if (key.isNotEmpty()) headers["Authorization"] = "Bearer $key"
+        val response = postJson(options.resolvedUrl, headers, body, common.timeout)
+        val parsed = SearchProviderParsers.parseAnySearch(response, common.resultSize)
+        parsed.error?.let { throw SearchException(it) }
+        return SearchResult(items = parsed.items)
+    }
+
+    private fun doubao(query: String, options: DoubaoOptions, common: SearchCommonOptions): SearchResult {
+        val key = effectiveKey(options).trim()
+        if (key.isEmpty()) throw SearchException("Doubao API key is required")
+        val body = buildJsonObject {
+            put("Query", query)
+            put("SearchType", "web")
+            put("Count", common.resultSize.coerceIn(1, 50))
+            putJsonObject("Filter") { put("NeedUrl", true) }
+        }
+        val response = postJson(
+            "https://open.feedcoopapi.com/search_api/web_search",
+            mapOf("Authorization" to "Bearer $key", "Content-Type" to "application/json; charset=utf-8"),
+            body,
+            common.timeout,
+        )
+        val parsed = SearchProviderParsers.parseDoubao(response)
+        parsed.error?.let { throw SearchException(it) }
+        return SearchResult(items = parsed.items)
+    }
+
+    private fun parallel(query: String, options: ParallelOptions, common: SearchCommonOptions): SearchResult {
+        val body = buildJsonObject {
+            put("objective", query)
+            put("search_queries", buildJsonArray { add(JsonPrimitive(query)) })
+            put("mode", options.mode)
+        }
+        val response = postJson(
+            "https://api.parallel.ai/v1/search",
+            mapOf("x-api-key" to effectiveKey(options), "Content-Type" to "application/json"),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parseParallel(response, common.resultSize)
+            ?: throw SearchException("Parallel search failed: invalid response")
+    }
+
+    private fun you(query: String, options: YouSearchOptions, common: SearchCommonOptions): SearchResult {
+        val body = buildJsonObject {
+            put("query", query)
+            put("count", common.resultSize)
+            if (options.contentMode == YouSearchOptions.HIGHLIGHTS_MODE) {
+                putJsonObject("extraction") { put("extraction_mode", "highlights") }
+            }
+        }
+        val response = postJson(
+            "https://ydc-index.io/v1/search",
+            mapOf("X-API-Key" to effectiveKey(options), "Content-Type" to "application/json"),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parseYou(response, common.resultSize)
+            ?: throw SearchException("You.com search failed: invalid response")
+    }
+
+    private fun grok(query: String, options: GrokOptions, common: SearchCommonOptions): SearchResult {
+        val key = effectiveKey(options).trim()
+        if (key.isEmpty()) throw SearchException("Grok API key is required")
+        val body = buildJsonObject {
+            put("model", options.resolvedModel)
+            put("input", buildJsonArray {
+                add(buildJsonObject {
+                    put("role", "system")
+                    put("content", options.resolvedSystemPrompt)
+                })
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("content", query)
+                })
+            })
+            put("tools", buildJsonArray {
+                add(buildJsonObject { put("type", "web_search") })
+                add(buildJsonObject { put("type", "x_search") })
+            })
+            put("store", false)
+            put("stream", false)
+            options.reasoningEffort.trim().takeIf { it.isNotEmpty() }?.let { effort ->
+                putJsonObject("reasoning") { put("effort", effort) }
+            }
+        }
+        val response = postJson(
+            options.resolvedUrl,
+            mapOf("Authorization" to "Bearer $key", "Content-Type" to "application/json"),
+            body,
+            common.timeout,
+        )
+        return SearchProviderParsers.parseGrok(response, common.resultSize)
+            ?: throw SearchException("Grok search failed: invalid response")
     }
 }
