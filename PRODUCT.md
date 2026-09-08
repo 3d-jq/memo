@@ -12,6 +12,11 @@ People who use multiple LLM providers across mobile and desktop and need a depen
 
 Kelivo makes advanced LLM capabilities practical in one cross-platform client while keeping conversations, settings, and user-owned data portable and recoverable.
 
+## Surfaces
+
+- **Kelivo (Flutter)** — the original cross-platform app (`lib/`), source of truth for every screen, string, and behavior.
+- **Memo (native Android)** — a 1:1 native port in `memo-android/` (Kotlin + Jetpack Compose, package `com.psyche.memo`). Same features and flows as the Flutter app, Memo-branded, with its own database (`memo.db`). Port progress and per-batch specs live in `memo-android/docs/PORTING.md`.
+
 ## Brand Personality
 
 Practical, calm, and capable. The interface should feel familiar to Material You users, stay out of the conversation, and explain exceptional states without alarming or trapping people.
