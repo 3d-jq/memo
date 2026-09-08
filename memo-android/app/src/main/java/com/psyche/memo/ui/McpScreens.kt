@@ -30,7 +30,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -606,7 +608,7 @@ private fun McpField(
     Column(modifier = modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
         Text(label, style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.8f)))
         Spacer(Modifier.height(6.dp))
-        TextField(
+        OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
@@ -614,11 +616,11 @@ private fun McpField(
                 { Text(it, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f))) }
             },
             shape = RoundedCornerShape(12.dp),
-            colors = TextFieldDefaults.colors(
+            colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceFill,
                 unfocusedContainerColor = semantic.surfaceFill,
-                focusedIndicatorColor = cs.primary.copy(alpha = 0.5f),
-                unfocusedIndicatorColor = cs.outlineVariant.copy(alpha = 0.4f),
+                focusedBorderColor = cs.primary.copy(alpha = 0.5f),
+                unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
             ),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -674,7 +676,7 @@ private fun McpJsonEditSheet(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            TextField(
+            OutlinedTextField(
                 value = text,
                 onValueChange = {
                     text = it
@@ -690,11 +692,11 @@ private fun McpJsonEditSheet(
                     }
                 },
                 shape = RoundedCornerShape(12.dp),
-                colors = TextFieldDefaults.colors(
+                colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,
-                    focusedIndicatorColor = cs.primary.copy(alpha = 0.5f),
-                    unfocusedIndicatorColor = cs.outlineVariant.copy(alpha = 0.4f),
+                    focusedBorderColor = cs.primary.copy(alpha = 0.5f),
+                    unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -805,7 +807,7 @@ private fun McpTimeoutSheet(container: AppContainerImpl, onDismiss: () -> Unit) 
                 style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.8f)),
             )
             Spacer(Modifier.height(6.dp))
-            TextField(
+            OutlinedTextField(
                 value = text,
                 onValueChange = { text = it.filter { c -> c.isDigit() } },
                 singleLine = true,
@@ -813,11 +815,11 @@ private fun McpTimeoutSheet(container: AppContainerImpl, onDismiss: () -> Unit) 
                     keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
                 ),
                 shape = RoundedCornerShape(12.dp),
-                colors = TextFieldDefaults.colors(
+                colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,
-                    focusedIndicatorColor = cs.primary.copy(alpha = 0.5f),
-                    unfocusedIndicatorColor = cs.outlineVariant.copy(alpha = 0.4f),
+                    focusedBorderColor = cs.primary.copy(alpha = 0.5f),
+                    unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
                 ),
                 modifier = Modifier.fillMaxWidth(),
             )

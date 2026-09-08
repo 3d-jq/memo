@@ -26,7 +26,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -254,17 +256,17 @@ private fun BalanceField(label: String, value: String, onValueChange: (String) -
             style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.8f)),
         )
         Spacer(Modifier.height(6.dp))
-        TextField(
+        OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
             textStyle = TextStyle(fontSize = 14.sp),
             shape = RoundedCornerShape(10.dp),
-            colors = TextFieldDefaults.colors(
+            colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceFill,
                 unfocusedContainerColor = semantic.surfaceFill,
-                focusedIndicatorColor = cs.primary.copy(alpha = 0.35f),
-                unfocusedIndicatorColor = cs.outlineVariant.copy(alpha = 0.12f),
+                focusedBorderColor = cs.primary.copy(alpha = 0.35f),
+                unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.12f),
             ),
             modifier = Modifier.fillMaxWidth(),
         )

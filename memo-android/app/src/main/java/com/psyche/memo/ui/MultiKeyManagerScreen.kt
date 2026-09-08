@@ -26,7 +26,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -753,7 +755,7 @@ private fun SheetField(
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
-    TextField(
+    OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = singleLine,
@@ -761,11 +763,11 @@ private fun SheetField(
         maxLines = maxLines,
         placeholder = { Text(hint, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.5f))) },
         shape = RoundedCornerShape(14.dp),
-        colors = TextFieldDefaults.colors(
+        colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = semantic.surfaceCard,
             unfocusedContainerColor = semantic.surfaceCard,
-            focusedIndicatorColor = cs.primary.copy(alpha = 0.5f),
-            unfocusedIndicatorColor = cs.outlineVariant.copy(alpha = 0.4f),
+            focusedBorderColor = cs.primary.copy(alpha = 0.5f),
+            unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
         ),
         modifier = Modifier.fillMaxWidth(),
     )
