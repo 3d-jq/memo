@@ -168,7 +168,9 @@ private fun ToastItem(
     val fade = entry.anim.value
     val baseOpacity = 1f - (visualIndex * 0.2f)
     val stackOffset = visualIndex * 8f
-    val slideUp = (1f - fade) * 100f
+    // snackbar.dart `Tween(begin: Offset(0,-1), end: Offset.zero)` —— 从上方(-100)落下
+    // 进位，反向退场时滑上去 + 淡出，与上滑手势方向一致（此前写成 (1-fade)*100 方向反了）。
+    val slideUp = (fade - 1f) * 100f
 
     val icon: ImageVector = when (entry.notification.type) {
         NotificationType.SUCCESS -> Icons.Rounded.CheckCircle
