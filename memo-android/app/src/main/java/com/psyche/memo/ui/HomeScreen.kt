@@ -400,6 +400,12 @@ fun HomeScreen(
     }
 }
 
+private fun loadQuickPhrases(container: AppContainerImpl): List<com.psyche.memo.data.model.QuickPhrase> {
+    val repo = com.psyche.memo.data.repo.QuickPhraseRepository(container.database.writableDatabase)
+    val assistant = container.currentAssistant()
+    return repo.globalPhrases() + if (assistant != null) repo.forAssistant(assistant.id) else emptyList()
+}
+
 @Composable
 fun ChatContent(
     container: AppContainerImpl,
@@ -439,6 +445,7 @@ fun ChatContent(
     var showModelSheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
     var showToolsSheet by remember { mutableStateOf(false) }
+    var quickPhrases by remember { mutableStateOf<List<com.psyche.memo.data.model.QuickPhrase>?>(null) }
     var showOcrPrompt by remember { mutableStateOf(false) }
     var ocrSettings by remember {
         mutableStateOf(com.psyche.memo.provider.OcrService.settingsOf(container.preferenceRepository))
@@ -912,6 +919,7 @@ fun ChatContent(
             onSelectModel = { showModelSheet = true },
             onOpenSearch = { showSearchSheet = true },
             onOpenTools = { showToolsSheet = true },
+            onQuickPhrase = { quickPhrases = loadQuickPhrases(container) },
             attachments = attachments,
             onRemoveAttachment = { index -> vm.removeAttachment(index) },
             voice = voiceInput,
@@ -928,6 +936,22 @@ fun ChatContent(
             onDismiss = { showModelSheet = false },
             onOptionsInvalidated = { optionsVersion++ },
         )
+    }
+
+    quickPhrases?.let { phrases ->
+        if (phrases.isNotEmpty()) {
+            com.psyche.memo.ui.QuickPhraseMenu(
+                phrases = phrases,
+                onSelect = { phrase ->
+                    quickPhrases = null
+                    // 无选区信息：按「追加到末尾」处理（handleQuickPhraseSelection 的常见路径）。
+                    vm.updateInput(vm.input.value + phrase.content)
+                },
+                onDismiss = { quickPhrases = null },
+            )
+        } else {
+            quickPhrases = null
+        }
     }
 
     if (showToolsSheet) {
@@ -1746,6 +1770,7 @@ private fun ChatInputBar(
     onSelectModel: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenTools: () -> Unit = {},
+    onQuickPhrase: () -> Unit = {},
     attachments: List<ChatViewModel.PendingAttachment> = emptyList(),
     onRemoveAttachment: (Int) -> Unit = {},
     // 语音输入执行器（chat_input_bar.dart asrProvider 的系统分支）；null =
@@ -2014,7 +2039,7 @@ private fun ChatInputBar(
                                     InputIcon(
                                         Lucide.Zap,
                                         stringResource(UiR.string.chat_input_bar_quick_phrase_tooltip),
-                                        {},
+                                        onQuickPhrase,
                                         cs,
                                     )
                                 }
