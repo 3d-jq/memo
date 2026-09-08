@@ -555,12 +555,29 @@ class ChatViewModel(
                         else LlmMessage(role = msg.role, content = content)
                     }
                     .toMutableList()
+                // System prompt injection (message_builder_service.dart): the
+                // assistant prompt plus the search citation block when web
+                // search is on. Appended to an existing system message or
+                // prepended as a new one.
+                val assistant = container.currentAssistant()
+                val systemPrompt = buildSystemPrompt(assistant)
+                if (systemPrompt.isNotEmpty()) {
+                    val existing = history.indexOfFirst { it.role == "system" }
+                    if (existing >= 0) {
+                        val merged = listOf(history[existing].content, systemPrompt)
+                            .filterNotNull().filter { it.isNotEmpty() }.joinToString("\n\n")
+                        history[existing] = history[existing].copy(content = merged)
+                    } else {
+                        history.add(0, LlmMessage(role = "system", content = systemPrompt))
+                    }
+                }
                 // Only tools with a native dispatch path are offered:
                 // get_time_info has an executor, ask_user_input_v0 routes to the
                 // interaction service, calendar_create exercises the approval
                 // gate (its executor is unported → honest execution_error after
-                // approval). MCP/search/memory executors are unported, so their
-                // tools are not offered. Deviation from the original's full
+                // approval), search_web runs through the ported search engine.
+                // MCP/memory executors are unported, so their tools are not
+                // offered. Deviation from the original's full
                 // LocalToolsService.buildToolDefinitions set.
                 val tools = offeredTools()
                 runGenerationLoop(
@@ -618,6 +635,9 @@ class ChatViewModel(
             askUserService = container.askUserInteractionService,
             conversationId = conversationId,
             assistant = container.currentAssistant(),
+            searchEngine = container.searchEngine,
+            searchService = container.searchSettingsRepository.selectedService(),
+            searchCommonOptions = container.searchSettingsRepository.commonOptions(),
         )
         val providerId = selectedProviderId.value
         val modelId = selectedModelId.value
@@ -893,6 +913,17 @@ class ChatViewModel(
             names.CALENDAR_CREATE,
         )
         val out = mutableListOf<LlmToolSpec>()
+        // Web search tool (tool_handler_service.dart L241-245): offered
+        // whenever the assistant's search switch is on.
+        if (assistant.searchEnabled) {
+            out.add(
+                LlmToolSpec(
+                    name = com.psyche.memo.provider.search.SearchToolService.TOOL_NAME,
+                    description = com.psyche.memo.provider.search.SearchToolService.TOOL_DESCRIPTION,
+                    inputSchemaJson = com.psyche.memo.provider.search.SearchToolService.parametersJson(),
+                ),
+            )
+        }
         for (name in assistant.localToolIds) {
             if (name !in offered) continue
             if (!com.psyche.memo.ui.BuiltInToolCatalog.isAvailableOnThisPlatform(name)) continue
@@ -904,6 +935,20 @@ class ChatViewModel(
             out.add(LlmToolSpec(specName, description, parameters?.toString() ?: "{}"))
         }
         return out
+    }
+
+    /**
+     * message_builder_service.dart: the assistant system prompt plus the
+     * search citation block when web search is enabled
+     * (injectSearchPrompt L1734-1750).
+     */
+    private fun buildSystemPrompt(assistant: com.psyche.memo.data.model.Assistant?): String {
+        val parts = mutableListOf<String>()
+        assistant?.systemPrompt?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
+        if (assistant?.searchEnabled == true) {
+            parts.add(com.psyche.memo.provider.search.SearchToolService.SYSTEM_PROMPT)
+        }
+        return parts.joinToString("\n\n")
     }
 
     /** takeCallsAfterRound 的 Native 等价 —— 本轮新增（未执行）的工具调用。 */

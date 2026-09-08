@@ -11,21 +11,43 @@ import java.time.DayOfWeek
 import java.time.ZonedDateTime
 
 /**
- * tool_handler_service.dart buildToolCallHandler 的 Native 分派。只覆盖本批次
- * 有执行路径的工具子集（get_time_info / ask_user_input_v0 / calendar_create 审批
- * 门）；MCP / search / memory 执行器未移植，未提供的工具不会出现在请求里，因此
- * 不会走到这里。MCP fallthrough 用 execution_error 如实上报，模型可据此重试。
+ * tool_handler_service.dart buildToolCallHandler 的 Native 分派。覆盖有执行路径
+ * 的工具子集（get_time_info / ask_user_input_v0 / calendar_create 审批门 /
+ * search_web 搜索引擎）；MCP / memory 执行器未移植，未提供的工具不会出现在请求里。
+ * 未覆盖的工具用 execution_error 如实上报，模型可据此重试。
  */
 class ToolHandler(
     private val approvalService: ToolApprovalService?,
     private val askUserService: AskUserInteractionService?,
     private val conversationId: String?,
     private val assistant: Assistant?,
+    private val searchEngine: com.psyche.memo.provider.search.SearchEngine? = null,
+    private val searchService: com.psyche.memo.data.model.SearchServiceOptions? = null,
+    private val searchCommonOptions: com.psyche.memo.data.model.SearchCommonOptions =
+        com.psyche.memo.data.model.SearchCommonOptions(),
 ) {
 
     /** 处理一个工具调用，返回写回模型的内容（tool_error 为 JSON 字符串）。 */
     suspend fun handle(name: String, args: JsonObject, toolCallId: String?): String {
         return try {
+            // Search tool (tool_handler_service.dart L435-439).
+            if (name == com.psyche.memo.provider.search.SearchToolService.TOOL_NAME &&
+                assistant?.searchEnabled == true
+            ) {
+                val query = (args["query"] as? JsonPrimitive)?.content ?: ""
+                val engine = searchEngine
+                    ?: return toolError(
+                        error = "search_unavailable",
+                        message = "Search engine is unavailable.",
+                        tool = name,
+                    )
+                return com.psyche.memo.provider.search.SearchToolService.executeSearch(
+                    query = query,
+                    engine = engine,
+                    service = searchService,
+                    common = searchCommonOptions,
+                )
+            }
             // Creating calendar events or changing reminders modifies user data,
             // so those tools always require explicit user approval first.
             if (LocalToolNames.requiresUserApproval.contains(name) &&

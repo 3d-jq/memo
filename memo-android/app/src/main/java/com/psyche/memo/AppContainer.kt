@@ -63,6 +63,16 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
 
     val assistantStore: AssistantStore by lazy { AssistantStore(database.writableDatabase) }
 
+    /** Search service settings (search_service_rows + preference keys). */
+    val searchSettingsRepository: com.psyche.memo.data.repo.SearchSettingsRepository by lazy {
+        com.psyche.memo.data.repo.SearchSettingsRepository(database.writableDatabase, preferenceRepository)
+    }
+
+    /** HTTP search dispatch (ported provider subset). */
+    val searchEngine: com.psyche.memo.provider.search.SearchEngine by lazy {
+        com.psyche.memo.provider.search.HttpSearchEngine(httpClient)
+    }
+
     /** tool_approval_service.dart / ask_user_interaction_service.dart 服务对。 */
     val toolApprovalService: com.psyche.memo.ui.chat.ToolApprovalService by lazy {
         com.psyche.memo.ui.chat.ToolApprovalService()
