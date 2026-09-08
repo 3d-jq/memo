@@ -152,6 +152,7 @@ fun HomeScreen(
     onOpenHistory: () -> Unit,
     onOpenProviders: () -> Unit,
     onOpenSearchServices: () -> Unit = {},
+    onOpenWorldBookPage: () -> Unit = {},
     pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -329,6 +330,7 @@ fun HomeScreen(
                     temporaryActive = false
                 },
                 onOpenSearchServices = onOpenSearchServices,
+                onOpenWorldBookPage = onOpenWorldBookPage,
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
             // Composed only while the drawer presents — a permanently-mounted
@@ -417,6 +419,7 @@ fun ChatContent(
     newActionToggleable: Boolean = false,
     onOpenConversation: (String) -> Unit = {},
     onOpenSearchServices: () -> Unit = {},
+    onOpenWorldBookPage: () -> Unit = {},
 ) {
     val vm: ChatViewModel = viewModel(
         key = conversationId,
@@ -447,6 +450,8 @@ fun ChatContent(
     var showToolsSheet by remember { mutableStateOf(false) }
     var quickPhrases by remember { mutableStateOf<List<com.psyche.memo.data.model.QuickPhrase>?>(null) }
     var showInstructionSheet by remember { mutableStateOf(false) }
+    var showWorldBookSheet by remember { mutableStateOf(false) }
+    var worldBooksAvailable by remember { mutableStateOf(false) }
     var showOcrPrompt by remember { mutableStateOf(false) }
     var ocrSettings by remember {
         mutableStateOf(com.psyche.memo.provider.OcrService.settingsOf(container.preferenceRepository))
@@ -919,7 +924,15 @@ fun ChatContent(
             onStop = vm::stop,
             onSelectModel = { showModelSheet = true },
             onOpenSearch = { showSearchSheet = true },
-            onOpenTools = { showToolsSheet = true },
+            onOpenTools = {
+                worldBooksAvailable = runCatching {
+                    com.psyche.memo.data.repo.WorldBookRepository(
+                        container.database.readableDatabase,
+                        container.preferenceRepository,
+                    ).books().isNotEmpty()
+                }.getOrDefault(false)
+                showToolsSheet = true
+            },
             onQuickPhrase = { quickPhrases = loadQuickPhrases(container) },
             attachments = attachments,
             onRemoveAttachment = { index -> vm.removeAttachment(index) },
@@ -1001,6 +1014,23 @@ fun ChatContent(
                 showToolsSheet = false
                 showInstructionSheet = true
             },
+            worldBooksAvailable = worldBooksAvailable,
+            onOpenWorldBook = {
+                showToolsSheet = false
+                showWorldBookSheet = true
+            },
+            onOpenWorldBookPage = {
+                showToolsSheet = false
+                onOpenWorldBookPage()
+            },
+        )
+    }
+
+    if (showWorldBookSheet) {
+        com.psyche.memo.ui.WorldBookSheet(
+            container = container,
+            assistantId = container.currentAssistant()?.id,
+            onDismiss = { showWorldBookSheet = false },
         )
     }
 

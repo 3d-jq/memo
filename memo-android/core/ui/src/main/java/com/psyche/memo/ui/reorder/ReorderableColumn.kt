@@ -76,6 +76,53 @@ fun <T> ReorderableColumn(
 }
 
 /**
+ * [ReorderableColumn] variant that hands the drag handle to the caller instead
+ * of covering the whole item — kelivo's world-book page starts the book drag
+ * from the header only (`ReorderableDelayedDragStartListener` around the
+ * header row), leaving the rows below free for their own tap/long-press.
+ */
+@Composable
+fun <T> ReorderableColumnWithHandle(
+    items: List<T>,
+    keyOf: (T) -> Any,
+    onMove: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier,
+    handleEnabled: Boolean = true,
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp),
+    itemContent: @Composable (T, Boolean, Modifier) -> Unit,
+) {
+    val listState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
+        onMove(from.index, to.index)
+    }
+
+    androidx.compose.foundation.lazy.LazyColumn(
+        state = listState,
+        modifier = modifier,
+        contentPadding = contentPadding,
+    ) {
+        items(items.size, key = { keyOf(items[it]) }) { index ->
+            val item = items[index]
+            ReorderableItem(
+                state = reorderableState,
+                key = keyOf(item),
+                modifier = Modifier.animateItem(),
+            ) { isDragging ->
+                val handle = Modifier.longPressDraggableHandle(enabled = handleEnabled)
+                Column(
+                    modifier = Modifier
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .alpha(if (isDragging) 0.95f else 1f)
+                        .scale(if (isDragging) 0.98f else 1f),
+                ) {
+                    itemContent(item, isDragging, handle)
+                }
+            }
+        }
+    }
+}
+
+/**
  * Non-scrolling twin of [ReorderableColumn] for lists embedded in an outer
  * scroll container — Flutter does the same with
  * `ReorderableListView(shrinkWrap: true, physics: NeverScrollableScrollPhysics())`.
@@ -107,6 +154,42 @@ fun <T> ReorderableInlineColumn(
                         .longPressDraggableHandle(),
                 ) {
                     itemContent(item, isDragging)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * [ReorderableInlineColumn] variant that hands the drag handle to the caller
+ * (kelivo's world-book entry rows drag from the leading bookmark icon).
+ */
+@Composable
+fun <T> ReorderableInlineColumnWithHandle(
+    items: List<T>,
+    keyOf: (T) -> Any,
+    onMove: (Int, Int) -> Unit,
+    modifier: Modifier = Modifier,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    handleEnabled: Boolean = true,
+    itemContent: @Composable (T, Boolean, Modifier) -> Unit,
+) {
+    sh.calvin.reorderable.ReorderableColumn(
+        list = items,
+        onSettle = { from, to -> onMove(from, to) },
+        modifier = modifier,
+        verticalArrangement = verticalArrangement,
+    ) { _, item, isDragging ->
+        key(keyOf(item)) {
+            ReorderableItem {
+                val handle = Modifier.longPressDraggableHandle(enabled = handleEnabled)
+                Column(
+                    modifier = Modifier
+                        .zIndex(if (isDragging) 1f else 0f)
+                        .alpha(if (isDragging) 0.95f else 1f)
+                        .scale(if (isDragging) 0.98f else 1f),
+                ) {
+                    itemContent(item, isDragging, handle)
                 }
             }
         }

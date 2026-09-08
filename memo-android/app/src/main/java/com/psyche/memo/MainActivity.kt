@@ -48,6 +48,7 @@ import com.psyche.memo.ui.SearchServicesScreen
 import com.psyche.memo.ui.McpServersScreen
 import com.psyche.memo.ui.InstructionInjectionScreen
 import com.psyche.memo.ui.QuickPhrasesScreen
+import com.psyche.memo.ui.WorldBookScreen
 import com.psyche.memo.ui.ProviderEditScreen
 import com.psyche.memo.ui.ChatHistoryScreen
 import com.psyche.memo.ui.ImageSettingsScreen
@@ -255,6 +256,7 @@ private fun AppThemeAndContent(
                             onOpenHistory = { navController.navigate("chat_history") },
                             onOpenProviders = { navController.navigate("providers") },
                             onOpenSearchServices = { navController.navigate("search_services") },
+                            onOpenWorldBookPage = { navController.navigate("world_book") },
                             pendingOpenConversation = pendingOpenConversation,
                         )
                     }
@@ -287,6 +289,7 @@ private fun AppThemeAndContent(
                             onOpenMcp = { navController.navigate("mcp") },
                             onOpenQuickPhrases = { navController.navigate("quick_phrases") },
                             onOpenInstructionInjection = { navController.navigate("instruction_injection") },
+                            onOpenWorldBook = { navController.navigate("world_book") },
                             onOpenTtsServices = { navController.navigate("tts_services") },
                             onOpenLogs = { navController.navigate("log_viewer") },
                             onBack = { navController.popBackStack() },
@@ -416,6 +419,12 @@ private fun AppThemeAndContent(
                     }
                     composable("quick_phrases") {
                         QuickPhrasesScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("world_book") {
+                        WorldBookScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
                         )

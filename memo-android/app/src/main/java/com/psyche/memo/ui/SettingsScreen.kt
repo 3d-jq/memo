@@ -102,6 +102,7 @@ fun SettingsScreen(
     onOpenMcp: () -> Unit,
     onOpenQuickPhrases: () -> Unit,
     onOpenInstructionInjection: () -> Unit,
+    onOpenWorldBook: () -> Unit,
     onOpenTtsServices: () -> Unit,
     onOpenLogs: () -> Unit,
     onBack: () -> Unit,
@@ -269,7 +270,7 @@ fun SettingsScreen(
                     DividerRow()
                     SettingsRow(Lucide.Terminal, stringResource(UiR.string.settings_page_mcp), onTap = onOpenMcp)
                     DividerRow()
-                    SettingsRow(Lucide.BookOpen, stringResource(UiR.string.settings_page_world_book), onTap = {})
+                    SettingsRow(Lucide.BookOpen, stringResource(UiR.string.settings_page_world_book), onTap = onOpenWorldBook)
                     DividerRow()
                     SettingsRow(Lucide.Brain, stringResource(UiR.string.settings_page_memory), onTap = onOpenMemory)
                     DividerRow()

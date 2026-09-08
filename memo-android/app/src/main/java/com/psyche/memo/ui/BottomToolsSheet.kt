@@ -27,6 +27,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Eye
@@ -38,9 +39,9 @@ import com.psyche.memo.ui.theme.LocalSemanticColors
 
 /**
  * Port of bottom_tools_sheet.dart (mobile): the three attachment actions as
- * 72dp rounded cards. Upstream also lists instruction-injection / world-book /
- * OCR / context-management rows; those features are not ported yet, so the
- * rows are omitted rather than wired to dead ends.
+ * 72dp rounded cards plus the instruction-injection / world-book / OCR rows.
+ * The context-management row still has no ported engine, so it is omitted
+ * rather than wired to a dead end.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,6 +55,9 @@ fun BottomToolsSheet(
     onToggleOcr: () -> Unit = {},
     onOpenOcrPrompt: () -> Unit = {},
     onOpenInstructionInjection: () -> Unit = {},
+    worldBooksAvailable: Boolean = false,
+    onOpenWorldBook: () -> Unit = {},
+    onOpenWorldBookPage: () -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -124,6 +128,28 @@ fun BottomToolsSheet(
                     modifier = Modifier.weight(1f),
                 )
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+            }
+            // 世界书行（bottom_tools_sheet.dart：有世界书才显示；长按进管理页）。
+            if (worldBooksAvailable) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                        .combinedClickable(onClick = onOpenWorldBook, onLongClick = onOpenWorldBookPage)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Lucide.BookOpen, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.world_book_title),
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+                }
             }
             // OCR 行（bottom_tools_sheet.dart：配置了 OCR 模型才显示；长按改提示词）。
             if (ocrAvailable) {
