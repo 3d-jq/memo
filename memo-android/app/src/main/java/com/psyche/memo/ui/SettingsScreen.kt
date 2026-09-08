@@ -99,6 +99,7 @@ fun SettingsScreen(
     onOpenMemory: () -> Unit,
     onOpenNetworkProxy: () -> Unit,
     onOpenToolSchema: () -> Unit,
+    onOpenMcp: () -> Unit,
     onOpenTtsServices: () -> Unit,
     onOpenLogs: () -> Unit,
     onBack: () -> Unit,
@@ -264,7 +265,7 @@ fun SettingsScreen(
                     // settings_page.dart L311: TTS row opens TtsServicesPage directly.
                     SettingsRow(Lucide.Volume2, stringResource(UiR.string.settings_page_tts), onTap = onOpenTtsServices)
                     DividerRow()
-                    SettingsRow(Lucide.Terminal, stringResource(UiR.string.settings_page_mcp), onTap = {})
+                    SettingsRow(Lucide.Terminal, stringResource(UiR.string.settings_page_mcp), onTap = onOpenMcp)
                     DividerRow()
                     SettingsRow(Lucide.BookOpen, stringResource(UiR.string.settings_page_world_book), onTap = {})
                     DividerRow()

@@ -44,6 +44,7 @@ import com.psyche.memo.ui.ProviderDetailScreen
 import com.psyche.memo.ui.ProvidersScreen
 import com.psyche.memo.ui.ProviderGroupsScreen
 import com.psyche.memo.ui.SearchServicesScreen
+import com.psyche.memo.ui.McpServersScreen
 import com.psyche.memo.ui.ProviderEditScreen
 import com.psyche.memo.ui.ChatHistoryScreen
 import com.psyche.memo.ui.ImageSettingsScreen
@@ -275,6 +276,7 @@ private fun AppThemeAndContent(
                             onOpenMemory = { navController.navigate("memory_settings") },
                             onOpenNetworkProxy = { navController.navigate("network_proxy") },
                             onOpenToolSchema = { navController.navigate("tool_schema_settings") },
+                            onOpenMcp = { navController.navigate("mcp") },
                             onOpenTtsServices = { navController.navigate("tts_services") },
                             onOpenLogs = { navController.navigate("log_viewer") },
                             onBack = { navController.popBackStack() },
@@ -395,6 +397,12 @@ private fun AppThemeAndContent(
                                 onBack = { navController.popBackStack() },
                             )
                         }
+                    }
+                    composable("mcp") {
+                        McpServersScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                     composable("search_services") {
                         SearchServicesScreen(

@@ -72,6 +72,44 @@ class ToolHandler(
                 }
             }
 
+            // MCP tools: the assistant's bound servers, tool names not reserved
+            // by built-ins. Approval-gated tools ask the user first.
+            if (container != null && assistant != null && name !in com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all) {
+                val serverId = assistant.mcpServerIds.firstOrNull { id ->
+                    container.mcpConnections.isConnected(id) &&
+                        container.mcpConnections.toolsFor(id).any { it.name == name }
+                }
+                if (serverId != null) {
+                    val config = container.mcpRepository.server(serverId)
+                    val needsApproval = config?.toolByName(name)?.needsApproval == true
+                    if (needsApproval && approvalService != null) {
+                        val approval = approvalService.requestApproval(
+                            toolCallId = approvalIdFor(name, toolCallId),
+                            toolName = name,
+                            arguments = args,
+                            conversationId = conversationId,
+                        ).await()
+                        if (!approval.approved) {
+                            return toolError(
+                                error = "approval_denied",
+                                message = approval.denyReason ?: "User denied the tool call",
+                                tool = name,
+                            )
+                        }
+                    }
+                    return try {
+                        container.mcpConnections.callTool(serverId, name, args)
+                    } catch (e: Exception) {
+                        toolError(
+                            error = "execution_error",
+                            message = e.toString(),
+                            tool = name,
+                            instruction = "The tool execution failed unexpectedly. You may try again with different parameters or inform the user about the issue.",
+                        )
+                    }
+                }
+            }
+
             // Memory tools (memory_tools.dart handle)：enableMemory 才生效。
             container?.let { c ->
                 com.psyche.memo.provider.MemoryTools.handle(

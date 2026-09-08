@@ -195,6 +195,11 @@ fun AssistantSettingsEditScreen(
                     assistant = a,
                     onEdit = ::edit,
                 )
+                7 -> AssistantEditMcpTab(
+                    container = container,
+                    assistant = a,
+                    onEdit = ::edit,
+                )
                 else -> Box(Modifier.fillMaxSize())
             }
         }

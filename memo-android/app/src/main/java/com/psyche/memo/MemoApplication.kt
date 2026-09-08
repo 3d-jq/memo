@@ -21,6 +21,8 @@ class MemoApplication : Application(), ImageLoaderFactory {
         container.providerRepository.ensureBuiltinDefaultsSeeded()
         // PDFBox needs its resource loader before the first PDF extraction.
         com.psyche.memo.provider.DocumentTextExtractor.init(this)
+        // McpProvider.initConnectedServers：启动时连接已启用的 MCP 服务器。
+        container.mcpConnections.connectEnabled()
     }
 
     /**

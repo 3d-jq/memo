@@ -74,6 +74,14 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         com.psyche.memo.data.repo.SearchSettingsRepository(database.writableDatabase, preferenceRepository)
     }
 
+    /** MCP server storage + runtime connections. */
+    val mcpRepository: com.psyche.memo.data.repo.McpRepository by lazy {
+        com.psyche.memo.data.repo.McpRepository(database.writableDatabase)
+    }
+    val mcpConnections: com.psyche.memo.provider.mcp.McpConnectionManager by lazy {
+        com.psyche.memo.provider.mcp.McpConnectionManager(mcpRepository, httpClient)
+    }
+
     /** HTTP search dispatch (ported provider subset). */
     val searchEngine: com.psyche.memo.provider.search.SearchEngine by lazy {
         com.psyche.memo.provider.search.HttpSearchEngine(httpClient)

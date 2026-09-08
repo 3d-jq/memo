@@ -1039,6 +1039,27 @@ class ChatViewModel(
                 allowMemoryWrites = !isTemporary,
             ),
         )
+        // MCP 工具（mcp_tool_service）：助手绑定且已连接的服务器，仅启用的工具；
+        // 与内置工具同名的条目按原版保留名规则剔除。
+        val reserved = com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all.toSet() + setOf(
+            com.psyche.memo.provider.search.SearchToolService.TOOL_NAME,
+        ) + com.psyche.memo.provider.MemoryTools.ALL_TOOL_NAMES
+        for (serverId in assistant.mcpServerIds) {
+            if (!container.mcpConnections.isConnected(serverId)) continue
+            val config = container.mcpRepository.server(serverId) ?: continue
+            val enabledNames = config.tools.filter { it.enabled }.map { it.name }.toSet()
+            for (tool in container.mcpConnections.toolsFor(serverId)) {
+                if (tool.name in reserved) continue
+                if (enabledNames.isNotEmpty() && tool.name !in enabledNames) continue
+                out.add(
+                    LlmToolSpec(
+                        name = tool.name,
+                        description = tool.description ?: "",
+                        inputSchemaJson = tool.inputSchema?.toString() ?: "{}",
+                    ),
+                )
+            }
+        }
         for (name in assistant.localToolIds) {
             if (name !in offered) continue
             if (!com.psyche.memo.ui.BuiltInToolCatalog.isAvailableOnThisPlatform(name)) continue
