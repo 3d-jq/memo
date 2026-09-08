@@ -2,6 +2,7 @@ package com.psyche.memo.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Camera
+import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
@@ -45,6 +47,10 @@ fun BottomToolsSheet(
     onPhotos: () -> Unit,
     onUpload: () -> Unit,
     onDismiss: () -> Unit,
+    ocrAvailable: Boolean = false,
+    ocrEnabled: Boolean = false,
+    onToggleOcr: () -> Unit = {},
+    onOpenOcrPrompt: () -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -94,6 +100,37 @@ fun BottomToolsSheet(
                     modifier = Modifier.weight(1f),
                 ) {
                     onUpload()
+                }
+            }
+            // OCR 行（bottom_tools_sheet.dart：配置了 OCR 模型才显示；长按改提示词）。
+            if (ocrAvailable) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                        .combinedClickable(onClick = onToggleOcr, onLongClick = onOpenOcrPrompt)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Lucide.Eye,
+                        contentDescription = null,
+                        tint = if (ocrEnabled) cs.primary else cs.onSurface,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.bottom_tools_sheet_ocr),
+                        style = TextStyle(
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (ocrEnabled) cs.primary else cs.onSurface,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    IosSwitch(value = ocrEnabled, onValueChanged = { onToggleOcr() })
                 }
             }
         }

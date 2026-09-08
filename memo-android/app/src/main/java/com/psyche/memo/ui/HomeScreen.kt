@@ -439,6 +439,10 @@ fun ChatContent(
     var showModelSheet by remember { mutableStateOf(false) }
     var showSearchSheet by remember { mutableStateOf(false) }
     var showToolsSheet by remember { mutableStateOf(false) }
+    var showOcrPrompt by remember { mutableStateOf(false) }
+    var ocrSettings by remember {
+        mutableStateOf(com.psyche.memo.provider.OcrService.settingsOf(container.preferenceRepository))
+    }
     val attachments by vm.attachments.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -953,6 +957,31 @@ fun ChatContent(
                 filePicker.launch(arrayOf("*/*"))
             },
             onDismiss = { showToolsSheet = false },
+            ocrAvailable = ocrSettings.providerId != null && ocrSettings.modelId != null,
+            ocrEnabled = ocrSettings.enabled,
+            onToggleOcr = {
+                showToolsSheet = false
+                val next = !ocrSettings.enabled
+                container.preferenceRepository.writeJson(
+                    com.psyche.memo.provider.OcrService.ENABLED_KEY,
+                    kotlinx.serialization.json.JsonPrimitive(if (next) 1 else 0).toString(),
+                )
+                ocrSettings = com.psyche.memo.provider.OcrService.settingsOf(container.preferenceRepository)
+            },
+            onOpenOcrPrompt = {
+                showToolsSheet = false
+                showOcrPrompt = true
+            },
+        )
+    }
+
+    if (showOcrPrompt) {
+        OcrPromptSheet(
+            container = container,
+            onDismiss = {
+                showOcrPrompt = false
+                ocrSettings = com.psyche.memo.provider.OcrService.settingsOf(container.preferenceRepository)
+            },
         )
     }
 

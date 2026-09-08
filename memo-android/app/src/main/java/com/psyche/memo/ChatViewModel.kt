@@ -575,6 +575,35 @@ class ChatViewModel(
             try {
                 // Build request from current UI messages (exclude skeleton).
                 val rawMessages = _messages.value.dropLast(1)
+                // ocr_service.dart：开启 OCR 时先把图片识别成文本块前置进用户轮次
+                // （模型没有视觉能力也能读图）；结果按图片内容哈希缓存。
+                val ocrSettings = com.psyche.memo.provider.OcrService.settingsOf(container.preferenceRepository)
+                val ocrBlocks: Map<String, String> = if (ocrSettings.usable) {
+                    withContext(Dispatchers.IO) {
+                        rawMessages.filter { it.role == "user" }.mapNotNull { msg ->
+                            val images = msg.parts
+                                .filterIsInstance<com.psyche.memo.data.model.ImagePart>()
+                                .filter { it.unavailable != true && it.uri.isNotBlank() }
+                            if (images.isEmpty()) return@mapNotNull null
+                            val hashes = images.mapNotNull { com.psyche.memo.provider.OcrService.contentHash(it.uri) }
+                            val cachedText = hashes.mapNotNull { com.psyche.memo.provider.OcrService.cached(it) }
+                            val text = if (cachedText.size == hashes.size && hashes.isNotEmpty()) {
+                                cachedText.joinToString("\n\n")
+                            } else {
+                                com.psyche.memo.provider.OcrService.runOcr(
+                                    container,
+                                    ocrSettings,
+                                    images.map { it.uri },
+                                )?.also { result ->
+                                    hashes.forEach { com.psyche.memo.provider.OcrService.cacheText(it, result) }
+                                }
+                            } ?: return@mapNotNull null
+                            msg.id to com.psyche.memo.provider.OcrService.wrapBlock(text)
+                        }.toMap()
+                    }
+                } else {
+                    emptyMap()
+                }
                 // message_builder_service.readDocument: file attachments become
                 // a text block prepended to the user turn, cached by path+stat.
                 val fileBlocks = withContext(Dispatchers.IO) {
@@ -597,7 +626,7 @@ class ChatViewModel(
                 }
                 val history = rawMessages
                     .mapNotNull { msg ->
-                        val content = (fileBlocks[msg.id] ?: "") +
+                        val content = (ocrBlocks[msg.id] ?: "") + (fileBlocks[msg.id] ?: "") +
                             msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
                         // Images ride along as part payloads; only user turns may
                         // carry them (assistant media is stashed by the original
