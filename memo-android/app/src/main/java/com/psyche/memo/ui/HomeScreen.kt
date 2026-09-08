@@ -51,6 +51,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.composables.icons.lucide.ArrowUp
@@ -112,6 +113,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
@@ -1975,44 +1977,44 @@ private fun ChatInputBar(
                             bottom = SpacingXs,
                         ),
                 ) {
-                    TextField(
+                    // CIB:2779-2782 —— 原版是 border:none + contentPadding
+                    // (vertical:2, horizontal:0) 的裸输入框；M3 TextField 自带
+                    // 16dp 横向内边距会把打字区左右收窄，改用 BasicTextField
+                    // 完全复刻（hint 0.45 / 光标 primary / maxLines 5 / Send）。
+                    BasicTextField(
                         value = input,
                         onValueChange = onInputChange,
                         modifier = textFieldModifier,
-                        // CIB composer —— 正文 15sp onSurface；hint onSurface@0.45；
-                        // 光标 primary。
                         textStyle = androidx.compose.ui.text.TextStyle(
                             fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
                             color = cs.onSurface,
                         ),
-                        placeholder = {
-                            Text(
-                                stringResource(UiR.string.chat_input_bar_hint),
-                                style = androidx.compose.ui.text.TextStyle(
-                                    fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
-                                    color = cs.onSurface.copy(
-                                        alpha = ChatStyleSpec.INPUT_HINT_ALPHA,
-                                    ),
-                                ),
-                            )
-                        },
+                        cursorBrush = SolidColor(cs.primary),
+                        // CIB:2750-2752 readOnly —— composerLocked || _ownsVoiceSession。
+                        readOnly = voiceActive,
+                        // 源码 chat_input_bar.dart:2741 —— maxLines: 5（未展开状态）
+                        maxLines = 5,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                         // CIB:934-938 _handleSend —— 语音会话中不触发发送。
                         keyboardActions = KeyboardActions(
                             onSend = { if (!streaming && !voiceActive) onSend() },
                         ),
-                        // CIB:2750-2752 readOnly —— composerLocked || _ownsVoiceSession。
-                        readOnly = voiceActive,
-                        // 源码 chat_input_bar.dart:2741 —— maxLines: 5（未展开状态）
-                        maxLines = 5,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            // CIB —— 光标 primary。
-                            cursorColor = cs.primary,
-                        ),
+                        decorationBox = { inner ->
+                            Box {
+                                if (input.isEmpty()) {
+                                    Text(
+                                        stringResource(UiR.string.chat_input_bar_hint),
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = ChatStyleSpec.INPUT_TEXT_SP.sp,
+                                            color = cs.onSurface.copy(
+                                                alpha = ChatStyleSpec.INPUT_HINT_ALPHA,
+                                            ),
+                                        ),
+                                    )
+                                }
+                                inner()
+                            }
+                        },
                     )
                 }
 
