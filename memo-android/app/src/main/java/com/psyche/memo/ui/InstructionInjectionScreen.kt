@@ -79,21 +79,15 @@ fun InstructionInjectionScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, "Back") { onBack() }
-            Text(
-                text = stringResource(R.string.instruction_injection_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-            )
-            IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.instruction_injection_add_title)) {
-                adding = true
-            }
-            Spacer(Modifier.width(12.dp))
-        }
+                MemoTopBar(
+                    title = stringResource(R.string.instruction_injection_title),
+                    onBack = onBack,
+                ) {
+                    IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.instruction_injection_add_title)) {
+                        adding = true
+                    }
+                    Spacer(Modifier.width(12.dp))
+                }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

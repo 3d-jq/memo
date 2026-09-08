@@ -131,17 +131,10 @@ fun BalanceScreen(
     // detail screen, so without a background it shows through.
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
         // ---- AppBar ----
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, "Back") { onBack() }
-            Text(
-                text = stringResource(R.string.provider_detail_page_balance_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-            )
-        }
+        MemoTopBar(
+            title = stringResource(R.string.provider_detail_page_balance_title),
+            onBack = onBack,
+        )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

@@ -179,21 +179,11 @@ fun SettingsScreen(
     // Fixed top bar (like kelivo's Scaffold AppBar) so the back button never
     // scrolls away; the body list scrolls under it.
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onBack) {
-                Icon(Lucide.ArrowLeft, contentDescription = stringResource(UiR.string.settings_page_back_button), modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = stringResource(UiR.string.settings_page_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-            )
-        }
+        MemoTopBar(
+            title = stringResource(UiR.string.settings_page_title),
+            onBack = onBack,
+            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+        )
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
             // Mirrors kelivo's ListView padding: LTRB(16, 12, 16, 16).

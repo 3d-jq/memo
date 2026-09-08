@@ -129,16 +129,10 @@ fun MemoryEntriesScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.ArrowLeft, contentDescription = stringResource(UiR.string.settings_page_back_button), tint = cs.onSurface, modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = stringResource(UiR.string.memory_entries_page_title),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                modifier = Modifier.weight(1f),
-            )
-        }
+        MemoTopBar(
+            title = stringResource(UiR.string.memory_entries_page_title),
+            onBack = onBack,
+        )
 
         // Search field (L410-421).
         Box(Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp)) {

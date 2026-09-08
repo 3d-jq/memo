@@ -532,20 +532,10 @@ fun SearchServiceEditorScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
         // ---- AppBar: back / delete / save ----
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        MemoTopBar(
+            title = title,
+            onBack = { onClose(false) },
         ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.search_services_page_back_tooltip)) {
-                onClose(false)
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
             if (!isAdding && canDelete) {
                 IconActionButton(Lucide.Trash2, cs.error, stringResource(R.string.search_service_editor_delete_tooltip)) {
                     showDeleteConfirm = true

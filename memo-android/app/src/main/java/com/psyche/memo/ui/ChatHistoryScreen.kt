@@ -113,50 +113,36 @@ fun ChatHistoryScreen(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         // AppBar (L58-130)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                // Memo uses the auto-mirrored back arrow (RTL support).
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = null,
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            Text(
-                text = stringResource(UiR.string.chat_history_page_title),
-                modifier = Modifier.weight(1f),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-            )
-            IconButton(
-                onClick = {
-                    if (searching) query = ""
-                    searching = !searching
-                },
-                modifier = Modifier.size(44.dp),
-            ) {
-                Icon(
-                    if (searching) Lucide.X else Lucide.Search,
-                    contentDescription = stringResource(UiR.string.chat_history_page_search_tooltip),
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            IconButton(
-                onClick = { showDeleteAll = true },
-                modifier = Modifier.size(44.dp),
-            ) {
-                Icon(
-                    Lucide.Trash2,
-                    contentDescription = stringResource(UiR.string.chat_history_page_delete_all_tooltip),
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-        }
+                MemoTopBar(
+                    title = stringResource(UiR.string.chat_history_page_title),
+                    onBack = onBack,
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (searching) query = ""
+                            searching = !searching
+                        },
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Icon(
+                            if (searching) Lucide.X else Lucide.Search,
+                            contentDescription = stringResource(UiR.string.chat_history_page_search_tooltip),
+                            tint = cs.onSurface,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                    IconButton(
+                        onClick = { showDeleteAll = true },
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Icon(
+                            Lucide.Trash2,
+                            contentDescription = stringResource(UiR.string.chat_history_page_delete_all_tooltip),
+                            tint = cs.onSurface,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
 
         // Body (L131-246)
         Column(

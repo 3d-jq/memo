@@ -171,17 +171,10 @@ fun ProvidersScreen(
             .statusBarsPadding(),
     ) {
         // ---- AppBar ----
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        MemoTopBar(
+            title = stringResource(com.psyche.memo.ui.R.string.providers_page_title),
+            onBack = onBack,
         ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, "Back") { onBack() }
-            Text(
-                text = stringResource(com.psyche.memo.ui.R.string.providers_page_title),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
-                modifier = Modifier.weight(1f).padding(start = 4.dp),
-                maxLines = 1,
-            )
             // Multi-select toggle: circleDot <-> Check.
             IconActionButton(
                 if (selectMode) Lucide.Check else Lucide.CircleDot,

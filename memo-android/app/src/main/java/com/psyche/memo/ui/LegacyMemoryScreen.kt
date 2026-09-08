@@ -104,15 +104,10 @@ fun LegacyMemoryScreen(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         // AppBar with export + migrate actions (L40-84).
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.ArrowLeft, contentDescription = stringResource(UiR.string.settings_page_back_button), tint = cs.onSurface, modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = stringResource(UiR.string.legacy_memory_page_title),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                modifier = Modifier.weight(1f),
-            )
+        MemoTopBar(
+            title = stringResource(UiR.string.legacy_memory_page_title),
+            onBack = onBack,
+        ) {
             IconButton(
                 onClick = {
                     // exportAll (L125-148): write a text file, share via ACTION_SEND.

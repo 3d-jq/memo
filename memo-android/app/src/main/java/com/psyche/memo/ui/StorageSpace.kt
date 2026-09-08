@@ -642,20 +642,11 @@ fun StorageSpaceScreen(
     LaunchedEffect(Unit) { refresh() }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        MemoTopBar(
+            title = stringResource(UiR.string.storage_space_page_title),
+            onBack = onBack,
+            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
         ) {
-            TextButton(onClick = onBack) {
-                Icon(Lucide.ArrowLeft, contentDescription = stringResource(UiR.string.settings_page_back_button), modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = stringResource(UiR.string.storage_space_page_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-            )
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { refresh() }, enabled = !loading) {
                 Icon(

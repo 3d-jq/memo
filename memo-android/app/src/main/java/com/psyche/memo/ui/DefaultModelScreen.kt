@@ -306,22 +306,13 @@ fun DefaultModelScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = backTooltip,
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            Text(
-                text = stringResource(UiR.string.default_model_page_title),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-            )
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.width(12.dp)) // actions: SizedBox(width: 12)
-        }
+                MemoTopBar(
+                    title = stringResource(UiR.string.default_model_page_title),
+                    onBack = onBack,
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.width(12.dp)) // actions: SizedBox(width: 12)
+                }
         Column(
             modifier = Modifier
                 .fillMaxSize()

@@ -81,20 +81,10 @@ fun TtsSettingsScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = stringResource(UiR.string.tts_services_page_back_button),
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
+                MemoTopBar(
+                    title = stringResource(UiR.string.tts_settings_page_title),
+                    onBack = onBack,
                 )
-            }
-            Text(
-                text = stringResource(UiR.string.tts_settings_page_title),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-            )
-        }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),

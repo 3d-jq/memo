@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -139,16 +140,12 @@ fun ProviderDetailScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-        // ---- AppBar ----
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, "Back") { onBack() }
-            Row(
-                modifier = Modifier.weight(1f).padding(start = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+        // ---- AppBar: 24dp brand avatar before the name (custom title) ----
+        val testButtonLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_test_button)
+        MemoTopBarContent(
+            onBack = onBack,
+            title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.size(24.dp)) {
                     ProviderAvatarSmall(
                         providerKey = providerId,
@@ -159,11 +156,13 @@ fun ProviderDetailScreen(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = cfg.name.ifEmpty { providerId },
-                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
                     maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 )
             }
-            val testButtonLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_test_button)
+            },
+            actions = {
             if (tabIndex == 0) {
                 IconActionButton(Lucide.HeartPulse, cs.onSurface, testButtonLabel) {
                     Haptics.light(view)
@@ -195,7 +194,8 @@ fun ProviderDetailScreen(
                     showDelete = true
                 }
             }
-        }
+            },
+        )
 
         // ---- Both tabs kept alive in the pager ----
         HorizontalPager(

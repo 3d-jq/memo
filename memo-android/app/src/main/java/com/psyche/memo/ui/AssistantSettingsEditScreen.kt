@@ -117,21 +117,10 @@ fun AssistantSettingsEditScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton44(onClick = onBack) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = stringResource(UiR.string.settings_page_back_button),
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            Text(
-                text = assistant?.name?.takeIf { it.isNotBlank() }
-                    ?: stringResource(UiR.string.assistant_edit_page_title),
-                maxLines = 1,
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-            )
+        MemoTopBar(
+            title = assistant?.name?.takeIf { it.isNotBlank() } ?: stringResource(UiR.string.assistant_edit_page_title),
+            onBack = onBack,
+        ) {
             Spacer(Modifier.weight(1f))
             Spacer(Modifier.width(12.dp))
         }

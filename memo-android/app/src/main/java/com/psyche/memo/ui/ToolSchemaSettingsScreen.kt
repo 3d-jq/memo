@@ -317,23 +317,10 @@ fun ToolSchemaSettingsScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+        MemoTopBar(
+            title = stringResource(UiR.string.tool_schema_settings_page_title),
+            onBack = onBack,
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = stringResource(UiR.string.settings_page_back_button),
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            Text(
-                text = stringResource(UiR.string.tool_schema_settings_page_title),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                modifier = Modifier.weight(1f),
-            )
             // L63-76 — reset-all toolbar action.
             IconButton(onClick = { resetDialogVisible = true }, modifier = Modifier.size(44.dp)) {
                 Icon(

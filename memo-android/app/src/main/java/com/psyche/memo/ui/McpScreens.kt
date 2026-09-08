@@ -95,16 +95,10 @@ fun McpServersScreen(
     var deleteTarget by remember { mutableStateOf<McpServerConfig?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        MemoTopBar(
+            title = stringResource(R.string.mcp_assistant_sheet_title),
+            onBack = onBack,
         ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.mcp_page_back_tooltip)) { onBack() }
-            Text(
-                text = stringResource(R.string.mcp_assistant_sheet_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-            )
             IconActionButton(Lucide.Timer, cs.onSurface, stringResource(R.string.mcp_timeout_dialog_title)) {
                 showTimeout = true
             }

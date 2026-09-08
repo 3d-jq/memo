@@ -132,21 +132,11 @@ fun UserProfileScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onBack) {
-                Icon(Lucide.ArrowLeft, contentDescription = stringResource(UiR.string.settings_page_back_button), modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = stringResource(UiR.string.user_profile_page_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-            )
-        }
+        MemoTopBar(
+            title = stringResource(UiR.string.user_profile_page_title),
+            onBack = onBack,
+            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+        )
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),

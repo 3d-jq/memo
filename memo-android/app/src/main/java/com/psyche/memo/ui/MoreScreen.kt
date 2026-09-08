@@ -55,17 +55,8 @@ fun MoreScreen(onBack: () -> Unit) {
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onBack) {
-                Icon(Lucide.ArrowLeft, contentDescription = stringResource(com.psyche.memo.ui.R.string.settings_page_back_button), modifier = Modifier.size(22.dp))
-            }
-            // Page intentionally has no title upstream (title: null).
-        }
+        // Page intentionally has no title upstream (title: null).
+        MemoTopBar(title = "", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxWidth()

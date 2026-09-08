@@ -88,24 +88,15 @@ fun QuickPhrasesScreen(
     var adding by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.quick_phrase_back_tooltip)) { onBack() }
-            Text(
-                text = stringResource(
-                    if (assistantId == null) R.string.quick_phrase_global_title
-                    else R.string.quick_phrase_assistant_title,
-                ),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-            )
-            IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.quick_phrase_add_tooltip)) {
-                adding = true
-            }
-            Spacer(Modifier.width(12.dp))
-        }
+                MemoTopBar(
+                    title = stringResource( if (assistantId == null) R.string.quick_phrase_global_title else R.string.quick_phrase_assistant_title, ),
+                    onBack = onBack,
+                ) {
+                    IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.quick_phrase_add_tooltip)) {
+                        adding = true
+                    }
+                    Spacer(Modifier.width(12.dp))
+                }
 
         if (phrases.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

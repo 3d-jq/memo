@@ -207,20 +207,10 @@ fun AutoRetrySettingsScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = stringResource(UiR.string.settings_page_back_button),
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            Text(
-                text = stringResource(UiR.string.settings_page_auto_retry),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-            )
-        }
+        MemoTopBar(
+            title = stringResource(UiR.string.settings_page_auto_retry),
+            onBack = onBack,
+        )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(

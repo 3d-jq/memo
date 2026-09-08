@@ -232,85 +232,79 @@ fun TranslateScreen(
             .navigationBarsPadding()
             .imePadding(),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.settings_page_back_button)) { onBack() }
-            Text(
-                text = stringResource(R.string.desktop_nav_translate_tooltip),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-            )
-            IosIconButton(
-                icon = Lucide.Clipboard,
-                onTap = {
-                    val text = clipboard.getText()?.text ?: ""
-                    if (text.isNotEmpty()) src = text
-                },
-                color = cs.onSurface,
-                size = 20.dp,
-                contentPadding = 8.dp,
-                semanticLabel = stringResource(R.string.translate_page_paste_button),
-            )
-            Spacer(Modifier.width(4.dp))
-            IosIconButton(
-                icon = Lucide.Copy,
-                onTap = {
-                    clipboard.setText(AnnotatedString(dst))
-                    SnackbarManager.show(
-                        AppNotification(
-                            container.appContext.getString(R.string.chat_message_widget_copied_to_clipboard),
-                            NotificationType.SUCCESS,
-                        ),
-                    )
-                },
-                color = cs.onSurface,
-                size = 20.dp,
-                contentPadding = 8.dp,
-                semanticLabel = stringResource(R.string.translate_page_copy_result),
-            )
-            Spacer(Modifier.width(4.dp))
-            IosIconButton(
-                icon = Lucide.Eraser,
-                onTap = {
-                    stop()
-                    src = ""
-                    dst = ""
-                },
-                color = cs.onSurface,
-                size = 20.dp,
-                contentPadding = 8.dp,
-                semanticLabel = stringResource(R.string.translate_page_clear_all),
-            )
-            Spacer(Modifier.width(4.dp))
-            // 模型品牌图标（无品牌资源时回落到 Bot，L316-345）。
-            IosIconContentButton(
-                onTap = { if (!loading) showModelSheet = true },
-                color = cs.onSurface,
-                contentPadding = 8.dp,
-                semanticLabel = stringResource(R.string.default_model_page_translate_model_title),
-            ) { tint ->
-                val asset = brandAsset
-                if (asset != null) {
-                    AsyncImage(
-                        model = asset,
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp),
-                        colorFilter = if (
-                            cs.surface.luminance() < 0.5f && BrandAssets.assetNeedsDarkInvert(asset)
-                        ) {
-                            ColorFilter.tint(tint)
-                        } else {
-                            null
+                MemoTopBar(
+                    title = stringResource(R.string.desktop_nav_translate_tooltip),
+                    onBack = onBack,
+                ) {
+                    IosIconButton(
+                        icon = Lucide.Clipboard,
+                        onTap = {
+                            val text = clipboard.getText()?.text ?: ""
+                            if (text.isNotEmpty()) src = text
                         },
+                        color = cs.onSurface,
+                        size = 20.dp,
+                        contentPadding = 8.dp,
+                        semanticLabel = stringResource(R.string.translate_page_paste_button),
                     )
-                } else {
-                    Icon(Lucide.Bot, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(4.dp))
+                    IosIconButton(
+                        icon = Lucide.Copy,
+                        onTap = {
+                            clipboard.setText(AnnotatedString(dst))
+                            SnackbarManager.show(
+                                AppNotification(
+                                    container.appContext.getString(R.string.chat_message_widget_copied_to_clipboard),
+                                    NotificationType.SUCCESS,
+                                ),
+                            )
+                        },
+                        color = cs.onSurface,
+                        size = 20.dp,
+                        contentPadding = 8.dp,
+                        semanticLabel = stringResource(R.string.translate_page_copy_result),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    IosIconButton(
+                        icon = Lucide.Eraser,
+                        onTap = {
+                            stop()
+                            src = ""
+                            dst = ""
+                        },
+                        color = cs.onSurface,
+                        size = 20.dp,
+                        contentPadding = 8.dp,
+                        semanticLabel = stringResource(R.string.translate_page_clear_all),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    // 模型品牌图标（无品牌资源时回落到 Bot，L316-345）。
+                    IosIconContentButton(
+                        onTap = { if (!loading) showModelSheet = true },
+                        color = cs.onSurface,
+                        contentPadding = 8.dp,
+                        semanticLabel = stringResource(R.string.default_model_page_translate_model_title),
+                    ) { tint ->
+                        val asset = brandAsset
+                        if (asset != null) {
+                            AsyncImage(
+                                model = asset,
+                                contentDescription = null,
+                                modifier = Modifier.size(22.dp),
+                                colorFilter = if (
+                                    cs.surface.luminance() < 0.5f && BrandAssets.assetNeedsDarkInvert(asset)
+                                ) {
+                                    ColorFilter.tint(tint)
+                                } else {
+                                    null
+                                },
+                            )
+                        } else {
+                            Icon(Lucide.Bot, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
                 }
-            }
-            Spacer(Modifier.width(8.dp))
-        }
 
         // 输入卡（L352-374）：固定 200dp，卡片边框 outlineVariant 25%。
         Box(modifier = Modifier.padding(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 6.dp)) {

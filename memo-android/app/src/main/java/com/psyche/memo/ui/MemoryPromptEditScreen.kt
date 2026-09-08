@@ -90,23 +90,21 @@ internal fun MemoryPromptEditOverlay(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         // AppBar (L803-843): back, title, reset + save actions.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.ArrowLeft, contentDescription = stringResource(UiR.string.settings_page_back_button), tint = cs.onSurface, modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = stringResource(entry.titleRes),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
+        MemoTopBar(
+            title = stringResource(entry.titleRes),
+            onBack = onClose,
+        ) {
+            TopBarAction(
+                icon = Lucide.RotateCcw,
+                label = stringResource(UiR.string.memory_prompt_edit_reset),
+                onClick = { reset() },
             )
-            IconButton(onClick = { reset() }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.RotateCcw, contentDescription = stringResource(UiR.string.memory_prompt_edit_reset), tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = { save() }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.Check, contentDescription = stringResource(UiR.string.memory_prompt_edit_save), tint = cs.primary, modifier = Modifier.size(20.dp))
-            }
-            Spacer(Modifier.width(4.dp))
+            TopBarAction(
+                icon = Lucide.Check,
+                label = stringResource(UiR.string.memory_prompt_edit_save),
+                onClick = { save() },
+                color = cs.primary,
+            )
         }
 
         Column(

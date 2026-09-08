@@ -137,25 +137,19 @@ fun ProviderEditScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.ArrowLeft, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = if (isNew) stringResource(UiR.string.providers_page_add_tooltip)
-                else stringResource(UiR.string.settings_page_providers),
-                modifier = Modifier.weight(1f),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-            )
-            if (!isNew) {
-                IconButton(onClick = { showDelete = true }, modifier = Modifier.size(44.dp)) {
-                    Icon(Lucide.Trash2, contentDescription = null, tint = cs.error, modifier = Modifier.size(22.dp))
+                MemoTopBar(
+                    title = if (isNew) stringResource(UiR.string.providers_page_add_tooltip) else stringResource(UiR.string.settings_page_providers),
+                    onBack = onBack,
+                ) {
+                    if (!isNew) {
+                        IconButton(onClick = { showDelete = true }, modifier = Modifier.size(44.dp)) {
+                            Icon(Lucide.Trash2, contentDescription = null, tint = cs.error, modifier = Modifier.size(22.dp))
+                        }
+                    }
+                    Button(onClick = { save() }, modifier = Modifier.padding(end = 12.dp)) {
+                        Text(text = stringResource(UiR.string.provider_detail_page_save_button))
+                    }
                 }
-            }
-            Button(onClick = { save() }, modifier = Modifier.padding(end = 12.dp)) {
-                Text(text = stringResource(UiR.string.provider_detail_page_save_button))
-            }
-        }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),

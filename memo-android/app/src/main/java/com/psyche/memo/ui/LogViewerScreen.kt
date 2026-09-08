@@ -143,22 +143,17 @@ fun LogViewerScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.ArrowLeft, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = stringResource(UiR.string.storage_space_category_logs),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = { loadLogFiles() }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.RefreshCw, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = { settingsSheetVisible = true }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.Settings, contentDescription = stringResource(UiR.string.log_settings_title), tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
-        }
+                MemoTopBar(
+                    title = stringResource(UiR.string.storage_space_category_logs),
+                    onBack = onBack,
+                ) {
+                    IconButton(onClick = { loadLogFiles() }, modifier = Modifier.size(44.dp)) {
+                        Icon(Lucide.RefreshCw, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = { settingsSheetVisible = true }, modifier = Modifier.size(44.dp)) {
+                        Icon(Lucide.Settings, contentDescription = stringResource(UiR.string.log_settings_title), tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                    }
+                }
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 androidx.compose.material3.CircularProgressIndicator()

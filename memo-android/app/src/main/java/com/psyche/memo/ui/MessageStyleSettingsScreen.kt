@@ -268,20 +268,10 @@ fun MessageStyleSettingsScreen(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = stringResource(UiR.string.settings_page_back_button),
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-            Text(
-                text = stringResource(UiR.string.message_style_settings_page_title),
-                modifier = Modifier.weight(1f),
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-            )
+        MemoTopBar(
+            title = stringResource(UiR.string.message_style_settings_page_title),
+            onBack = onBack,
+        ) {
             // message_style_settings_page.dart:34-45 — AppBar reset action.
             IconButton(onClick = { showResetConfirm = true }, modifier = Modifier.size(44.dp)) {
                 Icon(

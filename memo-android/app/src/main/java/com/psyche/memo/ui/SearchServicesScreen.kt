@@ -112,16 +112,10 @@ fun SearchServicesScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
         // ---- AppBar ----
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        MemoTopBar(
+            title = stringResource(R.string.search_services_page_title),
+            onBack = onBack,
         ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.search_services_page_back_tooltip)) { onBack() }
-            Text(
-                text = stringResource(R.string.search_services_page_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-            )
             IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.search_services_page_add_provider)) {
                 adding = true
             }

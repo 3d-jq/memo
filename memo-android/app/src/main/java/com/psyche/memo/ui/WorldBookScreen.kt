@@ -170,26 +170,20 @@ fun WorldBookScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconActionButton(Lucide.ArrowLeft, cs.onSurface, stringResource(R.string.settings_page_back_button)) { onBack() }
-            Text(
-                text = stringResource(R.string.world_book_title),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                modifier = Modifier.weight(1f),
-            )
-            IconActionButton(
-                Lucide.CloudDownload,
-                cs.onSurface,
-                stringResource(R.string.providers_page_import_tooltip),
-            ) { importLauncher.launch(arrayOf("application/json")) }
-            IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.world_book_add)) {
-                addingBook = true
-            }
-            Spacer(Modifier.width(12.dp))
-        }
+                MemoTopBar(
+                    title = stringResource(R.string.world_book_title),
+                    onBack = onBack,
+                ) {
+                    IconActionButton(
+                        Lucide.CloudDownload,
+                        cs.onSurface,
+                        stringResource(R.string.providers_page_import_tooltip),
+                    ) { importLauncher.launch(arrayOf("application/json")) }
+                    IconActionButton(Lucide.Plus, cs.onSurface, stringResource(R.string.world_book_add)) {
+                        addingBook = true
+                    }
+                    Spacer(Modifier.width(12.dp))
+                }
 
         if (books.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
