@@ -636,7 +636,8 @@ fun IosButton(
         .background(background, RoundedCornerShape(12.dp))
     if (!filled) row = row.border(BorderStroke(1.dp, ringColor), RoundedCornerShape(12.dp))
     Row(
-        modifier = row
+        modifier = modifier
+            .then(row)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -662,6 +663,88 @@ fun IosButton(
             maxLines = 1,
             style = TextStyle(
                 fontSize = if (dense) 13.sp else 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = foreground,
+            ),
+        )
+    }
+}
+
+/**
+ * Port of the per-page `_IosOutlineButton` / `_IosFilledButton` pairs that the
+ * sheets declare locally (quick_phrases_page.dart L573-680,
+ * instruction_injection_page.dart L836-940, world_book_page.dart L1999-2107).
+ * They share the r12 / vertical-12 padding / 0.97 press-scale shape but differ
+ * in ring and label colour, so the variants are knobs instead of separate
+ * widgets: [accentOutline] = primary ring + primary label (quick phrase),
+ * [useSurfaceFill] = surfaceFill fill + outlineVariant ring + onSurface label
+ * (world book), plain = transparent + outlineVariant ring (instruction
+ * injection). The caller stretches it (Expanded in the source), so it has no
+ * intrinsic width.
+ */
+@Composable
+fun IosSheetButton(
+    label: String,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+    filled: Boolean = false,
+    accentOutline: Boolean = false,
+    useSurfaceFill: Boolean = false,
+    fontSize: TextUnit = 14.sp,
+    enabled: Boolean = true,
+    lightHaptic: Boolean = false,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    val view = LocalView.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && enabled) 0.97f else 1f,
+        animationSpec = tween(durationMillis = 110, easing = EaseOutCubic),
+        label = "iosSheetButtonScale",
+    )
+    val background = when {
+        filled -> if (enabled) cs.primary else withAlpha(cs.primary, 0.4)
+        useSurfaceFill -> semantic.surfaceFill
+        else -> Color.Transparent
+    }
+    val foreground = when {
+        filled -> withAlpha(cs.onPrimary, if (enabled) 1.0 else 0.6)
+        accentOutline -> cs.primary
+        else -> cs.onSurface
+    }
+    val ringColor = when {
+        filled -> null
+        accentOutline -> withAlpha(cs.primary, 0.5)
+        useSurfaceFill -> withAlpha(cs.outlineVariant, 0.35)
+        else -> withAlpha(cs.outlineVariant, 0.4)
+    }
+    var box: Modifier = Modifier
+        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .background(background, RoundedCornerShape(12.dp))
+    if (ringColor != null) box = box.border(BorderStroke(1.dp, ringColor), RoundedCornerShape(12.dp))
+    Box(
+        modifier = modifier
+            .then(box)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = {
+                    if (lightHaptic) Haptics.light(view) else Haptics.soft(view)
+                    onTap()
+                },
+            )
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            maxLines = 1,
+            style = TextStyle(
+                fontSize = fontSize,
                 fontWeight = FontWeight.SemiBold,
                 color = foreground,
             ),

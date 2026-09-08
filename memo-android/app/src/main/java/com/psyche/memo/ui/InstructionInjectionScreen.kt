@@ -308,25 +308,22 @@ internal fun InstructionEditSheet(
             )
             Spacer(Modifier.height(16.dp))
             Row {
-                Box(modifier = Modifier.weight(1f)) {
-                    IosButton(
-                        label = stringResource(R.string.quick_phrase_cancel_button),
-                        onTap = onDismiss,
-                        neutral = false,
-                    )
-                }
+                IosSheetButton(
+                    label = stringResource(R.string.quick_phrase_cancel_button),
+                    onTap = onDismiss,
+                    modifier = Modifier.weight(1f),
+                )
                 Spacer(Modifier.width(12.dp))
-                Box(modifier = Modifier.weight(1f)) {
-                    IosButton(
-                        label = stringResource(R.string.quick_phrase_save_button),
-                        filled = true,
-                        onTap = {
-                            if (title.isNotBlank() && prompt.isNotBlank()) {
-                                onSave(title.trim(), prompt.trim(), group.trim())
-                            }
-                        },
-                    )
-                }
+                IosSheetButton(
+                    label = stringResource(R.string.quick_phrase_save_button),
+                    filled = true,
+                    modifier = Modifier.weight(1f),
+                    onTap = {
+                        if (title.isNotBlank() && prompt.isNotBlank()) {
+                            onSave(title.trim(), prompt.trim(), group.trim())
+                        }
+                    },
+                )
             }
         }
     }
