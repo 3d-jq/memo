@@ -43,6 +43,7 @@ import com.psyche.memo.ui.HomeScreen
 import com.psyche.memo.ui.ProviderDetailScreen
 import com.psyche.memo.ui.ProvidersScreen
 import com.psyche.memo.ui.ProviderGroupsScreen
+import com.psyche.memo.ui.SearchServicesScreen
 import com.psyche.memo.ui.ProviderEditScreen
 import com.psyche.memo.ui.ChatHistoryScreen
 import com.psyche.memo.ui.ImageSettingsScreen
@@ -244,6 +245,7 @@ private fun AppThemeAndContent(
                             onOpenSettings = { navController.navigate("settings") },
                             onOpenHistory = { navController.navigate("chat_history") },
                             onOpenProviders = { navController.navigate("providers") },
+                            onOpenSearchServices = { navController.navigate("search_services") },
                             pendingOpenConversation = pendingOpenConversation,
                         )
                     }
@@ -265,6 +267,7 @@ private fun AppThemeAndContent(
                             onOpenAssistants = { navController.navigate("assistant_settings") },
                             onOpenDisplay = { navController.navigate("display") },
                             onOpenProviders = { navController.navigate("providers") },
+                            onOpenSearchServices = { navController.navigate("search_services") },
                             onOpenDefaultModel = { navController.navigate("default_model") },
                             onOpenStats = { navController.navigate("stats") },
                             onOpenAbout = { navController.navigate("about") },
@@ -392,6 +395,12 @@ private fun AppThemeAndContent(
                                 onBack = { navController.popBackStack() },
                             )
                         }
+                    }
+                    composable("search_services") {
+                        SearchServicesScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
                     }
                     composable("provider_groups") {
                         ProviderGroupsScreen(

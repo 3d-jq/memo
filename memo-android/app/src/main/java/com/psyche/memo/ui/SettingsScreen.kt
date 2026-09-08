@@ -91,6 +91,7 @@ fun SettingsScreen(
     onOpenAssistants: () -> Unit,
     onOpenDisplay: () -> Unit,
     onOpenProviders: () -> Unit,
+    onOpenSearchServices: () -> Unit,
     onOpenDefaultModel: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -258,7 +259,7 @@ fun SettingsScreen(
                     DividerRow()
                     SettingsRow(Lucide.Boxes, stringResource(UiR.string.settings_page_providers), onTap = onOpenProviders)
                     DividerRow()
-                    SettingsRow(Lucide.Earth, stringResource(UiR.string.settings_page_search), onTap = {})
+                    SettingsRow(Lucide.Earth, stringResource(UiR.string.settings_page_search), onTap = onOpenSearchServices)
                     DividerRow()
                     // settings_page.dart L311: TTS row opens TtsServicesPage directly.
                     SettingsRow(Lucide.Volume2, stringResource(UiR.string.settings_page_tts), onTap = onOpenTtsServices)

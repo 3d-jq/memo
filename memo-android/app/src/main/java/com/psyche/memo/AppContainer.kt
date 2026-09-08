@@ -114,6 +114,13 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         appScope.launch { preferenceRepository.writeJson(currentAssistantKey(), "\"$id\"") }
     }
 
+    /** assistant_provider.dart setSearchEnabledForCurrentAssistant 460-464. */
+    fun setAssistantSearchEnabled(enabled: Boolean) {
+        val current = currentAssistant() ?: return
+        if (current.searchEnabled == enabled) return
+        assistantStore.update(current.copy(searchEnabled = enabled))
+    }
+
     private fun currentAssistantKey(): String = "current_assistant_id_v1"
 
     val cancellations: CancellationRegistry = CancellationRegistry()

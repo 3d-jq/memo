@@ -151,6 +151,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenProviders: () -> Unit,
+    onOpenSearchServices: () -> Unit = {},
     pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -327,6 +328,7 @@ fun HomeScreen(
                     selectedConversationId = id
                     temporaryActive = false
                 },
+                onOpenSearchServices = onOpenSearchServices,
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
             // Composed only while the drawer presents — a permanently-mounted
@@ -408,6 +410,7 @@ fun ChatContent(
     isTemporary: Boolean = false,
     newActionToggleable: Boolean = false,
     onOpenConversation: (String) -> Unit = {},
+    onOpenSearchServices: () -> Unit = {},
 ) {
     val vm: ChatViewModel = viewModel(
         key = conversationId,
@@ -434,6 +437,7 @@ fun ChatContent(
     val cs = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
     var showModelSheet by remember { mutableStateOf(false) }
+    var showSearchSheet by remember { mutableStateOf(false) }
     // 语音输入执行器（chat_input_bar.dart 的系统 ASR 分支）。应用上下文持有，
     // 避免持有 Activity 导致的 SpeechRecognizer 泄漏。
     val voiceAppContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
@@ -862,6 +866,7 @@ fun ChatContent(
             onSend = vm::send,
             onStop = vm::stop,
             onSelectModel = { showModelSheet = true },
+            onOpenSearch = { showSearchSheet = true },
             voice = voiceInput,
         )
     }
@@ -875,6 +880,17 @@ fun ChatContent(
             },
             onDismiss = { showModelSheet = false },
             onOptionsInvalidated = { optionsVersion++ },
+        )
+    }
+
+    if (showSearchSheet) {
+        SearchSettingsSheet(
+            container = container,
+            onDismiss = { showSearchSheet = false },
+            onOpenServices = {
+                showSearchSheet = false
+                onOpenSearchServices()
+            },
         )
     }
 
@@ -1626,6 +1642,7 @@ private fun ChatInputBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onSelectModel: () -> Unit,
+    onOpenSearch: () -> Unit = {},
     // 语音输入执行器（chat_input_bar.dart asrProvider 的系统分支）；null =
     // 不可用，麦克风按钮按 CIB:2542-2546 showVoiceInput 条件隐藏。
     voice: com.psyche.memo.ui.chat.VoiceInputController? = null,
@@ -1871,7 +1888,7 @@ private fun ChatInputBar(
                                     InputIcon(
                                         Lucide.Globe,
                                         stringResource(UiR.string.chat_input_bar_online_search_tooltip),
-                                        {},
+                                        onOpenSearch,
                                         cs,
                                     )
                                     InputIcon(

@@ -81,8 +81,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | A3 | 提示词 tab 1/3：系统提示词卡（全屏编辑 sheet + 文件导入 + 变量表 + 缓存告警）+ 追加当前时间行 + 两弹窗；tab 顺序对齐 `defaultAssistantEditTabIds`；`PromptTransformer.applyMessageTemplate`（core:llm） | ✅ 本轮 |
 | A3b | 提示词 tab 2/3：消息模板卡（4 变量 + 实时预览）+ 预设对话卡（pill/内联输入/_PresetMessageCard/拖拽/编辑 sheet）+ `PresetMessage` 模型 | ✅ 本轮 |
 | S1 | 搜索体系 1/3：`SearchServiceOptions` 24 选项类（JSON 逐键对齐）+ `SearchSettingsRepository`（search_service_rows + preference 键）+ 引擎（bing_local/tavily/searxng/brave/serper/bocha/zhipu/duckduckgo 8 个 provider + key 轮换）+ `search_web` 工具（定义/引用提示词/执行）+ 系统提示词注入（assistant.systemPrompt + 搜索引用块） | ✅ 本轮 |
-| S2 | 搜索体系 2/3：`search_settings_sheet`（输入栏 Globe 入口）+ 搜索服务列表页 + 服务编辑器（24 provider 表单）+ API keys 页 + 连接测试/用量查询 | ⬜ |
-| S3 | 搜索体系 3/3：其余 16 个 provider 引擎（exa/zhipu 之外的 metaso/ollama/jina/linkup/perplexity/grok/querit/stepfun/firecrawl/tinyfish/anysearch/doubao/kelivo/parallel/you） | ⬜ |
+| S2 | 搜索体系 2/3：`search_settings_sheet`（输入栏 Globe 入口 + 设置页"搜索"行）+ 搜索服务列表页（连接状态胶囊/长按测试与删除/通用选项步进器）+ 服务编辑器（类型 chips + 24 类型表单 + 多 Key 入口 + 连接测试）+ API keys 池页；路由 `search_services` | ✅ 本轮 |
+| S3 | 搜索体系 3/3：其余 16 个 provider 引擎（exa/zhipu 之外的 metaso/ollama/jina/linkup/perplexity/grok/querit/stepfun/firecrawl/tinyfish/anysearch/doubao/kelivo/parallel/you）+ 用量查询卡（search_service_usage_service）+ 启动自动测试 | ⬜ |
 | B | 记忆/本地工具/MCP tab | ⬜ |
 | C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜ |
 
