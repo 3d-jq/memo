@@ -83,7 +83,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | S1 | 搜索体系 1/3：`SearchServiceOptions` 24 选项类（JSON 逐键对齐）+ `SearchSettingsRepository`（search_service_rows + preference 键）+ 引擎（bing_local/tavily/searxng/brave/serper/bocha/zhipu/duckduckgo 8 个 provider + key 轮换）+ `search_web` 工具（定义/引用提示词/执行）+ 系统提示词注入（assistant.systemPrompt + 搜索引用块） | ✅ 本轮 |
 | S2 | 搜索体系 2/3：`search_settings_sheet`（输入栏 Globe 入口 + 设置页"搜索"行）+ 搜索服务列表页（连接状态胶囊/长按测试与删除/通用选项步进器）+ 服务编辑器（类型 chips + 24 类型表单 + 多 Key 入口 + 连接测试）+ API keys 池页；路由 `search_services` | ✅ 本轮 |
 | S3 | 搜索体系 3/3：其余 15 个 provider 引擎（exa/linkup/metaso/ollama/jina/perplexity/querit/stepfun/firecrawl/tinyfish/anysearch/doubao/parallel/you/grok）——共 23 个可运行 provider | ✅ 本轮 |
-| S4 | 搜索收尾：用量查询卡（search_service_usage_service.dart 172 行 + 各家 usage 端点）+ 启动自动测试（autoTestOnLaunch 已存盘，未接线）+ kelivo 内置搜索（上游端点 + 内置令牌，按品牌规则不移植） | ⬜ |
+| S4 | 搜索收尾：用量查询卡（Tavily 余额/进度条 + LinkUp 余额 + 自动查询；`SearchUsageService` 纯解析带测试） | ✅ 本轮 |
+| S5 | 搜索剩余：kelivo 内置搜索（上游端点 + 内置令牌，按品牌规则不移植）、启动自动测试（原版移动端也只有存盘开关，无执行路径） | ⬜（低优先/不移植） |
 | B | 记忆/本地工具/MCP tab | ⬜ |
 | C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜ |
 

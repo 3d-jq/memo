@@ -53,7 +53,10 @@ import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.KeyRound
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Search
+import com.composables.icons.lucide.TriangleAlert
+import com.composables.icons.lucide.Wallet
 import com.composables.icons.lucide.Trash2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.AnySearchOptions
@@ -84,6 +87,7 @@ import com.psyche.memo.data.model.YouSearchOptions
 import com.psyche.memo.data.model.ZhipuOptions
 import com.psyche.memo.provider.search.SearchApiKeyRotator
 import com.psyche.memo.provider.search.SearchToolService
+import com.psyche.memo.provider.search.SearchUsageService
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.launch
 
@@ -362,6 +366,9 @@ fun SearchServiceEditorScreen(
     var testError by remember { mutableStateOf<String?>(null) }
     var testQuery by remember { mutableStateOf("") }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var usage by remember { mutableStateOf<SearchUsageService.UsageInfo?>(null) }
+    var usageError by remember { mutableStateOf<String?>(null) }
+    var usageLoading by remember { mutableStateOf(false) }
 
     // Seed the form from the initial service (controllers keyed like upstream).
     remember(initial) {
@@ -491,6 +498,33 @@ fun SearchServiceEditorScreen(
         onClose(true)
     }
 
+    fun queryUsage() {
+        val service = currentService()
+        if (!SearchUsageService.supports(service) || usageLoading) return
+        usageLoading = true
+        usageError = null
+        scope.launch {
+            try {
+                usage = SearchUsageService.fetch(service, container.httpClient)
+            } catch (e: Exception) {
+                usageError = e.message ?: e.toString()
+            } finally {
+                usageLoading = false
+            }
+        }
+    }
+
+    // autoQueryUsage：编辑已有服务且填了 key 时自动查一次。
+    androidx.compose.runtime.LaunchedEffect(initial) {
+        val service = initial
+        val hasCredential = when (service) {
+            is TavilyOptions -> service.apiKey.trim().isNotEmpty()
+            is LinkUpOptions -> service.apiKey.trim().isNotEmpty()
+            else -> false
+        }
+        if (hasCredential) queryUsage()
+    }
+
     val displayName = stringResource(SearchServiceUi.nameRes(currentService()))
     val title = if (isAdding) stringResource(R.string.search_services_add_dialog_title) else displayName
 
@@ -550,6 +584,18 @@ fun SearchServiceEditorScreen(
                     extraKeyCount = extraKeys.size,
                     onOpenApiKeys = { showApiKeys = true },
                 )
+            }
+            if (SearchUsageService.supports(currentService())) {
+                item { SectionHeaderText(stringResource(R.string.search_service_editor_usage_title)) }
+                item {
+                    UsageCard(
+                        service = currentService(),
+                        usage = usage,
+                        error = usageError,
+                        loading = usageLoading,
+                        onQuery = { queryUsage() },
+                    )
+                }
             }
             item { SectionHeaderText(stringResource(R.string.search_service_editor_test_title)) }
             item {
@@ -659,6 +705,130 @@ private fun TypeChips(selected: String, onSelect: (String) -> Unit) {
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun UsageCard(
+    service: SearchServiceOptions,
+    usage: SearchUsageService.UsageInfo?,
+    error: String?,
+    loading: Boolean,
+    onQuery: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val context = androidx.compose.ui.platform.LocalContext.current
+    fun fmt(value: Double): String =
+        java.text.NumberFormat.getNumberInstance(context.resources.configuration.locales[0]).apply {
+            minimumFractionDigits = 0
+            maximumFractionDigits = 2
+        }.format(value)
+
+    SectionCard {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(cs.primary.copy(alpha = 0.1f), androidx.compose.foundation.shape.CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Lucide.Wallet, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.search_service_editor_usage_title),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                if (loading) {
+                    Box(modifier = Modifier.size(44.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, color = cs.primary, modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    IconActionButton(Lucide.RefreshCw, cs.primary, stringResource(R.string.search_service_editor_usage_query)) {
+                        onQuery()
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            when {
+                loading && usage == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, color = cs.primary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        stringResource(R.string.search_service_editor_usage_querying),
+                        style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.7f)),
+                    )
+                }
+                error != null && usage == null -> UsageErrorRow(
+                    stringResource(R.string.search_service_editor_usage_failed, error),
+                )
+                usage == null -> Text(
+                    stringResource(R.string.search_service_editor_usage_not_queried),
+                    style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.64f)),
+                )
+                service is TavilyOptions && usage.used != null && usage.limit != null -> {
+                    val limit = usage.limit
+                    val progress = if (limit <= 0) 0f else ((usage.used / limit).coerceIn(0.0, 1.0)).toFloat()
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = stringResource(R.string.search_service_editor_usage_remaining, fmt(usage.remaining)),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(
+                                    R.string.search_service_editor_usage_used,
+                                    fmt(usage.used),
+                                    fmt(limit),
+                                ),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                style = TextStyle(fontSize = 12.5.sp, color = cs.onSurface.copy(alpha = 0.68f)),
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { progress },
+                            modifier = Modifier.fillMaxWidth().height(7.dp),
+                            color = cs.primary,
+                            trackColor = cs.primary.copy(alpha = 0.13f),
+                        )
+                    }
+                }
+                service is LinkUpOptions -> Text(
+                    text = stringResource(R.string.search_service_editor_usage_balance, fmt(usage.remaining)),
+                    style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
+                )
+                else -> Text(
+                    text = stringResource(R.string.search_service_editor_usage_remaining, fmt(usage.remaining)),
+                    style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
+                )
+            }
+            if (usage != null && error != null) {
+                Spacer(Modifier.height(10.dp))
+                UsageErrorRow(stringResource(R.string.search_service_editor_usage_failed, error))
+            }
+        }
+    }
+}
+
+@Composable
+private fun UsageErrorRow(message: String) {
+    val cs = MaterialTheme.colorScheme
+    Row {
+        Icon(Lucide.TriangleAlert, contentDescription = null, tint = cs.error, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = message,
+            style = TextStyle(fontSize = 13.sp, lineHeight = 17.5.sp, color = cs.error),
+        )
     }
 }
 
