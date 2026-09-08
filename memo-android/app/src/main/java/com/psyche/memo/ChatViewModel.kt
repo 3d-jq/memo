@@ -624,9 +624,18 @@ class ChatViewModel(
                         msg.id to block.toString()
                     }.filterValues { it.isNotEmpty() }
                 }
+                // 记忆摘要注入（memory_block_builder.buildFullSnapshotPrefix）：
+                // 只加到本轮最后一条用户消息前，让模型无需主动调工具就能看到记忆。
+                val memoryPrefix = container.currentAssistant()?.let { current ->
+                    withContext(Dispatchers.IO) {
+                        com.psyche.memo.provider.MemoryBlockBuilder.buildPrefix(container, current)
+                    }
+                }.orEmpty()
+                val lastUserIndex = rawMessages.indexOfLast { it.role == "user" }
                 val history = rawMessages
-                    .mapNotNull { msg ->
-                        val content = (ocrBlocks[msg.id] ?: "") + (fileBlocks[msg.id] ?: "") +
+                    .mapIndexedNotNull { index, msg ->
+                        val content = (if (index == lastUserIndex) memoryPrefix else "") +
+                            (ocrBlocks[msg.id] ?: "") + (fileBlocks[msg.id] ?: "") +
                             msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
                         // Images ride along as part payloads; only user turns may
                         // carry them (assistant media is stashed by the original
