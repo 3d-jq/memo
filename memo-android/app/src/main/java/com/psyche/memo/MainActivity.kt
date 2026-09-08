@@ -480,6 +480,7 @@ private fun AppThemeAndContent(
                             container = container,
                             assistantId = entry.arguments?.getString("assistantId").orEmpty(),
                             onBack = { navController.popBackStack() },
+                            onOpenMemorySettings = { navController.navigate("memory_settings") },
                         )
                     }
                     composable("network_proxy") {

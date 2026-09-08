@@ -91,6 +91,7 @@ fun AssistantSettingsEditScreen(
     container: com.psyche.memo.AppContainerImpl,
     assistantId: String,
     onBack: () -> Unit,
+    onOpenMemorySettings: () -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     var assistant by remember { mutableStateOf<Assistant?>(null) }
@@ -183,6 +184,12 @@ fun AssistantSettingsEditScreen(
                     onReload = { reloadKey++ },
                 )
                 1 -> PromptTab(assistant = a, onEdit = ::edit)
+                2 -> AssistantEditMemoryTab(
+                    container = container,
+                    assistant = a,
+                    onEdit = ::edit,
+                    onOpenMemorySettings = onOpenMemorySettings,
+                )
                 else -> Box(Modifier.fillMaxSize())
             }
         }
