@@ -114,6 +114,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | UI-7c | 推理预算全链路：`LlmRequest.thinkingBudget`（null/-1 auto、0 off、>0 预算）+ `reasoning` 模型标记；`ReasoningBudget`（effortForBudget / claudeThinkingConfig / _googleThinkingConfig 全量移植，含 Gemini 3 pro/flash/image 与 Gemma4 的 thinkingLevel 分支，带单测）→ 三客户端分别下发 `reasoning_effort` / `thinking`（含 reasoning 时省略 temperature）/ `generationConfig.thinkingConfig`；ChatViewModel 预算解析=助手覆盖→thinking_budget_v1；输入栏 Brain 按钮改渲染当前档位图标 + `ReasoningBudgetSheet`（off/auto/light/medium/heavy/xhigh/max/自定义，图标用 idea-01 SVG） | ✅ 本轮 |
 | UI-7d | 清空上下文：`ContextManagementSheet` + 底部工具面板"上下文管理"行；`ConversationDao.setTruncateIndex`、`ChatViewModel.clearContext`（截断点=消息数或 -1 恢复）、生成历史按截断点过滤、"清空上下文 (actual/configured)"标签 | ✅ 本轮 |
 | UI-7e | 压缩上下文：`core:common` 纯逻辑 `CompressText` + `Utf16SafeCut`（start/recent 窗口、keepRecent 选择、分块、请求预算、token 估算、context-length 检测、模型回退链，带单测）；`ChatViewModel.compressContext`（分块摘要 + 最多 8 轮合并 → 新建会话把摘要作为首条用户消息，keepRecent 保留最近 N 轮）+ `CompressContextDialog`（模型选择行 / 4 模式分段 / 字符数或保留条数 / 估算预览 / 加载弹窗 / 错误映射） | ✅ 本轮 |
+| UI-7f | 记忆关于页 + 注入种子：`MemoryAboutScreen`（6 段参考文案，FAQ 段带小标题）+ 记忆设置入口；`InstructionInjectionRepository` 空表时用 `learning_mode_prompt_v1`（回退 STUDYING 默认提示词，`LearningModePrompt.DEFAULT` 逐字）播种第一条注入项，`learning_mode_enabled_v1` 为真时默认勾选 | ✅ 本轮 |
+| UI-7g | 助手 MCP sheet：输入栏 Hammer 按钮（原为空实现）→ `McpAssistantSheet`（已连接服务器 + 启用/总数标签 + 单行开关 + 全选/清空，写 assistant.mcpServerIds） | ✅ 本轮 |
 | B | 记忆/本地工具/MCP tab | ⬜ |
 | C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜（tab 已做，布局管理页待做） |
 
