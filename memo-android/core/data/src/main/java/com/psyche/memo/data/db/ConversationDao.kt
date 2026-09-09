@@ -93,6 +93,15 @@ class ConversationDao(private val db: SQLiteDatabase) {
         )
     }
 
+    /** chat_service.toggleTruncateAtTail —— -1 = send everything. */
+    fun setTruncateIndex(id: String, value: Int, now: Long = System.currentTimeMillis()) {
+        val values = ContentValues().apply {
+            put("truncate_index", value)
+            put("updated_at", now)
+        }
+        db.update("conversation_rows", values, "id = ?", arrayOf(id))
+    }
+
     fun touch(id: String, now: Long = System.currentTimeMillis()) {
         db.execSQL("UPDATE conversation_rows SET updated_at = ? WHERE id = ?", arrayOf<Any>(now, id))
     }

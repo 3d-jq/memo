@@ -36,6 +36,7 @@ import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
+import com.composables.icons.lucide.Workflow
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.theme.LocalSemanticColors
 
@@ -60,6 +61,7 @@ fun BottomToolsSheet(
     worldBooksAvailable: Boolean = false,
     onOpenWorldBook: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
+    onOpenContextManagement: () -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -168,6 +170,29 @@ fun BottomToolsSheet(
                     )
                     Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
                 }
+            }
+            // 上下文管理行（bottom_tools_sheet.dart L316-328）。
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .clickable {
+                        Haptics.light(view)
+                        onOpenContextManagement()
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Workflow, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.context_management),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
             }
             // OCR 行（bottom_tools_sheet.dart：配置了 OCR 模型才显示；长按改提示词）。
             if (ocrAvailable) {

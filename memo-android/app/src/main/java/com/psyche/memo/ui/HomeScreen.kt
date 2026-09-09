@@ -470,6 +470,7 @@ fun ChatContent(
     var quickPhrases by remember { mutableStateOf<List<com.psyche.memo.data.model.QuickPhrase>?>(null) }
     var showInstructionSheet by remember { mutableStateOf(false) }
     var showWorldBookSheet by remember { mutableStateOf(false) }
+    var showContextSheet by remember { mutableStateOf(false) }
     var worldBooksAvailable by remember { mutableStateOf(false) }
     var showOcrPrompt by remember { mutableStateOf(false) }
     var ocrSettings by remember {
@@ -1056,6 +1057,21 @@ fun ChatContent(
                 showToolsSheet = false
                 onOpenWorldBookPage()
             },
+            onOpenContextManagement = {
+                showToolsSheet = false
+                showContextSheet = true
+            },
+        )
+    }
+
+    if (showContextSheet) {
+        com.psyche.memo.ui.chat.ContextManagementSheet(
+            clearLabel = vm.clearContextLabel(),
+            onClear = {
+                showContextSheet = false
+                vm.clearContext()
+            },
+            onDismiss = { showContextSheet = false },
         )
     }
 

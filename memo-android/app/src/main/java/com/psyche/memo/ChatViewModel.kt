@@ -284,6 +284,54 @@ class ChatViewModel(
         }
     }
 
+    // ------------------------------------------------------------------
+    // Context management (home_view_model.dart clearContext L1099-1113)
+    // ------------------------------------------------------------------
+
+    /** Truncation point as a message order, or null when everything is sent. */
+    private fun contextStartOrder(): Int? {
+        if (isTemporary) return null
+        val conv = container.conversationDao.get(conversationId) ?: return null
+        val t = conv.truncateIndex
+        if (t < 0) return null
+        val ids = container.messageDao.getMessageIds(conversationId)
+        val cutId = ids.getOrNull(t) ?: return null
+        return container.messageDao.get(cutId)?.messageOrder
+    }
+
+    /**
+     * Toggles the truncation point: cut everything up to now, or restore the
+     * full history. Mirrors ChatService.toggleTruncateAtTail.
+     */
+    fun clearContext() {
+        if (isTemporary) return
+        val conv = container.conversationDao.get(conversationId) ?: return
+        val count = container.messageDao.count(conversationId)
+        val next = if (conv.truncateIndex == count) -1 else count
+        container.conversationDao.setTruncateIndex(conversationId, next)
+        _contextVersion.value = _contextVersion.value + 1
+    }
+
+    /** 供 UI 观察清空后刷新标签。 */
+    private val _contextVersion = kotlinx.coroutines.flow.MutableStateFlow(0)
+    val contextVersion: kotlinx.coroutines.flow.StateFlow<Int> = _contextVersion
+
+    /** clearContextLabel —— "Clear Context (actual/configured)". */
+    fun clearContextLabel(): String {
+        val assistant = container.currentAssistant()
+        val configured = if (assistant?.limitContextMessages == true) assistant.contextMessageSize else 0
+        val total = if (isTemporary) _messages.value.size else container.messageDao.count(conversationId)
+        val t = if (isTemporary) -1 else (container.conversationDao.get(conversationId)?.truncateIndex ?: -1)
+        val safe = if (t < 0 || t > total) 0 else t
+        val remaining = total - safe
+        return if (configured > 0) {
+            val actual = if (remaining > configured) configured else remaining
+            container.appContext.getString(com.psyche.memo.ui.R.string.home_page_clear_context_with_count, actual.toString(), configured.toString())
+        } else {
+            container.appContext.getString(com.psyche.memo.ui.R.string.home_page_clear_context)
+        }
+    }
+
     /** thinking_budget_v1 —— null/-1 auto、0 off、>0 具体预算。 */
     private fun readThinkingBudgetSetting(): Int? {
         val raw = runCatching {
@@ -585,7 +633,11 @@ class ChatViewModel(
             }
             try {
                 // Build request from current UI messages (exclude skeleton).
+                // message_builder_service.dart L215-221 —— truncateIndex 之后
+                // 的消息才进入请求（"清空上下文"）。
+                val startOrder = contextStartOrder()
                 val rawMessages = _messages.value.dropLast(1)
+                    .let { all -> if (startOrder == null) all else all.filter { it.messageOrder >= startOrder } }
                 // ocr_service.dart：开启 OCR 时先把图片识别成文本块前置进用户轮次
                 // （模型没有视觉能力也能读图）；结果按图片内容哈希缓存。
                 val ocrSettings = com.psyche.memo.provider.OcrService.settingsOf(container.preferenceRepository)
