@@ -931,6 +931,9 @@ Updating Memo first is the safer choice.</string>
     <string name="flutter_log_setting_title">Flutter Logging</string>
     <string name="font_picker_choose_local_file">Choose Local File</string>
     <string name="generation_interrupted">Generation interrupted</string>
+    <string name="haptics_section_generation">Generation</string>
+    <string name="haptics_section_interaction">Interaction</string>
+    <string name="haptics_section_master">Master</string>
     <string name="health_data_settings_badge">%1$s/%2$s on</string>
     <string name="health_data_settings_category_activity">Activity</string>
     <string name="health_data_settings_category_body">Body</string>

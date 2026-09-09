@@ -931,6 +931,9 @@
     <string name="flutter_log_setting_title">应用日志打印</string>
     <string name="font_picker_choose_local_file">选择本地文件</string>
     <string name="generation_interrupted">生成已中断</string>
+    <string name="haptics_section_generation">生成触感</string>
+    <string name="haptics_section_interaction">交互触感</string>
+    <string name="haptics_section_master">总开关</string>
     <string name="health_data_settings_badge">%1$s/%2$s 开启</string>
     <string name="health_data_settings_category_activity">活动</string>
     <string name="health_data_settings_category_body">身体</string>

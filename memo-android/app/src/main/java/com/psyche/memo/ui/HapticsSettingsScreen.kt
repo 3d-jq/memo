@@ -84,7 +84,12 @@ fun HapticsSettingsScreen(
                 start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp,
             ),
         ) {
-            item {
+            // 分类重组（用户要求对齐设置主屏的分组卡片形态）：总开关 /
+            // 交互触感 / 生成触感。行顺序与 prefs key 均保持源序不动。
+            item(key = "h_global") {
+                SectionHeader(stringResource(UiR.string.haptics_section_master), first = true)
+            }
+            item(key = "c_global") {
                 SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.Vibrate,
@@ -99,7 +104,14 @@ fun HapticsSettingsScreen(
                         value = iosSwitch,
                         onToggle = { iosSwitch = it; writeBool(HapticsSettings.KEY_IOS_SWITCH, it) },
                     )
-                    SettingsIosDivider()
+                }
+            }
+            item(key = "gap_global") { Spacer(Modifier.height(12.dp)) }
+            item(key = "h_interaction") {
+                SectionHeader(stringResource(UiR.string.haptics_section_interaction))
+            }
+            item(key = "c_interaction") {
+                SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.PanelRight,
                         stringResource(UiR.string.display_settings_page_haptics_on_sidebar_title),
@@ -120,7 +132,14 @@ fun HapticsSettingsScreen(
                         value = onCardTap,
                         onToggle = { onCardTap = it; writeBool(HapticsSettings.KEY_CARD_TAP, it) },
                     )
-                    SettingsIosDivider()
+                }
+            }
+            item(key = "gap_interaction") { Spacer(Modifier.height(12.dp)) }
+            item(key = "h_generation") {
+                SectionHeader(stringResource(UiR.string.haptics_section_generation))
+            }
+            item(key = "c_generation") {
+                SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.Vibrate,
                         stringResource(UiR.string.display_settings_page_haptics_on_generate_title),
@@ -129,6 +148,7 @@ fun HapticsSettingsScreen(
                     )
                 }
             }
+            item(key = "tail") { Spacer(Modifier.height(12.dp)) }
         }
     }
 }
