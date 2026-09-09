@@ -466,6 +466,8 @@
     <string name="backup_page_web_dav_server_settings">WebDAV 服务器设置</string>
     <string name="backup_page_web_dav_server_url">WebDAV 服务器地址</string>
     <string name="backup_page_web_dav_tab">WebDAV 备份</string>
+    <string name="backup_page_while_charging">仅在充电时</string>
+    <string name="backup_page_wifi_only">仅 Wi-Fi</string>
     <string name="backup_progress_bytes">%1$s / %2$s</string>
     <string name="backup_progress_cancel">取消</string>
     <string name="backup_progress_cancelled">已取消</string>
@@ -1178,6 +1180,7 @@
     <string name="local_snapshot_manage_copies">管理副本</string>
     <string name="local_snapshot_maximum_title">占用上限</string>
     <string name="local_snapshot_maximum_unlimited">不限制</string>
+    <string name="local_snapshot_on_device_copies">本机副本</string>
     <string name="local_snapshot_origin_automatic">自动备份</string>
     <string name="local_snapshot_origin_before_restore">恢复前备份</string>
     <string name="local_snapshot_origin_manual">手动备份</string>

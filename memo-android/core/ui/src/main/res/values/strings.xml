@@ -466,6 +466,8 @@ Updating Memo first is the safer choice.</string>
     <string name="backup_page_web_dav_server_settings">WebDAV Server Settings</string>
     <string name="backup_page_web_dav_server_url">WebDAV Server URL</string>
     <string name="backup_page_web_dav_tab">WebDAV</string>
+    <string name="backup_page_while_charging">While charging</string>
+    <string name="backup_page_wifi_only">Wi-Fi only</string>
     <string name="backup_progress_bytes">%1$s / %2$s</string>
     <string name="backup_progress_cancel">Cancel</string>
     <string name="backup_progress_cancelled">Cancelled</string>
@@ -1178,6 +1180,7 @@ Updating Memo first is the safer choice.</string>
     <string name="local_snapshot_manage_copies">Manage copies</string>
     <string name="local_snapshot_maximum_title">Space limit</string>
     <string name="local_snapshot_maximum_unlimited">No limit</string>
+    <string name="local_snapshot_on_device_copies">On-device copies</string>
     <string name="local_snapshot_origin_automatic">Automatic</string>
     <string name="local_snapshot_origin_before_restore">Before a restore</string>
     <string name="local_snapshot_origin_manual">Saved by you</string>

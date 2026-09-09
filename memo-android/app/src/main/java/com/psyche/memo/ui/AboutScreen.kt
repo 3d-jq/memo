@@ -111,10 +111,16 @@ fun AboutScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Compile-time resource reference (resource reflection
-                        // via getIdentifier is discouraged and unoptimizable).
+                        // `R.mipmap.ic_launcher` is the adaptive-icon XML
+                        // (`mipmap-anydpi/ic_launcher.xml`), which
+                        // `painterResource` cannot decode — Compose's
+                        // `Image` only takes VectorDrawables or rasterized
+                        // PNG/JPG/WEBP, hence the `IllegalArgumentException`
+                        // that crashed this screen on entry. Fall back to
+                        // the foreground PNG drawable which is a regular
+                        // raster.
                         Image(
-                            painter = painterResource(com.psyche.memo.R.mipmap.ic_launcher),
+                            painter = painterResource(com.psyche.memo.R.drawable.ic_launcher_foreground),
                             contentDescription = null,
                             modifier = Modifier
                                 .size(54.dp)

@@ -105,6 +105,8 @@ fun SettingsScreen(
     onOpenWorldBook: () -> Unit,
     onOpenTtsServices: () -> Unit,
     onOpenLogs: () -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenSponsor: () -> Unit,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -273,7 +275,7 @@ fun SettingsScreen(
             item { SectionHeader(stringResource(UiR.string.settings_page_data_section)) }
             item {
                 SectionCard {
-                    SettingsRow(Lucide.Database, stringResource(UiR.string.settings_page_backup), onTap = {})
+                    SettingsRow(Lucide.Database, stringResource(UiR.string.settings_page_backup), onTap = onOpenBackup)
                     DividerRow()
                     // B4 — chat storage summary (L332-342,497-545); the row
                     // opens the storage space page (settings_page.dart L337).
@@ -313,10 +315,11 @@ fun SettingsScreen(
                     // B5 — Tool Descriptions row (L398-410).
                     DividerRow()
                     SettingsRow(Lucide.Wrench, stringResource(UiR.string.tool_schema_settings_page_title), onTap = onOpenToolSchema)
-                    // Sponsor row (L411-421) deliberately dropped: the whole
-                    // sponsor page is upstream (kelivo afdian / WeChat QR /
-                    // kelivo sponsors list) and is Memo-ized away per the
-                    // brand rules.
+                    // Sponsor row (L411-421). Ported in batch 1 of the
+                    // all-UI pass: re-added as a thin shell even though the
+                    // content (afdian/WeChat/sponsors list) is upstream.
+                    DividerRow()
+                    SettingsRow(Lucide.Heart, stringResource(UiR.string.settings_page_sponsor), onTap = onOpenSponsor)
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }

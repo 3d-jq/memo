@@ -81,6 +81,9 @@ import com.psyche.memo.ui.ThemeSettingsScreen
 import com.psyche.memo.ui.UserProfileScreen
 import com.psyche.memo.ui.SettingsScreen
 import com.psyche.memo.ui.DebugScreen
+import com.psyche.memo.ui.BackupScreen
+import com.psyche.memo.ui.LocalSnapshotsScreen
+import com.psyche.memo.ui.SponsorScreen
 import com.psyche.memo.ui.LegacyMemoryScreen
 import com.psyche.memo.ui.LogViewerScreen
 import com.psyche.memo.ui.MemoryEntriesScreen
@@ -339,6 +342,29 @@ private fun AppThemeAndContent(
                             onOpenWorldBook = { navController.navigate("world_book") },
                             onOpenTtsServices = { navController.navigate("tts_services") },
                             onOpenLogs = { navController.navigate("log_viewer") },
+                            onOpenBackup = { navController.navigate("backup") },
+                            onOpenSponsor = { navController.navigate("sponsor") },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    // Backup & Restore main page (tts_services_page.dart pattern
+                    // is "toolbar + scrollable sections"; the Flutter source is
+                    // lib/features/backup/pages/backup_page.dart BackupPage).
+                    composable("backup") {
+                        BackupScreen(
+                            onBack = { navController.popBackStack() },
+                            onOpenLocalSnapshots = { navController.navigate("local_snapshots") },
+                        )
+                    }
+                    composable("local_snapshots") {
+                        LocalSnapshotsScreen(
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    // Sponsor (settings_page.dart L411-421). Re-added as a thin
+                    // shell in the all-UI pass.
+                    composable("sponsor") {
+                        SponsorScreen(
                             onBack = { navController.popBackStack() },
                         )
                     }

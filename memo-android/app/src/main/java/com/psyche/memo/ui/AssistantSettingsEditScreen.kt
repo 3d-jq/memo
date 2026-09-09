@@ -853,9 +853,11 @@ private fun NameField(initial: String, hint: String, onChanged: (String) -> Unit
     )
 }
 
-/** Flutter _iosNavRow — 36dp icon slot, 15sp single-line label, 13sp detail, chevron. */
+/** Flutter _iosNavRow — 36dp icon slot, 15sp single-line label, 13sp detail, chevron.
+ *  `internal` so the new Settings/Provider/Backup/etc. shell screens can
+ *  reuse it without duplicating the layout. */
 @Composable
-private fun EditNavRow(
+internal fun EditNavRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     detailText: String,
