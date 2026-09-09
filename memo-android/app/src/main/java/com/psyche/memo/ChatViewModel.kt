@@ -195,9 +195,17 @@ class ChatViewModel(
         viewModelScope.launch { reloadTail() }
     }
 
+    /** chat_suggestions_json —— 助手回复后生成的 3 条建议气泡。 */
+    private val _suggestions = kotlinx.coroutines.flow.MutableStateFlow<List<String>>(emptyList())
+    val suggestions: kotlinx.coroutines.flow.StateFlow<List<String>> = _suggestions
+
     private suspend fun reloadTail() {
         val loaded = withContext(Dispatchers.IO) {
             container.messageDao.getTail(conversationId)
+        }
+        _suggestions.value = withContext(Dispatchers.IO) {
+            if (isTemporary) emptyList()
+            else container.conversationDao.get(conversationId)?.chatSuggestions ?: emptyList()
         }
         val versions = withContext(Dispatchers.IO) {
             container.messageDao.groupVersions(conversationId)
@@ -940,8 +948,79 @@ class ChatViewModel(
                 _streaming.value = false
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
+                // home_view_model L1755+ —— 回复完成后生成建议气泡。
+                maybeGenerateSuggestions()
             }
         }
+    }
+
+    /**
+     * chat_suggestion_service.generate —— 用 suggestion 模型对最近 8 轮生成
+     * 最多 3 条建议，写回 conversation.chatSuggestions。
+     */
+    private fun maybeGenerateSuggestions() {
+        if (isTemporary) return
+        if (!readBoolPref("suggestion_generation_enabled_v1")) return
+        val stored = readModelSelection("suggestion_model_v1")
+        val providerId = stored?.first ?: selectedProviderId.value
+        val modelId = stored?.second ?: selectedModelId.value
+        if (providerId.isEmpty() || modelId.isEmpty()) return
+        val startOrder = contextStartOrder()
+        val pairs = _messages.value
+            .filter { startOrder == null || it.messageOrder >= startOrder }
+            .map { it.role to it.content }
+        val content = com.psyche.memo.common.SuggestionText.buildContent(pairs)
+        if (content.isBlank()) return
+        val template = readPrefString("suggestion_prompt_v1")
+            ?: com.psyche.memo.DefaultModelPrefs.DEFAULT_SUGGESTION_PROMPT
+        val locale = java.util.Locale.getDefault().toLanguageTag()
+        val thinking = readBoolPref("suggestion_generation_thinking_enabled_v1")
+        viewModelScope.launch {
+            try {
+                // chat_service.clearConversationSuggestions —— 先清空旧建议。
+                _suggestions.value = emptyList()
+                writeSuggestions(emptyList())
+                val prompt = template.replace("{content}", content).replace("{locale}", locale)
+                val request = LlmRequest(
+                    providerId = providerId,
+                    modelId = modelId,
+                    messages = listOf(LlmMessage(role = "user", content = prompt)),
+                    apiKey = container.apiKeyFor(providerId) ?: "",
+                    baseUrl = container.baseUrlFor(providerId),
+                    chatPath = container.providerConfig(providerId)?.chatPath,
+                    thinkingBudget = if (thinking) -1 else 0,
+                )
+                val raw = withContext(Dispatchers.IO) {
+                    container.clientFor(providerId).complete(request).parts.joinToString("")
+                }
+                val parsed = com.psyche.memo.common.SuggestionText.parseSuggestions(raw)
+                if (parsed.isEmpty()) return@launch
+                _suggestions.value = parsed
+                writeSuggestions(parsed)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // 建议生成失败静默（原版只记录日志）。
+            }
+        }
+    }
+
+    private fun writeSuggestions(list: List<String>) {
+        if (isTemporary) return
+        val jsonText = kotlinx.serialization.json.JsonArray(
+            list.map { kotlinx.serialization.json.JsonPrimitive(it) },
+        ).toString()
+        runCatching {
+            container.conversationDao.updateJsonColumn(conversationId, "chat_suggestions_json", jsonText)
+        }
+    }
+
+    /** home_page_controller.sendSuggestion —— 插入输入框或直接发送。 */
+    fun sendSuggestion(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        updateInput(trimmed)
+        if (!readBoolPref("suggestion_insert_on_tap_only_v1")) send()
     }
 
     /**

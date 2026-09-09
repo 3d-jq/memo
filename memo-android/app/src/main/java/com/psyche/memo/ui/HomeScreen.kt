@@ -441,6 +441,7 @@ fun ChatContent(
         factory = ChatViewModel.factory(container, conversationId),
     )
     val messages by vm.messages.collectAsState()
+    val suggestions by vm.suggestions.collectAsState()
     val input by vm.input.collectAsState()
     val streaming by vm.streaming.collectAsState()
     val providerId by vm.selectedProviderId.collectAsState()
@@ -842,8 +843,12 @@ fun ChatContent(
                     ),
                 ) {
                     items(messages, key = { it.id }) { msg ->
+                        val isLastAssistant = msg.role == "assistant" &&
+                            messages.lastOrNull { it.role == "assistant" }?.id == msg.id
                         MessageRow(
                             msg = msg,
+                            suggestions = if (isLastAssistant) suggestions else emptyList(),
+                            onSuggestionTap = { vm.sendSuggestion(it) },
                             assistantLabel = resolvedAssistantLabel,
                             versionCount = versionInfo[msg.groupId]?.size ?: 1,
                             versionIndex = versionInfo[msg.groupId]
@@ -1284,6 +1289,8 @@ fun ChatContent(
 @Composable
 private fun MessageRow(
     msg: ChatViewModel.UiMessage,
+    suggestions: List<String> = emptyList(),
+    onSuggestionTap: (String) -> Unit = {},
     assistantLabel: String,
     versionCount: Int,
     versionIndex: Int,
@@ -1767,6 +1774,15 @@ private fun MessageRow(
                         durationMs = msg.durationMs,
                     )
                 }
+            }
+            // 建议气泡（chat_message_widget.dart:3410-3418）—— 最后一条助手
+            // 消息、非流式时显示。
+            if (!isUser && !msg.isStreaming && suggestions.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                com.psyche.memo.ui.chat.ChatSuggestionBubbles(
+                    suggestions = suggestions,
+                    onTap = onSuggestionTap,
+                )
             }
         }
     }
