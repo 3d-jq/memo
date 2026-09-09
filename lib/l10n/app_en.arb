@@ -2680,6 +2680,11 @@
     }
   },
   "providerDetailPageProviderTypeTitle": "Provider Type",
+  "displaySettingsPageSectionAppearance": "Appearance",
+  "displaySettingsPageSectionChatUi": "Chat UI",
+  "displaySettingsPageSectionFonts": "Fonts",
+  "displaySettingsPageSectionBehavior": "Behavior",
+  "displaySettingsPageSectionNotifications": "Notifications & Background",
   "displaySettingsPageChatItemDisplayTitle": "Chat item display",
   "displaySettingsPageRenderingSettingsTitle": "Rendering settings",
   "displaySettingsPageBehaviorStartupTitle": "Behavior & startup",

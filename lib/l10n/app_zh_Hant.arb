@@ -2249,6 +2249,11 @@
     }
   },
   "providerDetailPageProviderTypeTitle": "供應商類型",
+  "displaySettingsPageSectionAppearance": "外觀",
+  "displaySettingsPageSectionChatUi": "聊天介面",
+  "displaySettingsPageSectionFonts": "字體",
+  "displaySettingsPageSectionBehavior": "行為",
+  "displaySettingsPageSectionNotifications": "通知與後台",
   "displaySettingsPageChatItemDisplayTitle": "聊天項顯示",
   "displaySettingsPageRenderingSettingsTitle": "渲染設定",
   "displaySettingsPageBehaviorStartupTitle": "行為與啟動",

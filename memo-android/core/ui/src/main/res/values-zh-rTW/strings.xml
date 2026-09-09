@@ -872,6 +872,11 @@
     <string name="display_settings_page_other_settings_title">其他設定</string>
     <string name="display_settings_page_regenerate_delete_trailing_messages_title">重新生成時刪除下面的訊息</string>
     <string name="display_settings_page_rendering_settings_title">渲染設定</string>
+    <string name="display_settings_page_section_appearance">外觀</string>
+    <string name="display_settings_page_section_behavior">行為</string>
+    <string name="display_settings_page_section_chat_ui">聊天介面</string>
+    <string name="display_settings_page_section_fonts">字體</string>
+    <string name="display_settings_page_section_notifications">通知與後台</string>
     <string name="display_settings_page_send_shortcut_ctrl_enter">Ctrl/Cmd + Enter</string>
     <string name="display_settings_page_send_shortcut_enter">Enter</string>
     <string name="display_settings_page_send_shortcut_title">發送快捷鍵</string>

@@ -2217,6 +2217,11 @@
     }
   },
   "providerDetailPageProviderTypeTitle": "供应商类型",
+  "displaySettingsPageSectionAppearance": "外观",
+  "displaySettingsPageSectionChatUi": "聊天界面",
+  "displaySettingsPageSectionFonts": "字体",
+  "displaySettingsPageSectionBehavior": "行为",
+  "displaySettingsPageSectionNotifications": "通知与后台",
   "displaySettingsPageChatItemDisplayTitle": "聊天项显示",
   "displaySettingsPageRenderingSettingsTitle": "渲染设置",
   "displaySettingsPageBehaviorStartupTitle": "行为与启动",

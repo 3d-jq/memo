@@ -13,3 +13,7 @@
 - 遗留问题（lint warning、deprecated、硬编码 magic number）当场解决，不拖。
 - 绝不擅自改用户没提/没确认的逻辑；方案先讨论 → 用户点头 → 再动手。
 - 同文件多 Edit 必须串行（防整文件写回互相覆盖）。
+
+## 提示词（tip）交互约定（2026-09-09 用户两次纠正后确认）
+- 设置行 tip ≠ 裸副标题。原项目 `_iosSwitchRow`：`subtitle` 裸排（12sp@56%）；`tip` 是 MemoryTipIcon（28dp BadgeInfo 16sp@45%）+ Flutter Tooltip **浮动气泡**（tap 触发、preferBelow、maxWidth 280、点别处收起），M3 对应 `TooltipBox + PlainTooltip` + tap→state.show()（isPersistent=true）。
+- **教训**：交互形态（浮泡/行内展开/跳转）也属 UI/UX 1:1 范围——改 UI 交互前必须先读原项目组件源码（widget 全定义），不许拿代码库已有的简化版（如 MemoryUi.kt 的行内展开）当参考替代原项目。

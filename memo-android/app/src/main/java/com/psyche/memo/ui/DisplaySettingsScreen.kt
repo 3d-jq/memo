@@ -192,6 +192,10 @@ fun DisplaySettingsScreen(
             // Mirrors kelivo's ListView padding: LTRB(16, 12, 16, 16).
             contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp),
         ) {
+            // 分类重组（用户要求对齐设置主屏的 SectionHeader + SectionCard 形态；
+            // 原项目此页是一整张卡，这里按功能域拆 5 组）：
+            // 外观 / 聊天界面 / 字体 / 行为 / 通知与后台。
+            item { SectionHeader(stringResource(UiR.string.display_settings_page_section_appearance), first = true) }
             item {
                 SectionCard {
                     // B8 — theme row detail reads the stored palette responsively;
@@ -210,29 +214,17 @@ fun DisplaySettingsScreen(
                         detailText = stringResource(languageLabelRes(appLocale)),
                         onTap = { languageSheetVisible = true },
                     )
-                    DividerRow()
+                }
+            }
+
+            item { Spacer(Modifier.height(12.dp)) }
+            item { SectionHeader(stringResource(UiR.string.display_settings_page_section_chat_ui)) }
+            item {
+                SectionCard {
                     SettingsRow(
                         Lucide.MessageCircleMore,
                         stringResource(UiR.string.display_settings_page_chat_item_display_title),
                         onTap = onOpenChatItemDisplay,
-                    )
-                    DividerRow()
-                    SettingsRow(
-                        Lucide.LetterText,
-                        stringResource(UiR.string.display_settings_page_rendering_settings_title),
-                        onTap = onOpenRendering,
-                    )
-                    DividerRow()
-                    SettingsRow(
-                        Lucide.Eclipse,
-                        stringResource(UiR.string.display_settings_page_behavior_startup_title),
-                        onTap = onOpenBehavior,
-                    )
-                    DividerRow()
-                    SettingsRow(
-                        Lucide.Image,
-                        stringResource(UiR.string.image_settings_page_title),
-                        onTap = onOpenImage,
                     )
                     DividerRow()
                     SettingsRow(
@@ -242,9 +234,101 @@ fun DisplaySettingsScreen(
                     )
                     DividerRow()
                     SettingsRow(
+                        Lucide.LetterText,
+                        stringResource(UiR.string.display_settings_page_rendering_settings_title),
+                        onTap = onOpenRendering,
+                    )
+                    DividerRow()
+                    SettingsRow(
+                        Lucide.Image,
+                        stringResource(UiR.string.image_settings_page_title),
+                        onTap = onOpenImage,
+                    )
+                    DividerRow()
+                    // B13 — L364-380: background mask detail + sheet.
+                    SettingsRow(
+                        Lucide.Image,
+                        stringResource(UiR.string.display_settings_page_chat_background_mask_title),
+                        detailText = "${(maskStrength * 100).toInt()}%",
+                        onTap = { maskSheetVisible = true },
+                    )
+                    DividerRow()
+                    // B14 — L382-404: input opacity (current brightness) detail + sheet.
+                    val systemDark = isSystemInDarkTheme()
+                    SettingsRow(
+                        Lucide.RectangleHorizontal,
+                        stringResource(UiR.string.display_settings_page_chat_input_background_opacity_title),
+                        detailText = "${(((if (systemDark) inputOpacityDark else inputOpacityLight) * 100)).toInt()}%",
+                        onTap = { inputOpacitySheetVisible = true },
+                    )
+                }
+            }
+
+            item { Spacer(Modifier.height(12.dp)) }
+            item { SectionHeader(stringResource(UiR.string.display_settings_page_section_fonts)) }
+            item {
+                SectionCard {
+                    // B10 — L248-306: app font row with detail + source sheet.
+                    SettingsRow(
+                        Lucide.Type,
+                        stringResource(UiR.string.display_settings_page_app_font_title),
+                        detailText = when {
+                            appFontAlias?.isNotEmpty() == true ->
+                                stringResource(UiR.string.display_settings_page_font_local_file_label)
+                            appFontFamily?.isNotEmpty() == true -> appFontFamily!!
+                            else -> stringResource(UiR.string.desktop_font_family_system_default)
+                        },
+                        onTap = { fontSheetTarget = "app"; fontSheetVisible = true },
+                    )
+                    DividerRow()
+                    SettingsRow(
+                        Lucide.Code,
+                        stringResource(UiR.string.display_settings_page_code_font_title),
+                        detailText = when {
+                            codeFontAlias?.isNotEmpty() == true ->
+                                stringResource(UiR.string.display_settings_page_font_local_file_label)
+                            codeFontFamily?.isNotEmpty() == true -> codeFontFamily!!
+                            else -> stringResource(UiR.string.desktop_font_family_monospace_default)
+                        },
+                        onTap = { fontSheetTarget = "code"; fontSheetVisible = true },
+                    )
+                    DividerRow()
+                    // B11 — L319-336: chat font size detail + sheet.
+                    SettingsRow(
+                        Lucide.CaseSensitive,
+                        stringResource(UiR.string.display_settings_page_chat_font_size_title),
+                        detailText = "${(chatFontScale * 100).toInt()}%",
+                        onTap = { fontSizeSheetVisible = true },
+                    )
+                }
+            }
+
+            item { Spacer(Modifier.height(12.dp)) }
+            item { SectionHeader(stringResource(UiR.string.display_settings_page_section_behavior)) }
+            item {
+                SectionCard {
+                    SettingsRow(
+                        Lucide.Eclipse,
+                        stringResource(UiR.string.display_settings_page_behavior_startup_title),
+                        onTap = onOpenBehavior,
+                    )
+                    DividerRow()
+                    SettingsRow(
                         Lucide.RefreshCw,
                         stringResource(UiR.string.settings_page_auto_retry),
                         onTap = onOpenAutoRetry,
+                    )
+                    DividerRow()
+                    // B12 — L338-362: auto scroll idle detail + sheet.
+                    SettingsRow(
+                        Lucide.ArrowDown,
+                        stringResource(UiR.string.display_settings_page_auto_scroll_idle_title),
+                        detailText = if (!autoScrollEnabled) {
+                            stringResource(UiR.string.display_settings_page_auto_scroll_disabled_label)
+                        } else {
+                            "${autoScrollIdleSeconds}s"
+                        },
+                        onTap = { autoScrollSheetVisible = true },
                     )
                     DividerRow()
                     SettingsRow(
@@ -252,7 +336,13 @@ fun DisplaySettingsScreen(
                         stringResource(UiR.string.display_settings_page_haptics_settings_title),
                         onTap = onOpenHaptics,
                     )
-                    DividerRow()
+                }
+            }
+
+            item { Spacer(Modifier.height(12.dp)) }
+            item { SectionHeader(stringResource(UiR.string.display_settings_page_section_notifications)) }
+            item {
+                SectionCard {
                     // B9 — L184-229: Android background chat row with three-option
                     // sheet and real mode detail.
                     SettingsRow(
@@ -286,70 +376,9 @@ fun DisplaySettingsScreen(
                             )
                         },
                     )
-                    DividerRow()
-                    // B10 — L248-306: app font row with detail + source sheet.
-                    SettingsRow(
-                        Lucide.Type,
-                        stringResource(UiR.string.display_settings_page_app_font_title),
-                        detailText = when {
-                            appFontAlias?.isNotEmpty() == true ->
-                                stringResource(UiR.string.display_settings_page_font_local_file_label)
-                            appFontFamily?.isNotEmpty() == true -> appFontFamily!!
-                            else -> stringResource(UiR.string.desktop_font_family_system_default)
-                        },
-                        onTap = { fontSheetTarget = "app"; fontSheetVisible = true },
-                    )
-                    DividerRow()
-                    SettingsRow(
-                        Lucide.Code,
-                        stringResource(UiR.string.display_settings_page_code_font_title),
-                        detailText = when {
-                            codeFontAlias?.isNotEmpty() == true ->
-                                stringResource(UiR.string.display_settings_page_font_local_file_label)
-                            codeFontFamily?.isNotEmpty() == true -> codeFontFamily!!
-                            else -> stringResource(UiR.string.desktop_font_family_monospace_default)
-                        },
-                        onTap = { fontSheetTarget = "code"; fontSheetVisible = true },
-                    )
-                    DividerRow()
-                    // B11 — L319-336: chat font size detail + sheet.
-                    SettingsRow(
-                        Lucide.CaseSensitive,
-                        stringResource(UiR.string.display_settings_page_chat_font_size_title),
-                        detailText = "${(chatFontScale * 100).toInt()}%",
-                        onTap = { fontSizeSheetVisible = true },
-                    )
-                    DividerRow()
-                    // B12 — L338-362: auto scroll idle detail + sheet.
-                    SettingsRow(
-                        Lucide.ArrowDown,
-                        stringResource(UiR.string.display_settings_page_auto_scroll_idle_title),
-                        detailText = if (!autoScrollEnabled) {
-                            stringResource(UiR.string.display_settings_page_auto_scroll_disabled_label)
-                        } else {
-                            "${autoScrollIdleSeconds}s"
-                        },
-                        onTap = { autoScrollSheetVisible = true },
-                    )
-                    DividerRow()
-                    // B13 — L364-380: background mask detail + sheet.
-                    SettingsRow(
-                        Lucide.Image,
-                        stringResource(UiR.string.display_settings_page_chat_background_mask_title),
-                        detailText = "${(maskStrength * 100).toInt()}%",
-                        onTap = { maskSheetVisible = true },
-                    )
-                    DividerRow()
-                    // B14 — L382-404: input opacity (current brightness) detail + sheet.
-                    val systemDark = isSystemInDarkTheme()
-                    SettingsRow(
-                        Lucide.RectangleHorizontal,
-                        stringResource(UiR.string.display_settings_page_chat_input_background_opacity_title),
-                        detailText = "${(((if (systemDark) inputOpacityDark else inputOpacityLight) * 100)).toInt()}%",
-                        onTap = { inputOpacitySheetVisible = true },
-                    )
                 }
             }
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 
