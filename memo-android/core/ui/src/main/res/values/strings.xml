@@ -2476,6 +2476,8 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="storage_space_refresh_tooltip">Refresh</string>
     <string name="storage_space_restore_traces_hint">Previous data snapshots kept after completed restores. Clearing them does not affect the current app data.</string>
     <string name="storage_space_safe_to_clear_hint">Safe to clear. This will not affect your chat history.</string>
+    <string name="storage_space_section_categories">Categories</string>
+    <string name="storage_space_section_overview">Overview</string>
     <string name="storage_space_select_all">Select all</string>
     <string name="storage_space_selected_count">%1$s selected</string>
     <string name="storage_space_sort_label">Sort</string>

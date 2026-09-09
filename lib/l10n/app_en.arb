@@ -39,6 +39,8 @@
   "storageSpacePageTitle": "Storage Space",
   "storageSpaceRefreshTooltip": "Refresh",
   "storageSpaceLoadFailed": "Failed to load storage usage",
+  "storageSpaceSectionOverview": "Overview",
+  "storageSpaceSectionCategories": "Categories",
   "storageSpaceTotalLabel": "Used",
   "storageSpaceClearableLabel": "Clearable: {size}",
   "@storageSpaceClearableLabel": {

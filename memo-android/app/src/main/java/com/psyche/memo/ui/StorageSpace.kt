@@ -7,9 +7,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +23,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -35,11 +41,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowLeft
@@ -103,7 +111,11 @@ data class StorageFileEntry(
     val name: String,
     val bytes: Long,
     val modifiedAt: Long,
+    val source: StorageFileSource = StorageFileSource.USER_UPLOAD,
 )
+
+/** storage_usage_service.dart StorageFileSource — chat attachments vs generated images. */
+enum class StorageFileSource { USER_UPLOAD, ASSISTANT }
 
 object StorageUsage {
     private const val DATABASE_NAME = "memo.db"
@@ -495,7 +507,7 @@ object StorageUsage {
     /** listUploadEntries — upload/ (attachments) + images/ (generated). */
     fun listUploadEntries(context: Context, images: Boolean): List<StorageFileEntry> {
         val out = ArrayList<StorageFileEntry>()
-        fun addFrom(dir: File?, includeImages: Boolean) {
+        fun addFrom(dir: File?, includeImages: Boolean, source: StorageFileSource) {
             if (dir == null || !dir.exists()) return
             walk(dir) { f ->
                 val img = isImage(f.name)
@@ -506,12 +518,14 @@ object StorageUsage {
                         name = f.name,
                         bytes = runCatching { f.length() }.getOrDefault(0L),
                         modifiedAt = runCatching { f.lastModified() }.getOrDefault(0L),
+                        source = source,
                     ),
                 )
             }
         }
-        addFrom(File(context.filesDir, "upload"), images)
-        if (images) addFrom(File(context.filesDir, "images"), true)
+        // Chat attachments live under upload/; generated/inline images under images/.
+        addFrom(File(context.filesDir, "upload"), images, StorageFileSource.USER_UPLOAD)
+        if (images) addFrom(File(context.filesDir, "images"), true, StorageFileSource.ASSISTANT)
         return out.sortedByDescending { it.modifiedAt }
     }
 
@@ -681,6 +695,7 @@ private fun StorageListContent(report: StorageReport, onOpenCategory: (StorageCa
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
     ) {
+        item { SectionHeader(stringResource(UiR.string.storage_space_section_overview)) }
         item {
             SectionCard {
                 Column(modifier = Modifier.padding(14.dp)) {
@@ -708,6 +723,7 @@ private fun StorageListContent(report: StorageReport, onOpenCategory: (StorageCa
             }
         }
         item { Spacer(Modifier.height(12.dp)) }
+        item { SectionHeader(stringResource(UiR.string.storage_space_section_categories)) }
         item {
             SectionCard {
                 report.categories.forEachIndexed { i, category ->
@@ -790,6 +806,7 @@ fun StorageCategoryScreen(
     var report by remember { mutableStateOf<StorageReport?>(null) }
     var clearing by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf<ConfirmSpec?>(null) }
+    var uploadRefreshKey by remember { mutableStateOf(0) }
 
     suspend fun refresh() {
         report = withContext(Dispatchers.IO) { StorageUsage.computeReport(context) }
@@ -1028,6 +1045,7 @@ fun StorageCategoryScreen(
                 item {
                     UploadManagerSection(
                         images = categoryKey == StorageCategoryKey.IMAGES,
+                        refreshKey = uploadRefreshKey,
                         onDeleteRequested = { paths ->
                             confirm = ConfirmSpec(
                                 target = uploadsName,
@@ -1040,6 +1058,8 @@ fun StorageCategoryScreen(
                                             type = NotificationType.SUCCESS,
                                         ),
                                     )
+                                    uploadRefreshKey += 1
+                                    scope.launch { refresh() }
                                 },
                             )
                         },
@@ -1105,10 +1125,11 @@ private class ConfirmSpec(
     val action: () -> Unit,
 )
 
-/** _UploadManager: list + select-all + sort + delete (compact port). */
+/** _UploadManager: source filter + sort + image grid with thumbnails (tap → viewer) or file rows. */
 @Composable
 private fun UploadManagerSection(
     images: Boolean,
+    refreshKey: Int = 0,
     onDeleteRequested: (List<String>) -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1116,44 +1137,75 @@ private fun UploadManagerSection(
     var entries by remember { mutableStateOf<List<StorageFileEntry>>(emptyList()) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
     var sort by remember { mutableStateOf("newest") }
+    var sourceFilter by remember { mutableStateOf<StorageFileSource?>(null) }
     var loading by remember { mutableStateOf(true) }
+    var viewerPaths by remember { mutableStateOf<List<String>?>(null) }
+    var viewerIndex by remember { mutableStateOf(0) }
 
-    LaunchedEffect(sort) {
+    LaunchedEffect(sort, sourceFilter, refreshKey) {
         loading = true
         entries = withContext(Dispatchers.IO) { StorageUsage.listUploadEntries(context, images) }
+        // Drop stale selections whose files were deleted (mirrors _selected.removeWhere upstream).
+        selected = selected intersect entries.map { it.path }.toSet()
         loading = false
     }
 
+    val filtered = entries.filter { e -> sourceFilter == null || e.source == sourceFilter }
+    val sorted = when (sort) {
+        "oldest" -> filtered.sortedBy { it.modifiedAt }
+        "largest" -> filtered.sortedByDescending { it.bytes }
+        "smallest" -> filtered.sortedBy { it.bytes }
+        else -> filtered.sortedByDescending { it.modifiedAt }
+    }
+    val selectMode = selected.isNotEmpty()
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(12.dp))
+        // _StorageImageOrganizer — source filter + sort choice rows (images only have source row upstream,
+        // but the organizer shows both for images; file pages show sort only).
+        ChoicePillRow(
+            label = stringResource(UiR.string.storage_space_sort_label),
+            options = listOf(
+                "newest" to stringResource(UiR.string.storage_space_sort_newest),
+                "oldest" to stringResource(UiR.string.storage_space_sort_oldest),
+                "largest" to stringResource(UiR.string.storage_space_sort_largest),
+                "smallest" to stringResource(UiR.string.storage_space_sort_smallest),
+            ),
+            value = sort,
+            onChanged = {
+                sort = it
+                selected = emptySet()
+            },
+        )
+        if (images) {
+            Spacer(Modifier.height(8.dp))
+            ChoicePillRow(
+                label = stringResource(UiR.string.storage_space_source_label),
+                options = listOf(
+                    "" to stringResource(UiR.string.storage_space_source_all),
+                    "USER_UPLOAD" to stringResource(UiR.string.storage_space_source_user_upload),
+                    "ASSISTANT" to stringResource(UiR.string.storage_space_source_assistant),
+                ),
+                value = sourceFilter?.name ?: "",
+                onChanged = {
+                    sourceFilter = if (it.isEmpty()) null else StorageFileSource.valueOf(it)
+                    selected = emptySet()
+                },
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = stringResource(UiR.string.storage_space_uploads_count, entries.size.toString()),
+                text = stringResource(UiR.string.storage_space_uploads_count, sorted.size.toString()),
                 style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = {
-                sort = when (sort) {
-                    "newest" -> "oldest"
-                    "oldest" -> "largest"
-                    "largest" -> "smallest"
-                    else -> "newest"
+                selected = if (selectMode && selected.size == sorted.size) {
+                    emptySet()
+                } else {
+                    sorted.map { it.path }.toSet()
                 }
-            }) {
-                Text(
-                    text = stringResource(
-                        when (sort) {
-                            "oldest" -> UiR.string.storage_space_sort_oldest
-                            "largest" -> UiR.string.storage_space_sort_largest
-                            "smallest" -> UiR.string.storage_space_sort_smallest
-                            else -> UiR.string.storage_space_sort_newest
-                        },
-                    ),
-                    style = TextStyle(fontSize = 13.sp),
-                )
-            }
-            TextButton(onClick = {
-                selected = if (selected.size == entries.size) emptySet() else entries.map { it.path }.toSet()
             }) {
                 Text(
                     text = stringResource(UiR.string.storage_space_select_all),
@@ -1161,7 +1213,7 @@ private fun UploadManagerSection(
                 )
             }
         }
-        if (selected.isNotEmpty()) {
+        if (selectMode) {
             IosTileButton(
                 label = stringResource(UiR.string.storage_space_selected_count, selected.size.toString()),
                 icon = Lucide.Trash2,
@@ -1174,53 +1226,190 @@ private fun UploadManagerSection(
                 style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f)),
                 modifier = Modifier.padding(vertical = 12.dp),
             )
-        } else if (entries.isEmpty()) {
+        } else if (sorted.isEmpty()) {
             Text(
                 text = stringResource(UiR.string.storage_space_no_uploads),
                 style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)),
                 modifier = Modifier.padding(vertical = 12.dp),
             )
-        } else {
-            SectionCard {
-                val sorted = when (sort) {
-                    "oldest" -> entries.sortedBy { it.modifiedAt }
-                    "largest" -> entries.sortedByDescending { it.bytes }
-                    "smallest" -> entries.sortedBy { it.bytes }
-                    else -> entries
-                }
-                sorted.forEachIndexed { i, entry ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                selected = if (entry.path in selected) {
-                                    selected - entry.path
-                                } else {
-                                    selected + entry.path
-                                }
+        } else if (images) {
+            Spacer(Modifier.height(8.dp))
+            // L2040-2056: 3-column thumbnail grid, tap opens viewer, long-press selects.
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxWidth().height(((sorted.size / 3 + 1) * 116).dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                userScrollEnabled = false,
+            ) {
+                items(sorted.size) { index ->
+                    val entry = sorted[index]
+                    StorageImageTile(
+                        entry = entry,
+                        selected = entry.path in selected,
+                        selectMode = selectMode,
+                        onTap = {
+                            if (selectMode) {
+                                selected = if (entry.path in selected) selected - entry.path else selected + entry.path
+                            } else {
+                                viewerPaths = sorted.map { it.path }
+                                viewerIndex = index
                             }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                    ) {
-                        IosCheckbox(value = entry.path in selected, onValueChanged = {
-                            selected = if (it) selected + entry.path else selected - entry.path
-                        })
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = entry.name,
-                                style = TextStyle(fontSize = 14.sp, color = cs.onSurface),
-                                maxLines = 1,
-                            )
-                            Text(
-                                text = StorageUsage.fmtBytes(entry.bytes),
-                                style = TextStyle(fontSize = 11.sp, color = cs.onSurface.copy(alpha = 0.6f)),
-                            )
-                        }
-                    }
+                        },
+                        onToggle = {
+                            selected = if (entry.path in selected) selected - entry.path else selected + entry.path
+                        },
+                    )
+                }
+            }
+        } else {
+            Spacer(Modifier.height(8.dp))
+            SectionCard {
+                sorted.forEachIndexed { i, entry ->
+                    StorageFileRow(
+                        entry = entry,
+                        selected = entry.path in selected,
+                        onTap = {
+                            selected = if (entry.path in selected) selected - entry.path else selected + entry.path
+                        },
+                    )
                     if (i != sorted.lastIndex) DividerRow()
                 }
             }
         }
     }
+
+    viewerPaths?.let { paths ->
+        com.psyche.memo.ui.chat.ImageViewerOverlay(
+            images = paths,
+            initialIndex = viewerIndex,
+            onClose = { viewerPaths = null },
+        )
+    }
+}
+
+/** _StorageChoiceRow — label + wrap of filter pills. */
+@Composable
+private fun ChoicePillRow(
+    label: String,
+    options: List<Pair<String, String>>,
+    value: String,
+    onChanged: (String) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = TextStyle(fontSize = 12.5.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+            modifier = Modifier.width(36.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
+            options.forEach { (key, text) ->
+                val active = key == value
+                Text(
+                    text = text,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (active) cs.onSurface else cs.onSurface.copy(alpha = 0.6f),
+                    ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50.dp))
+                        .background(cs.onSurface.copy(alpha = if (active) 0.10f else 0.05f))
+                        .clickable { onChanged(key) }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
+        }
+    }
+}
+
+/** _ImageTile: cover thumbnail with selection checkbox overlay. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun StorageImageTile(
+    entry: StorageFileEntry,
+    selected: Boolean,
+    selectMode: Boolean,
+    onTap: () -> Unit,
+    onToggle: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(cs.onSurface.copy(alpha = 0.04f))
+            .border(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) cs.primary.copy(alpha = 0.55f) else cs.onSurface.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .combinedClickable(onClick = onTap, onLongClick = onToggle),
+    ) {
+        coil.compose.AsyncImage(
+            model = java.io.File(entry.path),
+            contentDescription = entry.name,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (selectMode) {
+            IosCheckbox(
+                value = selected,
+                onValueChanged = { onToggle() },
+                modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                size = 20.dp,
+                hitTestSize = 22.dp,
+                borderWidth = 1.6.dp,
+                enableHaptics = false,
+            )
+        }
+    }
+}
+
+/** _FileRow: checkbox + paperclip + name/size-time column. */
+@Composable
+private fun StorageFileRow(
+    entry: StorageFileEntry,
+    selected: Boolean,
+    onTap: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        IosCheckbox(value = selected, onValueChanged = { onTap() }, size = 20.dp, hitTestSize = 22.dp, borderWidth = 1.6.dp)
+        Spacer(Modifier.width(10.dp))
+        Icon(
+            Lucide.Paperclip,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = cs.onSurface.copy(alpha = 0.82f),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = entry.name,
+                style = TextStyle(fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.88f)),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = StorageUsage.fmtBytes(entry.bytes) + " · " + storageFmtTime(entry.modifiedAt),
+                style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.65f)),
+            )
+        }
+    }
+}
+
+/** _fmtTime for file rows — yyyy-MM-dd HH:mm, locale-independent short form. */
+private fun storageFmtTime(epochMs: Long): String {
+    if (epochMs <= 0L) return ""
+    return java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).format(java.util.Date(epochMs))
 }

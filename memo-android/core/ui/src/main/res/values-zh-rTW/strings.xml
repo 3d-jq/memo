@@ -2476,6 +2476,8 @@
     <string name="storage_space_refresh_tooltip">重新整理</string>
     <string name="storage_space_restore_traces_hint">還原完成後保留的舊資料快照。清理不會影響目前的應用程式資料。</string>
     <string name="storage_space_safe_to_clear_hint">可安全清理，不影響聊天記錄。</string>
+    <string name="storage_space_section_categories">儲存分類</string>
+    <string name="storage_space_section_overview">空間總覽</string>
     <string name="storage_space_select_all">全選</string>
     <string name="storage_space_selected_count">已選 %1$s 項</string>
     <string name="storage_space_sort_label">排序</string>

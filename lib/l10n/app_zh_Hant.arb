@@ -29,6 +29,8 @@
   "storageSpacePageTitle": "儲存空間",
   "storageSpaceRefreshTooltip": "重新整理",
   "storageSpaceLoadFailed": "載入失敗",
+  "storageSpaceSectionOverview": "空間總覽",
+  "storageSpaceSectionCategories": "儲存分類",
   "storageSpaceTotalLabel": "已用空間",
   "storageSpaceClearableLabel": "可清理：{size}",
   "storageSpaceClearableHint": "共發現可清理空間 {size}",
