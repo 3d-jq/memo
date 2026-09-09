@@ -695,7 +695,19 @@ fun ChatContent(
         }
     }
 
-    Column(modifier = modifier) {
+    // chat_assistant_background.dart —— 当前助手壁纸 + surface 遮罩渐变（0.20→0.50 × 强度）。
+    val bgAssistantId by container.currentAssistantId.collectAsState()
+    val chatBackground = remember(bgAssistantId) { container.currentAssistant()?.background }
+    val chatMaskStrength = remember {
+        container.preferenceRepository.readLocal("display_chat_background_mask_strength_v1")
+            ?.toFloatOrNull() ?: 1f
+    }
+    Box(modifier = modifier) {
+        com.psyche.memo.ui.chat.ChatAssistantBackground(
+            background = chatBackground,
+            maskStrength = chatMaskStrength,
+        )
+        Column(modifier = Modifier.fillMaxSize()) {
         // Transparent-ish AppBar: menu, title+model, new-conversation.
         Row(
             modifier = Modifier
@@ -943,6 +955,7 @@ fun ChatContent(
             onRemoveAttachment = { index -> vm.removeAttachment(index) },
             voice = voiceInput,
         )
+    }
     }
 
     if (showModelSheet) {
