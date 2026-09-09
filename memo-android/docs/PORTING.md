@@ -109,6 +109,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | 收尾-3 | 触觉反馈接线：`Haptics` 服务 + 6 开关 + 分类门控早已就绪，补齐调用点——设置行/开关行（soft，按 hapticsOnListItemTap）、世界书页与 sheet、快捷短语/指令注入、底部工具面板、抽屉会话行与开关脉冲（hapticsOnDrawer）、发送/重新生成（hapticsOnGenerate）、消息操作图标与用户气泡长按菜单 | ✅ 本轮 |
 | 收尾-4 | 输入框几何：原版 composer 是无边框裸 TextField（contentPadding 垂直 2/横向 0，InputDecorator 非 dense 字段最小高 48dp）；M3 TextField 自带 16dp 横向内边距且最小高 56dp → 改 `BasicTextField` + decorationBox 占位符 + 48dp 最小高居中，宽高都对齐 | ✅ 本轮 |
 | UI-6 | 助手剩余 tab + 标签管理：快捷短语 tab（拖拽重排/左滑删除/玻璃加号/共用编辑 sheet）、自定义请求 tab（headers/body 键值卡，逐键落库）、正则 tab（`AssistantRegex` DTO + 名称/正则/替换 + 4 个范围 chip + 正则可编译校验 + 拖拽/开关/删除）、`TagsManagerScreen`（assistant_tag_rows + assignment/collapse 两个 preference 键，创建/重命名/删除/排序/点按指派并返回）、助手卡长按上下文菜单（编辑/复制（`_buildCopyName` 命名）/清除标签/管理标签/删除）+ `tags_manager/{assistantId}` 路由 | ✅ 本轮 |
+| UI-7a | 聊天周边 1/2：消息"更多"里的 Select & Copy（`SelectCopySheet`：可选中正文 + Copy All）、Render WebView（`HtmlPreviewScreen` + `assets/html/mark.html` 模板 + 主题色占位替换）、Share（系统分享纯文本）、`BoundedLargeTextView`（40 行/12k 字符折叠 + 分块懒加载，投影算法带单测） | ✅ 本轮 |
+| UI-7b | 聊天周边 2/2：`ChatAssistantBackground`（当前助手壁纸 + surface 遮罩渐变 0.20→0.50 × display_chat_background_mask_strength_v1，网络/沙箱文件，`isBackgroundActive` 带单测）+ ChatContent 包一层 Box 挂到聊天页背后 | ✅ 本轮 |
 | B | 记忆/本地工具/MCP tab | ⬜ |
 | C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜（tab 已做，布局管理页待做） |
 
