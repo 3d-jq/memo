@@ -473,6 +473,32 @@ fun ChatContent(
     var showWorldBookSheet by remember { mutableStateOf(false) }
     var showContextSheet by remember { mutableStateOf(false) }
     var showMcpSheet by remember { mutableStateOf(false) }
+    // ---- 消息多选（home_page_controller ChatSelectionMode）----
+    var selecting by remember { mutableStateOf(false) }
+    var selectionDeleteMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var selShowThinkingTools by remember { mutableStateOf(false) }
+    var selShowThinkingContent by remember { mutableStateOf(false) }
+    var showExportSheet by remember { mutableStateOf(false) }
+    var exportPending by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    fun finishExport(uri: android.net.Uri?) {
+        val pending = exportPending
+        exportPending = null
+        if (uri == null || pending == null) return
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(pending.second.toByteArray(Charsets.UTF_8))
+            }
+        }
+        selecting = false
+        selectedIds = emptySet()
+    }
+    val exportMdLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/markdown"),
+    ) { uri -> finishExport(uri) }
+    val exportTxtLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri -> finishExport(uri) }
     var showCompressDialog by remember { mutableStateOf(false) }
     var compressing by remember { mutableStateOf(false) }
     var worldBooksAvailable by remember { mutableStateOf(false) }
@@ -715,6 +741,65 @@ fun ChatContent(
             maskStrength = chatMaskStrength,
         )
         Column(modifier = Modifier.fillMaxSize()) {
+        if (selecting) {
+            // ChatSelectionAppBar：关闭 + 已选计数 + 反选 + 全选。
+            val selectable = messages.filter { it.role == "user" || it.role == "assistant" }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = {
+                        selecting = false
+                        selectedIds = emptySet()
+                    },
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    Icon(Lucide.X, contentDescription = stringResource(UiR.string.home_page_cancel), tint = cs.onSurface)
+                }
+                Text(
+                    text = stringResource(UiR.string.chat_selection_selected_count_title, selectedIds.size.toString()),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Medium),
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(UiR.string.model_fetch_invert_tooltip),
+                    style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = cs.onSurface.copy(alpha = 0.9f)),
+                    modifier = Modifier
+                        .clickable {
+                            selectedIds = selectable.map { it.id }.toSet() - selectedIds
+                        }
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
+                )
+                Row(
+                    modifier = Modifier
+                        .clickable {
+                            val all = selectable.map { it.id }.toSet()
+                            selectedIds = if (selectedIds.containsAll(all) && all.isNotEmpty()) emptySet() else all
+                        }
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IosCheckbox(
+                        value = selectable.isNotEmpty() && selectedIds.containsAll(selectable.map { it.id }),
+                        onValueChanged = {},
+                        size = 18.dp,
+                        hitTestSize = 32.dp,
+                        interactive = false,
+                    )
+                    Spacer(Modifier.width(2.dp))
+                    Text(
+                        text = stringResource(UiR.string.storage_space_select_all),
+                        style = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                    )
+                }
+            }
+        } else {
         // Transparent-ish AppBar: menu, title+model, new-conversation.
         Row(
             modifier = Modifier
@@ -800,6 +885,7 @@ fun ChatContent(
             // home_page.dart —— 顶栏末尾 4px 尾距。
             Spacer(Modifier.width(ChatStyleSpec.TOP_BAR_TRAILING_GAP_DP.dp))
         }
+        }
 
         // Message timeline: empty temporary conversation shows the hat/glasses
         // hint inside the message area (kelivo's _TemporaryConversationEmptyState).
@@ -845,8 +931,36 @@ fun ChatContent(
                     items(messages, key = { it.id }) { msg ->
                         val isLastAssistant = msg.role == "assistant" &&
                             messages.lastOrNull { it.role == "assistant" }?.id == msg.id
+                        val canSelect = msg.role == "user" || msg.role == "assistant"
+                        Row(verticalAlignment = Alignment.Top) {
+                            if (selecting && canSelect) {
+                                Box(modifier = Modifier.padding(start = 10.dp, top = 10.dp)) {
+                                    IosCheckbox(
+                                        value = msg.id in selectedIds,
+                                        onValueChanged = { checked ->
+                                            selectedIds = if (checked) selectedIds + msg.id else selectedIds - msg.id
+                                        },
+                                        size = 20.dp,
+                                        hitTestSize = 28.dp,
+                                    )
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .then(
+                                        if (selecting && canSelect) {
+                                            Modifier.clickable {
+                                                selectedIds = if (msg.id in selectedIds) selectedIds - msg.id else selectedIds + msg.id
+                                            }
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
+                            ) {
                         MessageRow(
                             msg = msg,
+                            selecting = selecting,
                             suggestions = if (isLastAssistant) suggestions else emptyList(),
                             onSuggestionTap = { vm.sendSuggestion(it) },
                             assistantLabel = resolvedAssistantLabel,
@@ -911,6 +1025,8 @@ fun ChatContent(
                                 vm.resumeAfterToolAnswer(msg.id, part, result.jsonString)
                             },
                         )
+                            }
+                        }
                     }
                 }
                 // 滚动导航面板（scroll_nav_buttons.dart）：贴输入栏上方右侧。
@@ -939,6 +1055,42 @@ fun ChatContent(
             }
         }
 
+        if (selecting) {
+            // 选择态：底部换成导出/删除操作栏（home_page.dart
+            // _buildSelectionActionBar）。
+            if (selectionDeleteMode) {
+                com.psyche.memo.ui.chat.ChatSelectionDeleteBar(
+                    hasMultiVersionSelection = selectedIds.size > 1,
+                    onDeleteCurrentVersions = {
+                        val ids = selectedIds
+                        ids.forEach { vm.deleteVersion(it) }
+                        selecting = false
+                        selectedIds = emptySet()
+                    },
+                    onDeleteAllVersions = {
+                        val ids = selectedIds
+                        ids.forEach { vm.deleteAllVersions(it) }
+                        selecting = false
+                        selectedIds = emptySet()
+                    },
+                )
+            } else {
+                com.psyche.memo.ui.chat.ChatSelectionExportBar(
+                    showThinkingTools = selShowThinkingTools,
+                    showThinkingContent = selShowThinkingContent,
+                    onExportMarkdown = { showExportSheet = true },
+                    onExportTxt = { showExportSheet = true },
+                    onExportImage = {},
+                    onToggleThinkingTools = {
+                        selShowThinkingTools = !selShowThinkingTools
+                        if (!selShowThinkingTools) selShowThinkingContent = false
+                    },
+                    onToggleThinkingContent = {
+                        if (selShowThinkingTools) selShowThinkingContent = !selShowThinkingContent
+                    },
+                )
+            }
+        } else {
         ChatInputBar(
             input = input,
             streaming = streaming,
@@ -969,6 +1121,7 @@ fun ChatContent(
             onRemoveAttachment = { index -> vm.removeAttachment(index) },
             voice = voiceInput,
         )
+        }
     }
     }
 
@@ -1085,6 +1238,63 @@ fun ChatContent(
                 vm.clearContext()
             },
             onDismiss = { showContextSheet = false },
+        )
+    }
+
+    if (showExportSheet) {
+        val exportTitle = (container.conversationDao.get(conversationId)?.title ?: "")
+            .ifBlank { container.appContext.getString(UiR.string.message_export_sheet_default_title) }
+        val selectedMessages = messages.filter { it.id in selectedIds }
+            .map {
+                com.psyche.memo.ui.chat.MessageExport.ExportMessage(
+                    role = it.role,
+                    parts = it.parts,
+                    timestamp = it.timestamp,
+                    modelName = it.model.takeIf { name -> name.isNotBlank() },
+                )
+            }
+        val roleNameOf: (com.psyche.memo.ui.chat.MessageExport.ExportMessage) -> String = { m ->
+            if (m.role == "user") {
+                container.preferenceRepository.readLocal("user_name")
+                    ?.takeIf { it.isNotBlank() }
+                    ?: container.appContext.getString(UiR.string.user_provider_default_user_name)
+            } else {
+                val assistant = container.currentAssistant()
+                if (assistant?.useAssistantName == true && assistant.name.isNotBlank()) {
+                    assistant.name
+                } else {
+                    m.modelName
+                        ?: container.appContext.getString(UiR.string.message_export_sheet_assistant)
+                }
+            }
+        }
+        val timeOf: (Long) -> String = { millis ->
+            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                .format(java.util.Date(millis))
+        }
+        fun buildExport(markdown: Boolean): String = com.psyche.memo.ui.chat.MessageExport.export(
+            title = exportTitle,
+            messages = selectedMessages,
+            roleNameOf = roleNameOf,
+            timeOf = timeOf,
+            thinkingLabel = container.appContext.getString(UiR.string.message_export_thinking_content_label),
+            includeThinking = selShowThinkingTools && selShowThinkingContent,
+            includeTools = selShowThinkingTools,
+            markdown = markdown,
+            imageLine = { uri -> if (markdown) "![image]($uri)" else uri },
+        )
+        com.psyche.memo.ui.chat.MessageExportSheet(
+            onMarkdown = {
+                showExportSheet = false
+                exportPending = true to buildExport(true)
+                exportMdLauncher.launch("chat-export-${System.currentTimeMillis()}.md")
+            },
+            onTxt = {
+                showExportSheet = false
+                exportPending = false to buildExport(false)
+                exportTxtLauncher.launch("chat-export-${System.currentTimeMillis()}.txt")
+            },
+            onDismiss = { showExportSheet = false },
         )
     }
 
@@ -1218,13 +1428,43 @@ fun ChatContent(
                         }
                         context.startActivity(android.content.Intent.createChooser(send, null))
                     }
-                    com.psyche.memo.ui.chat.MessageMoreAction.SELECT_MESSAGES,
-                    -> com.psyche.memo.ui.snackbar.SnackbarManager.show(
-                        com.psyche.memo.ui.snackbar.AppNotification(
-                            message = notImplementedText,
-                            type = com.psyche.memo.ui.snackbar.NotificationType.INFO,
-                        ),
-                    )
+                    com.psyche.memo.ui.chat.MessageMoreAction.SELECT_MESSAGES -> {
+                        // startMessageSelection：锚点消息 + 配对的 user/assistant。
+                        val list = messages
+                        val index = list.indexOfFirst { it.id == target.id }
+                        val picked = linkedSetOf<String>()
+                        fun addIfSelectable(i: Int?) {
+                            val m = i?.let { list.getOrNull(it) } ?: return
+                            if (m.role == "user" || m.role == "assistant") picked.add(m.id)
+                        }
+                        if (index >= 0) {
+                            val anchor = list[index]
+                            when (anchor.role) {
+                                "assistant" -> {
+                                    addIfSelectable(index)
+                                    addIfSelectable(list.take(index).indexOfLast { it.role == "user" }
+                                        .takeIf { it >= 0 })
+                                }
+                                "user" -> {
+                                    addIfSelectable(index)
+                                    addIfSelectable(list.drop(index + 1).indexOfFirst { it.role == "assistant" }
+                                        .takeIf { it >= 0 }?.plus(index + 1))
+                                }
+                                else -> {
+                                    addIfSelectable(list.take(index).indexOfLast { it.role == "user" }
+                                        .takeIf { it >= 0 })
+                                    addIfSelectable(list.drop(index).indexOfFirst { it.role == "assistant" }
+                                        .takeIf { it >= 0 }?.plus(index))
+                                }
+                            }
+                        }
+                        if (picked.isEmpty()) picked.add(target.id)
+                        selectedIds = picked
+                        selectionDeleteMode = false
+                        selShowThinkingTools = false
+                        selShowThinkingContent = false
+                        selecting = true
+                    }
                     com.psyche.memo.ui.chat.MessageMoreAction.EDIT -> editFor = target
                     com.psyche.memo.ui.chat.MessageMoreAction.FORK -> forkAt(target.id)
                     com.psyche.memo.ui.chat.MessageMoreAction.DELETE_CURRENT_VERSION ->
@@ -1289,6 +1529,7 @@ fun ChatContent(
 @Composable
 private fun MessageRow(
     msg: ChatViewModel.UiMessage,
+    selecting: Boolean = false,
     suggestions: List<String> = emptyList(),
     onSuggestionTap: (String) -> Unit = {},
     assistantLabel: String,
@@ -1507,7 +1748,7 @@ private fun MessageRow(
                     .combinedClickable(
                         enabled = isUser,
                         onLongClick = {
-                            if (isUser) {
+                            if (isUser && !selecting) {
                                 Haptics.light(rowView)
                                 showContextMenu = true
                             }
@@ -1688,7 +1929,8 @@ private fun MessageRow(
         // regenerate / speak / translate / more (CMW:3191-3410), version
         // selector and token stats trail the row.
         val showVersionSwitcher = versionCount > 1
-        if (isUser || showVersionSwitcher || msg.totalTokens != null || !isUser) {
+        // CMW:1979 —— 多选态隐藏操作行与建议气泡。
+        if (!selecting && (isUser || showVersionSwitcher || msg.totalTokens != null || !isUser)) {
             // CMW:1848 / 3209 —— 按钮行上方 8（用户与助手一致）。
             Spacer(Modifier.height(ChatStyleSpec.ACTIONS_TOP_GAP_DP.dp))
             Row(
@@ -1777,7 +2019,7 @@ private fun MessageRow(
             }
             // 建议气泡（chat_message_widget.dart:3410-3418）—— 最后一条助手
             // 消息、非流式时显示。
-            if (!isUser && !msg.isStreaming && suggestions.isNotEmpty()) {
+            if (!selecting && !isUser && !msg.isStreaming && suggestions.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 com.psyche.memo.ui.chat.ChatSuggestionBubbles(
                     suggestions = suggestions,
