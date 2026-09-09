@@ -65,6 +65,8 @@ data class AppSemanticColors(
                     Color(0xFF16A34A),
                     Color(0xFFCA8A04),
                     Color(0xFF0891B2),
+                    Color(0xFFDB2777),
+                    Color(0xFF4F46E5),
                 ),
                 layered = layered,
             )
@@ -94,6 +96,8 @@ data class AppSemanticColors(
                     Color(0xFF86EFAC),
                     Color(0xFFFACC15),
                     Color(0xFF67E8F9),
+                    Color(0xFFF472B6),
+                    Color(0xFF818CF8),
                 ),
                 layered = layered,
                 isDark = true,
