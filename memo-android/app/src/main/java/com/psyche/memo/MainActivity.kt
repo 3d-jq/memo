@@ -90,6 +90,8 @@ import com.psyche.memo.ui.NetworkProxyScreen
 import com.psyche.memo.ui.ToolSchemaEditorScreen
 import com.psyche.memo.ui.ToolSchemaSettingsScreen
 import com.psyche.memo.ui.TtsServicesScreen
+import com.psyche.memo.ui.TtsServicesEditorScreen
+import com.psyche.memo.ui.AsrServicesEditorScreen
 import com.psyche.memo.ui.TtsSettingsScreen
 import com.psyche.memo.ui.locale.withAppLocale
 import com.psyche.memo.ui.theme.MemoTheme
@@ -630,6 +632,35 @@ private fun AppThemeAndContent(
                             container = container,
                             onBack = { navController.popBackStack() },
                             onOpenSettings = { navController.navigate("tts_settings") },
+                            onOpenTtsEditor = { id ->
+                                navController.navigate(if (id == null) "tts_editor" else "tts_editor?id=$id")
+                            },
+                            onOpenAsrEditor = { id ->
+                                navController.navigate(if (id == null) "asr_editor" else "asr_editor?id=$id")
+                            },
+                        )
+                    }
+                    // TTS add/edit page — 1:1 with tts_services_page.dart
+                    // _NetworkTtsEditorPage (pushed via Navigator.push, full
+                    // Scaffold, not a bottom sheet).
+                    composable("tts_editor?id={id}") { entry ->
+                        val id = entry.arguments?.getString("id")
+                        TtsServicesEditorScreen(
+                            container = container,
+                            serviceId = id,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    // ASR add/edit page — 1:1 with asr_services_section.dart
+                    // _showAsrEditor mobile branch (Navigator.push, full
+                    // Scaffold with "Add Speech Recognition" / "Edit Speech
+                    // Recognition" title, not a bottom sheet).
+                    composable("asr_editor?id={id}") { entry ->
+                        val id = entry.arguments?.getString("id")
+                        AsrServicesEditorScreen(
+                            container = container,
+                            serviceId = id,
+                            onBack = { navController.popBackStack() },
                         )
                     }
                 }

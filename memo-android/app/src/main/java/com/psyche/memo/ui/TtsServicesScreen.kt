@@ -87,11 +87,13 @@ fun TtsServicesScreen(
     container: AppContainerImpl,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenTtsEditor: (serviceId: String?) -> Unit,
+    onOpenAsrEditor: (serviceId: String?) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val app = LocalSemanticColors.current
     val context = LocalContext.current
-    val store = remember { TtsServicesStore(container.preferenceRepository) }
+    val store = container.ttsServicesStore
 
     androidx.compose.runtime.LaunchedEffect(Unit) { store.load() }
     var rev by remember { mutableStateOf(0) }
@@ -123,8 +125,6 @@ fun TtsServicesScreen(
         )
     }
 
-    var editorExisting by remember { mutableStateOf<TtsServiceOptions?>(null) }
-    var editorOpen by remember { mutableStateOf(false) }
     var systemConfigOpen by remember { mutableStateOf(false) }
     var errorDetails by remember { mutableStateOf<String?>(null) }
 
@@ -156,7 +156,11 @@ fun TtsServicesScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),
         ) {
-            key(rev) {
+            // rev bumps on Android TextToSpeech init, store.version bumps on
+            // any add/edit/delete from the editor page (shared store instance,
+            // see AppContainer.ttsServicesStore). Key on both so the section
+            // re-renders when either changes.
+            key(rev + store.version) {
                 // VoiceServiceSectionHeader (tts_services_page.dart L79-84 +
                 // voice_service_widgets.dart L15-69): title + trailing "+" add
                 // button (_handleAddNetworkTts opens the editor in add mode).
@@ -182,8 +186,7 @@ fun TtsServicesScreen(
                             )
                             .clickable(interactionSource = addInteraction, indication = null) {
                                 Haptics.light(view)
-                                editorExisting = null
-                                editorOpen = true
+                                onOpenTtsEditor(null)
                             },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -268,7 +271,7 @@ fun TtsServicesScreen(
                             service = service,
                             selected = store.selectedServiceId == service.id,
                             onSelect = { store.selectedServiceId = service.id },
-                            onEdit = { editorExisting = service; editorOpen = true },
+                            onEdit = { onOpenTtsEditor(service.id) },
                             onTest = { demo ->
                                 // Cloud synthesis call belongs to the later
                                 // TTS-service batch — no request is made yet.
@@ -290,29 +293,12 @@ fun TtsServicesScreen(
 
                 // AsrServicesSection (tts_services_page.dart L200) — the
                 // voice-recognition half of the services page.
-                AsrServicesSection(container = container)
+                AsrServicesSection(
+                    container = container,
+                    onOpenAsrEditor = onOpenAsrEditor,
+                )
             }
         }
-    }
-
-    // Editor for add (null) / edit (existing) — L745-761.
-    if (editorOpen) {
-        NetworkTtsEditorOverlay(
-            container = container,
-            store = store,
-            initial = editorExisting,
-            onDismiss = { editorOpen = false },
-            onSaved = { created ->
-                // _handleAddNetworkTts L226-238.
-                if (editorExisting == null) {
-                    store.upsert(created)
-                    if (store.usingSystemTts) store.selectedServiceId = created.id
-                } else {
-                    store.upsert(created)
-                }
-                editorOpen = false
-            },
-        )
     }
 
     // System TTS config sheet — _showSystemTtsConfig L1859-2010.
@@ -467,224 +453,20 @@ private fun NetworkTtsRow(
     }
 }
 
-/**
- * _NetworkTtsEditorPage L762-1860 — kind chips + per-kind fields + submit.
- * Field sets mirror TtsServiceOptions.fromJson (network_tts.dart L83-266).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun NetworkTtsEditorOverlay(
-    container: AppContainerImpl,
-    store: TtsServicesStore,
-    initial: TtsServiceOptions?,
-    onDismiss: () -> Unit,
-    onSaved: (TtsServiceOptions) -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    val app = LocalSemanticColors.current
-
-    var kind by remember(initial) { mutableStateOf(initial?.kind ?: NetworkTtsKind.openai) }
-    var name by remember(initial) { mutableStateOf(initial?.name ?: "") }
-    var apiKey by remember(initial) { mutableStateOf(initial?.apiKey ?: "") }
-    var baseUrl by remember(initial) { mutableStateOf(initial?.let { baseUrlOf(it) } ?: TtsServicesStore.defaultBaseUrl(NetworkTtsKind.openai)) }
-    var model by remember(initial) { mutableStateOf(initial?.let { modelOf(it) } ?: TtsServicesStore.defaultModel(NetworkTtsKind.openai)) }
-    var voice by remember(initial) { mutableStateOf(initial?.let { voiceOf(it) } ?: TtsServicesStore.defaultVoice(NetworkTtsKind.openai)) }
-    // Extra kind-specific plain-text fields, re-hydrated from the existing
-    // options when editing (extra1Of/extra2Of/... below mirror initState
-    // L810-922) so saving an edit no longer wipes them:
-    //   extra1 = azure.language | minimax.emotion | qwenAudio.workspaceId |
-    //            xai.language | elevenlabs.outputFormat | mimo.instruction |
-    //            step.responseFormat | fishAudio.latency
-    //   extra2 = minimax.languageBoost | qwenAudio.region | step.instruction
-    var extra1 by remember(initial) { mutableStateOf(extra1Of(initial)) }
-    var extra2 by remember(initial) { mutableStateOf(extra2Of(initial)) }
-    var languageType by remember(initial) { mutableStateOf(languageTypeOf(initial)) }
-    var stream by remember(initial) { mutableStateOf(streamOf(initial)) }
-
-    fun applyKindDefaults(k: NetworkTtsKind) {
-        kind = k
-        baseUrl = TtsServicesStore.defaultBaseUrl(k)
-        model = TtsServicesStore.defaultModel(k)
-        voice = TtsServicesStore.defaultVoice(k)
-        extra1 = ""
-        extra2 = ""
-        languageType = "Auto"
-        stream = true
-    }
-
-    fun submit() {
-        val id = initial?.id ?: "tts-" + UUID.randomUUID().toString()
-        val enabled = initial?.enabled ?: true
-        val nm = name.trim().ifEmpty { kind.display + " TTS" }
-        val created: TtsServiceOptions = when (kind) {
-            NetworkTtsKind.openai -> OpenAiTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice)
-            NetworkTtsKind.gemini -> GeminiTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice)
-            NetworkTtsKind.azure -> AzureTtsOptions(id, enabled, nm, apiKey, baseUrl, extra1.ifEmpty { "zh-CN" }, voice)
-            NetworkTtsKind.minimax -> MiniMaxTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice,
-                emotion = extra1, speed = 1.0, volume = 1.0, pitch = 0, languageBoost = extra2,
-                format = "mp3", sampleRate = 32000, bitrate = 128000, channel = 1,
-                subtitleEnable = false, pronunciationDictionary = emptyList())
-            NetworkTtsKind.qwen -> QwenTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice, languageType)
-            NetworkTtsKind.qwenAudio -> QwenAudioTtsOptions(id, enabled, nm, apiKey, extra1, extra2.ifEmpty { "cn-beijing" }, model, voice, "mp3", 22050)
-            NetworkTtsKind.groq -> GroqTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice)
-            NetworkTtsKind.xai -> XaiTtsOptions(id, enabled, nm, apiKey, baseUrl, voice, extra1.ifEmpty { "auto" })
-            NetworkTtsKind.elevenlabs -> ElevenLabsTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice, extra1.ifEmpty { "mp3_44100_128" })
-            NetworkTtsKind.mimo -> MimoTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice, extra1, stream, false)
-            NetworkTtsKind.step -> StepTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice,
-                extra1.ifEmpty { "mp3" }, 1.0, 1.0, 24000, extra2)
-            NetworkTtsKind.fishAudio -> FishAudioTtsOptions(id, enabled, nm, apiKey, baseUrl, model, voice,
-                "mp3", 0.7, 0.7, 1.0, 44100, extra1.ifEmpty { "normal" })
-        }
-        onSaved(created)
-    }
-
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 20.dp),
-        ) {
-            Text(
-                stringResource(if (initial == null) UiR.string.tts_services_dialog_add_title else UiR.string.tts_services_dialog_edit_title),
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-            )
-            Spacer(Modifier.height(12.dp))
-
-            // _ProviderKindWrap L1628-1698 — kind chip wrap.
-            Row(Modifier.fillMaxWidth()) {
-                Column {
-                    NetworkTtsKind.values().toList().chunked(3).forEach { rowKinds ->
-                        Row {
-                            rowKinds.forEach { k ->
-                                val selected = kind == k
-                                TactileRow(onTap = { applyKindDefaults(k) }, haptics = false) { pressed ->
-                                    Text(
-                                        k.display,
-                                        style = TextStyle(
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (selected) cs.primary else withAlpha(cs.onSurface, 0.8),
-                                        ),
-                                        modifier = Modifier
-                                            .background(
-                                                if (selected) withAlpha(cs.primary, if (app.isDark) 0.22 else 0.12) else app.surfaceFill,
-                                                RoundedCornerShape(999.dp),
-                                            )
-                                            .border(
-                                                1.dp,
-                                                if (selected) withAlpha(cs.primary, 0.38) else withAlpha(cs.outlineVariant, 0.14),
-                                                RoundedCornerShape(999.dp),
-                                            )
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    )
-                                }
-                                Spacer(Modifier.width(8.dp))
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-
-            EditorTextField(label = stringResource(UiR.string.tts_services_field_name_label), value = name, onValueChange = { name = it })
-            EditorTextField(label = stringResource(UiR.string.tts_services_field_api_key_label), value = apiKey, onValueChange = { apiKey = it }, obscure = true)
-            if (kind != NetworkTtsKind.qwenAudio) {
-                EditorTextField(label = stringResource(UiR.string.tts_services_field_base_url_label), value = baseUrl, onValueChange = { baseUrl = it })
-            } else {
-                EditorTextField(label = stringResource(UiR.string.tts_services_field_workspace_id_label), value = extra1, onValueChange = { extra1 = it })
-                EditorTextField(label = stringResource(UiR.string.tts_services_field_region_label), value = extra2, onValueChange = { extra2 = it })
-            }
-            if (model.isNotEmpty() || kind != NetworkTtsKind.azure) {
-                val modelLabel = when (kind) {
-                    NetworkTtsKind.elevenlabs -> UiR.string.tts_services_field_model_label
-                    else -> UiR.string.tts_services_field_model_label
-                }
-                EditorTextField(label = stringResource(modelLabel), value = model, onValueChange = { model = it })
-            }
-            val voiceLabel = voiceLabelFor(kind)
-            EditorTextField(label = stringResource(voiceLabel), value = voice, onValueChange = { voice = it })
-
-            // Kind-specific extras (dense subset of the dart editor fields).
-            when (kind) {
-                NetworkTtsKind.azure -> EditorTextField(label = stringResource(UiR.string.tts_services_field_language_label), value = extra1.ifEmpty { "zh-CN" }, onValueChange = { extra1 = it })
-                NetworkTtsKind.qwen -> EditorTextField(label = stringResource(UiR.string.tts_services_field_language_type_label), value = languageType, onValueChange = { languageType = it })
-                NetworkTtsKind.xai -> EditorTextField(label = stringResource(UiR.string.tts_services_field_language_label), value = extra1.ifEmpty { "auto" }, onValueChange = { extra1 = it })
-                NetworkTtsKind.elevenlabs -> EditorTextField(label = stringResource(UiR.string.tts_services_field_output_format_label), value = extra1.ifEmpty { "mp3_44100_128" }, onValueChange = { extra1 = it })
-                NetworkTtsKind.mimo -> {
-                    EditorTextField(label = stringResource(UiR.string.tts_services_field_instruction_label), value = extra1, onValueChange = { extra1 = it })
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            stringResource(UiR.string.tts_services_field_streaming_label),
-                            style = TextStyle(fontSize = 15.sp, color = withAlpha(cs.onSurface, 0.9)),
-                            modifier = Modifier.weight(1f),
-                        )
-                        IosSwitch(value = stream, onValueChanged = { stream = it })
-                    }
-                }
-                NetworkTtsKind.step -> {
-                    EditorTextField(label = stringResource(UiR.string.tts_services_field_format_label), value = extra1.ifEmpty { "mp3" }, onValueChange = { extra1 = it })
-                    EditorTextField(label = stringResource(UiR.string.tts_services_field_instruction_label), value = extra2, onValueChange = { extra2 = it })
-                }
-                NetworkTtsKind.minimax -> {
-                    EditorTextField(label = stringResource(UiR.string.tts_services_field_emotion_label), value = extra1, onValueChange = { extra1 = it })
-                    EditorTextField(label = stringResource(UiR.string.tts_services_field_language_boost_label), value = extra2, onValueChange = { extra2 = it })
-                }
-                NetworkTtsKind.fishAudio -> EditorTextField(label = stringResource(UiR.string.tts_services_field_latency_label), value = extra1.ifEmpty { "normal" }, onValueChange = { extra1 = it })
-                else -> Unit
-            }
-
-            Spacer(Modifier.height(16.dp))
-            MemorySheetActions(
-                onCancel = onDismiss,
-                onConfirm = { submit() },
-                confirmLabel = stringResource(UiR.string.user_profile_save),
-            )
-        }
-    }
-}
-
-@Composable
-private fun EditorTextField(label: String, value: String, onValueChange: (String) -> Unit, obscure: Boolean = false) {
-    val cs = MaterialTheme.colorScheme
-    val app = LocalSemanticColors.current
-    Column(Modifier.padding(vertical = 6.dp)) {
-        Text(
-            label,
-            style = TextStyle(fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.7)),
-        )
-        Spacer(Modifier.height(4.dp))
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .background(app.surfaceFill, RoundedCornerShape(10.dp))
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            if (value.isEmpty()) {
-                Text(label, style = TextStyle(fontSize = 14.sp, color = withAlpha(cs.onSurface, 0.4)))
-            }
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                visualTransformation = if (obscure) androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                textStyle = TextStyle(fontSize = 14.sp, color = cs.onSurface),
-                cursorBrush = SolidColor(cs.primary),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
+// _NetworkTtsEditorPage L762-1860 moved to TtsServicesEditorScreen.kt —
+// 1:1 fidelity fix; the original Flutter page is a full Scaffold (pushed
+// via Navigator.push), not a bottom sheet. The editor form body is the same,
+// only the container is MemoTopBar + scrollable Column instead of
+// ModalBottomSheet. Hydration extractors (baseUrlOf / modelOf / voiceOf /
+// extra1Of / extra2Of / languageTypeOf / streamOf) and the per-kind voice
+// label lookup (voiceLabelFor) are kept here so the existing
+// TtsServicesEditorHydrationTest import paths keep working.
 
 // tts_services_page.dart L2161-2221 — per-kind field extractors.
-private fun baseUrlOf(o: TtsServiceOptions): String = when (o) {
+// `internal` so TtsServicesEditorScreen.kt (same package) can hydrate the
+// form state. Mirrored by TtsServicesEditorHydrationTest (extra1Of/extra2Of/
+// languageTypeOf/streamOf are `internal` for the same reason).
+internal fun baseUrlOf(o: TtsServiceOptions): String = when (o) {
     is OpenAiTtsOptions -> o.baseUrl
     is GeminiTtsOptions -> o.baseUrl
     is AzureTtsOptions -> o.baseUrl
@@ -699,7 +481,7 @@ private fun baseUrlOf(o: TtsServiceOptions): String = when (o) {
     is FishAudioTtsOptions -> o.baseUrl
 }
 
-private fun modelOf(o: TtsServiceOptions): String = when (o) {
+internal fun modelOf(o: TtsServiceOptions): String = when (o) {
     is OpenAiTtsOptions -> o.model
     is GeminiTtsOptions -> o.model
     is MiniMaxTtsOptions -> o.model
@@ -713,7 +495,7 @@ private fun modelOf(o: TtsServiceOptions): String = when (o) {
     else -> ""
 }
 
-private fun voiceOf(o: TtsServiceOptions): String = when (o) {
+internal fun voiceOf(o: TtsServiceOptions): String = when (o) {
     is OpenAiTtsOptions -> o.voice
     is GeminiTtsOptions -> o.voiceName
     is AzureTtsOptions -> o.voice
@@ -730,7 +512,7 @@ private fun voiceOf(o: TtsServiceOptions): String = when (o) {
 
 /** tts_services_page.dart _voiceLabelFor L2310-2337. */
 @Composable
-private fun voiceLabelFor(k: NetworkTtsKind): Int = when (k) {
+internal fun voiceLabelFor(k: NetworkTtsKind): Int = when (k) {
     NetworkTtsKind.minimax, NetworkTtsKind.xai, NetworkTtsKind.elevenlabs, NetworkTtsKind.fishAudio ->
         UiR.string.tts_services_field_voice_id_label
     else -> UiR.string.tts_services_field_voice_label

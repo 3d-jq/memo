@@ -86,6 +86,19 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val worldBookRepository: com.psyche.memo.data.repo.WorldBookRepository by lazy {
         com.psyche.memo.data.repo.WorldBookRepository(database.writableDatabase, preferenceRepository)
     }
+
+    /**
+     * Voice service stores (TTS + ASR). Container-scoped so the list page
+     * and the add/edit pages share the same instance; the editor's
+     * `upsert` / `add` / `remove` bump `version` here, and the list page
+     * re-renders the section without any nav-result plumbing.
+     */
+    val ttsServicesStore: com.psyche.memo.ui.TtsServicesStore by lazy {
+        com.psyche.memo.ui.TtsServicesStore(preferenceRepository)
+    }
+    val asrServicesStore: com.psyche.memo.ui.AsrServicesStore by lazy {
+        com.psyche.memo.ui.AsrServicesStore(preferenceRepository)
+    }
     val mcpConnections: com.psyche.memo.provider.mcp.McpConnectionManager by lazy {
         com.psyche.memo.provider.mcp.McpConnectionManager(mcpRepository, httpClient)
     }
