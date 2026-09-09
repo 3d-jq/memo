@@ -107,9 +107,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | 收尾-1 | 顶栏统一：新增共享 `MemoTopBar`（56dp 工具栏、56dp 前导槽 + 44dp 返回键、标题在槽后 16dp、18sp semibold、44dp 动作槽；`MemoTopBarContent` 支持自定义标题（供应商详情的头像+名称））并转换全部 40+ 页面；此前标题有 16/18/20/22sp 四种、返回键 22/24dp 混用 | ✅ 本轮 |
 | 收尾-2 | 页面转场：Flutter 当前 Android 默认 `PredictiveBackPageTransitionsBuilder`→`FadeForwardsPageTransitionsBuilder`（450ms，新页从右侧 25% 滑入 + 前 75% 淡入，旧页左滑 25% + 前 25% 淡出，pop 镜像，easeInOutCubicEmphasized 三段点曲线）替代 Navigation Compose 默认 M3 淡入淡出 | ✅ 本轮 |
 | 收尾-3 | 触觉反馈接线：`Haptics` 服务 + 6 开关 + 分类门控早已就绪，补齐调用点——设置行/开关行（soft，按 hapticsOnListItemTap）、世界书页与 sheet、快捷短语/指令注入、底部工具面板、抽屉会话行与开关脉冲（hapticsOnDrawer）、发送/重新生成（hapticsOnGenerate）、消息操作图标与用户气泡长按菜单 | ✅ 本轮 |
-| 收尾-4 | 输入框宽度：原版 composer 是无边框裸 TextField（contentPadding 垂直 2/横向 0）；M3 TextField 自带 16dp 横向内边距导致打字区变窄 → 改 `BasicTextField` + decorationBox 占位符完全复刻 | ✅ 本轮 |
+| 收尾-4 | 输入框几何：原版 composer 是无边框裸 TextField（contentPadding 垂直 2/横向 0，InputDecorator 非 dense 字段最小高 48dp）；M3 TextField 自带 16dp 横向内边距且最小高 56dp → 改 `BasicTextField` + decorationBox 占位符 + 48dp 最小高居中，宽高都对齐 | ✅ 本轮 |
+| UI-6 | 助手剩余 tab + 标签管理：快捷短语 tab（拖拽重排/左滑删除/玻璃加号/共用编辑 sheet）、自定义请求 tab（headers/body 键值卡，逐键落库）、正则 tab（`AssistantRegex` DTO + 名称/正则/替换 + 4 个范围 chip + 正则可编译校验 + 拖拽/开关/删除）、`TagsManagerScreen`（assistant_tag_rows + assignment/collapse 两个 preference 键，创建/重命名/删除/排序/点按指派并返回）、助手卡长按上下文菜单（编辑/复制（`_buildCopyName` 命名）/清除标签/管理标签/删除）+ `tags_manager/{assistantId}` 路由 | ✅ 本轮 |
 | B | 记忆/本地工具/MCP tab | ⬜ |
-| C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜ |
+| C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜（tab 已做，布局管理页待做） |
 
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
