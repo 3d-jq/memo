@@ -116,8 +116,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | UI-7e | 压缩上下文：`core:common` 纯逻辑 `CompressText` + `Utf16SafeCut`（start/recent 窗口、keepRecent 选择、分块、请求预算、token 估算、context-length 检测、模型回退链，带单测）；`ChatViewModel.compressContext`（分块摘要 + 最多 8 轮合并 → 新建会话把摘要作为首条用户消息，keepRecent 保留最近 N 轮）+ `CompressContextDialog`（模型选择行 / 4 模式分段 / 字符数或保留条数 / 估算预览 / 加载弹窗 / 错误映射） | ✅ 本轮 |
 | UI-7f | 记忆关于页 + 注入种子：`MemoryAboutScreen`（6 段参考文案，FAQ 段带小标题）+ 记忆设置入口；`InstructionInjectionRepository` 空表时用 `learning_mode_prompt_v1`（回退 STUDYING 默认提示词，`LearningModePrompt.DEFAULT` 逐字）播种第一条注入项，`learning_mode_enabled_v1` 为真时默认勾选 | ✅ 本轮 |
 | UI-7g | 助手 MCP sheet：输入栏 Hammer 按钮（原为空实现）→ `McpAssistantSheet`（已连接服务器 + 启用/总数标签 + 单行开关 + 全选/清空，写 assistant.mcpServerIds） | ✅ 本轮 |
+| UI-7h | 建议气泡：`core:common/SuggestionText`（parseSuggestions 去项目符号/编号/引号 + 上限 3 条、buildContent 最近 8 轮/尾部 4000 字符，带单测）+ 回复完成后按 `suggestion_generation_enabled_v1` 生成（suggestion 模型/prompt/thinking）写回 conversation.chatSuggestions + `ChatSuggestionBubbles`（最后一条助手消息下方，点按按 `suggestion_insert_on_tap_only_v1` 插入或直接发送） | ✅ 本轮 |
 | B | 记忆/本地工具/MCP tab | ⬜ |
 | C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜（tab 已做，布局管理页待做） |
+| 收尾-5 | Toast：用 `io.github.dokar3:sonner`（Apache-2.0，最新 0.3.9）替换手撸 `MemoSnackbar`。**严格保留现有 UI/UX 视觉**——圆角/阴影/颜色/堆叠间距/动作按钮/入场出场动画全部对齐当前 `MemoSnackbar.kt` 的参数；仅获取库内置能力（fling 关闭、关闭按钮、堆叠展开、dismiss pause、id 替换更新）。**当前不接入**——等移植完再启动 | ⬜（移植完后） |
 
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
