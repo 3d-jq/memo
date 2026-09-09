@@ -912,6 +912,28 @@ class ChatViewModel(
                         history.add(0, LlmMessage(role = "system", content = systemPrompt))
                     }
                 }
+                // World book (lorebook) injection. Mirrors
+                // `MessageBuilderService.injectWorldBookPrompts`
+                // (message_builder_service.dart L1776-2106): keyword/regex
+                // triggers, then splice entries at BEFORE_SYSTEM_PROMPT,
+                // AFTER_SYSTEM_PROMPT, TOP_OF_CHAT, BOTTOM_OF_CHAT, or
+                // AT_DEPTH. The repo is the same one the WorldBook settings
+                // page writes to, so a toggle there takes effect on the very
+                // next chat request.
+                run {
+                    val assistantId = container.currentAssistant()?.id
+                    val activeIds = container.worldBookRepository.activeIds(assistantId)
+                    if (activeIds.isNotEmpty()) {
+                        val books = container.worldBookRepository.books()
+                        val injected = com.psyche.memo.worldbook.WorldBookInjector.inject(
+                            history, books, activeIds,
+                        )
+                        if (injected !== history) {
+                            history.clear()
+                            history.addAll(injected)
+                        }
+                    }
+                }
                 // Only tools with a native dispatch path are offered:
                 // get_time_info has an executor, ask_user_input_v0 routes to the
                 // interaction service, calendar_create exercises the approval

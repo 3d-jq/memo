@@ -81,6 +81,11 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val mcpRepository: com.psyche.memo.data.repo.McpRepository by lazy {
         com.psyche.memo.data.repo.McpRepository(database.writableDatabase)
     }
+
+    /** World book (lorebook) data layer. */
+    val worldBookRepository: com.psyche.memo.data.repo.WorldBookRepository by lazy {
+        com.psyche.memo.data.repo.WorldBookRepository(database.writableDatabase, preferenceRepository)
+    }
     val mcpConnections: com.psyche.memo.provider.mcp.McpConnectionManager by lazy {
         com.psyche.memo.provider.mcp.McpConnectionManager(mcpRepository, httpClient)
     }
