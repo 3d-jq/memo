@@ -549,7 +549,7 @@ private fun McpServerEditSheet(
                         SettingsSwitchRow(
                             icon = Lucide.Terminal,
                             label = tool.name,
-                            subtitle = tool.description,
+                            tip = tool.description,
                             value = tool.enabled,
                             onToggle = { tools[index] = tool.copy(enabled = it) },
                         )

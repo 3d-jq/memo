@@ -129,7 +129,7 @@ fun ThemeSettingsScreen(
                     SettingsSwitchRow(
                         icon = Lucide.Palette,
                         label = stringResource(UiR.string.theme_settings_page_use_dynamic_color_title),
-                        subtitle = stringResource(UiR.string.theme_settings_page_use_dynamic_color_subtitle),
+                        tip = stringResource(UiR.string.theme_settings_page_use_dynamic_color_subtitle),
                         value = ThemeState.useDynamicColor,
                         onToggle = { v ->
                             ThemeState.setDynamicColor(container, v)
@@ -148,7 +148,7 @@ fun ThemeSettingsScreen(
                     SettingsSwitchRow(
                         icon = Lucide.Square,
                         label = stringResource(UiR.string.theme_settings_page_use_pure_background_title),
-                        subtitle = stringResource(UiR.string.theme_settings_page_use_pure_background_subtitle),
+                        tip = stringResource(UiR.string.theme_settings_page_use_pure_background_subtitle),
                         value = ThemeState.usePureBackground,
                         onToggle = { ThemeState.setPureBackground(container, it) },
                     )

@@ -58,7 +58,7 @@ fun ThemeAdvancedScreen(
                     SettingsSwitchRow(
                         icon = Lucide.Layers,
                         label = stringResource(UiR.string.theme_advanced_settings_page_use_layered_surfaces_title),
-                        subtitle = stringResource(UiR.string.theme_advanced_settings_page_use_layered_surfaces_subtitle),
+                        tip = stringResource(UiR.string.theme_advanced_settings_page_use_layered_surfaces_subtitle),
                         value = ThemeState.useLayeredSurfaces,
                         onToggle = { ThemeState.setLayeredSurfaces(container, it) },
                     )
@@ -66,7 +66,7 @@ fun ThemeAdvancedScreen(
                     SettingsSwitchRow(
                         icon = Lucide.Square,
                         label = stringResource(UiR.string.theme_advanced_settings_page_use_layered_sheet_tiles_title),
-                        subtitle = stringResource(UiR.string.theme_advanced_settings_page_use_layered_sheet_tiles_subtitle),
+                        tip = stringResource(UiR.string.theme_advanced_settings_page_use_layered_sheet_tiles_subtitle),
                         value = ThemeState.useLayeredSheetTiles,
                         onToggle = { ThemeState.setLayeredSheetTiles(container, it) },
                     )

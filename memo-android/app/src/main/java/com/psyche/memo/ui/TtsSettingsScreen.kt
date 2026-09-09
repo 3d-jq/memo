@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -13,17 +14,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,10 +41,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lucide
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.R as UiR
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -177,7 +187,8 @@ private fun TtsSettingsSection(
     }
 }
 
-/** L163-189 — _SettingsRow: title/subtitle column + trailing widget. */
+/** L163-189 — _SettingsRow: title + trailing widget；说明走 Tooltip 气泡（用户规范：不裸排）。 */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TtsSettingsRow(
     title: String,
@@ -185,22 +196,39 @@ private fun TtsSettingsRow(
     trailing: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val tipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 14.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
-            )
-            Spacer(Modifier.height(3.dp))
-            Text(
-                text = subtitle,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = cs.onSurface.copy(alpha = 0.62f)),
-            )
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
+        )
+        if (subtitle.isNotEmpty()) {
+            TooltipBox(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable { scope.launch { tipState.show() } },
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = {
+                    PlainTooltip { Text(subtitle, modifier = Modifier.widthIn(max = 280.dp)) }
+                },
+                state = tipState,
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Lucide.BadgeInfo,
+                        contentDescription = subtitle,
+                        tint = cs.onSurface.copy(alpha = 0.45f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
         }
         Spacer(Modifier.width(12.dp))
         trailing()

@@ -16,10 +16,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * SettingsSwitchRow 的 tip/subtitle 语义（照抄 display_settings_page.dart
- * _iosSwitchRow + memory_ui.dart MemoryTipIcon）：subtitle 是裸排副标题；
- * tip 不裸排——点击行尾 BadgeInfo 图标弹出浮动 Tooltip 气泡（不顶开内容）。
- * 锁住该交互防止退回"裸提示词直接显示"。
+ * SettingsSwitchRow 的 tip 语义（用户规范：不裸提示词，统一 Tooltip）：
+ * subtitle 参数已删除；一切说明走 tip——点击行尾 BadgeInfo 图标弹出
+ * 浮动 Tooltip 气泡（不顶开内容）。锁住该交互防止退回"裸提示词直接显示"。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -49,20 +48,22 @@ class SettingsSwitchRowTipTest {
     }
 
     @Test
-    fun subtitleRendersBareImmediately() {
-        val subtitle = "Bare subtitle"
+    fun noTipMeansNoInfoIcon() {
+        // 用户规范（2026-09-09）：设置行不裸排提示，全部改 Tooltip；
+        // 无 tip 时行尾不应出现 BadgeInfo（contentDescription 为空即可判）。
         compose.setContent {
             MaterialTheme {
                 SettingsSwitchRow(
                     icon = Lucide.Sun,
                     label = "Row",
-                    subtitle = subtitle,
-                    value = true,
+                    value = false,
                     onToggle = {},
                 )
             }
         }
-        compose.onNodeWithText(subtitle).assertIsDisplayed()
+        compose.onNodeWithText("Row").assertIsDisplayed()
+        // 组件无 tip 时不存在任何 BadgeInfo 语义节点。
+        compose.onNodeWithContentDescription("tip").assertDoesNotExist()
     }
 
     @Test

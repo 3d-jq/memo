@@ -15,20 +15,27 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.psyche.memo.ui.R as UiR
+import kotlinx.coroutines.launch
 import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.Bookmark
 import com.composables.icons.lucide.Check
@@ -62,7 +70,6 @@ import com.psyche.memo.ui.theme.withAlpha
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.material3.ExperimentalMaterial3Api
 import com.psyche.memo.AppContainerImpl
 
 /** memory_ui.dart L24 — `DateFormat('yyyy-MM-dd')`. */
@@ -130,33 +137,34 @@ internal fun loadAssistantsSync(container: AppContainerImpl): List<Assistant> =
 
 // ── MemoryTipIcon ────────────────────────────────────────────────────────────
 
-/** memory_ui.dart L82-123 — tap shows the tip; Android uses a tap-toggled popup text. */
+/** memory_ui.dart L82-123 — tap shows the tip as a floating Tooltip bubble
+ *  (persistent: stays until tapping elsewhere; 280dp max width), matching
+ *  SettingsSwitchRow's tip affordance. No inline expansion. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MemoryTipIcon(message: String) {
-    var expanded by remember { mutableStateOf(false) }
     val cs = MaterialTheme.colorScheme
-    Column {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clickable { expanded = !expanded },
-            contentAlignment = Alignment.Center,
-        ) {
+    // Flutter Tooltip: tap-triggered, preferBelow, maxWidth 280, dismissed by
+    // tapping outside. isPersistent keeps it readable (M3 non-persistent auto
+    // -dismisses in ~2s).
+    val tipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        modifier = Modifier
+            .size(28.dp)
+            .clickable { scope.launch { tipState.show() } },
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip { Text(message, modifier = Modifier.widthIn(max = 280.dp)) }
+        },
+        state = tipState,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Icon(
                 Lucide.BadgeInfo,
                 contentDescription = message,
                 modifier = Modifier.size(16.dp),
                 tint = withAlpha(cs.onSurface, 0.45),
-            )
-        }
-        // Expanded tip text renders inline below the icon row when toggled.
-        if (expanded) {
-            Text(
-                text = message,
-                style = TextStyle(fontSize = 11.5.sp, lineHeight = 16.sp, color = withAlpha(cs.onSurface, 0.6)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 4.dp),
             )
         }
     }
@@ -327,9 +335,10 @@ internal fun MemorySectionLabel(text: String) {
     )
 }
 
-/** memory_ui.dart L482-541 — title + subtitle + chevron row. */
+/** memory_ui.dart L482-541 — title + info Tooltip + chevron row. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun MemoryNavRow(title: String, subtitle: String, onTap: () -> Unit) {
+internal fun MemoryNavRow(title: String, tip: String, onTap: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     TactileRow(onTap = onTap) { pressed ->
         val bg = if (pressed) withAlpha(cs.onSurface, 0.05) else Color.Transparent
@@ -340,17 +349,12 @@ internal fun MemoryNavRow(title: String, subtitle: String, onTap: () -> Unit) {
                 .padding(start = 14.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.9)),
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    subtitle,
-                    style = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = withAlpha(cs.onSurface, 0.62)),
-                )
-            }
+            Text(
+                title,
+                modifier = Modifier.weight(1f),
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.9)),
+            )
+            MemoryTipIcon(tip)
             Spacer(Modifier.width(8.dp))
             Icon(
                 Lucide.ChevronRight,

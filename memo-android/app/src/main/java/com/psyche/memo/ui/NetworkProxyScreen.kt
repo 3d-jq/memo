@@ -115,6 +115,7 @@ fun NetworkProxyScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp),
         ) {
+            item { SectionHeader(stringResource(UiR.string.network_proxy_section_proxy), first = true) }
             item {
                 SettingsSectionCard {
                     // L111-140 — enable switch row.
@@ -217,12 +218,8 @@ fun NetworkProxyScreen(
             }
             item { Spacer(Modifier.height(12.dp)) }
             item {
-                // L228-237 — test header.
-                Text(
-                    text = stringResource(UiR.string.network_proxy_test_header),
-                    modifier = Modifier.padding(start = 12.dp, top = 2.dp, end = 12.dp, bottom = 6.dp),
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                )
+                // L228-237 — test header; use the unified SectionHeader form.
+                SectionHeader(stringResource(UiR.string.network_proxy_test_header))
             }
             item {
                 SettingsSectionCard {

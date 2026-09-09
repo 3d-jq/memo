@@ -23,6 +23,8 @@
     <string name="about_page_q_q_group_one">Memo Group 1</string>
     <string name="about_page_q_q_group_three">Memo Group 3</string>
     <string name="about_page_q_q_group_two">Memo Group 2</string>
+    <string name="about_page_section_community">Community &amp; Links</string>
+    <string name="about_page_section_version">App Info</string>
     <string name="about_page_system">System</string>
     <string name="about_page_unknown_placeholder">-</string>
     <string name="about_page_version">Version</string>
@@ -1834,6 +1836,7 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="network_proxy_password">Password</string>
     <string name="network_proxy_port">Port</string>
     <string name="network_proxy_priority_note">When both global and provider proxies are enabled, provider-level proxy takes priority.</string>
+    <string name="network_proxy_section_proxy">Proxy Settings</string>
     <string name="network_proxy_server_host">Server</string>
     <string name="network_proxy_settings_header">Proxy Settings</string>
     <string name="network_proxy_test_button">Test</string>
@@ -2412,6 +2415,8 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="stats_page_range_last30_days">Last 30 Days</string>
     <string name="stats_page_range_previous_month">Last Month</string>
     <string name="stats_page_range_previous_quarter">Last Quarter</string>
+    <string name="stats_page_section_overview">Overview</string>
+    <string name="stats_page_section_ranking">Rankings</string>
     <string name="stats_page_show_all_tooltip">Show all</string>
     <string name="stats_page_summary_title">Overview</string>
     <string name="stats_page_title">Statistics</string>

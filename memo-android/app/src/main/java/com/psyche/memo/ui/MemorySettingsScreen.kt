@@ -278,7 +278,7 @@ fun MemorySettingsScreen(
                     SectionCard {
                         MemoryNavRow(
                             title = stringResource(UiR.string.memory_settings_legacy_prompt_title),
-                            subtitle = stringResource(UiR.string.memory_prompt_edit_rules_subtitle),
+                            tip = stringResource(UiR.string.memory_prompt_edit_rules_subtitle),
                             onTap = { promptEditor = PromptEntry(UiR.string.memory_settings_legacy_prompt_title, UiR.string.memory_prompt_edit_rules_subtitle, MemoryPromptKind.LEGACY_RULES) },
                         )
                     }
@@ -287,7 +287,7 @@ fun MemorySettingsScreen(
                     SectionCard {
                         MemoryNavRow(
                             title = stringResource(UiR.string.memory_settings_legacy_title),
-                            subtitle = stringResource(UiR.string.memory_settings_legacy_subtitle),
+                            tip = stringResource(UiR.string.memory_settings_legacy_subtitle),
                             onTap = onOpenLegacyMemory,
                         )
                     }
@@ -384,7 +384,7 @@ fun MemorySettingsScreen(
                     SectionCard {
                         MemoryNavRow(
                             title = stringResource(UiR.string.memory_settings_about_title),
-                            subtitle = stringResource(UiR.string.memory_settings_about_subtitle),
+                            tip = stringResource(UiR.string.memory_settings_about_subtitle),
                             onTap = onOpenMemoryAbout,
                         )
                     }

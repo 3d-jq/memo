@@ -111,7 +111,7 @@ fun ImageSettingsScreen(
                     SettingsSwitchRow(
                         Lucide.Crop,
                         stringResource(UiR.string.display_settings_page_enable_image_cropper_title),
-                        subtitle = stringResource(UiR.string.display_settings_page_enable_image_cropper_subtitle),
+                        tip = stringResource(UiR.string.display_settings_page_enable_image_cropper_subtitle),
                         value = cropperEnabled,
                         onToggle = { cropperEnabled = it; writeBool("image_cropper_enabled_v1", it) },
                     )
@@ -125,7 +125,7 @@ fun ImageSettingsScreen(
                     SettingsSwitchRow(
                         Lucide.Link,
                         stringResource(UiR.string.image_settings_page_markdown_image_links_title),
-                        subtitle = stringResource(UiR.string.image_settings_page_markdown_image_links_subtitle),
+                        tip = stringResource(UiR.string.image_settings_page_markdown_image_links_subtitle),
                         value = mdImageLinks,
                         onToggle = { mdImageLinks = it; writeBool("send_markdown_image_links_as_images_v1", it) },
                     )

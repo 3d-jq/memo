@@ -55,6 +55,8 @@ import com.composables.icons.lucide.MessagesSquare
 import com.composables.icons.lucide.Paperclip
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.RotateCcw
+import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.Shield
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.User
@@ -780,6 +782,8 @@ fun StorageCategoryScreen(
     container: AppContainerImpl,
     categoryKey: StorageCategoryKey,
     onBack: () -> Unit,
+    onOpenLogs: (() -> Unit)? = null,
+    onOpenSnapshots: (() -> Unit)? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -906,17 +910,29 @@ fun StorageCategoryScreen(
             if (categoryKey == StorageCategoryKey.LOGS) {
                 item {
                     Spacer(Modifier.height(12.dp))
-                    IosTileButton(
-                        label = stringResource(UiR.string.storage_space_clear_logs_button),
-                        icon = Lucide.Trash2,
-                        enabled = !clearing,
-                        onClick = {
-                            confirm = ConfirmSpec(
-                                target = logsName,
-                                action = { StorageUsage.clearLogs(context) },
+                    // storage_space_page.dart L1420-1444: view-logs + clear pair.
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (onOpenLogs != null) {
+                            IosTileButton(
+                                label = stringResource(UiR.string.storage_space_view_logs_button),
+                                icon = Lucide.Eye,
+                                onClick = onOpenLogs,
+                                modifier = Modifier.weight(1f),
                             )
-                        },
-                    )
+                        }
+                        IosTileButton(
+                            label = stringResource(UiR.string.storage_space_clear_logs_button),
+                            icon = Lucide.Trash2,
+                            enabled = !clearing,
+                            onClick = {
+                                confirm = ConfirmSpec(
+                                    target = logsName,
+                                    action = { StorageUsage.clearLogs(context) },
+                                )
+                            },
+                            modifier = if (onOpenLogs != null) Modifier.weight(1f) else Modifier,
+                        )
+                    }
                 }
             }
             if (categoryKey == StorageCategoryKey.LEGACY_CHAT_DATA) {
@@ -964,6 +980,18 @@ fun StorageCategoryScreen(
                                 action = { StorageUsage.clearDisplacedDatabases(context) },
                             )
                         },
+                    )
+                }
+            }
+            if (categoryKey == StorageCategoryKey.LOCAL_SNAPSHOTS && onOpenSnapshots != null) {
+                item {
+                    Spacer(Modifier.height(12.dp))
+                    // storage_space_page.dart L1459-1471 — managed, not cleared:
+                    // each copy is restorable, so route to the copies manager.
+                    IosTileButton(
+                        label = stringResource(UiR.string.local_snapshot_manage_copies),
+                        icon = Lucide.ChevronRight,
+                        onClick = onOpenSnapshots,
                     )
                 }
             }

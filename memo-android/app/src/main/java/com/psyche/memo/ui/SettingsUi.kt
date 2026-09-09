@@ -129,11 +129,18 @@ internal fun SettingsRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+            // settings_page.dart L573-584: label is single-line ellipsized so a
+            // long detail never wraps the row.
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         if (detailText != null) {
             Text(
                 text = detailText,
+                // _iosNavRow detail is a single-line 13px@60% trailing summary.
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontSize = 13.sp,
                     color = cs.onSurface.copy(alpha = 0.6f),
@@ -267,19 +274,16 @@ fun SettingsIosDivider() {
 }
 
 /**
- * 源码 display_settings_page.dart L1363-1432 —— _iosSwitchRow：
- * 36dp 图标位 + 15sp 标签（+ 可选 subtitle 副标题 12sp@56% 裸排）+ 可选
- * MemoryTipIcon + IosSwitch。subtitle 与 tip 语义不同（照抄原项目）：
- * - [subtitle]：裸排副标题（如背景生成四行、主题/图片/自动重试的说明）。
- * - [tip]：不裸排——行尾 BadgeInfo 图标（memory_ui.dart L82-123
- *   MemoryTipIcon），点击后在行下方展开完整提示文字。
+ * 源码 display_settings_page.dart L1363-1432 —— _iosSwitchRow + memory_ui.dart
+ * L82-123 MemoryTipIcon：36dp 图标位 + 15sp 标签 + IosSwitch；说明文字一律走
+ * 行尾 BadgeInfo 图标的 Tooltip 浮动气泡（tap 触发、maxWidth 280、点别处收起），
+ * 不在行内裸排——用户规范：项目内不统一的原生 subtitle 提示全部收敛为 Tooltip。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSwitchRow(
     icon: ImageVector,
     label: String,
-    subtitle: String? = null,
     tip: String? = null,
     value: Boolean,
     onToggle: (Boolean) -> Unit,
@@ -298,7 +302,7 @@ fun SettingsSwitchRow(
                 if (haptics.onListItemTap) Haptics.soft(view)
                 onToggle(!value)
             }
-            .padding(horizontal = 12.dp, vertical = if (subtitle == null) 2.dp else 8.dp),
+            .padding(horizontal = 12.dp, vertical = if (tip == null) 2.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
@@ -311,22 +315,7 @@ fun SettingsSwitchRow(
                 )
             }
             Spacer(Modifier.width(12.dp))
-            Column {
-                Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
-                if (!subtitle.isNullOrEmpty()) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        subtitle,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(
-                            fontSize = 12.sp,
-                            lineHeight = 14.sp,
-                            color = cs.onSurface.copy(alpha = 0.56f),
-                        ),
-                    )
-                }
-            }
+            Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
         }
         // MemoryTipIcon（memory_ui.dart L82-123）：28dp 触控区 + BadgeInfo
         // 16sp@45%，点击弹浮动 Tooltip 气泡（CacheWarningIcon 同款交互），

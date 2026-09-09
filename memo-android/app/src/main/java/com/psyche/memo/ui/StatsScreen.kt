@@ -256,6 +256,10 @@ fun StatsScreen(
                 unknownProviderLabel = unknownProviderLabel,
                 unknownTopicLabel = unknownTopicLabel,
             )
+            // Categorized sections (user request): overview group for the raw
+            // data cards, ranking group for the three rank cards — matching
+            // the SectionHeader + card form of the settings home.
+            SectionHeader(stringResource(UiR.string.stats_page_section_overview), first = true)
             StatsSectionCard(title = stringResource(UiR.string.stats_page_heatmap_title)) {
                 StatsHeatmapPanel(days = active.heatmap)
             }
@@ -269,6 +273,7 @@ fun StatsScreen(
             }
             Spacer(Modifier.height(12.dp))
             // L99-156 — three rank sections stacked on phones (<820).
+            SectionHeader(stringResource(UiR.string.stats_page_section_ranking))
             Column {
                 val sections = listOf(
                     RankSpec(

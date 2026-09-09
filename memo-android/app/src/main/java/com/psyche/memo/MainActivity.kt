@@ -447,6 +447,8 @@ private fun AppThemeAndContent(
                                 container = container,
                                 categoryKey = category,
                                 onBack = { navController.popBackStack() },
+                                onOpenLogs = { navController.navigate("log_viewer") },
+                                onOpenSnapshots = { navController.navigate("local_snapshots") },
                             )
                         }
                     }

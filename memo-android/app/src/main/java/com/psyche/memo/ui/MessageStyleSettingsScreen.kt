@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,14 +29,20 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lucide
@@ -60,6 +68,7 @@ import com.composables.icons.lucide.Sun
 import com.composables.icons.lucide.User
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.R as UiR
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -296,7 +305,7 @@ fun MessageStyleSettingsScreen(
                     StyleRow(
                         styleId = "default",
                         label = stringResource(UiR.string.display_settings_page_chat_message_background_default),
-                        subtitle = stringResource(UiR.string.message_style_settings_page_style_default_subtitle),
+                        tip = stringResource(UiR.string.message_style_settings_page_style_default_subtitle),
                         selected = isDefault,
                         onTap = { saveStyle("default") },
                     )
@@ -304,7 +313,7 @@ fun MessageStyleSettingsScreen(
                     StyleRow(
                         styleId = "frosted",
                         label = stringResource(UiR.string.display_settings_page_chat_message_background_frosted),
-                        subtitle = stringResource(UiR.string.message_style_settings_page_style_frosted_subtitle),
+                        tip = stringResource(UiR.string.message_style_settings_page_style_frosted_subtitle),
                         selected = style == "frosted",
                         onTap = { saveStyle("frosted") },
                     )
@@ -312,7 +321,7 @@ fun MessageStyleSettingsScreen(
                     StyleRow(
                         styleId = "solid",
                         label = stringResource(UiR.string.display_settings_page_chat_message_background_solid),
-                        subtitle = stringResource(UiR.string.message_style_settings_page_style_solid_subtitle),
+                        tip = stringResource(UiR.string.message_style_settings_page_style_solid_subtitle),
                         selected = style == "solid",
                         onTap = { saveStyle("solid") },
                     )
@@ -326,14 +335,14 @@ fun MessageStyleSettingsScreen(
                 SettingsSectionCard {
                     TextSwitchRow(
                         label = stringResource(UiR.string.message_style_settings_page_assistant_fit_content),
-                        subtitle = stringResource(UiR.string.message_style_settings_page_assistant_fit_content_subtitle),
+                        tip = stringResource(UiR.string.message_style_settings_page_assistant_fit_content_subtitle),
                         value = fitContent,
                         onToggle = { fitContent = it; saveBool("display_assistant_bubble_fit_content_v1", it) },
                     )
                     SettingsIosDivider()
                     TextSwitchRow(
                         label = stringResource(UiR.string.message_style_settings_page_assistant_split_paragraphs),
-                        subtitle = stringResource(UiR.string.message_style_settings_page_assistant_split_paragraphs_subtitle),
+                        tip = stringResource(UiR.string.message_style_settings_page_assistant_split_paragraphs_subtitle),
                         value = splitParagraphs,
                         onToggle = { splitParagraphs = it; saveBool("display_assistant_bubble_split_paragraphs_v1", it) },
                     )
@@ -598,9 +607,10 @@ private fun StyleSwatch(styleId: String) {
     )
 }
 
-/** L584-645 — style row: swatch + label + subtitle + check. */
+/** L584-645 — style row: swatch + label + info Tooltip + check. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StyleRow(styleId: String, label: String, subtitle: String, selected: Boolean, onTap: () -> Unit) {
+private fun StyleRow(styleId: String, label: String, tip: String, selected: Boolean, onTap: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
@@ -611,23 +621,24 @@ private fun StyleRow(styleId: String, label: String, subtitle: String, selected:
     ) {
         StyleSwatch(styleId)
         Spacer(Modifier.size(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)))
-            Spacer(Modifier.height(2.dp))
-            Text(
-                subtitle,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = cs.onSurface.copy(alpha = 0.52f)),
-            )
-        }
+        Text(label, modifier = Modifier.weight(1f), style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)))
+        TipIcon(tip)
         if (selected) {
+            Spacer(Modifier.size(10.dp))
             Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
         }
     }
 }
 
-/** L647-696 — switch row with subtitle. */
+/** L647-696 — switch row; explanation via info-icon Tooltip, not a bare subtitle. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TextSwitchRow(label: String, subtitle: String, value: Boolean, onToggle: (Boolean) -> Unit) {
+private fun TextSwitchRow(
+    label: String,
+    tip: String,
+    value: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
@@ -635,16 +646,38 @@ private fun TextSwitchRow(label: String, subtitle: String, value: Boolean, onTog
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)))
-            Spacer(Modifier.height(2.dp))
-            Text(
-                subtitle,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = cs.onSurface.copy(alpha = 0.52f)),
-            )
-        }
+        Text(label, modifier = Modifier.weight(1f), style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)))
+        TipIcon(tip)
         Spacer(Modifier.width(12.dp))
         IosSwitch(value = value, onValueChanged = onToggle)
+    }
+}
+
+/** Shared info-icon + persistent Tooltip bubble (SettingsSwitchRow's tip affordance). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TipIcon(tip: String) {
+    val cs = MaterialTheme.colorScheme
+    val tipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        modifier = Modifier
+            .size(28.dp)
+            .clickable { scope.launch { tipState.show() } },
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip { Text(tip, modifier = Modifier.widthIn(max = 280.dp)) }
+        },
+        state = tipState,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                Lucide.BadgeInfo,
+                contentDescription = tip,
+                tint = cs.onSurface.copy(alpha = 0.45f),
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }
 

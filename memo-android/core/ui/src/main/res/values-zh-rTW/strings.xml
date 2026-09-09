@@ -23,6 +23,8 @@
     <string name="about_page_q_q_group_one">Memo 一群</string>
     <string name="about_page_q_q_group_three">Memo 三群</string>
     <string name="about_page_q_q_group_two">Memo 二群</string>
+    <string name="about_page_section_community">社群與連結</string>
+    <string name="about_page_section_version">應用資訊</string>
     <string name="about_page_system">系統</string>
     <string name="about_page_unknown_placeholder">-</string>
     <string name="about_page_version">版本</string>
@@ -1834,6 +1836,7 @@
     <string name="network_proxy_password">密碼</string>
     <string name="network_proxy_port">連接埠</string>
     <string name="network_proxy_priority_note">同時啟用全域代理與供應商代理時，將優先使用供應商代理。</string>
+    <string name="network_proxy_section_proxy">代理設定</string>
     <string name="network_proxy_server_host">伺服器地址</string>
     <string name="network_proxy_settings_header">代理設定</string>
     <string name="network_proxy_test_button">測試</string>
@@ -2412,6 +2415,8 @@
     <string name="stats_page_range_last30_days">最近 30 天</string>
     <string name="stats_page_range_previous_month">上個月</string>
     <string name="stats_page_range_previous_quarter">上個季度</string>
+    <string name="stats_page_section_overview">數據概覽</string>
+    <string name="stats_page_section_ranking">排行榜</string>
     <string name="stats_page_show_all_tooltip">查看全部</string>
     <string name="stats_page_summary_title">總覽</string>
     <string name="stats_page_title">統計</string>
