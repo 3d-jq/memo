@@ -17,19 +17,24 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -44,6 +49,7 @@ import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lucide
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.common.Haptics
@@ -268,6 +274,7 @@ fun SettingsIosDivider() {
  * - [tip]：不裸排——行尾 BadgeInfo 图标（memory_ui.dart L82-123
  *   MemoryTipIcon），点击后在行下方展开完整提示文字。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSwitchRow(
     icon: ImageVector,
@@ -280,54 +287,62 @@ fun SettingsSwitchRow(
     val cs = MaterialTheme.colorScheme
     val view = LocalView.current
     val haptics = LocalHapticsSettings.current
-    var tipExpanded by remember { mutableStateOf(false) }
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    if (haptics.onListItemTap) Haptics.soft(view)
-                    onToggle(!value)
-                }
-                .padding(horizontal = 12.dp, vertical = if (subtitle == null) 2.dp else 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.width(36.dp)) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        tint = cs.onSurface.copy(alpha = 0.9f),
-                        modifier = Modifier.size(20.dp),
+    // Flutter Tooltip：tap 触发、preferBelow、maxWidth 280、点别处收起。
+    // isPersistent=true 由外点收起（M3 非持久气泡 ~2s 自动消失，太短读不完）。
+    val tipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                if (haptics.onListItemTap) Haptics.soft(view)
+                onToggle(!value)
+            }
+            .padding(horizontal = 12.dp, vertical = if (subtitle == null) 2.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.width(36.dp)) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = cs.onSurface.copy(alpha = 0.9f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
+                if (!subtitle.isNullOrEmpty()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        subtitle,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(
+                            fontSize = 12.sp,
+                            lineHeight = 14.sp,
+                            color = cs.onSurface.copy(alpha = 0.56f),
+                        ),
                     )
                 }
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
-                    if (!subtitle.isNullOrEmpty()) {
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            subtitle,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp,
-                                color = cs.onSurface.copy(alpha = 0.56f),
-                            ),
-                        )
-                    }
-                }
             }
-            // MemoryTipIcon（memory_ui.dart L82-123）：28dp 触控区 + BadgeInfo
-            // 16sp@45%，点击切换展开（原项目 Tooltip tap 触发的安卓等价交互）。
-            if (!tip.isNullOrEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable { tipExpanded = !tipExpanded },
-                    contentAlignment = Alignment.Center,
-                ) {
+        }
+        // MemoryTipIcon（memory_ui.dart L82-123）：28dp 触控区 + BadgeInfo
+        // 16sp@45%，点击弹浮动 Tooltip 气泡（CacheWarningIcon 同款交互），
+        // 不裸排、不顶开下方内容。
+        if (!tip.isNullOrEmpty()) {
+            TooltipBox(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clickable { scope.launch { tipState.show() } },
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = {
+                    PlainTooltip { Text(tip, modifier = Modifier.widthIn(max = 280.dp)) }
+                },
+                state = tipState,
+            ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Icon(
                         Lucide.BadgeInfo,
                         contentDescription = tip,
@@ -336,23 +351,9 @@ fun SettingsSwitchRow(
                     )
                 }
             }
-            Spacer(Modifier.width(12.dp))
-            IosSwitch(value = value, onValueChanged = onToggle)
         }
-        // 点击图标后：完整提示展开在整行下方（与 Memory 页 MemoryTipIcon 同款）。
-        if (tipExpanded && !tip.isNullOrEmpty()) {
-            Text(
-                text = tip,
-                style = TextStyle(
-                    fontSize = 11.5.sp,
-                    lineHeight = 16.sp,
-                    color = cs.onSurface.copy(alpha = 0.6f),
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 60.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
-            )
-        }
+        Spacer(Modifier.width(12.dp))
+        IosSwitch(value = value, onValueChanged = onToggle)
     }
 }
 

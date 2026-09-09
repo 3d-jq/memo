@@ -17,8 +17,9 @@ import org.robolectric.annotation.Config
 
 /**
  * SettingsSwitchRow 的 tip/subtitle 语义（照抄 display_settings_page.dart
- * _iosSwitchRow）：subtitle 是裸排副标题；tip 不裸排——行尾 MemoryTipIcon
- * 图标点击后才在行下方展开完整提示。锁住该交互防止退回"裸提示词直接显示"。
+ * _iosSwitchRow + memory_ui.dart MemoryTipIcon）：subtitle 是裸排副标题；
+ * tip 不裸排——点击行尾 BadgeInfo 图标弹出浮动 Tooltip 气泡（不顶开内容）。
+ * 锁住该交互防止退回"裸提示词直接显示"。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -45,20 +46,6 @@ class SettingsSwitchRowTipTest {
         compose.onNodeWithText(tip).assertDoesNotExist()
         compose.onNodeWithContentDescription(tip).performClick()
         compose.onNodeWithText(tip).assertIsDisplayed()
-    }
-
-    @Test
-    fun tipIconSecondTapCollapsesTip() {
-        val tip = "Toggle tip"
-        compose.setContent {
-            MaterialTheme {
-                SettingsSwitchRow(icon = Lucide.Sun, label = "Row", tip = tip, value = false, onToggle = {})
-            }
-        }
-        compose.onNodeWithContentDescription(tip).performClick()
-        compose.onNodeWithText(tip).assertIsDisplayed()
-        compose.onNodeWithContentDescription(tip).performClick()
-        compose.onNodeWithText(tip).assertDoesNotExist()
     }
 
     @Test
