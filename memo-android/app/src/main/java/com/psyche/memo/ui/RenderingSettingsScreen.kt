@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -117,7 +118,12 @@ fun RenderingSettingsScreen(
                 start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp,
             ),
         ) {
-            item {
+            // 分类重组（用户要求对齐设置主屏的分组卡片形态）：数学公式 /
+            // Markdown 渲染 / 代码块。行顺序与 prefs key 均保持源序不动。
+            item(key = "h_math") {
+                SectionHeader(stringResource(UiR.string.display_settings_page_section_math), first = true)
+            }
+            item(key = "c_math") {
                 SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.Hash,
@@ -132,7 +138,14 @@ fun RenderingSettingsScreen(
                         value = mathRendering,
                         onToggle = { mathRendering = it; writeBool("display_enable_math_rendering_v1", it) },
                     )
-                    SettingsIosDivider()
+                }
+            }
+            item(key = "gap_math") { Spacer(Modifier.height(12.dp)) }
+            item(key = "h_md") {
+                SectionHeader(stringResource(UiR.string.display_settings_page_section_markdown))
+            }
+            item(key = "c_md") {
+                SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.TextSelect,
                         stringResource(UiR.string.display_settings_page_enable_user_markdown_title),
@@ -153,7 +166,14 @@ fun RenderingSettingsScreen(
                         value = assistantMarkdown,
                         onToggle = { assistantMarkdown = it; writeBool("display_enable_assistant_markdown_v1", it) },
                     )
-                    SettingsIosDivider()
+                }
+            }
+            item(key = "gap_md") { Spacer(Modifier.height(12.dp)) }
+            item(key = "h_code") {
+                SectionHeader(stringResource(UiR.string.display_settings_page_section_code_block))
+            }
+            item(key = "c_code") {
+                SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.FoldVertical,
                         stringResource(UiR.string.display_settings_page_auto_collapse_code_block_title),
@@ -235,6 +255,7 @@ fun RenderingSettingsScreen(
                     )
                 }
             }
+            item(key = "tail") { Spacer(Modifier.height(12.dp)) }
         }
     }
 }

@@ -75,32 +75,43 @@ private data class SwitchItem(
     val default: Boolean = true,
 )
 
-private val switchRows = listOf(
-    SwitchItem(Lucide.User, UiR.string.display_settings_page_show_user_avatar_title, prefsKey = "display_show_user_avatar_v1"),
-    SwitchItem(Lucide.MessageCircle, UiR.string.display_settings_page_show_user_name_title, prefsKey = "display_show_user_name_v1"),
-    SwitchItem(Lucide.Clock, UiR.string.display_settings_page_show_user_timestamp_title, prefsKey = "display_show_user_timestamp_v1"),
-    SwitchItem(Lucide.Ellipsis, UiR.string.display_settings_page_show_user_message_actions_title, prefsKey = "display_show_user_message_actions_v1"),
-    SwitchItem(Lucide.Bot, UiR.string.display_settings_page_chat_model_icon_title, prefsKey = "display_show_model_icon_v1"),
-    // settings_provider.dart:4803 — _useNewAssistantAvatarUx = false.
-    SwitchItem(Lucide.Bot, UiR.string.display_settings_page_use_new_assistant_avatar_ux_title, prefsKey = "display_use_new_assistant_avatar_ux_v1", default = false),
-    SwitchItem(Lucide.MessageSquare, UiR.string.display_settings_page_show_model_name_title, prefsKey = "display_show_model_name_v1"),
-    SwitchItem(Lucide.Clock, UiR.string.display_settings_page_show_model_timestamp_title, prefsKey = "display_show_model_timestamp_v1"),
-    // settings_provider.dart:4825 — _showProviderInChatMessage = false.
-    SwitchItem(Lucide.Globe, UiR.string.display_settings_page_show_provider_in_chat_message_title, prefsKey = "display_show_provider_in_chat_message_v1", default = false),
-    SwitchItem(Lucide.Type, UiR.string.display_settings_page_show_token_stats_title, prefsKey = "display_show_token_stats_v1"),
-    SwitchItem(
-        Lucide.Sparkles,
-        UiR.string.display_settings_page_show_thinking_cards_title,
-        tipRes = UiR.string.display_settings_page_show_thinking_cards_subtitle,
-        prefsKey = "display_show_thinking_cards_v1",
-    ),
-    SwitchItem(
-        Lucide.Wrench,
-        UiR.string.display_settings_page_show_tool_cards_title,
-        tipRes = UiR.string.display_settings_page_show_tool_cards_subtitle,
-        prefsKey = "display_show_tool_cards_v1",
-    ),
+/** 分类标题 key（用户要求：子页也按设置主屏的 分组卡片 形态）。 */
+private data class SwitchSection(val titleRes: Int, val items: List<SwitchItem>)
+
+private val sections = listOf(
+    SwitchSection(UiR.string.display_settings_page_section_user_rows, listOf(
+        SwitchItem(Lucide.User, UiR.string.display_settings_page_show_user_avatar_title, prefsKey = "display_show_user_avatar_v1"),
+        SwitchItem(Lucide.MessageCircle, UiR.string.display_settings_page_show_user_name_title, prefsKey = "display_show_user_name_v1"),
+        SwitchItem(Lucide.Clock, UiR.string.display_settings_page_show_user_timestamp_title, prefsKey = "display_show_user_timestamp_v1"),
+        SwitchItem(Lucide.Ellipsis, UiR.string.display_settings_page_show_user_message_actions_title, prefsKey = "display_show_user_message_actions_v1"),
+    )),
+    SwitchSection(UiR.string.display_settings_page_section_model_rows, listOf(
+        SwitchItem(Lucide.Bot, UiR.string.display_settings_page_chat_model_icon_title, prefsKey = "display_show_model_icon_v1"),
+        // settings_provider.dart:4803 — _useNewAssistantAvatarUx = false.
+        SwitchItem(Lucide.Bot, UiR.string.display_settings_page_use_new_assistant_avatar_ux_title, prefsKey = "display_use_new_assistant_avatar_ux_v1", default = false),
+        SwitchItem(Lucide.MessageSquare, UiR.string.display_settings_page_show_model_name_title, prefsKey = "display_show_model_name_v1"),
+        SwitchItem(Lucide.Clock, UiR.string.display_settings_page_show_model_timestamp_title, prefsKey = "display_show_model_timestamp_v1"),
+        // settings_provider.dart:4825 — _showProviderInChatMessage = false.
+        SwitchItem(Lucide.Globe, UiR.string.display_settings_page_show_provider_in_chat_message_title, prefsKey = "display_show_provider_in_chat_message_v1", default = false),
+        SwitchItem(Lucide.Type, UiR.string.display_settings_page_show_token_stats_title, prefsKey = "display_show_token_stats_v1"),
+    )),
+    SwitchSection(UiR.string.display_settings_page_section_card_rows, listOf(
+        SwitchItem(
+            Lucide.Sparkles,
+            UiR.string.display_settings_page_show_thinking_cards_title,
+            tipRes = UiR.string.display_settings_page_show_thinking_cards_subtitle,
+            prefsKey = "display_show_thinking_cards_v1",
+        ),
+        SwitchItem(
+            Lucide.Wrench,
+            UiR.string.display_settings_page_show_tool_cards_title,
+            tipRes = UiR.string.display_settings_page_show_tool_cards_subtitle,
+            prefsKey = "display_show_tool_cards_v1",
+        ),
+    )),
 )
+
+private val switchRows: List<SwitchItem> get() = sections.flatMap { it.items }
 
 /** L1183-1192: iOS divider — height 6, 0.6 thick, indent 54, endIndent 12. */
 @Composable
@@ -160,18 +171,29 @@ fun ChatItemDisplaySettingsScreen(
                 start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp,
             ),
         ) {
-            item {
-                SettingsSectionCard {
-                    switchRows.forEachIndexed { index, item ->
-                        SettingsSwitchRow(
-                            icon = item.icon,
-                            label = stringResource(item.labelRes),
-                            tip = item.tipRes?.let { stringResource(it) },
-                            value = values[item.prefsKey] ?: item.default,
-                            onToggle = { writeBool(item.prefsKey, it) },
-                        )
-                        if (index != switchRows.lastIndex) SettingsIosDivider()
+            sections.forEachIndexed { sectionIndex, section ->
+                item(key = "header_$sectionIndex") {
+                    SectionHeader(
+                        stringResource(section.titleRes),
+                        first = sectionIndex == 0,
+                    )
+                }
+                item(key = "card_$sectionIndex") {
+                    SettingsSectionCard {
+                        section.items.forEachIndexed { index, item ->
+                            SettingsSwitchRow(
+                                icon = item.icon,
+                                label = stringResource(item.labelRes),
+                                tip = item.tipRes?.let { stringResource(it) },
+                                value = values[item.prefsKey] ?: item.default,
+                                onToggle = { writeBool(item.prefsKey, it) },
+                            )
+                            if (index != section.items.lastIndex) SettingsIosDivider()
+                        }
                     }
+                }
+                if (sectionIndex != sections.lastIndex) {
+                    item(key = "gap_$sectionIndex") { Spacer(Modifier.height(12.dp)) }
                 }
             }
         }

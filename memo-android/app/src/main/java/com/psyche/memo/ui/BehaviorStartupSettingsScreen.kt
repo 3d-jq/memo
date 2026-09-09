@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -162,7 +163,13 @@ fun BehaviorStartupSettingsScreen(
                 start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp,
             ),
         ) {
-            item {
+            // 分类重组（用户要求对齐设置主屏的分组卡片形态）。行顺序与 prefs
+            // key 均保持源序不动，仅按功能域分 5 组卡：思考与工具卡 / 消息与
+            // 编辑 / 侧边栏与会话列表 / 新对话 / 输入。
+            item(key = "h_cards") {
+                SectionHeader(stringResource(UiR.string.display_settings_page_section_thinking_cards), first = true)
+            }
+            item(key = "c_cards") {
                 SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.Brain,
@@ -193,6 +200,21 @@ fun BehaviorStartupSettingsScreen(
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
+                        Lucide.Pencil,
+                        stringResource(UiR.string.display_settings_page_edit_assistant_keep_thinking_tool_cards_title),
+                        tip = stringResource(UiR.string.display_settings_page_edit_assistant_keep_thinking_tool_cards_subtitle),
+                        value = keepThinkingAndToolCards,
+                        onToggle = { keepThinkingAndToolCards = it; writeBool("chat_edit_assistant_keep_thinking_tool_cards_v1", it) },
+                    )
+                }
+            }
+            item(key = "gap_cards") { Spacer(Modifier.height(12.dp)) }
+            item(key = "h_msg") {
+                SectionHeader(stringResource(UiR.string.display_settings_page_section_messages_editing))
+            }
+            item(key = "c_msg") {
+                SettingsSectionCard {
+                    SettingsSwitchRow(
                         Lucide.TextSelect,
                         stringResource(UiR.string.display_settings_page_insert_suggestion_only_title),
                         value = insertSuggestionOnTapOnly,
@@ -220,21 +242,6 @@ fun BehaviorStartupSettingsScreen(
                         onToggle = { forkKeepMessageVersions = it; writeBool("chat_fork_keep_message_versions_v1", it) },
                     )
                     SettingsIosDivider()
-                    SettingsSwitchRow(
-                        Lucide.Pencil,
-                        stringResource(UiR.string.display_settings_page_edit_assistant_keep_thinking_tool_cards_title),
-                        tip = stringResource(UiR.string.display_settings_page_edit_assistant_keep_thinking_tool_cards_subtitle),
-                        value = keepThinkingAndToolCards,
-                        onToggle = { keepThinkingAndToolCards = it; writeBool("chat_edit_assistant_keep_thinking_tool_cards_v1", it) },
-                    )
-                    SettingsIosDivider()
-                    SettingsSwitchRow(
-                        Lucide.BadgeInfo,
-                        stringResource(UiR.string.display_settings_page_show_updates_title),
-                        value = showAppUpdates,
-                        onToggle = { showAppUpdates = it; writeBool("display_show_app_updates_v1", it) },
-                    )
-                    SettingsIosDivider()
                     // L2139-2153 —— 三态 nav row + 底部弹层（C6）。
                     SettingsRow(
                         icon = Lucide.ChevronRight,
@@ -247,6 +254,20 @@ fun BehaviorStartupSettingsScreen(
                             },
                         ),
                         onTap = { navModeSheetVisible = true },
+                    )
+                }
+            }
+            item(key = "gap_msg") { Spacer(Modifier.height(12.dp)) }
+            item(key = "h_side") {
+                SectionHeader(stringResource(UiR.string.display_settings_page_section_sidebar_list))
+            }
+            item(key = "c_side") {
+                SettingsSectionCard {
+                    SettingsSwitchRow(
+                        Lucide.BadgeInfo,
+                        stringResource(UiR.string.display_settings_page_show_updates_title),
+                        value = showAppUpdates,
+                        onToggle = { showAppUpdates = it; writeBool("display_show_app_updates_v1", it) },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
@@ -276,7 +297,14 @@ fun BehaviorStartupSettingsScreen(
                         value = keepAssistantListExpanded,
                         onToggle = { keepAssistantListExpanded = it; writeBool("display_keep_assistant_list_expanded_on_sidebar_close_v1", it) },
                     )
-                    SettingsIosDivider()
+                }
+            }
+            item(key = "gap_side") { Spacer(Modifier.height(12.dp)) }
+            item(key = "h_new") {
+                SectionHeader(stringResource(UiR.string.display_settings_page_section_new_chat))
+            }
+            item(key = "c_new") {
+                SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.Shuffle,
                         stringResource(UiR.string.display_settings_page_new_chat_on_assistant_switch_title),
@@ -297,7 +325,14 @@ fun BehaviorStartupSettingsScreen(
                         value = newChatOnLaunch,
                         onToggle = { newChatOnLaunch = it; writeBool("display_new_chat_on_launch_v1", it) },
                     )
-                    SettingsIosDivider()
+                }
+            }
+            item(key = "gap_new") { Spacer(Modifier.height(12.dp)) }
+            item(key = "h_input") {
+                SectionHeader(stringResource(UiR.string.display_settings_page_section_input))
+            }
+            item(key = "c_input") {
+                SettingsSectionCard {
                     SettingsSwitchRow(
                         Lucide.CornerDownLeft,
                         stringResource(UiR.string.display_settings_page_enter_to_send_title),
@@ -374,6 +409,7 @@ fun BehaviorStartupSettingsScreen(
                     }
                 }
             }
+            item(key = "tail") { Spacer(Modifier.height(12.dp)) }
         }
     }
 

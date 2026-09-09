@@ -217,10 +217,13 @@ fun AutoRetrySettingsScreen(
                 start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp,
             ),
         ) {
-            item {
+            // 分类重组（用户要求对齐设置主屏的分组卡片形态）：重试策略 /
+            // 触发条件（状态码 / 关键词 / 停止词）。行内容与提交逻辑不动。
+            item(key = "h_strategy") {
+                SectionHeader(stringResource(UiR.string.auto_retry_section_strategy), first = true)
+            }
+            item(key = "c_strategy") {
                 SettingsSectionCard {
-                    // auto_retry_page.dart:161-175 — enable row uses
-                    // autoRetryEnableLabel (C5).
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -278,8 +281,12 @@ fun AutoRetrySettingsScreen(
                     )
                 }
             }
-            item {
-                Spacer(Modifier.size(12.dp))
+            item(key = "gap_strategy") { Spacer(Modifier.size(12.dp)) }
+            item(key = "h_triggers") {
+                SectionHeader(stringResource(UiR.string.auto_retry_section_triggers))
+            }
+            item(key = "c_status") {
+                Spacer(Modifier.size(0.dp))
                 // auto_retry_page.dart:254-281 — status codes, 100-599, no restore.
                 ChipSection(
                     title = stringResource(UiR.string.auto_retry_status_codes),
@@ -301,7 +308,7 @@ fun AutoRetrySettingsScreen(
                     onRestore = null,
                 )
             }
-            item {
+            item(key = "c_keywords") {
                 Spacer(Modifier.size(12.dp))
                 ChipSection(
                     title = stringResource(UiR.string.auto_retry_keywords),
@@ -325,7 +332,7 @@ fun AutoRetrySettingsScreen(
                     },
                 )
             }
-            item {
+            item(key = "c_stop") {
                 Spacer(Modifier.size(12.dp))
                 ChipSection(
                     title = stringResource(UiR.string.auto_retry_stop_keywords),
@@ -349,7 +356,7 @@ fun AutoRetrySettingsScreen(
                     },
                 )
             }
-            item {
+            item(key = "footer") {
                 // auto_retry_page.dart:346-355 — footer.
                 Text(
                     text = stringResource(UiR.string.auto_retry_footer),

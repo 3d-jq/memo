@@ -288,7 +288,10 @@ fun MessageStyleSettingsScreen(
                 start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp,
             ),
         ) {
-            item {
+            item(key = "h_style") {
+                SectionHeader(stringResource(UiR.string.message_style_settings_page_section_style), first = true)
+            }
+            item(key = "c_style") {
                 SettingsSectionCard {
                     StyleRow(
                         styleId = "default",
@@ -315,8 +318,11 @@ fun MessageStyleSettingsScreen(
                     )
                 }
             }
-            item {
-                Spacer(Modifier.size(12.dp))
+            item(key = "gap_style") { Spacer(Modifier.size(12.dp)) }
+            item(key = "h_bubble") {
+                SectionHeader(stringResource(UiR.string.message_style_settings_page_section_bubble))
+            }
+            item(key = "c_bubble") {
                 SettingsSectionCard {
                     TextSwitchRow(
                         label = stringResource(UiR.string.message_style_settings_page_assistant_fit_content),
