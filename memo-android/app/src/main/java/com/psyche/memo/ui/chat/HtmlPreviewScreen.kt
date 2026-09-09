@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Base64
 import android.webkit.WebView
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
@@ -32,7 +33,11 @@ fun HtmlPreviewScreen(
     val html = remember(markdown, cs) { MarkdownPreviewHtml.build(context, cs, markdown) }
 
     androidx.compose.foundation.layout.Column(
-        modifier = Modifier.fillMaxSize().statusBarsPadding(),
+        // 整页不透明（原版是独立路由的 Scaffold），否则会透出后面的聊天页。
+        modifier = Modifier
+            .fillMaxSize()
+            .background(cs.surface)
+            .statusBarsPadding(),
     ) {
         MemoTopBar(
             title = androidx.compose.ui.res.stringResource(com.psyche.memo.ui.R.string.assistant_edit_preview_title),
@@ -43,11 +48,18 @@ fun HtmlPreviewScreen(
             factory = { ctx ->
                 WebView(ctx).apply {
                     settings.javaScriptEnabled = true
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                    // 页面 body 自带主题底色，但加载期间 WebView 自身也要不透明，
+                    // 否则会透出后面的聊天页（用户实测报障）。
+                    setBackgroundColor(cs.surface.toArgb())
                 }
             },
             update = { webView ->
-                webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                // update 每次重组都会跑；只在 HTML 变化时重新加载，否则页面
+                // 会被反复重载而一直空白（表现为"背景透明"）。
+                if (webView.tag != html) {
+                    webView.tag = html
+                    webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+                }
             },
         )
     }
