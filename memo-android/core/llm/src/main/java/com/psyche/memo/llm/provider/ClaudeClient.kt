@@ -257,7 +257,17 @@ class ClaudeClient(
             put("messages", messages)
             put("stream", stream)
             put("max_tokens", request.maxTokens?.coerceAtLeast(1) ?: 4096)
-            request.temperature?.let { put("temperature", it) }
+            // claude_official.dart L338-370 —— reasoning 时下发 thinking 配置，
+            // 且开启推理时不下发 temperature（采样参数与 thinking 互斥）。
+            val thinking = if (request.reasoning) {
+                com.psyche.memo.llm.client.ReasoningBudget
+                    .claudeThinkingConfig(request.modelId, request.thinkingBudget)
+            } else {
+                null
+            }
+            if (!com.psyche.memo.llm.client.ReasoningBudget.isReasoningEnabled(request.thinkingBudget)) {
+                request.temperature?.let { put("temperature", it) }
+            }
             if (system.isNotEmpty()) put("system", system)
             if (request.tools.isNotEmpty()) {
                 put("tools", buildJsonArray {
@@ -270,6 +280,7 @@ class ClaudeClient(
                     }
                 })
             }
+            if (thinking != null) put("thinking", thinking)
         }.toString()
     }
 

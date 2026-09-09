@@ -186,6 +186,13 @@ class OpenAiChatCompletionsClient(
             put("stream", stream)
             request.temperature?.let { put("temperature", it) }
             request.maxTokens?.let { put("max_tokens", it) }
+            // chat_completions_api.dart L806 / openai_provider.dart L581 ——
+            // reasoning 模型且预算非 off/auto 时下发 reasoning_effort。
+            if (request.reasoning) {
+                val effort = com.psyche.memo.llm.client.ReasoningBudget
+                    .openAiEffortForBudget(request.thinkingBudget, request.modelId)
+                if (effort != "off" && effort != "auto") put("reasoning_effort", effort)
+            }
             if (request.tools.isNotEmpty()) {
                 put("tools", buildJsonArray {
                     for (tool in request.tools) {

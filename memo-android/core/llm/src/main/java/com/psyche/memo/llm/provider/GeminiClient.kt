@@ -247,6 +247,12 @@ class GeminiClient(
         val generationConfig = buildJsonObject {
             request.temperature?.let { put("temperature", it) }
             request.maxTokens?.let { put("maxOutputTokens", it) }
+            // google_common.dart L710-715 —— reasoning 时写入 thinkingConfig。
+            if (request.reasoning) {
+                val thinking = com.psyche.memo.llm.client.ReasoningBudget
+                    .googleThinkingConfig(request.modelId, request.thinkingBudget)
+                if (thinking.isNotEmpty()) put("thinkingConfig", thinking)
+            }
         }
         return buildJsonObject {
             put("contents", contents)

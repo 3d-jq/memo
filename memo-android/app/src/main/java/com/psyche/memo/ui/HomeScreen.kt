@@ -463,6 +463,8 @@ fun ChatContent(
     val cs = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
     var showModelSheet by remember { mutableStateOf(false) }
+    var showReasoningSheet by remember { mutableStateOf(false) }
+    var reasoningBudget by remember { mutableStateOf(com.psyche.memo.ui.chat.readBudget(container)) }
     var showSearchSheet by remember { mutableStateOf(false) }
     var showToolsSheet by remember { mutableStateOf(false) }
     var quickPhrases by remember { mutableStateOf<List<com.psyche.memo.data.model.QuickPhrase>?>(null) }
@@ -951,11 +953,24 @@ fun ChatContent(
                 showToolsSheet = true
             },
             onQuickPhrase = { quickPhrases = loadQuickPhrases(container) },
+            reasoningBudget = reasoningBudget,
+            onOpenReasoning = { showReasoningSheet = true },
             attachments = attachments,
             onRemoveAttachment = { index -> vm.removeAttachment(index) },
             voice = voiceInput,
         )
     }
+    }
+
+    if (showReasoningSheet) {
+        com.psyche.memo.ui.chat.ReasoningBudgetSheet(
+            container = container,
+            modelId = modelId,
+            onDismiss = {
+                showReasoningSheet = false
+                reasoningBudget = com.psyche.memo.ui.chat.readBudget(container)
+            },
+        )
     }
 
     if (showModelSheet) {
@@ -1863,6 +1878,8 @@ private fun ChatInputBar(
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    reasoningBudget: Int? = null,
+    onOpenReasoning: () -> Unit = {},
     onSelectModel: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenTools: () -> Unit = {},
@@ -2131,11 +2148,14 @@ private fun ChatInputBar(
                                         onOpenSearch,
                                         cs,
                                     )
-                                    InputIcon(
-                                        Lucide.Brain,
-                                        stringResource(UiR.string.chat_input_bar_reasoning_strength_tooltip),
-                                        {},
-                                        cs,
+                                    // CIB:1880-1920 —— Brain 按钮渲染当前预算图标
+                                    // （ReasoningIcons.budgetIcon），点开预算 sheet。
+                                    InputIconAsset(
+                                        asset = com.psyche.memo.ui.chat.ReasoningBudgetIcons
+                                            .assetForBudget(reasoningBudget),
+                                        label = stringResource(UiR.string.chat_input_bar_reasoning_strength_tooltip),
+                                        onClick = onOpenReasoning,
+                                        cs = cs,
                                     )
                                     InputIcon(
                                         Lucide.Hammer,
@@ -2329,6 +2349,28 @@ private fun InputIcon(
             tint = cs.onSurface.copy(
                 alpha = (if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
                 else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT) * if (enabled) 1f else 0.45f,
+            ),
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Composable
+private fun InputIconAsset(
+    asset: String,
+    label: String,
+    onClick: () -> Unit,
+    cs: androidx.compose.material3.ColorScheme,
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(32.dp)) {
+        coil.compose.AsyncImage(
+            model = asset,
+            contentDescription = label,
+            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                cs.onSurface.copy(
+                    alpha = if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
+                    else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
+                ),
             ),
             modifier = Modifier.size(20.dp),
         )

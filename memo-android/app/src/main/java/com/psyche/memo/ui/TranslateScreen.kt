@@ -193,7 +193,7 @@ fun TranslateScreen(
                     providerId = pk,
                     modelId = mid,
                     messages = listOf(LlmMessage(role = "user", content = prompt)),
-                    thinking = thinking,
+                    thinkingBudget = if (thinking) -1 else 0,
                     apiKey = container.apiKeyFor(pk) ?: "",
                     baseUrl = container.baseUrlFor(pk),
                     chatPath = container.providerConfig(pk)?.chatPath,

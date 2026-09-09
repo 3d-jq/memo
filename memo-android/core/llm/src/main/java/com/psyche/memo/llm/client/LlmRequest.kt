@@ -37,6 +37,13 @@ data class LlmRequest(
     val temperature: Double? = null,
     val maxTokens: Int? = null,
     val thinking: Boolean = false,
+    /**
+     * thinking_budget_v1 semantics: null/-1 auto, 0 off, >0 explicit budget.
+     * Mapped to provider fields by [ReasoningBudget].
+     */
+    val thinkingBudget: Int? = null,
+    /** Model-level reasoning trait (ModelRegistry) — gates reasoning_effort. */
+    val reasoning: Boolean = false,
     val extraHeaders: Map<String, String> = emptyMap(),
     val extraBodyJson: String? = null,
     val apiKey: String,

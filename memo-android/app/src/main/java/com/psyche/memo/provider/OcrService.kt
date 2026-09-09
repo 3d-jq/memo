@@ -86,7 +86,7 @@ object OcrService {
                     apiKey = container.apiKeyFor(providerId) ?: "",
                     baseUrl = container.baseUrlFor(providerId),
                     chatPath = container.providerConfig(providerId)?.chatPath,
-                    thinking = settings.thinking,
+                    thinkingBudget = if (settings.thinking) -1 else 0,
                 ),
             )
             result.parts.joinToString("").trim().ifEmpty { null }

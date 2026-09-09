@@ -31,6 +31,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
@@ -281,6 +282,16 @@ class ChatViewModel(
             val last = msgs.last()
             _messages.value = msgs.dropLast(1) + last.copy(isStreaming = false)
         }
+    }
+
+    /** thinking_budget_v1 —— null/-1 auto、0 off、>0 具体预算。 */
+    private fun readThinkingBudgetSetting(): Int? {
+        val raw = runCatching {
+            container.preferenceRepository.readJson("thinking_budget_v1")
+        }.getOrNull() ?: return null
+        return runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.intOrNull
+        }.getOrNull()
     }
 
     // ------------------------------------------------------------------
@@ -743,6 +754,9 @@ class ChatViewModel(
         val providerId = selectedProviderId.value
         val modelId = selectedModelId.value
         while (true) {
+            // chat_actions.dart L2116-2117 —— 助手覆盖优先，其次全局 thinking_budget_v1。
+            val thinkingBudget = container.currentAssistant()?.thinkingBudget
+                ?: readThinkingBudgetSetting()
             val request = LlmRequest(
                 providerId = providerId,
                 modelId = modelId,
@@ -751,6 +765,8 @@ class ChatViewModel(
                 apiKey = container.apiKeyFor(providerId) ?: "",
                 baseUrl = container.baseUrlFor(providerId),
                 chatPath = container.providerConfig(providerId)?.chatPath,
+                thinkingBudget = thinkingBudget,
+                reasoning = com.psyche.memo.ModelRegistry.infer(modelId).reasoning,
             )
             val client = container.clientFor(providerId)
             // Fresh handler per round: each HTTP stream ends with its own
