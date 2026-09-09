@@ -60,6 +60,10 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - provider 管理页、语音服务/备份/赞助 UI 壳（BackupScreen/LocalSnapshotsScreen/SponsorScreen）+ TTS/ASR 编辑器全屏化
 - 日志三件套（收尾-6：LogPayloadElider/LogRedactor/RequestLogger/FlutterLogger/ContextLogger/LogBootstrap，64 单测）
 - 关于页闪退修复、智谱 400 修复（applyVendorReasoningKnobs）
+- **设置全站分类化（2026-09-09 用户点名）**：偏好主页 17 行拆 5 组、五个偏好子页/触感页行内分组、关于页（应用信息/社区与链接）、统计页（数据概览/排行榜）、网络代理页（代理设置/连接测试）、存储主页（空间总览/存储分类）——统一 SectionHeader + SectionCard
+- **设置行 tip 规范（2026-09-09 用户点名）**：不裸排提示词，一律行尾 ⓘ + 浮动气泡（收尾-7）
+- **存储功能补全（用户点名）**：上传管理器=原项目形态（来源筛选/排序/3 列缩略图网格/点击预览/长按选择/批量删除）、用量条 10 分类 10 色（撞色修复）、LOGS「查看日志」+ LOCAL_SNAPSHOTS「管理副本」入口
+- **图片查看器补全（用户点名）**：底部毛玻璃功能栏（保存/分享/镜像×2/旋转×2）+ 每图独立变换状态（收尾-9）
 
 待移植 / 剩余（仅以下）
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
@@ -71,6 +75,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）
 - 备份/语音功能落地（壳已建，功能走 RikkaHub data-sync + app 模块，下一批）
+- 图片查看器桌面专属件（复制钮/缩放三钮/拖拽关图/桌面翻页箭头——compact=手机端不含，低优先）
 
 - Build env on this machine: system `JAVA_HOME` points at jdk-13 (breaks AGP) —
   always pin `JAVA_HOME=/c/Program Files/Java/jdk-21.0.10` and
