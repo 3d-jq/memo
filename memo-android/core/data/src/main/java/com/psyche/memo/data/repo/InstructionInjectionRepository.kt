@@ -8,6 +8,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Instruction injection storage — instruction_injection_rows plus the two
@@ -23,10 +25,34 @@ class InstructionInjectionRepository(
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val dao = PayloadEntityDao(db, "instruction_injection_rows")
 
-    fun items(): List<InstructionInjection> =
-        dao.getAll().mapNotNull { row ->
+    fun items(): List<InstructionInjection> {
+        val stored = dao.getAll().mapNotNull { row ->
             runCatching { json.decodeFromString(InstructionInjection.serializer(), row.payload) }.getOrNull()
         }
+        if (stored.isNotEmpty()) return stored
+        // instruction_injection_store.dart L63-82 —— 空表时用学习模式提示词
+        // 播种第一条注入项（learning_mode_enabled_v1 为真时默认勾选）。
+        val prompt = prefs.readJson("learning_mode_prompt_v1")
+            ?.let { raw -> runCatching { kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.content }.getOrDefault(raw) }
+            ?.takeIf { it.trim().isNotEmpty() }
+            ?: LearningModePrompt.DEFAULT
+        val item = InstructionInjection(
+            id = java.util.UUID.randomUUID().toString(),
+            title = "",
+            prompt = prompt,
+        )
+        add(item)
+        val enabled = prefs.readJson("learning_mode_enabled_v1")
+            ?.let { raw -> runCatching { kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.booleanOrNull }.getOrNull() }
+            ?: false
+        if (enabled) {
+            prefs.writeJson(
+                ACTIVE_KEY,
+                JsonObject(mapOf(assistantKey(null) to JsonArray(listOf(JsonPrimitive(item.id))))).toString(),
+            )
+        }
+        return listOf(item)
+    }
 
     fun add(item: InstructionInjection) {
         dao.upsert(item.id, json.encodeToString(InstructionInjection.serializer(), item), dao.nextSortOrder())

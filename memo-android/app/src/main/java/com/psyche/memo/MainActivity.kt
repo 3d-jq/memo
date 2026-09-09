@@ -54,6 +54,7 @@ import com.psyche.memo.ui.ProvidersScreen
 import com.psyche.memo.ui.ProviderGroupsScreen
 import com.psyche.memo.ui.SearchServicesScreen
 import com.psyche.memo.ui.McpServersScreen
+import com.psyche.memo.ui.MemoryAboutScreen
 import com.psyche.memo.ui.InstructionInjectionScreen
 import com.psyche.memo.ui.QuickPhrasesScreen
 import com.psyche.memo.ui.TagsManagerScreen
@@ -473,6 +474,9 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
+                    composable("memory_about") {
+                        MemoryAboutScreen(onBack = { navController.popBackStack() })
+                    }
                     composable("tags_manager/{assistantId}") { entry ->
                         TagsManagerScreen(
                             container = container,
@@ -528,7 +532,7 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                             onOpenLegacyMemory = { navController.navigate("legacy_memory") },
                             onOpenMemoryTrace = { navController.navigate("memory_trace") },
-                            onOpenMemoryAbout = { /* memory_about_page.dart — later batch */ },
+                            onOpenMemoryAbout = { navController.navigate("memory_about") },
                             onOpenMemoryEntries = { navController.navigate("memory_entries") },
                         )
                     }
