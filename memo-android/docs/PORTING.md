@@ -117,6 +117,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | UI-7f | 记忆关于页 + 注入种子：`MemoryAboutScreen`（6 段参考文案，FAQ 段带小标题）+ 记忆设置入口；`InstructionInjectionRepository` 空表时用 `learning_mode_prompt_v1`（回退 STUDYING 默认提示词，`LearningModePrompt.DEFAULT` 逐字）播种第一条注入项，`learning_mode_enabled_v1` 为真时默认勾选 | ✅ 本轮 |
 | UI-7g | 助手 MCP sheet：输入栏 Hammer 按钮（原为空实现）→ `McpAssistantSheet`（已连接服务器 + 启用/总数标签 + 单行开关 + 全选/清空，写 assistant.mcpServerIds） | ✅ 本轮 |
 | UI-7h | 建议气泡：`core:common/SuggestionText`（parseSuggestions 去项目符号/编号/引号 + 上限 3 条、buildContent 最近 8 轮/尾部 4000 字符，带单测）+ 回复完成后按 `suggestion_generation_enabled_v1` 生成（suggestion 模型/prompt/thinking）写回 conversation.chatSuggestions + `ChatSuggestionBubbles`（最后一条助手消息下方，点按按 `suggestion_insert_on_tap_only_v1` 插入或直接发送） | ✅ 本轮 |
+| UI-7i | 消息多选 + 导出：更多 sheet 的 Select Messages 进入选择态（锚点消息配对的 user/assistant 预选、行内 20dp 复选框 + 点按切换、顶栏换成关闭/已选计数/反选/全选、底部输入栏换成导出栏或删除栏）；`MessageExport`（part 遍历 + markdown/txt 文档构建，带单测）；导出走 CreateDocument（.md/.txt）。**未移植**：图片导出（widget 截图引擎，按钮暂不渲染）、选择态 mini-map | ✅ 本轮（图片导出 ⬜） |
 | B | 记忆/本地工具/MCP tab | ⬜ |
 | C | 快捷短语/自定义请求/正则 tab + tab 布局管理页（AppBar Settings2 按钮） | ⬜（tab 已做，布局管理页待做） |
 | 收尾-5 | Toast：用 `io.github.dokar3:sonner`（Apache-2.0，最新 0.3.9）替换手撸 `MemoSnackbar`。**严格保留现有 UI/UX 视觉**——圆角/阴影/颜色/堆叠间距/动作按钮/入场出场动画全部对齐当前 `MemoSnackbar.kt` 的参数；仅获取库内置能力（fling 关闭、关闭按钮、堆叠展开、dismiss pause、id 替换更新）。**当前不接入**——等移植完再启动 | ⬜（移植完后） |
