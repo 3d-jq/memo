@@ -266,6 +266,7 @@ private fun BasicSettingsTab(
 ) {
     val cs = MaterialTheme.colorScheme
     var paramSheet by remember { mutableStateOf<ParamSheet?>(null) }
+    var reasoningSheetVisible by remember { mutableStateOf(false) }
     var contextInputDialog by remember { mutableStateOf(false) }
     var avatarSheet by remember { mutableStateOf(false) }
     var emojiDialog by remember { mutableStateOf(false) }
@@ -386,12 +387,14 @@ private fun BasicSettingsTab(
                     onTap = { paramSheet = ParamSheet.Context },
                 )
                 DividerRow()
-                // TODO(port): opens showReasoningBudgetSheet, not ported yet.
+                // reasoning_budget_sheet.dart L1-342 (the editor-page variant
+                // writes back to Assistant.thinkingBudget via SettingsProvider
+                // round-trip in Dart; here we go direct).
                 EditNavRow(
                     icon = Lucide.Brain,
                     label = stringResource(UiR.string.assistant_edit_thinking_budget_title),
                     detailText = assistant.thinkingBudget?.toString() ?: "-",
-                    onTap = {},
+                    onTap = { reasoningSheetVisible = true },
                 )
                 DividerRow()
                 EditNavRow(
@@ -779,6 +782,14 @@ private fun BasicSettingsTab(
                 urlDialog = false
                 onEdit { it.copy(avatar = url) }
             },
+        )
+    }
+    if (reasoningSheetVisible) {
+        com.psyche.memo.ui.chat.ReasoningBudgetSheet(
+            initialBudget = assistant.thinkingBudget,
+            onSelect = { v -> onEdit { it.copy(thinkingBudget = v) } },
+            modelId = assistant.chatModelId.orEmpty(),
+            onDismiss = { reasoningSheetVisible = false },
         )
     }
     if (qqDialog) {

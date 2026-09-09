@@ -73,13 +73,17 @@ object ReasoningBudgetIcons {
 
 /**
  * Port of reasoning_budget_sheet.dart: off / auto / light / medium / heavy /
- * xhigh / max presets plus a custom token budget. The sheet writes
- * `thinking_budget_v1` through [onSelect].
+ * xhigh / max presets plus a custom token budget. The sheet seeds
+ * [initialBudget] and pushes the chosen value to [onSelect] — callers decide
+ * where to persist (the chat input bar writes the global
+ * `thinking_budget_v1`; the assistant edit page writes
+ * `assistant.thinkingBudget`).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReasoningBudgetSheet(
-    container: AppContainerImpl,
+    initialBudget: Int?,
+    onSelect: (Int) -> Unit,
     modelId: String,
     onDismiss: () -> Unit,
 ) {
@@ -87,7 +91,7 @@ fun ReasoningBudgetSheet(
     val semantic = LocalSemanticColors.current
     val view = LocalView.current
     val context = LocalContext.current
-    var selected by remember { mutableStateOf(readBudget(container)) }
+    var selected by remember { mutableStateOf(initialBudget ?: -1) }
     var customOpen by remember { mutableStateOf(false) }
 
     val showXhigh = ReasoningBudget.supportsXhighReasoning(modelId)
@@ -99,10 +103,7 @@ fun ReasoningBudgetSheet(
 
     fun select(value: Int) {
         selected = value
-        container.preferenceRepository.writeJson(
-            "thinking_budget_v1",
-            kotlinx.serialization.json.JsonPrimitive(value).toString(),
-        )
+        onSelect(value)
     }
 
     ModalBottomSheet(
@@ -292,7 +293,18 @@ private fun BudgetTile(
 internal fun readBudget(container: AppContainerImpl): Int? {
     val raw = runCatching {
         container.preferenceRepository.readJson("thinking_budget_v1")
-    }.getOrNull() ?: return null
+    }.getOrNull()
+    return parseBudgetJson(raw)
+}
+
+/**
+ * Pure-JVM parser for the `thinking_budget_v1` payload. Mirrors the
+ * `JsonPrimitive.content.toIntOrNull()` projection used by the original Dart
+ * `SettingsProvider.readInt`; tolerates null, blank, malformed, and non-int
+ * JSON by returning null.
+ */
+internal fun parseBudgetJson(raw: String?): Int? {
+    if (raw.isNullOrBlank()) return null
     return runCatching {
         kotlinx.serialization.json.Json.parseToJsonElement(raw)
             .let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }

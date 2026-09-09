@@ -1127,7 +1127,13 @@ fun ChatContent(
 
     if (showReasoningSheet) {
         com.psyche.memo.ui.chat.ReasoningBudgetSheet(
-            container = container,
+            initialBudget = com.psyche.memo.ui.chat.readBudget(container),
+            onSelect = { v ->
+                container.preferenceRepository.writeJson(
+                    "thinking_budget_v1",
+                    kotlinx.serialization.json.JsonPrimitive(v).toString(),
+                )
+            },
             modelId = modelId,
             onDismiss = {
                 showReasoningSheet = false

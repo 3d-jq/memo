@@ -77,7 +77,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | A2 | 编辑页骨架 + EditSegTabBar + basic tab 静态行 + 路由 | ✅ cf19bcd |
 | A2b | basic tab：聊天模型选择 + 聊天背景（选图/清除/预览） | ✅ 本轮 |
 | A2c | basic tab：4 个参数 sheet（Temperature/TopP/上下文滑块 + MaxTokens 输入）+ 上下文精确值弹窗 + 头像选择 sheet（相册/emoji/链接/QQ/重置）；偏差：相册图按原字节拷进 filesDir，未做原版 maxWidth1024/quality90 降采样（同 A2b 背景） | ✅ 本轮 |
-| A2c.5 | 思考预算行 → `showReasoningBudgetSheet`（reasoning_budget_sheet.dart 342 行）。现状：`AssistantSettingsEditScreen.kt:391` 的 Brain 行还挂着 `onTap = {}` + `// TODO(port)` 死按钮；UI-7c 那边的 `ui/chat/ReasoningBudgetSheet.kt` 是 chat 输入栏的 brain，不是编辑页的这个 | ⬜ |
+| A2c.5 | basic tab：思考预算行接 `ReasoningBudgetSheet`（off/auto/light/medium/heavy/xhigh/max/自定义，复用 UI-7c 那张 sheet；改成 callback-based `initialBudget: Int?` + `onSelect: (Int) -> Unit`，调用方各自持久化——chat 输入栏写 `thinking_budget_v1`，编辑页写 `assistant.thinkingBudget`）。抽出 `parseBudgetJson` 纯函数好测 + `ReasoningBudgetHelperTest` 14 个（7 parseBudgetJson + 7 assetForBudget） | ✅ 本轮 |
 | A3 | 提示词 tab 1/3：系统提示词卡（全屏编辑 sheet + 文件导入 + 变量表 + 缓存告警）+ 追加当前时间行 + 两弹窗；tab 顺序对齐 `defaultAssistantEditTabIds`；`PromptTransformer.applyMessageTemplate`（core:llm） | ✅ 本轮 |
 | A3b | 提示词 tab 2/3：消息模板卡（4 变量 + 实时预览）+ 预设对话卡（pill/内联输入/_PresetMessageCard/拖拽/编辑 sheet）+ `PresetMessage` 模型 | ✅ 本轮 |
 | S1 | 搜索体系 1/3：`SearchServiceOptions` 24 选项类（JSON 逐键对齐）+ `SearchSettingsRepository`（search_service_rows + preference 键）+ 引擎（bing_local/tavily/searxng/brave/serper/bocha/zhipu/duckduckgo 8 个 provider + key 轮换）+ `search_web` 工具（定义/引用提示词/执行）+ 系统提示词注入（assistant.systemPrompt + 搜索引用块） | ✅ 本轮 |
