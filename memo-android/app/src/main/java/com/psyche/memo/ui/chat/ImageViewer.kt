@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,7 +47,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.composables.icons.lucide.Download
+import com.composables.icons.lucide.FlipHorizontal2
+import com.composables.icons.lucide.FlipVertical2
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.RotateCcw
+import com.composables.icons.lucide.RotateCw
+import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.X
 import com.composables.icons.lucide.ImageOff
 import com.psyche.memo.data.model.ImagePart
@@ -125,9 +132,22 @@ fun MessageImageAttachments(
 }
 
 /**
- * 全屏图片查看器（image_viewer_page.dart 移动端核心子集）：HorizontalPager
- * 翻页 + 捏合缩放/拖拽 + 双击重置 + 顶部计数器 + 保存到相册。旋转/翻转/
- * 分享/复制不在本批（原版 2261 行完整行为集）。
+ * Per-image display state (image_viewer_page.dart `_ImageDisplayTransform`):
+ * zoom/pan plus display-only flip/rotation, kept independently per page index.
+ */
+private data class ImageViewerTransform(
+    val scale: Float = 1f,
+    val panX: Float = 0f,
+    val panY: Float = 0f,
+    val flipX: Boolean = false,
+    val flipY: Boolean = false,
+    val quarterTurns: Int = 0,
+)
+
+/**
+ * 全屏图片查看器（image_viewer_page.dart 移动端核心）：HorizontalPager
+ * 翻页 + 捏合缩放/拖拽 + 双击重置 + 顶部计数器 + 底部玻璃功能栏
+ * （保存/分享/左右镜像/上下镜像/左旋/右旋）。每张图独立保留变换状态。
  */
 @Composable
 fun ImageViewerOverlay(
@@ -148,15 +168,64 @@ fun ImageViewerOverlay(
             initialPage = initialIndex.coerceIn(0, (images.size - 1).coerceAtLeast(0)),
             pageCount = { images.size },
         )
-        var scale by remember { mutableStateOf(1f) }
-        var offsetXPx by remember { mutableStateOf(0f) }
-        var offsetYPx by remember { mutableStateOf(0f) }
         var saving by remember { mutableStateOf(false) }
+        var sharing by remember { mutableStateOf(false) }
+        // _displayTransforms/_zoomCtrls — one display transform per image index
+        // (image_viewer_page.dart L364): zoom/pan/flip/rotation survive paging.
+        var transforms by remember {
+            mutableStateOf(List(images.size.coerceAtLeast(1)) { ImageViewerTransform() })
+        }
+        val currentIndex = pagerState.currentPage.coerceIn(0, transforms.lastIndex)
+        val current = transforms[currentIndex]
 
-        fun resetTransform() {
-            scale = 1f
-            offsetXPx = 0f
-            offsetYPx = 0f
+        fun updateCurrent(block: (ImageViewerTransform) -> ImageViewerTransform) {
+            transforms = transforms.toMutableList().also { it[currentIndex] = block(it[currentIndex]) }
+        }
+
+        fun showSnack(message: String) {
+            com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                com.psyche.memo.ui.snackbar.AppNotification(
+                    message = message,
+                    type = com.psyche.memo.ui.snackbar.NotificationType.INFO,
+                ),
+            )
+        }
+
+        fun saveCurrent() {
+            if (saving) return
+            saving = true
+            val url = images.getOrNull(pagerState.currentPage).orEmpty()
+            scope.launch {
+                val message = withContext(Dispatchers.IO) { saveImageToGallery(context, url) }
+                saving = false
+                showSnack(message)
+            }
+        }
+
+        // _shareCurrent: resolve the current image to a shareable local file,
+        // then hand it to the system share sheet.
+        fun shareCurrent() {
+            if (sharing) return
+            sharing = true
+            val url = images.getOrNull(pagerState.currentPage).orEmpty()
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    resolveShareableImage(context, url)
+                }
+                sharing = false
+                if (result == null) {
+                    showSnack(context.getString(UiR.string.image_viewer_page_image_load_failed))
+                    return@launch
+                }
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "image/*"
+                    putExtra(android.content.Intent.EXTRA_STREAM, result)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                runCatching {
+                    context.startActivity(android.content.Intent.createChooser(send, null))
+                }.onFailure { showSnack(it.message ?: "share failed") }
+            }
         }
 
         Box(
@@ -168,6 +237,7 @@ fun ImageViewerOverlay(
                 modifier = Modifier.fillMaxSize(),
                 key = { images[it] },
             ) { page ->
+                val t = transforms[page.coerceIn(0, transforms.lastIndex)]
                 AsyncImage(
                     model = images[page],
                     contentDescription = androidx.compose.ui.res.stringResource(
@@ -180,26 +250,42 @@ fun ImageViewerOverlay(
                         .fillMaxSize()
                         .pointerInput(page) {
                             detectTransformGestures { _, pan, zoom, _ ->
-                                scale = (scale * zoom).coerceIn(1f, 8f)
-                                if (scale > 1f) {
-                                    offsetXPx += pan.x
-                                    offsetYPx += pan.y
+                                val newZoom = (t.scale * zoom).coerceIn(1f, 8f)
+                                if (newZoom > 1f) {
+                                    transforms = transforms.toMutableList().also { list ->
+                                        list[page.coerceIn(0, list.lastIndex)] = list[page.coerceIn(0, list.lastIndex)]
+                                            .let { it.copy(scale = newZoom, panX = it.panX + pan.x, panY = it.panY + pan.y) }
+                                    }
                                 } else {
-                                    offsetXPx = 0f
-                                    offsetYPx = 0f
+                                    transforms = transforms.toMutableList().also { list ->
+                                        list[page.coerceIn(0, list.lastIndex)] = ImageViewerTransform(
+                                            flipX = t.flipX,
+                                            flipY = t.flipY,
+                                            quarterTurns = t.quarterTurns,
+                                        )
+                                    }
                                 }
                             }
                         }
                         .pointerInput(page) {
                             detectTapGestures(
-                                onDoubleTap = { resetTransform() },
+                                onDoubleTap = {
+                                    transforms = transforms.toMutableList().also { list ->
+                                        list[page.coerceIn(0, list.lastIndex)] = ImageViewerTransform(
+                                            flipX = t.flipX,
+                                            flipY = t.flipY,
+                                            quarterTurns = t.quarterTurns,
+                                        )
+                                    }
+                                },
                             )
                         }
                         .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                            translationX = offsetXPx
-                            translationY = offsetYPx
+                            scaleX = t.scale * (if (t.flipX) -1f else 1f)
+                            scaleY = t.scale * (if (t.flipY) -1f else 1f)
+                            translationX = t.panX
+                            translationY = t.panY
+                            rotationZ = t.quarterTurns * 90f
                         },
                 )
             }
@@ -208,10 +294,10 @@ fun ImageViewerOverlay(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 24.dp),
+                    .padding(horizontal = 16.dp, vertical = 34.dp),
             ) {
                 ViewerCircleButton(Lucide.X, UiR.string.image_viewer_page_close_button, onClose)
-                androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f))
                 Text(
                     text = androidx.compose.ui.res.stringResource(
                         UiR.string.image_viewer_page_counter,
@@ -223,56 +309,105 @@ fun ImageViewerOverlay(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                     ),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50.dp))
+                        .background(Color.White.copy(alpha = 0.12f))
+                        .border(0.7.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(50.dp))
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                 )
-                Box(Modifier.weight(1f))
-                ViewerCircleButton(
-                    Lucide.Download,
-                    UiR.string.image_viewer_page_save_button,
-                    enabled = !saving,
+            }
+            // 底部功能栏（image_viewer_page.dart _buildActionChrome）：玻璃面板内
+            // 保存 · 分享 | 左右镜像 · 上下镜像 · 左旋 · 右旋。
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 28.dp)
+                    .clip(RoundedCornerShape(30.dp))
+                    .background(Color.Black.copy(alpha = 0.26f))
+                    .border(0.7.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(30.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                GlassViewerButton(
+                    icon = Lucide.Download,
+                    labelRes = UiR.string.image_viewer_page_save_button,
+                    loading = saving,
+                    onClick = ::saveCurrent,
+                )
+                GlassViewerButton(
+                    icon = Lucide.Share2,
+                    labelRes = UiR.string.image_viewer_page_share_button,
+                    loading = sharing,
+                    onClick = ::shareCurrent,
+                )
+                GlassViewerDivider()
+                GlassViewerButton(
+                    icon = Lucide.FlipHorizontal2,
+                    labelRes = UiR.string.image_viewer_page_flip_horizontal_button,
+                    active = current.flipX,
+                    onClick = { updateCurrent { it.copy(flipX = !it.flipX) } },
+                )
+                GlassViewerButton(
+                    icon = Lucide.FlipVertical2,
+                    labelRes = UiR.string.image_viewer_page_flip_vertical_button,
+                    active = current.flipY,
+                    onClick = { updateCurrent { it.copy(flipY = !it.flipY) } },
+                )
+                GlassViewerButton(
+                    icon = Lucide.RotateCcw,
+                    labelRes = UiR.string.image_viewer_page_rotate_left_button,
                     onClick = {
-                        if (!saving) {
-                            saving = true
-                            val url = images.getOrNull(pagerState.currentPage).orEmpty()
-                            scope.launch {
-                                val message = withContext(Dispatchers.IO) {
-                                    saveImageToGallery(context, url)
-                                }
-                                saving = false
-                                com.psyche.memo.ui.snackbar.SnackbarManager.show(
-                                    com.psyche.memo.ui.snackbar.AppNotification(
-                                        message = message,
-                                        type = com.psyche.memo.ui.snackbar.NotificationType.INFO,
-                                    ),
-                                )
-                            }
-                        }
+                        updateCurrent { it.copy(quarterTurns = (it.quarterTurns - 1).mod(4)) }
+                    },
+                )
+                GlassViewerButton(
+                    icon = Lucide.RotateCw,
+                    labelRes = UiR.string.image_viewer_page_rotate_right_button,
+                    onClick = {
+                        updateCurrent { it.copy(quarterTurns = (it.quarterTurns + 1).mod(4)) }
                     },
                 )
             }
-            // 底部页码点（多图时）。
-            if (images.size > 1) {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 24.dp),
-                ) {
-                    for (i in images.indices) {
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 3.dp)
-                                .size(if (i == pagerState.currentPage) 8.dp else 6.dp)
-                                .background(
-                                    if (i == pagerState.currentPage) Color.White else Color.White.copy(alpha = 0.4f),
-                                    CircleShape,
-                                ),
-                        )
-                    }
-                }
-            }
         }
     }
+}
+
+/**
+ * Resolve the current image to a shareable local path: local file paths are
+ * used as-is, remote/data images are materialized into the cache dir.
+ * Returns null when the input is unusable.
+ */
+internal fun materializeShareablePath(context: android.content.Context, url: String): String? {
+    if (url.isEmpty()) return null
+    return when {
+        url.startsWith("file://") -> {
+            java.io.File(url.removePrefix("file://")).takeIf { it.exists() }?.absolutePath
+        }
+        url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:") -> {
+            val bytes = readImageBytes(url) ?: return null
+            val ext = when {
+                url.startsWith("data:image/png") || url.endsWith(".png") -> "png"
+                url.endsWith(".webp") -> "webp"
+                else -> "jpg"
+            }
+            val out = java.io.File(context.cacheDir, "share/memo-${System.currentTimeMillis()}.$ext")
+            out.parentFile?.mkdirs()
+            out.writeBytes(bytes)
+            out.absolutePath
+        }
+        else -> java.io.File(url).takeIf { it.exists() }?.absolutePath
+    }
+}
+
+/** Wrap a shareable path in a FileProvider content uri (file_paths.xml). */
+internal fun resolveShareableImage(context: android.content.Context, url: String): android.net.Uri? {
+    val file = materializeShareablePath(context, url)?.let { java.io.File(it) } ?: return null
+    return androidx.core.content.FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file,
+    )
 }
 
 @Composable
@@ -297,6 +432,54 @@ private fun ViewerCircleButton(
             modifier = Modifier.size(18.dp),
         )
     }
+}
+
+/** _GlassCircleButton: 48dp frosted circle, white-on-dark, loading state. */
+@Composable
+private fun GlassViewerButton(
+    icon: ImageVector,
+    labelRes: Int,
+    loading: Boolean = false,
+    active: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val fill = Color.White.copy(alpha = if (active) 0.26f else 0.16f)
+    val border = Color.White.copy(alpha = 0.30f)
+    val contentAlpha = if (loading) 0.52f else 0.92f
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .background(fill, CircleShape)
+            .border(0.7.dp, border, CircleShape)
+            .clickable(enabled = !loading, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (loading) {
+            androidx.compose.material3.CircularProgressIndicator(
+                modifier = Modifier.size(19.dp),
+                strokeWidth = 2.1.dp,
+                color = Color.White.copy(alpha = contentAlpha),
+            )
+        } else {
+            Icon(
+                icon,
+                contentDescription = androidx.compose.ui.res.stringResource(labelRes),
+                tint = Color.White.copy(alpha = contentAlpha),
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/** _GlassDivider: 1x24 vertical white hairline between action groups. */
+@Composable
+private fun GlassViewerDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .height(24.dp)
+            .background(Color.White.copy(alpha = 0.16f)),
+    )
 }
 
 /**
