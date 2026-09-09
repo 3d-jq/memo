@@ -265,7 +265,7 @@ fun AutoRetrySettingsScreen(
                     SettingsSwitchRow(
                         Lucide.RefreshCw,
                         stringResource(UiR.string.auto_retry_jitter),
-                        tip = stringResource(UiR.string.auto_retry_jitter_subtitle),
+                        subtitle = stringResource(UiR.string.auto_retry_jitter_subtitle),
                         value = jitter,
                         onToggle = { jitter = it; save() },
                     )

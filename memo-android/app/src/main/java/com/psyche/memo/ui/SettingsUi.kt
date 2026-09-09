@@ -28,6 +28,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -38,9 +40,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Check
-import com.composables.icons.lucide.Lightbulb
 import com.composables.icons.lucide.Lucide
 import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.common.AppLocale
@@ -260,12 +262,17 @@ fun SettingsIosDivider() {
 
 /**
  * 源码 display_settings_page.dart L1363-1432 —— _iosSwitchRow：
- * 36dp 图标位 + 15sp 标签（+tip 副标题 12sp@56% 与提示图标）+ IosSwitch。
+ * 36dp 图标位 + 15sp 标签（+ 可选 subtitle 副标题 12sp@56% 裸排）+ 可选
+ * MemoryTipIcon + IosSwitch。subtitle 与 tip 语义不同（照抄原项目）：
+ * - [subtitle]：裸排副标题（如背景生成四行、主题/图片/自动重试的说明）。
+ * - [tip]：不裸排——行尾 BadgeInfo 图标（memory_ui.dart L82-123
+ *   MemoryTipIcon），点击后在行下方展开完整提示文字。
  */
 @Composable
 fun SettingsSwitchRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
+    subtitle: String? = null,
     tip: String? = null,
     value: Boolean,
     onToggle: (Boolean) -> Unit,
@@ -273,54 +280,79 @@ fun SettingsSwitchRow(
     val cs = MaterialTheme.colorScheme
     val view = LocalView.current
     val haptics = LocalHapticsSettings.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                if (haptics.onListItemTap) Haptics.soft(view)
-                onToggle(!value)
+    var tipExpanded by remember { mutableStateOf(false) }
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    if (haptics.onListItemTap) Haptics.soft(view)
+                    onToggle(!value)
+                }
+                .padding(horizontal = 12.dp, vertical = if (subtitle == null) 2.dp else 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.width(36.dp)) {
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = cs.onSurface.copy(alpha = 0.9f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
+                    if (!subtitle.isNullOrEmpty()) {
+                        Spacer(Modifier.height(3.dp))
+                        Text(
+                            subtitle,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
+                                color = cs.onSurface.copy(alpha = 0.56f),
+                            ),
+                        )
+                    }
+                }
             }
-            .padding(horizontal = 12.dp, vertical = if (tip == null) 2.dp else 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.width(36.dp)) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = cs.onSurface.copy(alpha = 0.9f),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
-                if (!tip.isNullOrEmpty()) {
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        tip,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(
-                            fontSize = 12.sp,
-                            lineHeight = 14.sp,
-                            color = cs.onSurface.copy(alpha = 0.56f),
-                        ),
+            // MemoryTipIcon（memory_ui.dart L82-123）：28dp 触控区 + BadgeInfo
+            // 16sp@45%，点击切换展开（原项目 Tooltip tap 触发的安卓等价交互）。
+            if (!tip.isNullOrEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clickable { tipExpanded = !tipExpanded },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Lucide.BadgeInfo,
+                        contentDescription = tip,
+                        tint = cs.onSurface.copy(alpha = 0.45f),
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
+            Spacer(Modifier.width(12.dp))
+            IosSwitch(value = value, onValueChanged = onToggle)
         }
-        // MemoryTipIcon slot (L1424-1426) — CircleHelp glyph（Info 缺失）。
-        if (!tip.isNullOrEmpty()) {
-            Icon(
-                Lucide.Lightbulb,
-                contentDescription = null,
-                tint = cs.onSurface.copy(alpha = 0.45f),
-                modifier = Modifier.size(16.dp),
+        // 点击图标后：完整提示展开在整行下方（与 Memory 页 MemoryTipIcon 同款）。
+        if (tipExpanded && !tip.isNullOrEmpty()) {
+            Text(
+                text = tip,
+                style = TextStyle(
+                    fontSize = 11.5.sp,
+                    lineHeight = 16.sp,
+                    color = cs.onSurface.copy(alpha = 0.6f),
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 60.dp, end = 16.dp, top = 2.dp, bottom = 6.dp),
             )
         }
-        Spacer(Modifier.width(12.dp))
-        IosSwitch(value = value, onValueChanged = onToggle)
     }
 }
 
