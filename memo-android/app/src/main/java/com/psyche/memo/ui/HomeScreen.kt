@@ -158,6 +158,8 @@ fun HomeScreen(
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
     onOpenTranslate: () -> Unit = {},
+    onEditAssistant: (String) -> Unit = {},
+    onManageTags: (String) -> Unit = {},
     pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
 ) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -407,6 +409,8 @@ fun HomeScreen(
                     onOpenHistory = onOpenHistory,
                     onCurrentDeleted = ::onCurrentDeleted,
                     onOpenTranslate = onOpenTranslate,
+                    onEditAssistant = onEditAssistant,
+                    onManageTags = onManageTags,
                 )
             }
         }

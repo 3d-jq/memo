@@ -56,6 +56,7 @@ import com.psyche.memo.ui.SearchServicesScreen
 import com.psyche.memo.ui.McpServersScreen
 import com.psyche.memo.ui.InstructionInjectionScreen
 import com.psyche.memo.ui.QuickPhrasesScreen
+import com.psyche.memo.ui.TagsManagerScreen
 import com.psyche.memo.ui.TranslateScreen
 import com.psyche.memo.ui.WorldBookScreen
 import com.psyche.memo.ui.ProviderEditScreen
@@ -298,6 +299,8 @@ private fun AppThemeAndContent(
                             onOpenSearchServices = { navController.navigate("search_services") },
                             onOpenWorldBookPage = { navController.navigate("world_book") },
                             onOpenTranslate = { navController.navigate("translate") },
+                            onEditAssistant = { id -> navController.navigate("assistant_settings_edit/$id") },
+                            onManageTags = { id -> navController.navigate("tags_manager/$id") },
                             pendingOpenConversation = pendingOpenConversation,
                         )
                     }
@@ -467,6 +470,13 @@ private fun AppThemeAndContent(
                     composable("world_book") {
                         WorldBookScreen(
                             container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("tags_manager/{assistantId}") { entry ->
+                        TagsManagerScreen(
+                            container = container,
+                            assistantId = entry.arguments?.getString("assistantId").orEmpty(),
                             onBack = { navController.popBackStack() },
                         )
                     }

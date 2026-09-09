@@ -183,7 +183,7 @@ fun QuickPhrasesScreen(
 
 /** Slidable endActionPane equivalent: drag left to reveal a delete action. */
 @Composable
-private fun SwipeDeleteRow(
+internal fun SwipeDeleteRow(
     onDelete: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -316,7 +316,7 @@ private fun QuickPhraseCard(phrase: QuickPhrase, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QuickPhraseEditSheet(
+internal fun QuickPhraseEditSheet(
     phrase: QuickPhrase?,
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit,

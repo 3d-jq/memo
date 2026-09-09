@@ -179,6 +179,20 @@ fun AssistantSettingsEditScreen(
                     onEdit = ::edit,
                     onOpenMemorySettings = onOpenMemorySettings,
                 )
+                3 -> AssistantEditQuickPhraseTab(
+                    container = container,
+                    assistant = a,
+                    onEdit = ::edit,
+                )
+                4 -> AssistantEditCustomRequestTab(
+                    assistant = a,
+                    onEdit = ::edit,
+                )
+                5 -> AssistantEditRegexTab(
+                    container = container,
+                    assistant = a,
+                    onEdit = ::edit,
+                )
                 6 -> AssistantEditLocalToolsTab(
                     container = container,
                     assistant = a,

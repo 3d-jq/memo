@@ -42,7 +42,9 @@ import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.CircleCheck
 import com.composables.icons.lucide.History
+import com.composables.icons.lucide.Bookmark
 import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.Eraser
 
 import com.composables.icons.lucide.ListChecks
 import com.composables.icons.lucide.Pencil
@@ -121,6 +123,8 @@ fun SideDrawerContent(
     onOpenHistory: () -> Unit,
     onCurrentDeleted: () -> Unit,
     onOpenTranslate: () -> Unit = {},
+    onEditAssistant: (String) -> Unit = {},
+    onManageTags: (String) -> Unit = {},
     assistantName: String? = null,
     userName: String? = null,
     forceSelectionMode: Boolean = false,
@@ -195,6 +199,8 @@ fun SideDrawerContent(
     val selectedIds = remember { mutableStateListOf<String>() }
     val allSelected = filtered.isNotEmpty() && filtered.all { it.id in selectedIds }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
+    var assistantMenuFor by remember { mutableStateOf<Assistant?>(null) }
+    var assistantDeleteTarget by remember { mutableStateOf<Assistant?>(null) }
     var deleteTarget by remember { mutableStateOf<Conversation?>(null) }
     var multiDeleteConfirm by remember { mutableStateOf(false) }
     // Global search mode (side_drawer.dart): the search field prefix toggles
@@ -409,7 +415,11 @@ fun SideDrawerContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
-                .clickable { assistantsExpanded = !assistantsExpanded },
+                .combinedClickable(
+                    onClick = { assistantsExpanded = !assistantsExpanded },
+                    // assistant_entry_actions.dart —— 长按助手卡弹上下文菜单。
+                    onLongClick = { assistantMenuFor = container.currentAssistant() },
+                ),
         ) {
             Row(
                 modifier = Modifier
@@ -1054,6 +1064,113 @@ fun SideDrawerContent(
             },
         )
     }
+
+    // Assistant context menu (assistant_entry_actions.dart
+    // _showAssistantItemMenuMobile): edit / copy / clear tag / manage tags /
+    // delete rows, 48dp tiles on the sheet background.
+    assistantMenuFor?.let { target ->
+        val tagsRepo = remember(container) {
+            com.psyche.memo.data.repo.TagRepository(container.database.writableDatabase, container.preferenceRepository)
+        }
+        ModalBottomSheet(
+            onDismissRequest = { assistantMenuFor = null },
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            containerColor = cs.surface,
+            dragHandle = null,
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 40.dp, height = 4.dp)
+                            .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                MenuRow(Lucide.Pencil, stringResource(UiR.string.assistant_tags_context_menu_edit_assistant), cs.onSurface) {
+                    assistantMenuFor = null
+                    onEditAssistant(target.id)
+                }
+                MenuRow(Lucide.Copy, stringResource(UiR.string.assistant_settings_copy_button), cs.onSurface) {
+                    assistantMenuFor = null
+                    val store = com.psyche.memo.data.assistant.AssistantStore(container.database.writableDatabase)
+                    val copyName = buildCopyName(
+                        existing = store.getAll().map { it.name },
+                        sourceName = target.name,
+                        suffix = container.appContext.getString(UiR.string.assistant_settings_copy_suffix).trim(),
+                        fallback = container.appContext.getString(UiR.string.assistant_provider_new_assistant_name),
+                    )
+                    if (store.duplicate(target.id, copyName) != null) {
+                        com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                            com.psyche.memo.ui.snackbar.AppNotification(
+                                message = container.appContext.getString(UiR.string.assistant_settings_copy_success),
+                                type = com.psyche.memo.ui.snackbar.NotificationType.SUCCESS,
+                            ),
+                        )
+                    }
+                }
+                if (tagsRepo.tagOfAssistant(target.id) != null) {
+                    MenuRow(Lucide.Eraser, stringResource(UiR.string.assistant_tags_clear_tag), cs.onSurface) {
+                        assistantMenuFor = null
+                        tagsRepo.assignAssistant(target.id, null)
+                    }
+                }
+                MenuRow(Lucide.Bookmark, stringResource(UiR.string.assistant_tags_context_menu_manage_tags), cs.onSurface) {
+                    assistantMenuFor = null
+                    onManageTags(target.id)
+                }
+                MenuRow(Lucide.Trash2, stringResource(UiR.string.assistant_tags_context_menu_delete_assistant), cs.error) {
+                    assistantMenuFor = null
+                    assistantDeleteTarget = target
+                }
+            }
+        }
+    }
+
+    assistantDeleteTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { assistantDeleteTarget = null },
+            title = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_title)) },
+            text = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_content)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    assistantDeleteTarget = null
+                    Haptics.light(view)
+                    val store = com.psyche.memo.data.assistant.AssistantStore(container.database.writableDatabase)
+                    val success = store.delete(target.id)
+                    if (container.currentAssistant()?.id == target.id) {
+                        container.setCurrentAssistant("")
+                        container.refreshCurrentAssistant()
+                    }
+                    reload()
+                    if (!success) {
+                        com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                            com.psyche.memo.ui.snackbar.AppNotification(
+                                message = container.appContext.getString(UiR.string.assistant_settings_at_least_one_assistant_required),
+                                type = com.psyche.memo.ui.snackbar.NotificationType.WARNING,
+                            ),
+                        )
+                    }
+                }) {
+                    Text(
+                        text = stringResource(UiR.string.assistant_settings_delete_dialog_confirm),
+                        color = cs.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { assistantDeleteTarget = null }) {
+                    Text(stringResource(UiR.string.assistant_settings_delete_dialog_cancel))
+                }
+            },
+        )
+    }
+
 }
 
 /**
@@ -1338,4 +1455,22 @@ private fun GlobalSearchResults(
             }
         }
     }
+}
+
+/** assistant_provider.dart _buildCopyName L155-170. */
+private fun buildCopyName(
+    existing: List<String>,
+    sourceName: String,
+    suffix: String,
+    fallback: String,
+): String {
+    val baseName = sourceName.trim().ifEmpty { fallback }
+    var candidate = if (suffix.isEmpty()) baseName else "$baseName $suffix"
+    var counter = 2
+    while (candidate in existing) {
+        val counterSuffix = if (suffix.isEmpty()) "$counter" else "$suffix $counter"
+        candidate = "$baseName $counterSuffix"
+        counter++
+    }
+    return candidate
 }
