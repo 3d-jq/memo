@@ -526,6 +526,8 @@ fun ChatContent(
     var moreFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
     var editFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
     var regenerateFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
+    var selectCopyFor by remember { mutableStateOf<String?>(null) }
+    var htmlPreviewFor by remember { mutableStateOf<String?>(null) }
 
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val copiedText = stringResource(UiR.string.chat_message_widget_copied_to_clipboard)
@@ -1103,9 +1105,18 @@ fun ChatContent(
             onAction = { action ->
                 moreFor = null
                 when (action) {
-                    com.psyche.memo.ui.chat.MessageMoreAction.SELECT_COPY,
-                    com.psyche.memo.ui.chat.MessageMoreAction.RENDER_WEB_VIEW,
-                    com.psyche.memo.ui.chat.MessageMoreAction.SHARE,
+                    com.psyche.memo.ui.chat.MessageMoreAction.SELECT_COPY ->
+                        selectCopyFor = target.content
+                    com.psyche.memo.ui.chat.MessageMoreAction.RENDER_WEB_VIEW ->
+                        htmlPreviewFor = target.content
+                    com.psyche.memo.ui.chat.MessageMoreAction.SHARE -> {
+                        // message_more_sheet.dart Share —— 系统分享纯文本。
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_TEXT, target.content)
+                        }
+                        context.startActivity(android.content.Intent.createChooser(send, null))
+                    }
                     com.psyche.memo.ui.chat.MessageMoreAction.SELECT_MESSAGES,
                     -> com.psyche.memo.ui.snackbar.SnackbarManager.show(
                         com.psyche.memo.ui.snackbar.AppNotification(
@@ -1121,6 +1132,20 @@ fun ChatContent(
                         vm.deleteAllVersions(target.id)
                 }
             },
+        )
+    }
+
+    selectCopyFor?.let { content ->
+        com.psyche.memo.ui.chat.SelectCopySheet(
+            content = content,
+            onDismiss = { selectCopyFor = null },
+        )
+    }
+
+    htmlPreviewFor?.let { markdown ->
+        com.psyche.memo.ui.chat.HtmlPreviewScreen(
+            markdown = markdown,
+            onBack = { htmlPreviewFor = null },
         )
     }
 
