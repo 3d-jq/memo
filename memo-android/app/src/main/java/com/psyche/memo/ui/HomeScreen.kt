@@ -471,6 +471,7 @@ fun ChatContent(
     var showInstructionSheet by remember { mutableStateOf(false) }
     var showWorldBookSheet by remember { mutableStateOf(false) }
     var showContextSheet by remember { mutableStateOf(false) }
+    var showMcpSheet by remember { mutableStateOf(false) }
     var showCompressDialog by remember { mutableStateOf(false) }
     var compressing by remember { mutableStateOf(false) }
     var worldBooksAvailable by remember { mutableStateOf(false) }
@@ -958,6 +959,7 @@ fun ChatContent(
             onQuickPhrase = { quickPhrases = loadQuickPhrases(container) },
             reasoningBudget = reasoningBudget,
             onOpenReasoning = { showReasoningSheet = true },
+            onOpenMcp = { showMcpSheet = true },
             attachments = attachments,
             onRemoveAttachment = { index -> vm.removeAttachment(index) },
             voice = voiceInput,
@@ -1078,6 +1080,13 @@ fun ChatContent(
                 vm.clearContext()
             },
             onDismiss = { showContextSheet = false },
+        )
+    }
+
+    if (showMcpSheet) {
+        com.psyche.memo.ui.chat.McpAssistantSheet(
+            container = container,
+            onDismiss = { showMcpSheet = false },
         )
     }
 
@@ -1939,6 +1948,7 @@ private fun ChatInputBar(
     onStop: () -> Unit,
     reasoningBudget: Int? = null,
     onOpenReasoning: () -> Unit = {},
+    onOpenMcp: () -> Unit = {},
     onSelectModel: () -> Unit,
     onOpenSearch: () -> Unit = {},
     onOpenTools: () -> Unit = {},
@@ -2219,7 +2229,7 @@ private fun ChatInputBar(
                                     InputIcon(
                                         Lucide.Hammer,
                                         stringResource(UiR.string.chat_input_bar_mcp_servers_tooltip),
-                                        {},
+                                        onOpenMcp,
                                         cs,
                                     )
                                     InputIcon(
