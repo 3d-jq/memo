@@ -2398,6 +2398,8 @@
   "logViewerSectionAttachments": "附件",
   "logViewerPayloadOmitted": "已省略",
   "logViewerShowMore": "顯示更多",
+  "logViewerRefresh": "重新整理",
+  "logViewerCopy": "複製",
   "logSettingsTitle": "日誌設定",
   "logSettingsSaveOutput": "保存回應輸出",
   "logSettingsSaveOutputSubtitle": "記錄串流輸出的每個分片（可能影響生成效能）。HTTP 報錯回應仍會寫入。",

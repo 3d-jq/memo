@@ -1208,6 +1208,7 @@
     <string name="log_settings_save_output">保存回應輸出</string>
     <string name="log_settings_save_output_subtitle">記錄串流輸出的每個分片（可能影響生成效能）。HTTP 報錯回應仍會寫入。</string>
     <string name="log_settings_title">日誌設定</string>
+    <string name="log_viewer_copy">複製</string>
     <string name="log_viewer_current_log">目前日誌</string>
     <string name="log_viewer_empty">暫無日誌</string>
     <string name="log_viewer_error_title">錯誤</string>
@@ -1221,6 +1222,7 @@
     <string name="log_viewer_more_count">+%1$s 條更多</string>
     <string name="log_viewer_open_folder">開啟日誌目錄</string>
     <string name="log_viewer_payload_omitted">已省略</string>
+    <string name="log_viewer_refresh">重新整理</string>
     <string name="log_viewer_requests_count">%1$s 個請求</string>
     <string name="log_viewer_section_attachments">附件</string>
     <string name="log_viewer_section_parameters">參數</string>

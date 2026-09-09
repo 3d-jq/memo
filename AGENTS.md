@@ -13,7 +13,13 @@ AGP 8.11.1 / Gradle 8.14 / Kotlin 2.2.20, minSdk 26 / target 35) in
 because it is a proven schema — not for compatibility. No user-visible string,
 identifier, resource key or asset may carry the kelivo name. Reference
 implementation for native details: **RikkaHub** (https://github.com/rikkahub/rikkahub,
-same AGPL-3.0 license; its `ai` module is the closest match to `core:llm`).
+same AGPL-3.0 license; its `ai` module is the closest match to `core:llm`, local clone
+at `D:\program\.rikkahub-ref`). Memo and RikkaHub are functionally very close (sibling
+LLM chat clients with the same provider/tool/surface model), so when implementing or
+fixing a Memo feature, **borrow or directly port from RikkaHub** as a valid source —
+don't re-derive from scratch unless RikkaHub doesn't cover the case. The Flutter
+source (`lib/`) remains the primary 1:1 source-of-truth for UI/text parity; RikkaHub
+fills in native-side details and shared feature implementations.
 
 ## Native Android port (memo-android)
 
@@ -115,6 +121,7 @@ flutter test test/perf/timeline_scroll_bench.dart
 - **Icons**: use `lucide_icons_flutter`, not `Icons.*` from Material.
 - **Animations**: use `flutter_animate` / `animations` for motion.
 - When building a new page, create separate desktop and mobile layouts unless the page is trivially simple. Wire them together via `ResponsiveHelper`.
+- **Preserve the current Memo UI/UX** — the 1:1-ported visual style and interaction feel is intentional. Don't refactor or swap components for "modern patterns" / library upgrades / cleanliness without explicit approval; user prefers the current look. Visible-behavior changes (animations, transitions, gestures, spacing, color, type ramp, motion) need plan-then-confirm. Library/architecture swaps (e.g. swapping `MemoSnackbar` for `io.github.dokar3:sonner`) are allowed only when the *visible* UI/UX is preserved.
 
 ## Code style
 

@@ -1208,6 +1208,7 @@
     <string name="log_settings_save_output">保存响应输出</string>
     <string name="log_settings_save_output_subtitle">记录流式输出的每个分片（可能影响生成性能）。HTTP 报错响应仍会写入。</string>
     <string name="log_settings_title">日志设置</string>
+    <string name="log_viewer_copy">复制</string>
     <string name="log_viewer_current_log">当前日志</string>
     <string name="log_viewer_empty">暂无日志</string>
     <string name="log_viewer_error_title">错误</string>
@@ -1221,6 +1222,7 @@
     <string name="log_viewer_more_count">+%1$s 条更多</string>
     <string name="log_viewer_open_folder">打开日志目录</string>
     <string name="log_viewer_payload_omitted">已省略</string>
+    <string name="log_viewer_refresh">刷新</string>
     <string name="log_viewer_requests_count">%1$s 条请求</string>
     <string name="log_viewer_section_attachments">附件</string>
     <string name="log_viewer_section_parameters">参数</string>

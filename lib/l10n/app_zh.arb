@@ -2399,6 +2399,8 @@
   "logViewerSectionAttachments": "附件",
   "logViewerPayloadOmitted": "已省略",
   "logViewerShowMore": "显示更多",
+  "logViewerRefresh": "刷新",
+  "logViewerCopy": "复制",
   "logSettingsTitle": "日志设置",
   "logSettingsSaveOutput": "保存响应输出",
   "logSettingsSaveOutputSubtitle": "记录流式输出的每个分片（可能影响生成性能）。HTTP 报错响应仍会写入。",

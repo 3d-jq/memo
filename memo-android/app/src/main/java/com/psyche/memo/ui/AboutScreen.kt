@@ -225,11 +225,20 @@ private fun AboutNavRow(
 @Composable
 private fun EasterEggSheet(container: AppContainerImpl, onDismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    fun readFlag(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
-    var contextLog by remember { mutableStateOf(readFlag("context_log_enabled_v1", true)) }
-    var requestLog by remember { mutableStateOf(readFlag("request_log_enabled_v1", true)) }
-    var flutterLog by remember { mutableStateOf(readFlag("flutter_log_enabled_v1", false)) }
+    // Mirrors Flutter's settings_provider.dart enable sequence: read the
+    // current value via LogBootstrap (which routes to the correct backing
+    // store), write through LogBootstrap so the change is also pushed to
+    // the writer's enabled flag.
+    val prefs = container.preferenceRepository
+    var contextLog by remember { mutableStateOf(
+        com.psyche.memo.logging.LogBootstrap.isContextLogEnabled(prefs, default = true)
+    ) }
+    var requestLog by remember { mutableStateOf(
+        com.psyche.memo.logging.LogBootstrap.isRequestLogEnabled(prefs, default = true)
+    ) }
+    var flutterLog by remember { mutableStateOf(
+        com.psyche.memo.logging.LogBootstrap.isFlutterLogEnabled(prefs, default = false)
+    ) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
@@ -246,7 +255,7 @@ private fun EasterEggSheet(container: AppContainerImpl, onDismiss: () -> Unit) {
                 value = contextLog,
                 onChange = { v ->
                     contextLog = v
-                    container.preferenceRepository.writeLocal("context_log_enabled_v1", if (v) "1" else "0")
+                    com.psyche.memo.logging.LogBootstrap.setContextLogEnabled(prefs, v)
                 },
             )
             Spacer(Modifier.height(12.dp))
@@ -256,7 +265,7 @@ private fun EasterEggSheet(container: AppContainerImpl, onDismiss: () -> Unit) {
                 value = requestLog,
                 onChange = { v ->
                     requestLog = v
-                    container.preferenceRepository.writeLocal("request_log_enabled_v1", if (v) "1" else "0")
+                    com.psyche.memo.logging.LogBootstrap.setRequestLogEnabled(prefs, v)
                 },
             )
             Spacer(Modifier.height(12.dp))
@@ -266,7 +275,7 @@ private fun EasterEggSheet(container: AppContainerImpl, onDismiss: () -> Unit) {
                 value = flutterLog,
                 onChange = { v ->
                     flutterLog = v
-                    container.preferenceRepository.writeLocal("flutter_log_enabled_v1", if (v) "1" else "0")
+                    com.psyche.memo.logging.LogBootstrap.setFlutterLogEnabled(prefs, v)
                 },
             )
             Spacer(Modifier.height(12.dp))

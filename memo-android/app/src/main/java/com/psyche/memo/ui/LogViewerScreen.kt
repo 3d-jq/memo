@@ -79,6 +79,7 @@ import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.Terminal
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.logging.LogPayloadRef
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -147,12 +148,16 @@ fun LogViewerScreen(
                     title = stringResource(UiR.string.storage_space_category_logs),
                     onBack = onBack,
                 ) {
-                    IconButton(onClick = { loadLogFiles() }, modifier = Modifier.size(44.dp)) {
-                        Icon(Lucide.RefreshCw, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
-                    }
-                    IconButton(onClick = { settingsSheetVisible = true }, modifier = Modifier.size(44.dp)) {
-                        Icon(Lucide.Settings, contentDescription = stringResource(UiR.string.log_settings_title), tint = cs.onSurface, modifier = Modifier.size(20.dp))
-                    }
+                    TopBarAction(
+                        icon = Lucide.RefreshCw,
+                        label = stringResource(UiR.string.log_viewer_refresh),
+                        onClick = { loadLogFiles() },
+                    )
+                    TopBarAction(
+                        icon = Lucide.Settings,
+                        label = stringResource(UiR.string.log_settings_title),
+                        onClick = { settingsSheetVisible = true },
+                    )
                 }
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -470,30 +475,34 @@ private fun PlainLogContentOverlay(file: LogFileEntry, title: String, onClose: (
         title = title,
         onClose = onClose,
         actions = {
-            IconButton(onClick = {
-                runCatching {
-                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(android.content.Intent.EXTRA_SUBJECT, file.name)
-                        putExtra(android.content.Intent.EXTRA_STREAM, shareUri(file))
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            TopBarAction(
+                icon = Lucide.Share2,
+                label = stringResource(UiR.string.log_viewer_export),
+                onClick = {
+                    runCatching {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, file.name)
+                            putExtra(android.content.Intent.EXTRA_STREAM, shareUri(file))
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        UiBridge.startActivity(android.content.Intent.createChooser(intent, file.name))
+                    }.onFailure {
+                        SnackbarManager.show(AppNotification(message = "Export failed: $it", type = NotificationType.ERROR))
                     }
-                    UiBridge.startActivity(android.content.Intent.createChooser(intent, file.name))
-                }.onFailure {
-                    SnackbarManager.show(AppNotification(message = "Export failed: $it", type = NotificationType.ERROR))
-                }
-            }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.Share2, contentDescription = stringResource(UiR.string.log_viewer_export), tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = {
-                clipboard.setText(AnnotatedString(content))
-                SnackbarManager.show(AppNotification(
-                    message = context.getString(UiR.string.chat_message_widget_copied_to_clipboard),
-                    type = NotificationType.SUCCESS,
-                ))
-            }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.Copy, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
+                },
+            )
+            TopBarAction(
+                icon = Lucide.Copy,
+                label = stringResource(UiR.string.log_viewer_copy),
+                onClick = {
+                    clipboard.setText(AnnotatedString(content))
+                    SnackbarManager.show(AppNotification(
+                        message = context.getString(UiR.string.chat_message_widget_copied_to_clipboard),
+                        type = NotificationType.SUCCESS,
+                    ))
+                },
+            )
         },
     ) {
         when {
@@ -547,6 +556,13 @@ private fun shareUri(file: LogFileEntry): android.net.Uri {
 
 // —— Shared overlay scaffold (full-screen "pushed page" look) ——————————
 
+/**
+ * Full-screen overlay shell for the file/snapshot/detail pages. The top bar is
+ * the standard [MemoTopBar] so its back-button slot (56dp leading + 16dp spacer)
+ * and 22dp ArrowLeft match every other page in the app — without this the
+ * overlay felt slightly off (44dp slot, no spacer) and the action icons were
+ * 20dp instead of the standard 22dp.
+ */
 @Composable
 private fun OverlayScaffold(
     title: String,
@@ -561,17 +577,10 @@ private fun OverlayScaffold(
             .background(cs.surface)
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.ArrowLeft, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = title,
-                style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        MemoTopBar(
+            title = title,
+            onBack = onClose,
+        ) {
             actions()
         }
         content()
@@ -610,12 +619,16 @@ private fun RequestLogFileOverlay(container: AppContainerImpl, file: LogFileEntr
         title = title,
         onClose = onClose,
         actions = {
-            IconButton(onClick = { load() }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.RefreshCw, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = { shareLogFile(file) }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.Share2, contentDescription = stringResource(UiR.string.log_viewer_export), tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
+            TopBarAction(
+                icon = Lucide.RefreshCw,
+                label = stringResource(UiR.string.log_viewer_refresh),
+                onClick = { load() },
+            )
+            TopBarAction(
+                icon = Lucide.Share2,
+                label = stringResource(UiR.string.log_viewer_export),
+                onClick = { shareLogFile(file) },
+            )
         },
     ) {
         when {
@@ -1328,16 +1341,20 @@ private fun ContextLogFileOverlay(container: AppContainerImpl, file: LogFileEntr
         title = title,
         onClose = onClose,
         actions = {
-            IconButton(onClick = {
-                loading = true; loadingMore = false; hasMore = false
-                snapshots = emptyList(); cursor = ContextLogTailCursor()
-                fetchPage(reset = true)
-            }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.RefreshCw, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = { shareLogFile(file) }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.Share2, contentDescription = stringResource(UiR.string.log_viewer_export), tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
+            TopBarAction(
+                icon = Lucide.RefreshCw,
+                label = stringResource(UiR.string.log_viewer_refresh),
+                onClick = {
+                    loading = true; loadingMore = false; hasMore = false
+                    snapshots = emptyList(); cursor = ContextLogTailCursor()
+                    fetchPage(reset = true)
+                },
+            )
+            TopBarAction(
+                icon = Lucide.Share2,
+                label = stringResource(UiR.string.log_viewer_export),
+                onClick = { shareLogFile(file) },
+            )
         },
     ) {
         when {
@@ -1606,9 +1623,11 @@ private fun ContextSnapshotDetailOverlay(snapshot: ContextLogSnapshot, onClose: 
         title = title.ifEmpty { stringResource(UiR.string.context_log_snapshot_fallback_title) },
         onClose = onClose,
         actions = {
-            IconButton(onClick = { copyAll() }, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.Copy, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
-            }
+            TopBarAction(
+                icon = Lucide.Copy,
+                label = stringResource(UiR.string.log_viewer_copy),
+                onClick = { copyAll() },
+            )
         },
     ) {
         LazyColumn(
@@ -1821,22 +1840,12 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
     val lum = 0.2126f * cs.surface.red + 0.7152f * cs.surface.green + 0.0722f * cs.surface.blue
     val isDark = lum < 0.5f
 
-    fun readBool(key: String, default: Boolean): Boolean = runCatching {
-        container.preferenceRepository.readJson(key)
-            ?.let { kotlinx.serialization.json.Json.parseToJsonElement(it).jsonPrimitive.booleanOrNull }
-    }.getOrNull() ?: default
-    fun readInt(key: String, default: Int): Int = runCatching {
-        container.preferenceRepository.readJson(key)
-            ?.let { kotlinx.serialization.json.Json.parseToJsonElement(it).jsonPrimitive.intOrNull }
-    }.getOrNull() ?: default
-    fun write(key: String, value: String) {
-        container.preferenceRepository.writeJson(key, value)
-    }
-
-    var saveOutput by remember { mutableStateOf(readBool("log_save_output_v1", false)) }
-    var elidePayloads by remember { mutableStateOf(readBool("log_elide_large_payloads_v1", true)) }
-    var autoDeleteDays by remember { mutableStateOf(readInt("log_auto_delete_days_v1", 0)) }
-    var maxSizeMB by remember { mutableStateOf(readInt("log_max_size_mb_v1", 50)) }
+    val bs = com.psyche.memo.logging.LogBootstrap
+    val prefs = container.preferenceRepository
+    var saveOutput by remember { mutableStateOf(bs.isSaveOutput(prefs, false)) }
+    var elidePayloads by remember { mutableStateOf(bs.isElideLargePayloads(prefs, true)) }
+    var autoDeleteDays by remember { mutableStateOf(bs.autoDeleteDays(prefs, 0)) }
+    var maxSizeMB by remember { mutableStateOf(bs.maxSizeMB(prefs, 50)) }
 
     val autoDeleteOptions = listOf(0, 3, 7, 14, 30)
     val maxSizeOptions = listOf(0, 50, 100, 200, 500)
@@ -1870,7 +1879,7 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
                         value = saveOutput,
                         onValueChanged = {
                             saveOutput = it
-                            write("log_save_output_v1", it.toString())
+                            bs.setSaveOutput(prefs, it)
                         },
                     )
                 }
@@ -1894,7 +1903,7 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
                         value = elidePayloads,
                         onValueChanged = {
                             elidePayloads = it
-                            write("log_elide_large_payloads_v1", it.toString())
+                            bs.setElideLargePayloads(prefs, it)
                         },
                     )
                 }
@@ -1915,7 +1924,7 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
                 selectedIndex = autoDeleteOptions.indexOf(autoDeleteDays).coerceIn(0, autoDeleteOptions.lastIndex),
                 onSelected = { i ->
                     autoDeleteDays = autoDeleteOptions[i]
-                    write("log_auto_delete_days_v1", autoDeleteOptions[i].toString())
+                    bs.setAutoDeleteDays(prefs, autoDeleteOptions[i])
                     onChanged()
                 },
             )
@@ -1928,7 +1937,7 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
                 selectedIndex = maxSizeOptions.indexOf(maxSizeMB).coerceIn(0, maxSizeOptions.lastIndex),
                 onSelected = { i ->
                     maxSizeMB = maxSizeOptions[i]
-                    write("log_max_size_mb_v1", maxSizeOptions[i].toString())
+                    bs.setMaxSizeMB(prefs, maxSizeOptions[i])
                     onChanged()
                 },
             )

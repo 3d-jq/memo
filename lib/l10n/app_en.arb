@@ -2881,6 +2881,8 @@
   "logViewerSectionAttachments": "Attachments",
   "logViewerPayloadOmitted": "omitted",
   "logViewerShowMore": "Show more",
+  "logViewerRefresh": "Refresh",
+  "logViewerCopy": "Copy",
   "logSettingsTitle": "Log Settings",
   "logSettingsSaveOutput": "Save Response Output",
   "logSettingsSaveOutputSubtitle": "Log every streaming chunk (can slow generation). HTTP error bodies are always recorded.",

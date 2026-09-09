@@ -1208,6 +1208,7 @@ Updating Memo first is the safer choice.</string>
     <string name="log_settings_save_output">Save Response Output</string>
     <string name="log_settings_save_output_subtitle">Log every streaming chunk (can slow generation). HTTP error bodies are always recorded.</string>
     <string name="log_settings_title">Log Settings</string>
+    <string name="log_viewer_copy">Copy</string>
     <string name="log_viewer_current_log">Current Log</string>
     <string name="log_viewer_empty">No logs yet</string>
     <string name="log_viewer_error_title">Error</string>
@@ -1221,6 +1222,7 @@ Updating Memo first is the safer choice.</string>
     <string name="log_viewer_more_count">+%1$s more</string>
     <string name="log_viewer_open_folder">Open Logs Folder</string>
     <string name="log_viewer_payload_omitted">omitted</string>
+    <string name="log_viewer_refresh">Refresh</string>
     <string name="log_viewer_requests_count">%1$s requests</string>
     <string name="log_viewer_section_attachments">Attachments</string>
     <string name="log_viewer_section_parameters">Parameters</string>

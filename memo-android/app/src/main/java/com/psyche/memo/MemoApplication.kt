@@ -23,6 +23,9 @@ class MemoApplication : Application(), ImageLoaderFactory {
         com.psyche.memo.provider.DocumentTextExtractor.init(this)
         // McpProvider.initConnectedServers：启动时连接已启用的 MCP 服务器。
         container.mcpConnections.connectEnabled()
+        // Wire request/flutter/context log writers to <filesDir>/logs and apply
+        // the per-source enable prefs + install the uncaught-exception hook.
+        com.psyche.memo.logging.LogBootstrap.init(this, container.preferenceRepository)
     }
 
     /**

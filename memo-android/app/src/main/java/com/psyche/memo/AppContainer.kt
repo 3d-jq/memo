@@ -40,6 +40,9 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(300, TimeUnit.SECONDS) // long SSE reads
         .writeTimeout(30, TimeUnit.SECONDS)
+        // RequestLogInterceptor is a no-op when com.psyche.memo.common.logging.RequestLogger
+        // is disabled; safe to keep installed regardless of the toggle.
+        .addInterceptor(com.psyche.memo.llm.logging.RequestLogInterceptor())
         .build()
 
     val database: MemoDatabase by lazy { MemoDatabase(appContext) }
