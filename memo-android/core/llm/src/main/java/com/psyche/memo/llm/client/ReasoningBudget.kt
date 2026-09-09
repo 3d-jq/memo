@@ -183,6 +183,61 @@ object ReasoningBudget {
         }
     }
 
+    /**
+     * applyVendorReasoningKnobs — per-vendor reasoning fields (openai_vendor_
+     * compat.dart L503-570). Returns the JSON fields to merge into the request
+     * body; the generic OpenAI-compatible path uses `reasoning_effort`.
+     */
+    fun vendorReasoningFields(
+        providerId: String,
+        baseUrl: String,
+        modelId: String,
+        thinkingBudget: Int?,
+        reasoning: Boolean,
+    ): Map<String, kotlinx.serialization.json.JsonElement> {
+        if (!reasoning) return emptyMap()
+        val host = runCatching { java.net.URI(baseUrl).host.orEmpty() }.getOrDefault("").lowercase()
+        val provider = providerId.lowercase()
+        val model = modelId.lowercase()
+        val off = isOff(thinkingBudget)
+        val isZhipu = provider.contains("zhipu") || provider.contains("智谱") ||
+            host.contains("open.bigmodel.cn") || host.contains("bigmodel") ||
+            host == "api.z.ai" || model.startsWith("glm-")
+        val isMimo = host.contains("xiaomimimo") || model.startsWith("mimo-") || model.contains("/mimo-")
+        val isVolc = host.contains("ark.cn-beijing.volces.com") || host.contains("volc") || host.contains("ark")
+        val isDashScope = host.contains("dashscope") || host.contains("aliyun")
+        val isOpenRouter = provider.contains("openrouter") || host.contains("openrouter.ai")
+        val isLaguna = model.startsWith("laguna-") || model.contains("/laguna-")
+        return when {
+            isZhipu || isMimo || isVolc -> mapOf(
+                "thinking" to buildJsonObject { put("type", if (off) "disabled" else "enabled") },
+            )
+            isDashScope -> buildMap {
+                put("enable_thinking", kotlinx.serialization.json.JsonPrimitive(!off))
+                if (!off && (thinkingBudget ?: 0) > 0) {
+                    put("thinking_budget", kotlinx.serialization.json.JsonPrimitive(thinkingBudget))
+                }
+            }
+            isOpenRouter -> mapOf(
+                "reasoning" to buildJsonObject {
+                    put("enabled", !off)
+                    if (!off && (thinkingBudget ?: 0) > 0) put("max_tokens", thinkingBudget)
+                },
+            )
+            isLaguna -> mapOf(
+                "chat_template_kwargs" to buildJsonObject { put("enable_thinking", !off) },
+            )
+            else -> {
+                val effort = openAiEffortForBudget(thinkingBudget, modelId)
+                if (effort != "off" && effort != "auto") {
+                    mapOf("reasoning_effort" to kotlinx.serialization.json.JsonPrimitive(effort))
+                } else {
+                    emptyMap()
+                }
+            }
+        }
+    }
+
     // ---- internals ----
 
     private val CLAUDE_5 = Regex("claude-(?:opus|sonnet)-5(?:$|[._:@/-])", RegexOption.IGNORE_CASE)

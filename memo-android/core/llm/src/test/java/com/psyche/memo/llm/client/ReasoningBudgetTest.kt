@@ -104,4 +104,41 @@ class ReasoningBudgetTest {
             ReasoningBudget.googleThinkingConfig("gemini-3-flash-image", 32000).toString(),
         )
     }
+
+    @Test
+    fun `zhipu gets thinking type instead of reasoning_effort`() {
+        val fields = ReasoningBudget.vendorReasoningFields(
+            providerId = "zhipu ai",
+            baseUrl = "https://open.bigmodel.cn/api/paas/v4",
+            modelId = "glm-5.3-flash",
+            thinkingBudget = 16000,
+            reasoning = true,
+        )
+        assertEquals("""{"type":"enabled"}""", fields["thinking"].toString())
+        assertEquals(false, fields.containsKey("reasoning_effort"))
+    }
+
+    @Test
+    fun `openai compatible keeps reasoning_effort`() {
+        val fields = ReasoningBudget.vendorReasoningFields(
+            providerId = "OpenAI",
+            baseUrl = "https://api.openai.com/v1",
+            modelId = "gpt-5",
+            thinkingBudget = 32000,
+            reasoning = true,
+        )
+        assertEquals("\"high\"", fields["reasoning_effort"].toString())
+    }
+
+    @Test
+    fun `non reasoning requests carry no reasoning fields`() {
+        val fields = ReasoningBudget.vendorReasoningFields(
+            providerId = "OpenAI",
+            baseUrl = "https://api.openai.com/v1",
+            modelId = "gpt-4o",
+            thinkingBudget = 1024,
+            reasoning = false,
+        )
+        assertEquals(true, fields.isEmpty())
+    }
 }
