@@ -31,6 +31,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -310,6 +311,176 @@ class ChatViewModel(
         val next = if (conv.truncateIndex == count) -1 else count
         container.conversationDao.setTruncateIndex(conversationId, next)
         _contextVersion.value = _contextVersion.value + 1
+    }
+
+    /**
+     * home_view_model.compressContext —— 把折叠后的会话文本按模式截取/分块，交给
+     * compress 模型总结（必要时分块 + 多轮合并），然后新建会话把摘要作为第一条
+     * 用户消息（keepRecent 模式则保留最近若干轮用户消息）。
+     * [onResult] 回传新会话 id 与错误 key（成功时 error 为 null）。
+     */
+    fun compressContext(
+        mode: com.psyche.memo.common.CompressText.Mode,
+        maxChars: Int?,
+        keepUserMessages: Int?,
+        onResult: (newConversationId: String?, errorKey: String?) -> Unit,
+    ) {
+        if (_streaming.value) {
+            onResult(null, "busy")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val pairs = _messages.value.map { it.role to it.content }
+                if (pairs.isEmpty()) {
+                    onResult(null, "no_messages")
+                    return@launch
+                }
+                val contents = com.psyche.memo.common.CompressText.buildCompressRequestContents(
+                    pairs,
+                    mode,
+                    maxChars,
+                )
+                if (contents.isEmpty()) {
+                    onResult(null, "no_messages")
+                    return@launch
+                }
+                val assistant = container.currentAssistant()
+                val model = com.psyche.memo.common.CompressText.resolveCompressModel(
+                    readModelSelection("compress_model_v1"),
+                    readModelSelection("summary_model_v1"),
+                    readModelSelection("title_model_v1"),
+                    assistant?.chatModelProvider?.let { p -> assistant.chatModelId?.let { m -> p to m } },
+                    selectedProviderId.value.takeIf { it.isNotEmpty() }
+                        ?.let { p -> selectedModelId.value.takeIf { it.isNotEmpty() }?.let { m -> p to m } },
+                ) ?: run {
+                    onResult(null, "no_model")
+                    return@launch
+                }
+                val template = readPrefString("compress_prompt_v1")
+                    ?: com.psyche.memo.DefaultModelPrefs.DEFAULT_COMPRESS_PROMPT
+                val locale = java.util.Locale.getDefault().toLanguageTag()
+                val thinking = readBoolPref("compress_generation_thinking_enabled_v1")
+                val budgetChars = com.psyche.memo.common.CompressText.compressRequestCharBudget(
+                    readContextWindowTokens(model.first, model.second),
+                )
+                suspend fun summarize(text: String): String {
+                    val prompt = template.replace("{content}", text).replace("{locale}", locale)
+                    val request = LlmRequest(
+                        providerId = model.first,
+                        modelId = model.second,
+                        messages = listOf(LlmMessage(role = "user", content = prompt)),
+                        apiKey = container.apiKeyFor(model.first) ?: "",
+                        baseUrl = container.baseUrlFor(model.first),
+                        chatPath = container.providerConfig(model.first)?.chatPath,
+                        thinkingBudget = if (thinking) -1 else 0,
+                    )
+                    return container.clientFor(model.first).complete(request)
+                        .parts.joinToString("").trim()
+                }
+
+                var partials = contents.map { withContext(Dispatchers.IO) { summarize(it) } }
+                if (partials.any { it.isEmpty() }) {
+                    onResult(null, "empty_summary")
+                    return@launch
+                }
+                var mergeRound = 0
+                while (partials.size > 1 && mergeRound < 8) {
+                    mergeRound++
+                    val packed = com.psyche.memo.common.CompressText.chunkPlainTexts(partials, budgetChars)
+                    partials = packed.map { withContext(Dispatchers.IO) { summarize(it) } }
+                    if (partials.any { it.isEmpty() }) {
+                        onResult(null, "empty_summary")
+                        return@launch
+                    }
+                }
+                val summary = if (partials.size == 1) {
+                    partials.single()
+                } else {
+                    withContext(Dispatchers.IO) {
+                        summarize(com.psyche.memo.common.Utf16SafeCut.truncateHead(partials.joinToString("\n\n"), budgetChars))
+                    }
+                }
+                if (summary.isEmpty()) {
+                    onResult(null, "empty_summary")
+                    return@launch
+                }
+
+                val kept = if (mode == com.psyche.memo.common.CompressText.Mode.KEEP_RECENT) {
+                    com.psyche.memo.common.CompressText.selectKeepRecentMessages(pairs, keepUserMessages ?: 0)
+                } else {
+                    null
+                }
+                val source = container.conversationDao.get(conversationId)
+                val newConversation = com.psyche.memo.data.model.Conversation.create(
+                    title = source?.title ?: "",
+                    assistantId = source?.assistantId ?: container.currentAssistantId.value,
+                )
+                withContext(Dispatchers.IO) {
+                    container.conversationDao.insert(newConversation)
+                    var order = 0
+                    container.messageDao.insert(
+                        com.psyche.memo.data.model.ChatMessage(
+                            id = com.psyche.memo.data.model.ChatMessage.newId(),
+                            role = "user",
+                            parts = listOf(com.psyche.memo.data.model.TextPart(summary)),
+                            timestamp = System.currentTimeMillis(),
+                            conversationId = newConversation.id,
+                            groupId = com.psyche.memo.data.model.ChatMessage.newId(),
+                            messageOrder = order++,
+                        ),
+                    )
+                    kept?.forEach { (role, content) ->
+                        container.messageDao.insert(
+                            com.psyche.memo.data.model.ChatMessage(
+                                id = com.psyche.memo.data.model.ChatMessage.newId(),
+                                role = role,
+                                parts = listOf(com.psyche.memo.data.model.TextPart(content)),
+                                timestamp = System.currentTimeMillis(),
+                                conversationId = newConversation.id,
+                                groupId = com.psyche.memo.data.model.ChatMessage.newId(),
+                                messageOrder = order++,
+                            ),
+                        )
+                    }
+                }
+                onResult(newConversation.id, null)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onResult(null, e.message ?: "error")
+            }
+        }
+    }
+
+    private fun readPrefString(key: String): String? =
+        container.preferenceRepository.readJson(key)
+            ?.let { raw -> runCatching { kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.content }.getOrDefault(raw) }
+            ?.takeIf { it.isNotBlank() }
+
+    private fun readBoolPref(key: String): Boolean {
+        val raw = container.preferenceRepository.readJson(key) ?: return false
+        return runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.booleanOrNull
+        }.getOrNull() ?: false
+    }
+
+    private fun readModelSelection(key: String): Pair<String, String>? =
+        com.psyche.memo.DefaultModelPrefs.parseModelSelection(readPrefString(key))
+
+    /** readModelContextWindowTokens —— 模型 override 里的上下文字段。 */
+    private fun readContextWindowTokens(providerId: String, modelId: String): Int? {
+        val override = container.providerConfig(providerId)?.modelOverrides?.get(modelId)
+            as? kotlinx.serialization.json.JsonObject ?: return null
+        for (key in listOf(
+            "contextWindow", "context_window", "maxContextTokens",
+            "max_context_tokens", "contextLength", "context_length",
+        )) {
+            val value = (override[key] as? kotlinx.serialization.json.JsonPrimitive)
+                ?.content?.toIntOrNull()
+            if (value != null && value > 0) return value
+        }
+        return null
     }
 
     /** 供 UI 观察清空后刷新标签。 */

@@ -471,6 +471,8 @@ fun ChatContent(
     var showInstructionSheet by remember { mutableStateOf(false) }
     var showWorldBookSheet by remember { mutableStateOf(false) }
     var showContextSheet by remember { mutableStateOf(false) }
+    var showCompressDialog by remember { mutableStateOf(false) }
+    var compressing by remember { mutableStateOf(false) }
     var worldBooksAvailable by remember { mutableStateOf(false) }
     var showOcrPrompt by remember { mutableStateOf(false) }
     var ocrSettings by remember {
@@ -1067,12 +1069,53 @@ fun ChatContent(
     if (showContextSheet) {
         com.psyche.memo.ui.chat.ContextManagementSheet(
             clearLabel = vm.clearContextLabel(),
+            onCompress = {
+                showContextSheet = false
+                showCompressDialog = true
+            },
             onClear = {
                 showContextSheet = false
                 vm.clearContext()
             },
             onDismiss = { showContextSheet = false },
         )
+    }
+
+    if (showCompressDialog) {
+        com.psyche.memo.ui.chat.CompressContextDialog(
+            container = container,
+            messages = messages.map { it.role to it.content },
+            onDismiss = { showCompressDialog = false },
+            onConfirm = { mode, maxChars, keepUserMessages ->
+                showCompressDialog = false
+                compressing = true
+                vm.compressContext(mode, maxChars, keepUserMessages) { newId, errorKey ->
+                    compressing = false
+                    if (newId != null) {
+                        onOpenConversation(newId)
+                    } else {
+                        val message = when (errorKey) {
+                            "no_messages" -> container.appContext.getString(UiR.string.compress_context_no_messages)
+                            "no_conversation" -> container.appContext.getString(UiR.string.compress_context_no_conversation)
+                            "no_model" -> container.appContext.getString(UiR.string.compress_context_no_model)
+                            "empty_summary" -> container.appContext.getString(UiR.string.compress_context_empty_summary)
+                            else -> container.appContext.getString(UiR.string.compress_context_failed)
+                        }
+                        com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                            com.psyche.memo.ui.snackbar.AppNotification(
+                                message = message,
+                                type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+                                durationMs = 6000,
+                            ),
+                        )
+                    }
+                }
+            },
+        )
+    }
+
+    if (compressing) {
+        com.psyche.memo.ui.chat.CompressLoadingDialog()
     }
 
     if (showWorldBookSheet) {

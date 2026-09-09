@@ -28,20 +28,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Eraser
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Package2
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.R as UiR
 
 /**
- * Port of context_management_sheet.dart: "clear context" (truncateIndex toggle)
- * and "compress context" rows. The compress row is not rendered yet — its
- * engine (LLM summarize + new conversation) is still pending, and the sheet
- * omits unported rows rather than wiring dead buttons.
+ * Port of context_management_sheet.dart: "compress context" (summarize and
+ * start a new chat) and "clear context" (truncateIndex toggle) rows.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContextManagementSheet(
     clearLabel: String,
+    onCompress: () -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -69,6 +69,16 @@ fun ContextManagementSheet(
                 )
             }
             Spacer(Modifier.height(16.dp))
+            OptionRow(
+                icon = Lucide.Package2,
+                label = stringResource(UiR.string.compress_context),
+                description = stringResource(UiR.string.compress_context_desc),
+                onTap = {
+                    Haptics.light(view)
+                    onCompress()
+                },
+            )
+            Spacer(Modifier.height(8.dp))
             OptionRow(
                 icon = Lucide.Eraser,
                 label = clearLabel,
