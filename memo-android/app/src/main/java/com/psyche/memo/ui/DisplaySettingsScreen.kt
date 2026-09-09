@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
 import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.Bell
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Languages
 import com.composables.icons.lucide.MessageCircleMore
@@ -107,6 +108,7 @@ fun DisplaySettingsScreen(
     var paletteName by remember { mutableStateOf("") }
     var themeMode by remember { mutableStateOf("system") }
     var backgroundChatMode by remember { mutableStateOf("off") }
+    var liveUpdateEnabled by remember { mutableStateOf(false) }
     var appFontAlias by remember { mutableStateOf<String?>(null) }
     var appFontFamily by remember { mutableStateOf<String?>(null) }
     var codeFontAlias by remember { mutableStateOf<String?>(null) }
@@ -134,6 +136,8 @@ fun DisplaySettingsScreen(
         reloadPalette()
         themeMode = container.preferenceRepository.readLocal(MemoTheme.MODE_KEY)?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "system"
         backgroundChatMode = container.preferenceRepository.readLocal("android_background_chat_mode_v1")?.takeIf { it.isNotEmpty() } ?: "off"
+        liveUpdateEnabled =
+            container.preferenceRepository.readLocal("enable_live_update_notification_v1") == "1"
         appFontAlias = container.preferenceRepository.readLocal("display_app_font_local_alias_v1")?.takeIf { it.isNotEmpty() }
         appFontFamily = container.preferenceRepository.readLocal("display_app_font_family_v1")?.takeIf { it.isNotEmpty() }
         codeFontAlias = container.preferenceRepository.readLocal("display_code_font_local_alias_v1")?.takeIf { it.isNotEmpty() }
@@ -262,6 +266,25 @@ fun DisplaySettingsScreen(
                             },
                         ),
                         onTap = { backgroundChatSheetVisible = true },
+                    )
+                    DividerRow()
+                    // Live Update progress notification — RikkaHub
+                    // SettingPreferencesNotificationPage L136-149 (nested under
+                    // its master notification switch there; standalone here).
+                    // Key enable_live_update_notification_v1 mirrors
+                    // DisplaySetting.enableLiveUpdateNotification (default off).
+                    SettingsSwitchRow(
+                        Lucide.Bell,
+                        stringResource(UiR.string.display_settings_page_live_update_notification),
+                        tip = stringResource(UiR.string.display_settings_page_live_update_notification_desc),
+                        value = liveUpdateEnabled,
+                        onToggle = { v ->
+                            liveUpdateEnabled = v
+                            container.preferenceRepository.writeLocal(
+                                "enable_live_update_notification_v1",
+                                if (v) "1" else "0",
+                            )
+                        },
                     )
                     DividerRow()
                     // B10 — L248-306: app font row with detail + source sheet.

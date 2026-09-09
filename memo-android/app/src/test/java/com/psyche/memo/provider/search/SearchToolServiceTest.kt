@@ -92,7 +92,7 @@ class SearchToolServiceTest {
 
     @Test
     fun `system prompt documents the citation contract`() {
-        assertTrue(SearchToolService.SYSTEM_PROMPT.contains("[cite:id]"))
+        assertTrue(SearchToolService.SYSTEM_PROMPT.contains("[citation,domain](id)"))
         assertTrue(SearchToolService.SYSTEM_PROMPT.contains("<citations>"))
     }
 }

@@ -63,6 +63,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    // ProcessLifecycleOwner —— ChatBackgroundController 的 app 前后台观察
+    //（RikkaHub ChatNotificationManager/ChatService 同款依赖）。
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

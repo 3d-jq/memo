@@ -775,9 +775,61 @@ class ChatViewModel(
         messageOrder = messageOrder,
     )
 
+    /** 后台聊天生成（ChatBackgroundController，RikkaHub FGS 移植）的当前代 id。 */
+    private var backgroundGenerationId: String? = null
+
+    /**
+     * Live Update 进度通知的 sender（RikkaHub ChatService senderName L538-543：
+     * useAssistantAvatar 时助手名、空回退默认助手名；否则模型显示名）。Memo
+     * 无模型显示名运行时解析链路，用当前 modelId 代替。
+     */
+    private var backgroundSenderName: String = ""
+
+    private fun resolveNotificationSenderName(): String {
+        val assistant = container.currentAssistant()
+        return if (assistant?.useAssistantAvatar == true) {
+            assistant.name.ifEmpty {
+                MemoApplication.instance?.getString(
+                    com.psyche.memo.ui.R.string.assistant_provider_default_assistant_name,
+                ).orEmpty()
+            }
+        } else {
+            selectedModelId.value
+        }
+    }
+
+    private fun backgroundMode(): com.psyche.memo.service.ChatBackgroundController.AndroidBackgroundChatMode =
+        com.psyche.memo.service.ChatBackgroundController.modeOf(container.preferenceRepository::readLocal)
+
+    private fun beginBackgroundGeneration() {
+        val id = java.util.UUID.randomUUID().toString()
+        backgroundGenerationId = id
+        backgroundSenderName = resolveNotificationSenderName()
+        com.psyche.memo.service.ChatBackgroundController.onGenerationStart(
+            conversationId = conversationId,
+            mode = backgroundMode(),
+            generationId = id,
+            stopGeneration = { generationJob?.cancel() },
+        )
+    }
+
+    private fun endBackgroundGeneration() {
+        val id = backgroundGenerationId ?: return
+        backgroundGenerationId = null
+        com.psyche.memo.service.ChatBackgroundController.onGenerationEnd(
+            conversationId = conversationId,
+            mode = backgroundMode(),
+            generationId = id,
+            isCurrentConversation = true,
+        )
+        // 生成结束：取消 Live Update 进度通知（ChatGenerationEnded 等价）。
+        com.psyche.memo.service.ChatNotificationManager.onGenerationEnded(conversationId)
+    }
+
     private fun startGeneration(userMessage: ChatMessage) {
         generationJob?.cancel()
         _streaming.value = true
+        beginBackgroundGeneration()
         val generationStartMs = System.currentTimeMillis()
         generationJob = viewModelScope.launch {
             // Publish streaming state so the drawer can show its loading dot.
@@ -970,6 +1022,7 @@ class ChatViewModel(
                 _streaming.value = false
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
+                endBackgroundGeneration()
                 // home_view_model L1755+ —— 回复完成后生成建议气泡。
                 maybeGenerateSuggestions()
             }
@@ -1222,6 +1275,7 @@ class ChatViewModel(
         }
         generationJob?.cancel()
         _streaming.value = true
+        beginBackgroundGeneration()
         generationJob = viewModelScope.launch {
             container.streamingConversationIds.value =
                 container.streamingConversationIds.value + conversationId
@@ -1305,6 +1359,7 @@ class ChatViewModel(
                 _streaming.value = false
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
+                endBackgroundGeneration()
             }
         }
     }
@@ -1557,6 +1612,14 @@ class ChatViewModel(
                 msgs[index].copy(parts = parts, isStreaming = true, reasoningSegmentsJson = segmentsJson),
             )
         }
+        // Live Update 进度通知（RikkaHub ChatGenerationUpdate 事件等价；
+        // manager 内部做前台 / 开关 / 1s 节流 gate）。
+        com.psyche.memo.service.ChatNotificationManager.onGenerationUpdate(
+            conversationId = conversationId,
+            senderName = backgroundSenderName,
+            parts = parts,
+            segmentsJson = segmentsJson,
+        )
     }
 
     private fun finishAssistant(
@@ -1630,10 +1693,8 @@ class ChatViewModel(
         val msgs = _messages.value
         val idx = msgs.indexOfFirst { it.id == messageId }
         if (idx < 0) return
-        val segments = ReasoningSegmentCodec.decode(msgs[idx].reasoningSegmentsJson).toMutableList()
-        val segment = segments.getOrNull(segmentIndex) ?: return
-        segments[segmentIndex] = segment.copy(expanded = !segment.expanded)
-        val json = ReasoningSegmentCodec.encode(segments)
+        val json = ReasoningSegmentCodec.toggleExpandedAt(msgs[idx].reasoningSegmentsJson, segmentIndex)
+            ?: msgs[idx].reasoningSegmentsJson
         _messages.value = msgs.map { if (it.id == messageId) it.copy(reasoningSegmentsJson = json) else it }
         if (isTemporary) return
         viewModelScope.launch {

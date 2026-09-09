@@ -60,6 +60,7 @@ data class CitationSourceTag(val title: String, val description: String?)
 
 data class CitationSourceItem(
     val index: Int?,
+    val id: String? = null,
     val title: String,
     val url: String,
     val text: String = "",
@@ -74,6 +75,7 @@ data class CitationSourceItem(
         /** citation_sources_sheet.dart CitationSourceItem.fromMap。 */
         fun fromMap(map: JsonObject, fallbackIndex: Int): CitationSourceItem = CitationSourceItem(
             index = map.int("index") ?: fallbackIndex,
+            id = map.str("id"),
             title = map.str("title").orEmpty(),
             url = map.str("url").orEmpty(),
             text = (map.str("text") ?: map.str("quote") ?: map.str("snippet")).orEmpty(),

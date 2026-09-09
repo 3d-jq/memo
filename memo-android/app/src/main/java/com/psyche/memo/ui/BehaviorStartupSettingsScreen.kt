@@ -107,7 +107,6 @@ fun BehaviorStartupSettingsScreen(
     var forkKeepMessageVersions by remember { mutableStateOf(readBool("chat_fork_keep_message_versions_v1", false)) }
     var keepThinkingAndToolCards by remember { mutableStateOf(readBool("chat_edit_assistant_keep_thinking_tool_cards_v1", false)) }
     var showAppUpdates by remember { mutableStateOf(readBool("display_show_app_updates_v1", true)) }
-    var keepScreenOn by remember { mutableStateOf(readBool("display_keep_screen_on_during_generation_v1", false)) }
     // 源码 display_settings_page.dart:2139-2153 / settings_provider.dart:4933,5008-5024
     // —— 消息导航为三态（always/scroll/never）；旧 bool 键 display_show_message_nav_v1
     // 仅作迁移回退（true→scroll / false→never）。
@@ -234,14 +233,6 @@ fun BehaviorStartupSettingsScreen(
                         stringResource(UiR.string.display_settings_page_show_updates_title),
                         value = showAppUpdates,
                         onToggle = { showAppUpdates = it; writeBool("display_show_app_updates_v1", it) },
-                    )
-                    SettingsIosDivider()
-                    SettingsSwitchRow(
-                        Lucide.Sun,
-                        stringResource(UiR.string.display_settings_page_keep_screen_on_during_generation_title),
-                        tip = stringResource(UiR.string.display_settings_page_keep_screen_on_during_generation_subtitle),
-                        value = keepScreenOn,
-                        onToggle = { keepScreenOn = it; writeBool("display_keep_screen_on_during_generation_v1", it) },
                     )
                     SettingsIosDivider()
                     // L2139-2153 —— 三态 nav row + 底部弹层（C6）。

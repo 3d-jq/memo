@@ -481,6 +481,18 @@
   "androidBackgroundOptionOnNotify": "On and notify when done",
   "androidBackgroundOptionOff": "Off",
   "notificationChatCompletedTitle": "Generation complete",
+  "notificationChannelChatLiveUpdate": "Chat Generation Progress",
+  "notificationLiveUpdateThinking": "Thinking...",
+  "notificationLiveUpdateTitle": "Generating response...",
+  "notificationLiveUpdateTool": "Running tool: {tool}",
+  "@notificationLiveUpdateTool": {
+    "placeholders": {
+      "tool": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationLiveUpdateWriting": "Writing response...",
   "notificationChatCompletedBody": "Assistant reply has been generated",
   "androidBackgroundNotificationTitle": "Kelivo is running",
   "androidBackgroundNotificationText": "Keeping chat generation alive in background",
@@ -2100,6 +2112,8 @@
   "displaySettingsPageEnableImageCropperSubtitle": "Crop images after selecting from gallery or camera",
   "@displaySettingsPageEnableImageCropperSubtitle": {},
   "displaySettingsPageKeepSidebarOpenOnAssistantTapTitle": "Keep sidebar open when selecting assistant",
+  "displaySettingsPageLiveUpdateNotification": "Live Update Notification",
+  "displaySettingsPageLiveUpdateNotificationDesc": "Show real-time notification updates during message generation",
   "displaySettingsPageKeepSidebarOpenOnTopicTapTitle": "Keep sidebar open when selecting topic",
   "displaySettingsPageKeepAssistantListExpandedOnSidebarCloseTitle": "Don't collapse assistant list when closing sidebar",
   "displaySettingsPageShowUpdatesTitle": "Show Updates",

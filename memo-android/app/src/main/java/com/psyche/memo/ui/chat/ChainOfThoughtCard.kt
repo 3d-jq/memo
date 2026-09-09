@@ -38,8 +38,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -313,7 +314,7 @@ fun TimelineStepShell(
                     )
                 }
                 Column(
-                    modifier = Modifier.animateContentSizeTopLeft(),
+                    modifier = Modifier,
                     horizontalAlignment = Alignment.Start,
                 ) {
                     if (contentVisible && content != null) {
@@ -459,6 +460,10 @@ fun ChainOfThoughtReasoningStep(
     val fg = chatSurfaceFg(cs, isDark)
     val state = reasoningStepState(step.expanded, step.loading)
     val display = sanitizeReasoning(step.text)
+    // RikkaHub ChatMessageReasoning.kt::rememberReasoningState 的计时逻辑移植：
+    // 加载中每 50ms 用 now - startAt 重算 elapsed（实时），闭合（loading 变 false）
+    // 时冻结在 finishedAt - startAt。不依赖外部 tick 状态，避免重组竞态。
+    val elapsedMs by rememberReasoningElapsed(step.startAt, step.finishedAt, step.loading)
 
     val label = @Composable {
         Row(
@@ -473,10 +478,16 @@ fun ChainOfThoughtReasoningStep(
                     color = fg.strong,
                 ),
             )
-            // CMW:5126-5135 —— 有起始时间就显示 (X.Xs)。
+            // CMW:5126-5135 —— 有起始时间就实时显示 (X.Xs)。
             if (step.startAt != null) {
                 Spacer(Modifier.width(6.dp))
-                ReasoningElapsedLabel(step.startAt, step.finishedAt, step.loading, fg.medium)
+                Text(
+                    text = "(${String.format(Locale.US, "%.1f", elapsedMs / 1000.0)}s)",
+                    style = TextStyle(
+                        fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
+                        color = fg.medium,
+                    ),
+                )
             }
         }
     }
@@ -533,33 +544,32 @@ fun ChainOfThoughtReasoningStep(
 fun sanitizeReasoning(text: String): String = text.replace("\r", "").trim()
 
 /**
- * CMW:5040-5059 + 5128-5134 —— `finishedAt ?: (loading ? now : startAt)`，加载中
- * 每 100ms 重算，非加载时冻结在闭合时间。
+ * RikkaHub `ChatMessageReasoning.kt::rememberReasoningState` 的计时逻辑移植：
+ * 加载中每 50ms 用 `now - startAt` 重算 elapsed（实时），闭合（`loading` 变
+ * false）时冻结在 `finishedAt - startAt`。不依赖外部 tick 状态，避免重组竞态。
  */
 @Composable
-private fun ReasoningElapsedLabel(
-    startAt: Long,
+private fun rememberReasoningElapsed(
+    startAt: Long?,
     finishedAt: Long?,
     loading: Boolean,
-    color: Color,
-) {
-    var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(loading) {
-        if (!loading) return@LaunchedEffect
+): State<Long> {
+    val elapsed = remember(startAt) { mutableLongStateOf(0L) }
+    LaunchedEffect(loading, startAt) {
+        if (startAt == null) {
+            elapsed.value = 0L
+            return@LaunchedEffect
+        }
+        if (!loading) {
+            elapsed.value = ((finishedAt ?: startAt) - startAt).coerceAtLeast(0L)
+            return@LaunchedEffect
+        }
         while (isActive) {
-            delay(100)
-            tick++
+            elapsed.value = (System.currentTimeMillis() - startAt).coerceAtLeast(0L)
+            delay(50)
         }
     }
-    val end = finishedAt ?: if (loading) System.currentTimeMillis() else startAt
-    val seconds = (end - startAt).coerceAtLeast(0L) / 1000.0
-    Text(
-        text = "(${String.format(Locale.US, "%.1f", seconds)}s)",
-        style = TextStyle(
-            fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
-            color = color,
-        ),
-    )
+    return elapsed
 }
 
 /**
@@ -727,14 +737,6 @@ fun Modifier.fadeTopBottom(top: Dp, bottom: Dp): Modifier =
 
 private fun Modifier.graphicsLayerOffscreen(): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-
-/** AnimatedSize(duration 300ms, curve Cubic(0.2,0.8,0.2,1), alignment topLeft) — CMW:4906。 */
-fun Modifier.animateContentSizeTopLeft(): Modifier = animateContentSize(
-    animationSpec = tween(
-        durationMillis = 300,
-        easing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f),
-    ),
-)
 
 /** AnimatedSize(duration 300ms, curve easeInOutCubicEmphasized, alignment topLeft) — CMW:4672。 */
 fun Modifier.animateContentSizeCard(): Modifier = animateContentSize(

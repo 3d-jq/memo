@@ -852,6 +852,8 @@ Updating Memo first is the safer choice.</string>
     <string name="display_settings_page_language_english_label">English</string>
     <string name="display_settings_page_language_subtitle">Choose interface language</string>
     <string name="display_settings_page_language_title">App Language</string>
+    <string name="display_settings_page_live_update_notification">Live Update Notification</string>
+    <string name="display_settings_page_live_update_notification_desc">Show real-time notification updates during message generation</string>
     <string name="display_settings_page_long_paste_as_file_threshold_title">Conversion threshold</string>
     <string name="display_settings_page_long_paste_as_file_threshold_unit">characters</string>
     <string name="display_settings_page_long_paste_as_file_title">Paste long text as file</string>
@@ -1822,8 +1824,13 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="network_proxy_type_https">HTTPS</string>
     <string name="network_proxy_type_socks5">SOCKS5</string>
     <string name="network_proxy_username">Username</string>
+    <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
     <string name="notification_chat_completed_body">Assistant reply has been generated</string>
     <string name="notification_chat_completed_title">Generation complete</string>
+    <string name="notification_live_update_thinking">Thinking...</string>
+    <string name="notification_live_update_title">Generating response...</string>
+    <string name="notification_live_update_tool">Running tool: %1$s</string>
+    <string name="notification_live_update_writing">Writing response...</string>
     <string name="open_system_settings">Open Settings</string>
     <string name="provider_avatar_choose_built_in_icon">Choose Built-in Icon</string>
     <string name="provider_avatar_choose_lobehub_icon">Enter LobeHub Icon</string>

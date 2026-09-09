@@ -26,6 +26,13 @@ class MemoApplication : Application(), ImageLoaderFactory {
         // Wire request/flutter/context log writers to <filesDir>/logs and apply
         // the per-source enable prefs + install the uncaught-exception hook.
         com.psyche.memo.logging.LogBootstrap.init(this, container.preferenceRepository)
+        // 后台聊天生成：通知渠道 + app 前后台观察（ChatBackgroundController）。
+        com.psyche.memo.service.ChatBackgroundController.init(this)
+        // Live Update 进度通知管理器（RikkaHub ChatNotificationManager）：
+        // 注入 context + 偏好读取函数（RikkaHub 构造注入等价）。
+        com.psyche.memo.service.ChatNotificationManager.init(this) { key ->
+            container.preferenceRepository.readLocal(key)
+        }
     }
 
     /**

@@ -852,6 +852,8 @@
     <string name="display_settings_page_language_english_label">English</string>
     <string name="display_settings_page_language_subtitle">选择界面语言</string>
     <string name="display_settings_page_language_title">应用语言</string>
+    <string name="display_settings_page_live_update_notification">实时更新通知</string>
+    <string name="display_settings_page_live_update_notification_desc">在生成消息时显示实时通知更新</string>
     <string name="display_settings_page_long_paste_as_file_threshold_title">转换阈值</string>
     <string name="display_settings_page_long_paste_as_file_threshold_unit">字符</string>
     <string name="display_settings_page_long_paste_as_file_title">超长粘贴转为文件</string>
@@ -1822,8 +1824,13 @@
     <string name="network_proxy_type_https">HTTPS</string>
     <string name="network_proxy_type_socks5">SOCKS5</string>
     <string name="network_proxy_username">用户名</string>
+    <string name="notification_channel_chat_live_update">聊天生成进度</string>
     <string name="notification_chat_completed_body">助手回复已生成</string>
     <string name="notification_chat_completed_title">生成完成</string>
+    <string name="notification_live_update_thinking">思考中…</string>
+    <string name="notification_live_update_title">正在生成回复…</string>
+    <string name="notification_live_update_tool">正在运行工具：%1$s</string>
+    <string name="notification_live_update_writing">正在编写回复…</string>
     <string name="open_system_settings">去设置</string>
     <string name="provider_avatar_choose_built_in_icon">选择内置图标</string>
     <string name="provider_avatar_choose_lobehub_icon">输入 LobeHub 图标</string>

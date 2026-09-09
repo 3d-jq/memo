@@ -1597,6 +1597,33 @@ private fun MessageRow(
     val searchItems = remember(msg.id, msg.parts) {
         com.psyche.memo.ui.chat.extractCitationItems(msg.parts)
     }
+    // 引用元数据解析 + 点击处理（渲染为 RikkaHub 圆形域名胶囊：新格式
+    // [citation,domain](id) 由模型直写域名；历史 [cite:id] 归一化后经此
+    // 反查 search_items 得到域名/序号回退）。仅当本条消息含搜索来源时有效。
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val citationResolver: (String) -> com.psyche.memo.ui.markdown.CitationInfo? = { id ->
+        val key = id.trim()
+        if (key.isEmpty()) {
+            null
+        } else {
+            val item = searchItems.firstOrNull { it.id == key }
+                ?: key.toIntOrNull()?.let { n -> searchItems.firstOrNull { it.index == n } }
+            if (item == null) {
+                null
+            } else {
+                com.psyche.memo.ui.markdown.CitationInfo(
+                    domain = com.psyche.memo.ui.chat.citationDomain(item.url).takeIf { it.isNotEmpty() },
+                    index = item.index,
+                )
+            }
+        }
+    }
+    val handleCitationTap: (String) -> Unit = { id ->
+        val item = searchItems.firstOrNull { it.id == id }
+            ?: id.toIntOrNull()?.let { n -> searchItems.firstOrNull { it.index == n } }
+        val url = item?.url ?: if (id.contains('/') || id.contains('.')) id else null
+        if (!url.isNullOrEmpty()) com.psyche.memo.ui.chat.openExternal(context, url)
+    }
     // CMW:3707-3711 的第三分支 _buildToolMessage(1662-1706)：role == tool 的
     // 消息没有头像/气泡/操作行，正文本身就是 {tool, arguments, result, metadata}，
     // 渲染成 h16 v6 里的一张工具卡；按显示设置不可见时整条不占位。
@@ -1786,6 +1813,8 @@ private fun MessageRow(
                                     markdown = part.text,
                                     baseFontSize = ChatStyleSpec.USER_TEXT_SP,
                                     baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
+                                    onCitationTap = handleCitationTap,
+                                    citationInfoResolver = citationResolver,
                                 )
                             is ImagePart -> Unit // 已整组渲染在气泡顶部
                             else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
@@ -1802,6 +1831,8 @@ private fun MessageRow(
                                     markdown = block.text,
                                     baseFontSize = 15.7f,
                                     baseLineHeight = 23.55f,
+                                    onCitationTap = handleCitationTap,
+                                    citationInfoResolver = citationResolver,
                                 )
                             is com.psyche.memo.ui.chat.AssistantBlock.Thinking ->
                                 com.psyche.memo.ui.chat.ChainOfThoughtCard(

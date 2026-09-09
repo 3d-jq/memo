@@ -1,8 +1,8 @@
 package com.psyche.memo.common.logging
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -17,6 +17,7 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Calendar
 import java.util.Date
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -36,8 +37,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * `logs.txt` inside the configured logs directory.
  *
  * The OkHttp interceptor (in `core:llm`) and direct call sites both funnel
- * through [logLine]. Writes are queued on Dispatchers.IO behind a single
- * Mutex so concurrent calls serialize on a single file descriptor per day.
+ * through [logLine]. Writes run on a single-threaded FIFO writer (guarded
+ * additionally by a Mutex) so lines land in call order on one file
+ * descriptor per day.
  */
 object RequestLogger {
 
@@ -74,7 +76,15 @@ object RequestLogger {
     private var sink: BufferedWriter? = null
     private var sinkDate: Date? = null
     private val sinkMutex = Mutex()
-    private val writeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // Single-threaded FIFO writer: log lines must land in call order. A
+    // multi-threaded Dispatchers.IO pool only serializes on the Mutex — it
+    // does not preserve submission order (workers race for the lock), which
+    // reordered log lines. One daemon writer thread gives FIFO by design;
+    // the Mutex stays as the file-handle guard for setEnabled's flush/close.
+    private val writeDispatcher = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "memo-request-log-writer").apply { isDaemon = true }
+    }.asCoroutineDispatcher()
+    private val writeScope = CoroutineScope(SupervisorJob() + writeDispatcher)
     @Volatile private var writeErrorReported = false
 
     private val prettyJson = Json {

@@ -327,6 +327,18 @@
   "androidBackgroundOptionOnNotify": "開啟並在生成完時發送消息",
   "androidBackgroundOptionOff": "關閉",
   "notificationChatCompletedTitle": "生成完成",
+  "notificationChannelChatLiveUpdate": "聊天生成進度",
+  "notificationLiveUpdateThinking": "思考中…",
+  "notificationLiveUpdateTitle": "正在產生回覆…",
+  "notificationLiveUpdateTool": "正在執行工具：{tool}",
+  "@notificationLiveUpdateTool": {
+    "placeholders": {
+      "tool": {
+        "type": "String"
+      }
+    }
+  },
+  "notificationLiveUpdateWriting": "正在編寫回覆…",
   "notificationChatCompletedBody": "助手回覆已生成",
   "androidBackgroundNotificationTitle": "Kelivo 正在運行",
   "androidBackgroundNotificationText": "後台保持聊天生成",
@@ -1656,6 +1668,8 @@
   "displaySettingsPageShowChatListDateTitle": "顯示對話列表日期",
   "displaySettingsPageShowChatListDateSubtitle": "在左側對話列表中顯示日期分組標籤",
   "displaySettingsPageKeepSidebarOpenOnAssistantTapTitle": "點選助手時不自動關閉側邊欄",
+  "displaySettingsPageLiveUpdateNotification": "即時更新通知",
+  "displaySettingsPageLiveUpdateNotificationDesc": "在產生消息時顯示即時通知更新",
   "displaySettingsPageKeepSidebarOpenOnTopicTapTitle": "點選話題時不自動關閉側邊欄",
   "displaySettingsPageKeepAssistantListExpandedOnSidebarCloseTitle": "關閉側邊欄時不折疊助手列表",
   "displaySettingsPageShowUpdatesTitle": "顯示更新",

@@ -34,31 +34,43 @@ the `kelivo.psycheas.top` update/sponsor/tools endpoints, or upstream-branded
 seed entries; comment references to Flutter source paths (`mirrors kelivo's
 _iosNavRow`) stay as-is because they are provenance, not UI text.
 
-Already aligned (committed, quality-gate green):
-- Top bar: list icon + title + model subtitle + Map (mini map) + MessageCirclePlus
-- Input bar: frosted rounded container (TextField top + action row: Boxes/Globe/
-  Brain/Hammer/Zap left, Plus/Mic/ArrowUp send right)
-- Message headers: user 13px α0.7 + 11px α0.5; assistant 32px avatar + name/time
-- Bubbles: user primary α0.08 r16; assistant bare text 15.7sp/1.5
-- Message actions: Copy/RefreshCw/Pencil 28px rounded
-- MarkdownText (commonmark + GFM) + ThinkingCard (chain-of-thought collapse)
-- Side drawer: search/history/assistant card/date-grouped list/user bar
-- Launch: most recent conversation (or fresh); temporary chat only via toggle
-- Theme: light default + palettes; status/nav icons follow theme
+已对齐（已提交，全模块门禁绿）—— 详情与批次表见 `memo-android/docs/PORTING.md`（唯一事实索引）：
 
-Also aligned (9/3-9/4): model select sheet (search/Bookmark/provider chips),
-ChatHistoryScreen (swipe delete/pin/date formats), MiniMapSheet (QA pairing +
-jump), display-settings 16 rows + ChatItemDisplay 13 toggles + Rendering 8 +
-Behavior/Startup 20 rows + Image/MessageStyle/AutoRetry/Haptics sub-pages,
-provider management pages, drawer global-search mode, temporary-chat 3-state
-icon, long-press conversation sheet + multi-select bar, streaming breathing
-dot, IosSwitch/IosCheckbox/IosTileButton + tactile press + Haptics, semantic
-colors + surface ladder + HCT port, self-drawn InteractiveDrawer (offset
-slide-in, scrim 0.12, edge-only drag, settle by velocity), global ripple off.
+聊天与基础 UI
+- 顶栏 / 输入栏（frosted 圆角容器 + 左 Boxes/Globe/Brain/Hammer/Zap、右 Plus/Mic/ArrowUp）/ 消息头 / 气泡 / 消息操作
+- MarkdownText（commonmark + GFM）+ ThinkingCard（思维链折叠）
+- 侧边抽屉（搜索/历史/助手卡/日期分组/用户栏）+ 自绘 InteractiveDrawer（偏移滑入、scrim 0.12、仅边缘拖拽、按速度归位）
+- 启动：最近会话（或新建）；临时聊天仅经开关；全局 ripple 关闭
+- 顶栏统一（MemoTopBar，40+ 页面已转）、页面转场（PredictiveBack→FadeForwards）、输入框几何对齐 BasicTextField
 
-Still to port (per original source): tool detail cards, 24 business features
-(search/translate/MCP/backup/voice/QR/OCR), real device chat smoke w/ API key,
-remaining settings sub-pages, feature:* modules are still empty shells.
+模型与助手编辑
+- 模型选择 sheet（搜索/收藏/provider chips）+ ModelDetailSheet（编辑/创建双模 + Basic/Advanced/BuiltInTools 三 tab + 可拖拽高度 NestedScrollConnection）
+- 助手列表页 + AssistantStore + seed + assistant_rows PK 修复；拖拽 animateItem+zIndex / 左滑 pane
+- 编辑页骨架 + 分段条 + basic tab（聊天模型/背景/参数 sheet×4/头像 sheet/思考预算）+ 提示词 tab（系统提示词/消息模板/预设对话）+ 记忆/MCP/本地工具/快捷短语/自定义请求/正则/标签 tab
+- 显示设置 + 子页（ChatItemDisplay 13 / Rendering 8 / Behavior/Startup 20 / Image/MessageStyle/AutoRetry/Haptics）
+
+对话增强与工具
+- 搜索体系 S1–S4（定义/8+15 provider 引擎/设置/用量，共 23 个可运行 provider）
+- 翻译页、世界书（页 + 注入引擎，5 注入位置/31 单测）、指令注入、快捷短语、记忆工具 M1/M2a/M2b/M2c、本地工具 L1 + 日历 L2、OCR F4、文档抽取 F3、附件 UI F2
+- 多模态输入引擎 F1、MCP 基础与连接管理 MCP-1/MCP-2、助手 MCP sheet（输入栏 Hammer）
+- 聊天周边：Select&Copy/WebView 预览/分享/BoundedLargeTextView、助手壁纸、推理预算全链路、清空/压缩上下文、记忆关于+种子、建议气泡、消息多选+导出（文本）
+- 抽屉全局搜索模式、临时聊天三态、长按会话 sheet + 多选栏、流式呼吸点、iOS 风格控件 + 触觉反馈 + Haptics
+
+设置、系统与服务壳
+- provider 管理页、语音服务/备份/赞助 UI 壳（BackupScreen/LocalSnapshotsScreen/SponsorScreen）+ TTS/ASR 编辑器全屏化
+- 日志三件套（收尾-6：LogPayloadElider/LogRedactor/RequestLogger/FlutterLogger/ContextLogger/LogBootstrap，64 单测）
+- 关于页闪退修复、智谱 400 修复（applyVendorReasoningKnobs）
+
+待移植 / 剩余（仅以下）
+- 真机 API-key 聊天冒烟验证（设备已连，待跑）
+- MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
+- ModelSelectSheet 可拖拽高度（现固定 0.8，原版 DraggableScrollableSheet min0.4/max0.8，待移植 NestedScrollConnection 等价物——ModelDetailSheet 已做同类）
+- M2d：记忆收尾（哈希冻结/自愈、Smart Add LLM 去重合并、tab 内记忆条目列表与整理、legacy 记忆模式工具）
+- 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
+- C：tab 布局管理页（按 preference 重排/隐藏 tab）
+- UI-7i 图片导出（widget 截图引擎，文本导出已完成）
+- S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）
+- 备份/语音功能落地（壳已建，功能走 RikkaHub data-sync + app 模块，下一批）
 
 - Build env on this machine: system `JAVA_HOME` points at jdk-13 (breaks AGP) —
   always pin `JAVA_HOME=/c/Program Files/Java/jdk-21.0.10` and

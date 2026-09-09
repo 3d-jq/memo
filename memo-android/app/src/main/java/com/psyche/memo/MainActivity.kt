@@ -116,8 +116,26 @@ class MainActivity : ComponentActivity() {
         // (page surface) extends behind the camera cutout so the OEM never
         // paints its black strip over the top of the app.
         enableEdgeToEdge()
+        // Cold-start completion-notification tap: the launch intent carries
+        // the conversation id (ChatBackgroundController.EXTRA_CONVERSATION_ID).
+        deliverNotificationConversation(intent)
         setContent {
             MemoApp()
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        // singleTop launchMode + notification PendingIntent(CLEAR_TOP|SINGLE_TOP):
+        // taps while the app is alive land here.
+        deliverNotificationConversation(intent)
+    }
+
+    private fun deliverNotificationConversation(intent: android.content.Intent?) {
+        intent?.getStringExtra(
+            com.psyche.memo.service.ChatBackgroundController.EXTRA_CONVERSATION_ID,
+        )?.let {
+            com.psyche.memo.service.ChatBackgroundController.pendingOpenConversationId.value = it
         }
     }
 }
@@ -258,6 +276,20 @@ private fun AppThemeAndContent(
                 val navController = rememberNavController()
                 val pendingOpenConversation = remember {
                     androidx.compose.runtime.mutableStateOf<String?>(null)
+                }
+                // Completion-notification taps land in the controller's
+                // pendingOpenConversationId (MainActivity.onNewIntent/onCreate)
+                // and are forwarded into the HomeScreen pipeline — the same
+                // entry point ChatHistoryScreen's onOpenConversation uses.
+                LaunchedEffect(Unit) {
+                    com.psyche.memo.service.ChatBackgroundController
+                        .pendingOpenConversationId.collect { id ->
+                            if (id != null) {
+                                pendingOpenConversation.value = id
+                                com.psyche.memo.service.ChatBackgroundController
+                                    .pendingOpenConversationId.value = null
+                            }
+                        }
                 }
                 NavHost(
                     navController = navController,

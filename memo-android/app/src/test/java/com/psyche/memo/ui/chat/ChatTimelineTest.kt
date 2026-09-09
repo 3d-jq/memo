@@ -329,4 +329,60 @@ class ChatTimelineTest {
         val s = ChatTimelineSettings.fromPrefs { "true" }
         assertEquals(false, s.showThinkingCards)
     }
+
+    // --- ReasoningSegmentCodec.toggleExpandedAt ---------------------------------
+
+    @Test
+    fun toggleFlipsAnExistingCollapsedSegment() {
+        val json = ReasoningSegmentCodec.encode(
+            listOf(ReasoningSegment(expanded = false)),
+        )
+        val out = ReasoningSegmentCodec.toggleExpandedAt(json, 0)
+        val decoded = ReasoningSegmentCodec.decode(out)
+        assertEquals(1, decoded.size)
+        assertEquals(true, decoded[0].expanded)
+    }
+
+    @Test
+    fun toggleFlipsAnExistingExpandedSegment() {
+        val json = ReasoningSegmentCodec.encode(
+            listOf(ReasoningSegment(expanded = true)),
+        )
+        val out = ReasoningSegmentCodec.toggleExpandedAt(json, 0)
+        assertEquals(false, ReasoningSegmentCodec.decode(out)[0].expanded)
+    }
+
+    /**
+     * Regression: an older message whose `reasoning_segments_json` is null still
+     * renders expanded (projectAssistantBlocks defaults missing -> true), but the
+     * toggle used to no-op because there was no stored segment. Now it synthesizes
+     * the segment and collapses it.
+     */
+    @Test
+    fun toggleOnMissingSegmentDoesNotNoop() {
+        val out = ReasoningSegmentCodec.toggleExpandedAt(null, 0)
+        val decoded = ReasoningSegmentCodec.decode(out)
+        assertEquals(1, decoded.size)
+        assertEquals(false, decoded[0].expanded)
+    }
+
+    /** Index beyond the stored list: pad with default (expanded=true) entries, then flip the target. */
+    @Test
+    fun toggleBeyondStoredListPadsAndFlips() {
+        val json = ReasoningSegmentCodec.encode(
+            listOf(ReasoningSegment(expanded = false)),
+        )
+        val out = ReasoningSegmentCodec.toggleExpandedAt(json, 2)
+        val decoded = ReasoningSegmentCodec.decode(out)
+        assertEquals(3, decoded.size)
+        assertEquals(false, decoded[0].expanded) // untouched
+        assertEquals(true, decoded[1].expanded) // padded default
+        assertEquals(false, decoded[2].expanded) // flipped from default true
+    }
+
+    @Test
+    fun toggleNegativeIndexIsSafe() {
+        val json = ReasoningSegmentCodec.encode(listOf(ReasoningSegment(expanded = false)))
+        assertEquals(json, ReasoningSegmentCodec.toggleExpandedAt(json, -1))
+    }
 }

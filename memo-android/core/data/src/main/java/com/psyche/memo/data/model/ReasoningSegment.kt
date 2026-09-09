@@ -76,4 +76,23 @@ object ReasoningSegmentCodec {
         if (element is JsonNull) return null
         return (element as? JsonPrimitive)?.content?.toLongOrNull()
     }
+
+    /**
+     * Flip the [ReasoningSegment.expanded] flag at [index].
+     *
+     * `projectAssistantBlocks` defaults a reasoning block to *expanded* when no
+     * stored segment exists (`segment?.expanded ?: true`). For older messages
+     * whose `reasoning_segments_json` is null/empty or shorter than the part
+     * count, that made blocks show expanded yet uncollapsible (the toggle
+     * found no segment and no-op'd). Synthesize the missing entries so the
+     * toggle always takes effect, flipping the displayed state.
+     */
+    fun toggleExpandedAt(json: String?, index: Int): String? {
+        if (index < 0) return json
+        val list = decode(json).toMutableList()
+        val displayedExpanded = list.getOrNull(index)?.expanded ?: true
+        while (list.size <= index) list.add(ReasoningSegment())
+        list[index] = list[index].copy(expanded = !displayedExpanded)
+        return encode(list)
+    }
 }
