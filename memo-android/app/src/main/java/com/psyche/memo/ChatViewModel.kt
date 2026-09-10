@@ -255,12 +255,23 @@ class ChatViewModel(
         input.value = text
     }
 
+    /**
+     * `home_view_model._clearSuggestionsFor` —— 发送 / 重新生成 / 工具续答时会先
+     * 清掉上一轮的建议气泡（内存 + 落库），避免旧建议跨轮残留。
+     */
+    private fun clearSuggestions() {
+        if (_suggestions.value.isEmpty()) return
+        _suggestions.value = emptyList()
+        writeSuggestions(emptyList())
+    }
+
     fun send() {
         val text = input.value.trim()
         val pending = _attachments.value
         if ((text.isEmpty() && pending.isEmpty()) || _streaming.value) return
         input.value = ""
         _attachments.value = emptyList()
+        clearSuggestions()
         viewModelScope.launch {
             // nextOrder queries SQLite synchronously, so both the build and
             // the insert run on Dispatchers.IO; StateFlow updates (append)
@@ -289,7 +300,39 @@ class ChatViewModel(
         val msgs = _messages.value
         if (msgs.isNotEmpty()) {
             val last = msgs.last()
-            _messages.value = msgs.dropLast(1) + last.copy(isStreaming = false)
+            // stream_controller.dart 1339 / finishReasoningIfNeeded — a stop
+            // ends the reasoning phase too: close the open segment and fold it
+            // (when auto-collapse is on) so the card is not left spinning.
+            val closedJson = closeOpenReasoningSegment(last)
+            _messages.value = msgs.dropLast(1) +
+                last.copy(isStreaming = false, reasoningSegmentsJson = closedJson ?: last.reasoningSegmentsJson)
+            persistClosedSegments(last.id, closedJson)
+        }
+    }
+
+    /**
+     * Closes the message's still-open last reasoning segment (stamp
+     * `finishedAt`, fold when auto-collapse is on). Returns the rewritten
+     * `reasoning_segments_json`, or null when nothing changed.
+     * Mirrors `finishReasoningIfNeeded` (stream_controller.dart 1326-1362).
+     */
+    private fun closeOpenReasoningSegment(target: UiMessage): String? {
+        val segments = ReasoningSegmentCodec.decode(target.reasoningSegmentsJson)
+        if (segments.isEmpty()) return null
+        val (closed, changed) = ReasoningSegmentCodec.finishLastOpenSegment(
+            segments,
+            now = System.currentTimeMillis(),
+            autoCollapse = readBool(AUTO_COLLAPSE_THINKING_KEY, true),
+        )
+        if (!changed) return null
+        return encodeSegments(closed)
+    }
+
+    /** Persists a rewritten segment payload after an out-of-band close. */
+    private fun persistClosedSegments(messageId: String, json: String?) {
+        if (json == null || isTemporary) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { container.messageDao.updateReasoningSegments(messageId, json) }
         }
     }
 
@@ -658,6 +701,7 @@ class ChatViewModel(
         val idx = msgs.indexOfFirst { it.id == userMessageId }
         if (idx < 0) return
         val anchor = msgs[idx]
+        clearSuggestions()
         viewModelScope.launch {
             if (!isTemporary) {
                 withContext(Dispatchers.IO) {
@@ -850,16 +894,21 @@ class ChatViewModel(
             // UI handler folds every round into one parts list).
             val allParts = mutableListOf<MessagePart>()
             val allSegments = mutableListOf<ReasoningSegment>()
+            // 新一轮生成：清空 segment 初始态跟踪（见 encodeSegments）。
+            seenSegmentIndices.clear()
             var persisted = false
-            fun persistOnce(parts: List<MessagePart>, usage: UsageStats?) {
+            fun persistOnce(parts: List<MessagePart>, usage: UsageStats?, segmentsJson: String? = null) {
                 if (persisted) return
                 persisted = true
+                // 落库走与 UI 相同的编码路径（含新增段初始展开态与用户的展开/折叠
+                // 点击），否则库里存的是未修正的默认 expanded，冷启动即回退。
                 persistAssistant(
                     assistantId,
                     parts,
                     segments = allSegments,
                     usage = usage,
                     durationMs = System.currentTimeMillis() - generationStartMs,
+                    segmentsJson = segmentsJson ?: encodeSegments(allSegments),
                 )
             }
             try {
@@ -1004,20 +1053,28 @@ class ChatViewModel(
                     updateStreaming = { parts, segments ->
                         updateAssistantStreaming(assistantId, parts, segments)
                     },
-                    onPersist = { parts, usage -> persistOnce(parts, usage) },
+                    onPersist = { parts, usage, segmentsJson ->
+                        persistOnce(parts, usage, segmentsJson)
+                    },
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // user stop: the partial reply is kept and persisted, exactly
                 // like the original stop path.
-                persistAssistant(assistantId, allParts, segments = allSegments)
-            } catch (e: Exception) {
-                val finalParts = markFailed(
+                persistAssistant(
                     assistantId,
-                    e.toString(),
                     allParts,
-                    encodeSegments(allSegments),
+                    segments = allSegments,
+                    segmentsJson = encodeSegments(allSegments),
                 )
-                persistAssistant(assistantId, finalParts, segments = allSegments)
+            } catch (e: Exception) {
+                val segmentsJson = encodeSegments(allSegments)
+                val finalParts = markFailed(assistantId, e.toString(), allParts, segmentsJson)
+                persistAssistant(
+                    assistantId,
+                    finalParts,
+                    segments = allSegments,
+                    segmentsJson = segmentsJson,
+                )
             } finally {
                 _streaming.value = false
                 container.streamingConversationIds.value =
@@ -1025,6 +1082,11 @@ class ChatViewModel(
                 endBackgroundGeneration()
                 // home_view_model L1755+ —— 回复完成后生成建议气泡。
                 maybeGenerateSuggestions()
+                // 默认模型「标题总结」槽位通电：首条回复完成后自动生成标题
+                // （标题仍是默认占位时）；「对话总结」槽位在满足助手开关与
+                // 消息阈值后生成摘要。二者均复用 TitleSummaryGenerator。
+                maybeGenerateTitle()
+                maybeGenerateSummary()
             }
         }
     }
@@ -1090,6 +1152,57 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * 默认模型「标题总结」槽位通电 —— 复用 TitleSummaryGenerator 生成会话标题。
+     * 内部会自行判定：标题仍是默认占位 + title_generation_enabled_v1 开启 +
+     * 已配置模型（title_model_v1，缺省回退聊天模型）。
+     */
+    private fun maybeGenerateTitle() {
+        if (isTemporary) return
+        viewModelScope.launch {
+            runCatching {
+                com.psyche.memo.TitleSummaryGenerator.generateTitle(container, conversationId, force = false)
+            }.getOrNull()?.let { generated ->
+                // home_view_model.dart L1531-1536：写库后若会话就是当前会话，
+                // 立即 updateCurrentConversation + notifyListeners，让顶栏刷新。
+                title.value = generated
+            }
+        }
+    }
+
+    /**
+     * 重新从库里读取会话标题并刷新顶栏。
+     *
+     * Flutter 端 chat_service 持有一份共享的 `_conversationsCache`，抽屉/顶栏
+     * 都读它，任意一处写标题（手动重命名、LLM 生成、从别的页面改）后
+     * `notifyListeners()` 双方自动同步。Android 端没有这层共享缓存：顶栏读
+     * [title]（进入会话时的一次性快照），抽屉读自己的会话列表。故抽屉侧写完
+     * 标题后，通过本方法把变化同步回顶栏。
+     */
+    fun refreshTitle() {
+        if (isTemporary) return
+        viewModelScope.launch {
+            val stored = withContext(Dispatchers.IO) {
+                container.conversationDao.get(conversationId)
+            }
+            title.value = stored?.title?.trim() ?: ""
+        }
+    }
+
+    /**
+     * 默认模型「对话总结」槽位通电 —— 复用 TitleSummaryGenerator 生成会话摘要。
+     * 内部会自行判定：助手 allowPastConversationRecall + generateConversationSummary
+     * 均开启 + 消息数越过 recentChatsSummaryMessageCount 阈值 + 已配置模型。
+     */
+    private fun maybeGenerateSummary() {
+        if (isTemporary) return
+        viewModelScope.launch {
+            runCatching {
+                com.psyche.memo.TitleSummaryGenerator.generateSummary(container, conversationId)
+            }
+        }
+    }
+
     /** home_page_controller.sendSuggestion —— 插入输入框或直接发送。 */
     fun sendSuggestion(text: String) {
         val trimmed = text.trim()
@@ -1114,7 +1227,7 @@ class ChatViewModel(
         allParts: MutableList<MessagePart>,
         allSegments: MutableList<ReasoningSegment>,
         updateStreaming: (List<MessagePart>, String?) -> Unit,
-        onPersist: (List<MessagePart>, UsageStats?) -> Unit,
+        onPersist: (List<MessagePart>, UsageStats?, String?) -> Unit,
     ) {
         var finishUsage: UsageStats? = null
         val toolHandler = ToolHandler(
@@ -1146,17 +1259,31 @@ class ChatViewModel(
                 reasoning = com.psyche.memo.ModelRegistry.infer(modelId).reasoning,
             )
             val client = container.clientFor(providerId)
-            // Fresh handler per round: each HTTP stream ends with its own
-            // Finish, which would otherwise block later chunks (the Dart
-            // handler is likewise one instance per response).
-            val roundHandler = StreamChunkHandler()
             var failed = false
+            // Declared before the handler so `onSegmentClosed` can push the
+            // mid-stream fold straight to the UI (Kotlin resolves the local
+            // function at call time, not at lambda-creation time).
+            lateinit var roundHandler: StreamChunkHandler
             fun roundUpdate() {
                 updateStreaming(
                     allParts + roundHandler.parts,
                     encodeSegments(allSegments + roundHandler.reasoningSegments),
                 )
             }
+            // Fresh handler per round: each HTTP stream ends with its own
+            // Finish, which would otherwise block later chunks (the Dart
+            // handler is likewise one instance per response).
+            //
+            // The handler owns the "reasoning phase is over" move itself
+            // (stamp finishedAt + fold when auto-collapse is on) so a thought
+            // card folds as soon as a tool call starts or the answer begins
+            // arriving — not only when the whole reply finishes
+            // (stream_controller.dart L853 / L1232). `autoCollapse` is read
+            // fresh each time, matching Dart's per-call settings read.
+            roundHandler = StreamChunkHandler(
+                autoCollapse = { readBool(AUTO_COLLAPSE_THINKING_KEY, true) },
+                onSegmentClosed = { roundUpdate() },
+            )
             client.streamChat(request).collect { chunk ->
                 roundHandler.handle(chunk)
                 when (chunk) {
@@ -1175,13 +1302,15 @@ class ChatViewModel(
                         // content, surface the error text when nothing was
                         // generated, and mark the message failed.
                         failed = true
+                        val errorSegmentsJson =
+                            encodeSegments(allSegments + roundHandler.reasoningSegments)
                         val finalParts = markFailed(
                             assistantId,
                             chunk.message,
                             allParts + roundHandler.parts,
-                            encodeSegments(allSegments + roundHandler.reasoningSegments),
+                            errorSegmentsJson,
                         )
-                        onPersist(finalParts, finishUsage)
+                        onPersist(finalParts, finishUsage, errorSegmentsJson)
                     }
                 }
             }
@@ -1192,16 +1321,16 @@ class ChatViewModel(
                 // without a Finish chunk still finalizes (the round loop's
                 // `finish()`).
                 val finalParts = allParts + roundHandler.parts
-                updateStreaming(
-                    finalParts,
-                    encodeSegments(allSegments + roundHandler.reasoningSegments),
-                )
-                finishAssistant(
-                    assistantId,
-                    finalParts,
-                    encodeSegments(allSegments + roundHandler.reasoningSegments),
-                )
-                onPersist(finalParts, finishUsage)
+                // stream_controller.dart 1246-1255 —— 流正常结束：先给仍未结束的最后
+                // 一段补上 finishedAt（计时器停住），再按「自动折叠思考」决定是否折起。
+                val now = System.currentTimeMillis()
+                val finalSegments = (allSegments + roundHandler.reasoningSegments).map {
+                    if (it.finishedAt == null) it.copy(finishedAt = now) else it
+                }
+                val finalSegmentsJson = encodeSegments(collapseFinishedSegments(finalSegments))
+                updateStreaming(finalParts, finalSegmentsJson)
+                finishAssistant(assistantId, finalParts, finalSegmentsJson)
+                onPersist(finalParts, finishUsage, finalSegmentsJson)
                 break
             }
             // Execute each announced tool and fold its result into the
@@ -1281,8 +1410,11 @@ class ChatViewModel(
                 container.streamingConversationIds.value + conversationId
             val allParts = updatedParts.toMutableList()
             val allSegments = ReasoningSegmentCodec.decode(targetUi.reasoningSegmentsJson).toMutableList()
+            // 续写：已有 segment 视作「已存在」，保留其展开/折叠态（见 encodeSegments）。
+            seenSegmentIndices.clear()
+            seenSegmentIndices.addAll(allSegments.indices)
             var persisted = false
-            fun persistFinal(parts: List<MessagePart>) {
+            fun persistFinal(parts: List<MessagePart>, segmentsJson: String? = null) {
                 if (persisted) return
                 persisted = true
                 if (isTemporary) return
@@ -1293,7 +1425,7 @@ class ChatViewModel(
                         container.messageDao.replaceParts(
                             dbMsg.withParts(
                                 parts = parts,
-                                reasoningSegmentsJson = encodeSegments(allSegments),
+                                reasoningSegmentsJson = segmentsJson ?: encodeSegments(allSegments),
                                 isStreaming = false,
                             ),
                             streaming = false,
@@ -1349,7 +1481,9 @@ class ChatViewModel(
                     updateStreaming = { parts, segments ->
                         updateAssistantStreaming(messageId, parts, segments)
                     },
-                    onPersist = { parts, _ -> persistFinal(parts) },
+                    onPersist = { parts, _, segmentsJson ->
+                        persistFinal(parts, segmentsJson)
+                    },
                 )
             } catch (e: kotlinx.coroutines.CancellationException) {
                 persistFinal(allParts)
@@ -1671,15 +1805,41 @@ class ChatViewModel(
     }
 
     /**
-     * stream_controller.dart 771 — a segment starts expanded only when
-     * "auto-collapse thinking" is off; the user's own toggle wins afterwards.
+     * 已在本轮生成中出现过的 segment 下标。新增 segment 才给初始展开态，已存在的
+     * 保留其当前 `expanded`（用户的展开/折叠点击）——对应 Flutter
+     * `stream_controller.dart:776`「Do not reset r.expanded here - preserve user's
+     * toggle state during streaming」。每次开新会话生成时清空。
+     */
+    private val seenSegmentIndices = HashSet<Int>()
+
+    /**
+     * stream_controller.dart 771/776 —— 新 segment 的初始展开态 =
+     * `!autoCollapsePrompt`；已存在的 segment **不重置** expanded，从而保留用户在
+     * 流式过程中手动展开/折叠的点击。此前每次编码都把所有 segment 重算成
+     * `!autoCollapse`，导致手动折叠的思考卡在下次增量/落库时被改回展开（冷启动
+     * 后即为展开态）。
      */
     private fun encodeSegments(segments: List<ReasoningSegment>): String? {
-        val autoCollapse = readBool("display_auto_collapse_thinking_v1", true)
+        val initialExpanded = !readBool(AUTO_COLLAPSE_THINKING_KEY, true)
         return ReasoningSegmentCodec.encode(
-            segments.map { it.copy(expanded = !autoCollapse) },
+            ReasoningSegmentCodec.applyInitialExpanded(
+                segments,
+                seenSegmentIndices,
+                initialExpanded,
+            ),
         )
     }
+
+    /**
+     * stream_controller.dart 1231-1255 —— 流结束且「自动折叠思考」开启时，把**已结束**
+     * 的 segment 折起来（`finishedAt != null`）。未结束的最后一段保持原态。开关关闭
+     * 时原样返回（用户的手动展开得以保留）。
+     */
+    private fun collapseFinishedSegments(segments: List<ReasoningSegment>): List<ReasoningSegment> =
+        ReasoningSegmentCodec.collapseFinishedSegments(
+            segments,
+            autoCollapse = readBool(AUTO_COLLAPSE_THINKING_KEY, true),
+        )
 
     private fun readBool(key: String, default: Boolean): Boolean =
         container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
@@ -1714,6 +1874,8 @@ class ChatViewModel(
         segments: List<com.psyche.memo.data.model.ReasoningSegment> = emptyList(),
         usage: UsageStats? = null,
         durationMs: Long = 0L,
+        /** 已算好的 `reasoning_segments_json`（含展开态）；null 时由 [segments] 兜底编码。 */
+        segmentsJson: String? = null,
     ) {
         if (isTemporary || parts.isEmpty()) return
         val providerId = selectedProviderId.value
@@ -1740,7 +1902,7 @@ class ChatViewModel(
                         conversationId = conversationId,
                         reasoningStartAt = startAt,
                         reasoningFinishedAt = finishedAt,
-                        reasoningSegmentsJson = ReasoningSegmentCodec.encode(closed),
+                        reasoningSegmentsJson = segmentsJson ?: ReasoningSegmentCodec.encode(closed),
                         promptTokens = usage?.promptTokens,
                         completionTokens = usage?.completionTokens,
                         cachedTokens = usage?.cachedTokens,
@@ -1775,6 +1937,9 @@ class ChatViewModel(
     )
 
     companion object {
+        /** `display_auto_collapse_thinking_v1` — "auto-collapse thinking" setting. */
+        private const val AUTO_COLLAPSE_THINKING_KEY = "display_auto_collapse_thinking_v1"
+
         fun factory(container: AppContainerImpl, conversationId: String) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

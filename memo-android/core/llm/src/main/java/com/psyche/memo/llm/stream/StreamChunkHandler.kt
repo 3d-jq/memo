@@ -24,8 +24,21 @@ import kotlinx.serialization.json.JsonPrimitive
  * `stream_controller.handleReasoningChunk`, right next to the same split
  * rule): the first reasoning delta after a tool call opens a new segment, and
  * the first fragment of the next tool call closes the previous one.
+ *
+ * **Finishing a segment also collapses it.** The Dart original does the same
+ * three-step move — stamp `finishedAt`, then (when "auto-collapse thinking" is
+ * on) set `expanded = false` — at every point the reasoning phase ends, so the
+ * card folds the moment the model moves on instead of waiting for the whole
+ * reply to finish. [autoCollapse] carries that user setting into the fold, and
+ * [onSegmentClosed] lets the caller mirror the change to its UI state.
  */
-class StreamChunkHandler {
+class StreamChunkHandler(
+    /** `display_auto_collapse_thinking_v1` — fresh reads keep a mid-stream
+     *  settings change from being ignored (Dart reads the provider each time). */
+    private val autoCollapse: () -> Boolean = { true },
+    /** Invoked after a segment gains its `finishedAt` (and possibly collapsed). */
+    private val onSegmentClosed: (() -> Unit)? = null,
+) {
     private val json = Json { ignoreUnknownKeys = true }
 
     private val folded = ArrayList<MessagePart>()
@@ -64,6 +77,10 @@ class StreamChunkHandler {
 
     private fun appendText(delta: String) {
         if (delta.isEmpty()) return
+        // stream_controller.dart 1232 / chat_actions.dart 2388 — the first
+        // content chunk ends the reasoning phase: the model has moved on to
+        // the answer, so the thought card folds right there.
+        if (textIndex[TEXT_SERIES] == null) closeOpenSegment()
         val index = textIndex[TEXT_SERIES]
         if (index == null || folded[index] !is TextPart) {
             folded.add(TextPart(delta))
@@ -89,6 +106,9 @@ class StreamChunkHandler {
             ReasoningSegment(
                 startAt = System.currentTimeMillis(),
                 finishedAt = null,
+                // stream_controller.dart 776 — a brand-new segment starts
+                // expanded unless the user asked thinking to auto-collapse.
+                expanded = !autoCollapse(),
                 toolStartIndex = toolBuffers.size,
             ),
         )
@@ -120,8 +140,20 @@ class StreamChunkHandler {
         }
     }
 
+    /**
+     * Ends the still-open last segment and — when auto-collapse is on — folds
+     * it immediately. Mirrors the Dart three-step move that runs at every
+     * "reasoning phase is over" point (stream_controller.dart L853 tool call
+     * starts / L1232 content starts / L1280 stream ends / cancellation /
+     * error / the `finishReasoningIfNeeded` catch-all). No-op when the last
+     * segment is already finished.
+     */
     private fun closeOpenSegment() {
-        timed.lastOrNull()?.let { if (it.finishedAt == null) it.finishedAt = System.currentTimeMillis() }
+        val last = timed.lastOrNull() ?: return
+        if (last.finishedAt != null) return
+        last.finishedAt = System.currentTimeMillis()
+        if (autoCollapse()) last.expanded = false
+        onSegmentClosed?.invoke()
     }
 
     /** `_tryDecode` 438-…: empty input means "no arguments", bad JSON stays raw. */

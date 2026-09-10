@@ -188,4 +188,45 @@ class DefaultModelPrefsTest {
         // Not a list -> parseModalities returns null -> inference on base id.
         assertFalse(OcrModelCapability.supportsImageInput("deepseek-chat", weird))
     }
+
+    // ------------------------------------------------------------------
+    // parseJsonBool —— "*_enabled_v1" 标志的读取（home_page.dart:1285-1288
+    // 的建议气泡门控依赖它：禁用后已显示的建议必须立刻消失）
+    // ------------------------------------------------------------------
+
+    @Test
+    fun parseJsonBool_readsTrueAndFalse() {
+        assertTrue(DefaultModelPrefs.parseJsonBool("true"))
+        assertFalse(DefaultModelPrefs.parseJsonBool("false"))
+    }
+
+    @Test
+    fun parseJsonBool_missingKeyFallsBackToDefault() {
+        // settings_provider.dart:923: 未写过该键时建议生成视为未启用。
+        assertFalse(DefaultModelPrefs.parseJsonBool(null))
+        assertFalse(DefaultModelPrefs.parseJsonBool(null, default = false))
+        // 调用方也可传入自己的回退值（如 title 的 `?? sel != null`）。
+        assertTrue(DefaultModelPrefs.parseJsonBool(null, default = true))
+    }
+
+    @Test
+    fun parseJsonBool_malformedValueFallsBackInsteadOfThrowing() {
+        // 损坏的偏好值不应让对话页崩溃，退回 default。
+        assertFalse(DefaultModelPrefs.parseJsonBool("not-json"))
+        assertFalse(DefaultModelPrefs.parseJsonBool("{"))
+        assertTrue(DefaultModelPrefs.parseJsonBool("not-json", default = true))
+        // 非布尔 JSON 走回退（数字 / 对象 / null）。
+        assertFalse(DefaultModelPrefs.parseJsonBool("1"))
+        assertFalse(DefaultModelPrefs.parseJsonBool("null"))
+        assertTrue(DefaultModelPrefs.parseJsonBool("1", default = true))
+    }
+
+    @Test
+    fun parseJsonBool_quotedBooleanIsAcceptedLeniently() {
+        // kotlinx 的 jsonPrimitive.booleanOrNull 对带引号的 "true"/"false"
+        // 也能解析（内容解析而非类型严格校验）。这是既有的宽容行为，
+        // 这里锁定它以免将来误判为回归——真正的坏值仍走 default。
+        assertTrue(DefaultModelPrefs.parseJsonBool("\"true\""))
+        assertFalse(DefaultModelPrefs.parseJsonBool("\"false\""))
+    }
 }

@@ -174,4 +174,118 @@ class StreamChunkHandlerTest {
         assertEquals("Hello", handler.textContent())
         assertEquals("stop", handler.finishReason)
     }
+
+    // ------------------------------------------------------------------
+    // Mid-stream segment folding (stream_controller.dart L853 / L1232)
+    // ------------------------------------------------------------------
+
+    /** stream_controller.dart 776 — a new segment opens expanded by default. */
+    @Test
+    fun newSegmentStartsExpandedWhenAutoCollapseIsOff() {
+        val handler = StreamChunkHandler(autoCollapse = { false })
+        handler.handle(StreamChunk.ReasoningDelta("think"))
+        assertTrue(handler.reasoningSegments[0].expanded)
+    }
+
+    @Test
+    fun newSegmentStartsCollapsedWhenAutoCollapseIsOn() {
+        val handler = StreamChunkHandler(autoCollapse = { true })
+        handler.handle(StreamChunk.ReasoningDelta("think"))
+        assertFalse(handler.reasoningSegments[0].expanded)
+    }
+
+    /**
+     * stream_controller.dart 838-858 — the moment a tool call starts, the open
+     * reasoning segment is closed and folded, so the card is already collapsed
+     * while the tool runs instead of at the end of the reply.
+     */
+    @Test
+    fun toolCallStartFoldsTheOpenSegment() {
+        val handler = StreamChunkHandler(autoCollapse = { true })
+        handler.handle(StreamChunk.ReasoningDelta("thinking..."))
+        assertNull(handler.reasoningSegments[0].finishedAt)
+        handler.handle(StreamChunk.ToolCallDelta("t1", "search_web", "{\"query\":\"x\"}"))
+        val segment = handler.reasoningSegments[0]
+        assertNotNull("tool start closes the segment", segment.finishedAt)
+        assertFalse("and folds it when auto-collapse is on", segment.expanded)
+    }
+
+    /**
+     * chat_actions.dart 2388 / stream_controller.dart 1232 — the first content
+     * chunk ends the reasoning phase.
+     */
+    @Test
+    fun firstContentDeltaFoldsTheOpenSegment() {
+        val handler = StreamChunkHandler(autoCollapse = { true })
+        handler.handle(StreamChunk.ReasoningDelta("thinking..."))
+        assertNull(handler.reasoningSegments[0].finishedAt)
+        handler.handle(StreamChunk.TextDelta("The answer"))
+        val segment = handler.reasoningSegments[0]
+        assertNotNull("content start closes the segment", segment.finishedAt)
+        assertFalse(segment.expanded)
+    }
+
+    @Test
+    fun laterContentDeltasDoNotRecloseAlreadyClosedSegment() {
+        var closes = 0
+        val handler = StreamChunkHandler(autoCollapse = { true }, onSegmentClosed = { closes++ })
+        handler.handle(StreamChunk.ReasoningDelta("thinking..."))
+        handler.handle(StreamChunk.TextDelta("x"))
+        assertEquals(1, closes)
+        val finishedAt = handler.reasoningSegments[0].finishedAt
+        handler.handle(StreamChunk.TextDelta("y"))
+        handler.handle(StreamChunk.TextDelta("z"))
+        assertEquals("only the first delta closes", 1, closes)
+        assertEquals("timestamp is not rewritten", finishedAt, handler.reasoningSegments[0].finishedAt)
+    }
+
+    /** Auto-collapse off: the segment still ends, but keeps its expanded state. */
+    @Test
+    fun autoCollapseOffOnlyStampsFinishedAt() {
+        val handler = StreamChunkHandler(autoCollapse = { false })
+        handler.handle(StreamChunk.ReasoningDelta("thinking..."))
+        assertTrue(handler.reasoningSegments[0].expanded)
+        handler.handle(StreamChunk.TextDelta("answer"))
+        val segment = handler.reasoningSegments[0]
+        assertNotNull(segment.finishedAt)
+        assertTrue("user's expanded state survives", segment.expanded)
+    }
+
+    /** The auto-collapse flag is re-read per call, like Dart's settings read. */
+    @Test
+    fun autoCollapseIsReadFreshOnEveryClose() {
+        var autoCollapse = false
+        val handler = StreamChunkHandler(autoCollapse = { autoCollapse })
+        handler.handle(StreamChunk.ReasoningDelta("first"))
+        assertTrue(handler.reasoningSegments[0].expanded)
+        autoCollapse = true
+        handler.handle(StreamChunk.TextDelta("answer"))
+        assertFalse("flipped setting applies immediately", handler.reasoningSegments[0].expanded)
+    }
+
+    @Test
+    fun onSegmentClosedFiresOncePerSegment() {
+        var closes = 0
+        val handler = StreamChunkHandler(autoCollapse = { true }, onSegmentClosed = { closes++ })
+        handler.handle(StreamChunk.ReasoningDelta("a"))
+        assertEquals(0, closes)
+        handler.handle(StreamChunk.ToolCallDelta("t1", "search_web", "{}"))
+        assertEquals(1, closes)
+        handler.handle(StreamChunk.ToolCallDelta("t2", "search_web", "{}"))
+        assertEquals("no new segment yet", 1, closes)
+        handler.handle(StreamChunk.ReasoningDelta("b"))
+        assertEquals("fresh segment, still open", 1, closes)
+        handler.handle(StreamChunk.ToolCallDelta("t3", "search_web", "{}"))
+        assertEquals(2, closes)
+    }
+
+    @Test
+    fun finishClosesAndFoldsTheOpenSegment() {
+        val handler = StreamChunkHandler(autoCollapse = { true })
+        handler.handle(StreamChunk.ReasoningDelta("thinking..."))
+        handler.handle(StreamChunk.Finish("stop", null))
+        val segment = handler.reasoningSegments[0]
+        assertNotNull(segment.finishedAt)
+        assertFalse(segment.expanded)
+    }
 }

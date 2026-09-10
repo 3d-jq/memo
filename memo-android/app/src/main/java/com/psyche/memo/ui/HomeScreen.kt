@@ -34,6 +34,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -103,7 +105,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -184,6 +185,11 @@ fun HomeScreen(
 
     var selectedConversationId by remember { mutableStateOf<String?>(null) }
     var temporaryActive by remember { mutableStateOf(false) }
+
+    // 顶栏标题刷新信号：抽屉改写了当前会话标题（重命名 / 重新生成标题）后自增，
+    // ChatContent 观察到变化即让 ChatViewModel 重读库里的标题。对齐 Flutter 端
+    // 共享 _conversationsCache + notifyListeners 的自动同步语义。
+    var titleRefreshTick by remember { mutableStateOf(0) }
 
     val newChatTitle = stringResource(UiR.string.chat_service_default_conversation_title)
 
@@ -343,6 +349,7 @@ fun HomeScreen(
                 },
                 onOpenSearchServices = onOpenSearchServices,
                 onOpenWorldBookPage = onOpenWorldBookPage,
+                titleRefreshTick = titleRefreshTick,
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
             // Composed only while the drawer presents — a permanently-mounted
@@ -411,6 +418,13 @@ fun HomeScreen(
                     onOpenTranslate = onOpenTranslate,
                     onEditAssistant = onEditAssistant,
                     onManageTags = onManageTags,
+                    onConversationTitleChanged = { id ->
+                        // 仅当被改的会话正是当前展示的会话时刷新顶栏
+                        // （home_view_model.dart L1531 `currentConversation?.id == convo.id`）。
+                        if (com.psyche.memo.common.TitleText.shouldRefreshCurrent(id, selectedConversationId)) {
+                            titleRefreshTick++
+                        }
+                    },
                 )
             }
         }
@@ -435,11 +449,16 @@ fun ChatContent(
     onOpenConversation: (String) -> Unit = {},
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
+    titleRefreshTick: Int = 0,
 ) {
     val vm: ChatViewModel = viewModel(
         key = conversationId,
         factory = ChatViewModel.factory(container, conversationId),
     )
+    // 抽屉改写了本会话标题 → 让 vm 重读库里的标题刷新顶栏（首次 tick=0 不触发）。
+    androidx.compose.runtime.LaunchedEffect(titleRefreshTick) {
+        if (titleRefreshTick > 0) vm.refreshTitle()
+    }
     val messages by vm.messages.collectAsState()
     val suggestions by vm.suggestions.collectAsState()
     val input by vm.input.collectAsState()
@@ -453,6 +472,17 @@ fun ChatContent(
         com.psyche.memo.ui.chat.ChatTimelineSettings.fromPrefs { key ->
             container.preferenceRepository.readLocal(key)
         }
+    }
+    // home_page.dart:1285-1288 —— 建议气泡的外层门控：建议生成被禁用时，
+    // 即便会话里仍存着上一轮的建议也立刻隐藏（原项目不删库，只门控展示）。
+    // 与上面 display_* 同样是「返回本页即重建」的直读；未写过该键时按
+    // settings_provider.dart:923 回退为 false（默认未启用）。
+    val suggestionsEnabled = remember {
+        com.psyche.memo.DefaultModelPrefs.parseJsonBool(
+            container.preferenceRepository.readJson(
+                com.psyche.memo.DefaultModelPrefs.SUGGESTION_GENERATION_ENABLED_V1,
+            ),
+        )
     }
     // 工具执行服务（tool_approval_service / ask_user_interaction_service）—— 审批卡、
     // ask-user 卡与时间线可见性都从这里取状态。
@@ -562,7 +592,8 @@ fun ChatContent(
     var selectCopyFor by remember { mutableStateOf<String?>(null) }
     var htmlPreviewFor by remember { mutableStateOf<String?>(null) }
 
-    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
+    val clipboardScope = rememberCoroutineScope()
     val copiedText = stringResource(UiR.string.chat_message_widget_copied_to_clipboard)
     val notImplementedText = stringResource(UiR.string.message_more_sheet_not_implemented)
     val unsupportedEditText = stringResource(UiR.string.user_message_edit_unsupported_snackbar)
@@ -588,7 +619,13 @@ fun ChatContent(
     val translatingLabel = stringResource(UiR.string.home_page_translating)
 
     fun copyMessage(msg: ChatViewModel.UiMessage) {
-        clipboard.setText(androidx.compose.ui.text.AnnotatedString(msg.content))
+        clipboardScope.launch {
+            clipboard.setClipEntry(
+                androidx.compose.ui.platform.ClipEntry(
+                    android.content.ClipData.newPlainText("", msg.content),
+                ),
+            )
+        }
         com.psyche.memo.ui.snackbar.SnackbarManager.show(
             com.psyche.memo.ui.snackbar.AppNotification(
                 message = copiedText,
@@ -961,7 +998,11 @@ fun ChatContent(
                         MessageRow(
                             msg = msg,
                             selecting = selecting,
-                            suggestions = if (isLastAssistant) suggestions else emptyList(),
+                            suggestions = if (isLastAssistant && suggestionsEnabled) {
+                                suggestions
+                            } else {
+                                emptyList()
+                            },
                             onSuggestionTap = { vm.sendSuggestion(it) },
                             assistantLabel = resolvedAssistantLabel,
                             versionCount = versionInfo[msg.groupId]?.size ?: 1,
@@ -1631,13 +1672,15 @@ private fun MessageRow(
         val toolPart = remember(msg.id, msg.parts) {
             com.psyche.memo.ui.chat.ToolUiPart.fromToolMessage(msg.id, msg.content)
         }
+        // `visible` already implies a non-null part, so the extra null check
+        // is redundant (and smart-casts through the local).
         val visible = toolPart != null && com.psyche.memo.ui.chat.isTimelineToolVisible(
             toolName = toolPart.toolName,
             loading = toolPart.loading,
             showToolCards = timelineSettings.showToolCards,
             filterBuiltinSearch = false,
         )
-        if (visible && toolPart != null) {
+        if (visible) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2565,6 +2608,9 @@ private fun ChatInputBar(
                                     // CIB:3264-3315 _CompactSendButton —— 32 圆（icon 18 +
                                     // pad 7）；可用/流式: primary 底 + onPrimary 图标；
                                     // 禁用: onSurface@0.12 底 + onSurface@0.38 图标。
+                                    // 流式时图标换成原项目 assets/icons/stop.svg 的实心
+                                    // 圆角方块（24 viewBox 内 14×14、rx2），并用
+                                    // AnimatedSwitcher 等价的 Scale+Fade 做 200ms 形变。
                                     val canSend = input.isNotBlank()
                                     val sendBg = if (canSend || streaming) cs.primary
                                     else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_BG_ALPHA)
@@ -2579,12 +2625,48 @@ private fun ChatInputBar(
                                             },
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        Icon(
-                                            imageVector = if (streaming) Lucide.CircleStop else Lucide.ArrowUp,
-                                            contentDescription = if (streaming) "Stop" else "Send",
-                                            tint = sendFg,
-                                            modifier = Modifier.size(ChatStyleSpec.SEND_ICON_DP.dp),
-                                        )
+                                        AnimatedContent(
+                                            targetState = streaming,
+                                            transitionSpec = {
+                                                (scaleIn(
+                                                    initialScale = 0.6f,
+                                                    animationSpec = tween(
+                                                        ChatStyleSpec.SEND_ICON_SWITCH_MS,
+                                                    ),
+                                                ) + fadeIn(
+                                                    animationSpec = tween(
+                                                        ChatStyleSpec.SEND_ICON_SWITCH_MS,
+                                                    ),
+                                                )) togetherWith
+                                                    (scaleOut(
+                                                        targetScale = 0.6f,
+                                                        animationSpec = tween(
+                                                            ChatStyleSpec.SEND_ICON_SWITCH_MS,
+                                                        ),
+                                                    ) + fadeOut(
+                                                        animationSpec = tween(
+                                                            ChatStyleSpec.SEND_ICON_SWITCH_MS,
+                                                        ),
+                                                    ))
+                                            },
+                                            label = "send-stop",
+                                        ) { isStreaming ->
+                                            if (isStreaming) {
+                                                ChatStopSquare(
+                                                    color = sendFg,
+                                                    size = ChatStyleSpec.SEND_ICON_DP.dp,
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Lucide.ArrowUp,
+                                                    contentDescription = "Send",
+                                                    tint = sendFg,
+                                                    modifier = Modifier.size(
+                                                        ChatStyleSpec.SEND_ICON_DP.dp,
+                                                    ),
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -2593,6 +2675,32 @@ private fun ChatInputBar(
                 }
             }
         }
+    }
+}
+
+/**
+ * 停止图标 —— 原项目 `assets/icons/stop.svg` 的 Compose 等价物：
+ * 24 viewBox 内一个 14×14、圆角 2 的**实心**方块（fill=currentColor）。
+ * 按比例缩放到给定的 [size]（发送按钮用 18dp → 方块 10.5dp、圆角 1.5dp）。
+ * 不用 Lucide 的描边方块：原项目是实心且比例不同，描边版观感偏"取消"。
+ */
+@Composable
+private fun ChatStopSquare(
+    color: androidx.compose.ui.graphics.Color,
+    size: androidx.compose.ui.unit.Dp,
+) {
+    val scale = size / ChatStyleSpec.STOP_SVG_VIEWBOX_DP.dp
+    val side = ChatStyleSpec.STOP_SVG_SIDE_DP.dp * scale
+    val radius = ChatStyleSpec.STOP_SVG_RADIUS_DP.dp * scale
+    Box(
+        modifier = Modifier.size(size),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(side)
+                .background(color, androidx.compose.foundation.shape.RoundedCornerShape(radius)),
+        )
     }
 }
 

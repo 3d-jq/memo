@@ -1,10 +1,13 @@
 package com.psyche.memo
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Preference keys, default prompts and pure helpers for the Default Model
@@ -159,6 +162,23 @@ Do not interpret or translate—only transcribe and describe what is visually pr
      */
     fun normalizePrompt(input: String, default: String): String =
         if (input.trim().isEmpty()) default else input
+
+    /**
+     * Reads a JSON-encoded boolean preference (the wire format
+     * `PreferenceRepository` uses for `*_enabled_v1` flags).
+     *
+     * `settings_provider.dart:923` falls back to `false` for the suggestion
+     * flag when the key was never written, so a missing/malformed value is
+     * "disabled" rather than an exception. `default` lets callers that read a
+     * flag whose load-time fallback differs (e.g. `?? suggestionSel != null`)
+     * supply their own.
+     */
+    fun parseJsonBool(raw: String?, default: Boolean = false): Boolean {
+        if (raw == null) return default
+        return runCatching {
+            Json.parseToJsonElement(raw).jsonPrimitive.booleanOrNull
+        }.getOrNull() ?: default
+    }
 }
 
 /**
