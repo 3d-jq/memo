@@ -70,6 +70,13 @@ internal fun UserAvatarEditor(
     var step by remember { mutableStateOf(Step.Sheet) }
     androidx.compose.runtime.LaunchedEffect(open) { if (open) step = Step.Sheet }
 
+    // 子弹窗的取消/确认都要走这里：只调 onDismiss() 会把 open 置 false 而
+    // step 仍停在子弹窗，下面的渲染条件继续成立 → 弹窗关不掉。
+    fun closeEditor() {
+        step = Step.Sheet
+        onDismiss()
+    }
+
     // `_pickLocalImage` L3693-3733 —— 相册选图后复制进应用目录（content://
     // URI 重启后失效），并按原版的 maxWidth 1024 / quality 90 压缩；失败时
     // 提示并降级到「输入链接」。
@@ -85,7 +92,7 @@ internal fun UserAvatarEditor(
             withContext(Dispatchers.Main) {
                 if (saved != null) {
                     store.setAvatarFilePath(saved)
-                    onDismiss()
+                    closeEditor()
                 } else {
                     SnackbarManager.show(
                         AppNotification(
@@ -113,7 +120,7 @@ internal fun UserAvatarEditor(
             withContext(Dispatchers.Main) {
                 if (url != null) {
                     store.setAvatarUrl(url)
-                    onDismiss()
+                    closeEditor()
                 } else {
                     SnackbarManager.show(
                         AppNotification(
@@ -151,28 +158,28 @@ internal fun UserAvatarEditor(
 
         Step.Emoji -> EmojiPickerDialog(
             strings = AvatarSheetStrings.User,
-            onDismiss = onDismiss,
+            onDismiss = { closeEditor() },
             onPick = { emoji ->
                 store.setAvatarEmoji(emoji)
-                onDismiss()
+                closeEditor()
             },
         )
 
         Step.Url -> AvatarUrlDialog(
             strings = AvatarSheetStrings.User,
-            onDismiss = onDismiss,
+            onDismiss = { closeEditor() },
             onSave = { url ->
                 store.setAvatarUrl(url)
-                onDismiss()
+                closeEditor()
             },
         )
 
         Step.Qq -> QQAvatarDialog(
             strings = AvatarSheetStrings.User,
-            onDismiss = onDismiss,
+            onDismiss = { closeEditor() },
             onApplyUrl = { url ->
                 store.setAvatarUrl(url)
-                onDismiss()
+                closeEditor()
             },
             onRandom = { probeRandomQqAvatar() },
         )
