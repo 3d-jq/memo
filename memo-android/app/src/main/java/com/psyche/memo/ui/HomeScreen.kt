@@ -2587,41 +2587,36 @@ private fun ChatInputBar(
                                         ChatStyleSpec.INPUT_ACTIONS_GAP_DP.dp,
                                     ),
                                 ) {
-                                    // CIB:1763-1773 —— 模型按钮：选中模型后
-                                    // 显示 CurrentModelIcon（28 圆底 + 品牌图标/
-                                    // 首字母），未选择时 Boxes。
+                                    // CIB:1763-1773 —— 模型按钮：选中模型后显示
+                                    // CurrentModelIcon。底色透明（原版
+                                    // backgroundColor: Colors.transparent），
+                                    // 图标单色化到与本排其他按钮相同的
+                                    // onSurface 色（RikkaHub ModelSelectorButton
+                                    // 用 AutoAIIcon(color = Transparent) + CSS
+                                    // fill: contentColor 同款做法），避免彩色
+                                    // logo 在按钮排里显得突兀。
                                     val modelAsset = modelIconAsset
+                                    val actionTint = cs.onSurface.copy(
+                                        alpha = if (isDark) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
+                                        else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
+                                    )
                                     if (modelAsset != null || !modelIconInitial.isNullOrEmpty()) {
                                         IconButton(
                                             onClick = onSelectModel,
                                             modifier = Modifier.size(32.dp),
                                         ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(28.dp)
-                                                    .background(
-                                                        cs.primary.copy(alpha = if (isDark) 0.18f else 0.1f),
-                                                        CircleShape,
-                                                    ),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                if (modelAsset != null) {
-                                                    coil.compose.AsyncImage(
-                                                        model = modelAsset,
-                                                        contentDescription = stringResource(UiR.string.chat_input_bar_select_model_tooltip),
-                                                        colorFilter = if (isDark && BrandAssets.assetNeedsDarkInvert(modelAsset)) {
-                                                            androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
-                                                        } else {
-                                                            null
-                                                        },
-                                                        modifier = Modifier.size(14.dp),
-                                                    )
-                                                } else {
-                                                    Text(
-                                                        text = modelIconInitial!!.trim().take(1).uppercase(),
-                                                        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = cs.primary),
-                                                    )
-                                                }
+                                            if (modelAsset != null) {
+                                                coil.compose.AsyncImage(
+                                                    model = modelAsset,
+                                                    contentDescription = stringResource(UiR.string.chat_input_bar_select_model_tooltip),
+                                                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(actionTint),
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = modelIconInitial!!.trim().take(1).uppercase(),
+                                                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = actionTint),
+                                                )
                                             }
                                         }
                                     } else {
