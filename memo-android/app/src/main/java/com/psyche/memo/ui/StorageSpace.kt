@@ -764,16 +764,22 @@ private fun UsageBar(categories: List<StorageCategory>, totalBytes: Long) {
 }
 
 /** _UsageLegend: wrap of dot + title. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun UsageLegend(categories: List<StorageCategory>) {
     val items = categories.filter { it.stats.bytes > 0 }
     if (items.isEmpty()) return
-    Row(
+    // _UsageLegend L1226-1252 —— 原版是 `Wrap(spacing: 14, runSpacing: 8)`，
+    // **会自动换行**。此前写成 Row：10 个分类名一行排不下时末尾几项（"其他"）
+    // 被挤压/顶出屏幕。FlowRow 是 Compose 里 Wrap 的等价物；行距交给 runSpacing
+    // （原版 child Row 没有额外的 vertical padding，故这里也去掉）。
+    androidx.compose.foundation.layout.FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items.forEach { c ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
                         .size(10.dp)
