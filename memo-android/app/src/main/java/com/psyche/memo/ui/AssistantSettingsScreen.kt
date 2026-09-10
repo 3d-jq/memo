@@ -181,6 +181,13 @@ fun AssistantSettingsScreen(
                                             copySuffix = copySuffix,
                                             fallbackName = fallbackName,
                                         ),
+                                        // assistant_provider.dart L333-342 ——
+                                        // 副本的本地头像/背景复制成新文件。
+                                        copyLocalFile = { path, dupId, isAvatar ->
+                                            duplicateAssistantLocalFile(
+                                                container.appContext, path, dupId, isAvatar,
+                                            )
+                                        },
                                     )
                                     withContext(Dispatchers.Main) {
                                         reloadKey++

@@ -663,9 +663,11 @@ fun ChatContent(
     }
 
     // ---- 助手名称/头像：与抽屉助手卡一致的数据源（assistant_rows） ----
-    var assistantLabel by remember { mutableStateOf<String?>(null) }
+    // 整行读出来（不只 name）：消息头要按 chat_message_widget.dart:2787-2802
+    // 的规则在「助手头像」和「模型图标」之间二选一。
+    var assistantRow by remember { mutableStateOf<com.psyche.memo.data.model.Assistant?>(null) }
     androidx.compose.runtime.LaunchedEffect(conversationId) {
-        assistantLabel = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        assistantRow = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val aId = runCatching { container.conversationDao.get(conversationId)?.assistantId }
                 .getOrNull()
             if (aId.isNullOrEmpty()) return@withContext null
@@ -678,12 +680,19 @@ fun ChatContent(
                     com.psyche.memo.data.model.Assistant.fromJsonString(
                         kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
                         row.payload,
-                    ).name.trim().takeIf { it.isNotEmpty() }
+                    )
                 }
             }.getOrNull()
         }
     }
-    val resolvedAssistantLabel = assistantLabel
+    // settings_provider.dart:1069 —— display_show_model_icon_v1 默认 true。
+    val showModelIcon = remember(conversationId) {
+        com.psyche.memo.DefaultModelPrefs.parseJsonBool(
+            container.preferenceRepository.readJson("display_show_model_icon_v1"),
+            default = true,
+        )
+    }
+    val resolvedAssistantLabel = assistantRow?.name?.trim()?.takeIf { it.isNotEmpty() }
         ?: stringResource(UiR.string.message_export_sheet_assistant)
 
     // ---- 滚动导航 + 流式跟随（scroll_nav_buttons.dart / scroll_controller.dart） ----
@@ -1006,6 +1015,8 @@ fun ChatContent(
                             },
                             onSuggestionTap = { vm.sendSuggestion(it) },
                             assistantLabel = resolvedAssistantLabel,
+                            assistant = assistantRow,
+                            showModelIcon = showModelIcon,
                             versionCount = versionInfo[msg.groupId]?.size ?: 1,
                             versionIndex = versionInfo[msg.groupId]
                                 ?.let { it.indexOf(msg.version).coerceAtLeast(0) } ?: 0,
@@ -1603,6 +1614,55 @@ fun ChatContent(
     }
 }
 
+/**
+ * model_icon.dart `CurrentModelIcon` in the shape the chat header uses it
+ * (chat_message_widget.dart:2278-2287 → `CurrentModelIcon(size: 30)`):
+ * primary-tinted circle with the model's brand glyph at 0.5x, falling back to
+ * the first character of the model id. Mono assets that need inverting in dark
+ * theme are tinted onSurface, exactly like the Flutter original.
+ */
+@Composable
+private fun MessageModelIcon(
+    providerKey: String,
+    modelId: String,
+    size: androidx.compose.ui.unit.Dp,
+) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.surface.luminance() < 0.5f
+    val asset = remember(modelId, providerKey) {
+        modelId.takeIf { it.isNotEmpty() }?.let { BrandAssets.assetForName(it) }
+            ?: providerKey.takeIf { it.isNotEmpty() }?.let { BrandAssets.assetForName(it) }
+    }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(cs.primary.copy(alpha = if (isDark) 0.18f else 0.1f), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (asset != null) {
+            coil.compose.AsyncImage(
+                model = asset,
+                contentDescription = null,
+                colorFilter = if (isDark && BrandAssets.assetNeedsDarkInvert(asset)) {
+                    androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
+                } else {
+                    null
+                },
+                modifier = Modifier.size(size * 0.5f),
+            )
+        } else {
+            Text(
+                text = modelId.trim().take(1).uppercase().ifEmpty { "?" },
+                style = TextStyle(
+                    fontSize = (size.value * 0.43f).sp,
+                    fontWeight = FontWeight.Bold,
+                    color = cs.primary,
+                ),
+            )
+        }
+    }
+}
+
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
@@ -1611,6 +1671,10 @@ private fun MessageRow(
     suggestions: List<String> = emptyList(),
     onSuggestionTap: (String) -> Unit = {},
     assistantLabel: String,
+    /** 当前助手：消息头在「助手头像 / 模型图标」之间二选一（CMW:2787-2802）。 */
+    assistant: com.psyche.memo.data.model.Assistant? = null,
+    /** display_show_model_icon_v1，默认 true（settings_provider.dart:1069）。 */
+    showModelIcon: Boolean = true,
     versionCount: Int,
     versionIndex: Int,
     onPrevVersion: (() -> Unit)?,
@@ -1797,23 +1861,21 @@ private fun MessageRow(
             }
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Assistant avatar: 32px primary α0.1 circle with the current
-                // assistant's initial (drawer assistant-card data source).
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .background(cs.primary.copy(alpha = 0.1f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = assistantLabel.firstOrNull()?.toString() ?: "?",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            color = cs.primary,
-                            fontWeight = FontWeight.Medium,
-                        ),
+                // chat_message_widget.dart:2787-2802 —— useAssistantAvatar 优先
+                // （助手头像四态），否则 showModelIcon 时显示该消息的模型品牌
+                // 图标；两者都不显示时头部只有名字。
+                val useAssistantAvatar = assistant?.useAssistantAvatar == true
+                if (useAssistantAvatar && assistant != null) {
+                    AssistantListAvatar(assistant, 32.dp)
+                    Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
+                } else if (showModelIcon) {
+                    MessageModelIcon(
+                        providerKey = msg.providerId,
+                        modelId = msg.model,
+                        size = 30.dp,
                     )
+                    Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
                 }
-                Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
                 Column {
                     Text(
                         text = assistantLabel,

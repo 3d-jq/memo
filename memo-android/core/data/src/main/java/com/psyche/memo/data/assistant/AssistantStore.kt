@@ -57,14 +57,24 @@ class AssistantStore(private val db: SQLiteDatabase) {
 
     /**
      * duplicateAssistant L324-381 — fresh id + [copyName], inserted right
-     * after the source. Local avatar/background file copying is not
-     * applicable on Android (avatars are emoji or remote URLs in
-     * practice); list references are copied verbatim like the Dart copyWith.
+     * after the source. [copyLocalFile] mirrors the Dart `_duplicateLocalFile`
+     * calls (L333-342): the app layer copies a picked avatar/background file to
+     * a new name and returns its path, or null to keep the original value
+     * (remote URLs and emoji need no copying).
      */
-    fun duplicate(id: String, copyName: String): String? {
+    fun duplicate(
+        id: String,
+        copyName: String,
+        copyLocalFile: ((path: String, newId: String, isAvatar: Boolean) -> String?)? = null,
+    ): String? {
         val source = get(id) ?: return null
         val newId = UUID.randomUUID().toString()
-        val copy = source.copy(id = newId, name = copyName)
+        val copy = source.copy(
+            id = newId,
+            name = copyName,
+            avatar = source.avatar?.let { copyLocalFile?.invoke(it, newId, true) ?: it },
+            background = source.background?.let { copyLocalFile?.invoke(it, newId, false) ?: it },
+        )
         dao.upsert(newId, encode(copy), 0)
         // Position the copy right after its source (L377 insert(idx + 1)).
         setOrder(insertAfter(dao.getAll().map { it.id }, id, newId))

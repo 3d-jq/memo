@@ -1057,49 +1057,21 @@ private fun ModelRankIcon(providerId: String?, modelId: String, size: androidx.c
     }
 }
 
-/** AssistantAvatar (assistant_avatar.dart) — emoji / image / initial. */
+/** AssistantAvatar (assistant_avatar.dart) — http / local file / emoji / initial. */
 @Composable
 private fun AssistantAvatarMini(
     assistant: Assistant?,
     fallbackName: String,
     size: androidx.compose.ui.unit.Dp,
 ) {
-    val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
-    val avatarValue = assistant?.avatar?.trim().orEmpty()
-    val name = (assistant?.name ?: fallbackName).trim()
-
-    Box(
-        Modifier
-            .size(size)
-            .border(0.5.dp, cs.onSurface.copy(alpha = if (semantic.isDark) 0.24f else 0.12f), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        when {
-            avatarValue.startsWith("http") -> AsyncImage(
-                model = avatarValue,
-                contentDescription = null,
-                modifier = Modifier.size(size).clip(CircleShape),
-            )
-            // Local files (http/web handled above; memo avatars on Android
-            // are emoji or remote URLs in practice).
-            avatarValue.isNotEmpty() -> Text(
-                text = avatarValue.take(1),
-                style = TextStyle(fontSize = (size.value * 0.5f).sp, color = cs.onSurface),
-            )
-            else -> Box(
-                Modifier
-                    .size(size)
-                    .background(cs.primary.copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = name.firstOrNull()?.toString() ?: "?",
-                    style = TextStyle(fontSize = (size.value * 0.42f).sp, fontWeight = FontWeight.ExtraBold, color = cs.primary),
-                )
-            }
-        }
-    }
+    // Delegates to the shared四态 renderer. The old copy here only handled
+    // http + emoji and drew a 0.5dp ring the Flutter widget does not have
+    // (stats_page.dart:121 just uses AssistantAvatar), so a gallery-picked
+    // avatar showed up as the first character of its file path.
+    AssistantListAvatar(
+        item = assistant ?: Assistant(name = fallbackName),
+        size = size,
+    )
 }
 
 /** _RankFullPage — L110-148 (mobile <560 branch as an overlay screen). */

@@ -149,6 +149,12 @@ fun SideDrawerContent(
     // 全局当前助手（assistant_provider.currentAssistantId）：抽屉助手卡显示它，
     // 会话列表按它过滤；切换即 setCurrentAssistant。
     val currentAssistantId by container.currentAssistantId.collectAsState()
+    // 助手卡头像用（AssistantAvatar 四态：http / 本地文件 / emoji / 首字母）。
+    val currentAssistant = remember(currentAssistantId) {
+        currentAssistantId?.let { id ->
+            runCatching { container.assistantStore.get(id) }.getOrNull()
+        }
+    }
     val currentAssistantName = remember(currentAssistantId) {
         currentAssistantId?.let { id ->
             runCatching { container.assistantStore.get(id)?.name }.getOrNull()
@@ -432,21 +438,26 @@ fun SideDrawerContent(
                     .padding(start = 4.dp, top = 6.dp, end = 12.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .border(0.5.dp, cs.onSurface.copy(alpha = 0.12f), CircleShape)
-                        .background(cs.primary.copy(alpha = 0.15f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = assistantLabel.firstOrNull()?.toString() ?: "?",
-                        style = TextStyle(
-                            fontSize = 13.4.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = cs.primary,
-                        ),
-                    )
+                // side_drawer.dart:2610 —— AssistantAvatar(assistant, size: 32)；
+                // 原版只画 primary-15% 圆底（无描边），这里同样交给共享组件。
+                if (currentAssistant != null) {
+                    AssistantListAvatar(currentAssistant, 32.dp)
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(cs.primary.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = assistantLabel.firstOrNull()?.toString() ?: "?",
+                            style = TextStyle(
+                                fontSize = 13.4.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = cs.primary,
+                            ),
+                        )
+                    }
                 }
                 Spacer(Modifier.width(16.dp))
                 Text(
@@ -486,21 +497,8 @@ fun SideDrawerContent(
                             .padding(vertical = 8.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .background(cs.primary.copy(alpha = 0.15f), CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = a.name.trim().firstOrNull()?.toString() ?: "?",
-                                style = TextStyle(
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = cs.primary,
-                                ),
-                            )
-                        }
+                        // side_drawer.dart:3875 —— AssistantAvatar(a, size: 28)。
+                        AssistantListAvatar(a, 28.dp)
                         Spacer(Modifier.width(10.dp))
                         Text(
                             text = a.name,
@@ -1125,7 +1123,16 @@ fun SideDrawerContent(
                         suffix = container.appContext.getString(UiR.string.assistant_settings_copy_suffix).trim(),
                         fallback = container.appContext.getString(UiR.string.assistant_provider_new_assistant_name),
                     )
-                    if (store.duplicate(target.id, copyName) != null) {
+                    if (store.duplicate(
+                            id = target.id,
+                            copyName = copyName,
+                            copyLocalFile = { path, dupId, isAvatar ->
+                                duplicateAssistantLocalFile(
+                                    container.appContext, path, dupId, isAvatar,
+                                )
+                            },
+                        ) != null
+                    ) {
                         com.psyche.memo.ui.snackbar.SnackbarManager.show(
                             com.psyche.memo.ui.snackbar.AppNotification(
                                 message = container.appContext.getString(UiR.string.assistant_settings_copy_success),

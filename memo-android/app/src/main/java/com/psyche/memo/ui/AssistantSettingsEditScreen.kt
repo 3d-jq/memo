@@ -275,7 +275,9 @@ private fun BasicSettingsTab(
     val context = androidx.compose.ui.platform.LocalContext.current
     val avatarScope = rememberCoroutineScope()
     // `_pickLocalImage` L1948-1980 — the gallery path is copied into app storage
-    // because a content:// URI does not survive a reboot.
+    // because a content:// URI does not survive a reboot. Flutter asks the
+    // picker for maxWidth 1024 / imageQuality 90; Android's PickVisualMedia has
+    // no such knobs, so decode + downscale + re-encode here to match.
     val avatarPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
@@ -284,9 +286,32 @@ private fun BasicSettingsTab(
                 val copied = runCatching {
                     val dir = File(context.filesDir, "assistant_avatars").apply { mkdirs() }
                     val dest = File(dir, assistantId + "_" + System.currentTimeMillis() + ".jpg")
-                    context.contentResolver.openInputStream(uri)?.use { input ->
-                        dest.outputStream().use { output -> input.copyTo(output) }
-                    } ?: return@runCatching null
+                    val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
+                        android.graphics.BitmapFactory.decodeStream(input)
+                    }
+                    if (bitmap == null) {
+                        // Not decodable as an image: keep the original bytes so a
+                        // valid-but-exotic file still works.
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            dest.outputStream().use { output -> input.copyTo(output) }
+                        } ?: return@runCatching null
+                    } else {
+                        val scaled = if (bitmap.width > AVATAR_MAX_WIDTH_PX) {
+                            val ratio = AVATAR_MAX_WIDTH_PX.toFloat() / bitmap.width
+                            android.graphics.Bitmap.createScaledBitmap(
+                                bitmap,
+                                AVATAR_MAX_WIDTH_PX,
+                                (bitmap.height * ratio).toInt().coerceAtLeast(1),
+                                true,
+                            ).also { if (it !== bitmap) bitmap.recycle() }
+                        } else {
+                            bitmap
+                        }
+                        dest.outputStream().use { output ->
+                            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, AVATAR_QUALITY, output)
+                        }
+                        scaled.recycle()
+                    }
                     dest.absolutePath
                 }.getOrNull()
                 withContext(Dispatchers.Main) {
@@ -931,3 +956,9 @@ private fun IconButton44(onClick: () -> Unit, content: @Composable () -> Unit) {
         contentAlignment = Alignment.Center,
     ) { content() }
 }
+
+/** `_pickLocalImage` L1956-1960 — Flutter's picker downsamples to this width. */
+private const val AVATAR_MAX_WIDTH_PX = 1024
+
+/** `_pickLocalImage` L1959 — Flutter's `imageQuality: 90`. */
+private const val AVATAR_QUALITY = 90
