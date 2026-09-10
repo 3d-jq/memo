@@ -186,9 +186,9 @@ fun MarkdownText(
     val citation = CitationRenderConfig(onCitationTap, citationInfoResolver)
     // 首帧同步解析（避免空白闪烁），之后的内容变化在 Default 线程解析，并用
     // mapLatest 丢弃过期请求 —— RikkaHub Markdown.kt:240-252 同款做法。流式输出
-    // 时内容每个 chunk 都变，主线程不再被 CommonMark 解析阻塞，这是滚动掉帧的
-    // 主要来源；未变化的内容由 distinctUntilChanged + drop(1) 直接跳过。
-    var root by remember { mutableStateOf(parseMarkdownSource(markdown, onCitationTap != null)) }
+    // 时内容每个 chunk 都变，主线程不再被 CommonMark 解析（含纯文本预计算）阻塞，
+    // 这是滚动掉帧的主要来源；未变化的内容由 distinctUntilChanged + drop(1) 跳过。
+    var parsed by remember { mutableStateOf(parseMarkdownSource(markdown, onCitationTap != null)) }
     val latest by rememberUpdatedState(markdown to (onCitationTap != null))
     LaunchedEffect(Unit) {
         snapshotFlow { latest }
@@ -196,10 +196,11 @@ fun MarkdownText(
             .drop(1)
             .mapLatest { (md, withCitations) -> parseMarkdownSource(md, withCitations) }
             .flowOn(Dispatchers.Default)
-            .collect { root = it }
+            .collect { parsed = it }
     }
     MarkdownBody(
-        node = root,
+        node = parsed.root,
+        plainTexts = parsed.plainTexts,
         modifier = modifier,
         baseFontSize = baseFontSize,
         baseLineHeight = baseLineHeight,
@@ -209,19 +210,49 @@ fun MarkdownText(
 }
 
 /**
- * One parse pipeline for [MarkdownText]: citation preprocessing only runs when
- * tap handling is wired for this message, then the CommonMark parse. Called both
- * synchronously (first frame) and on [Dispatchers.Default] for streaming
- * updates.
+ * 一次解析的产物：AST 根 + 每个节点的纯文本（渲染阶段查表，避免在组合里递归）。
+ * commonmark 0.26 移除了 `Node.data`，所以只能外挂一张表。
  */
-private fun parseMarkdownSource(markdown: String, withCitations: Boolean): Node {
+private class ParsedMarkdown(
+    val root: Node,
+    val plainTexts: Map<Node, String>,
+)
+
+/**
+ * One parse pipeline for [MarkdownText]: citation preprocessing only runs when
+ * tap handling is wired for this message, then the CommonMark parse.
+ *
+ * 解析完顺带把每个节点的纯文本算好（[collectPlainText]），这样渲染阶段
+ * `nodeText` 只是查表 —— 否则每次重组都要在主线程递归遍历子树拼字符串，流式
+ * 输出时每帧都得跑一遍。预计算跟着解析一起走后台线程。
+ */
+private fun parseMarkdownSource(markdown: String, withCitations: Boolean): ParsedMarkdown {
     val source = if (withCitations) preprocessCitations(markdown) else markdown
-    return MarkdownRenderer.parse(source)
+    val root = MarkdownRenderer.parse(source)
+    val plainTexts = HashMap<Node, String>()
+    collectPlainText(root, plainTexts)
+    return ParsedMarkdown(root, plainTexts)
+}
+
+/** 自底向上记录「本节点子树的纯文本」，供 [nodeText] 查表。 */
+private fun collectPlainText(node: Node, out: MutableMap<Node, String>): String {
+    val sb = StringBuilder()
+    var child = node.firstChild
+    while (child != null) {
+        sb.append(
+            if (child is Text) child.literal.orEmpty() else collectPlainText(child, out),
+        )
+        child = child.next
+    }
+    val text = sb.toString()
+    out[node] = text
+    return text
 }
 
 @Composable
 private fun MarkdownBody(
     node: Node,
+    plainTexts: Map<Node, String>,
     modifier: Modifier = Modifier,
     baseFontSize: Float,
     baseLineHeight: Float,
@@ -231,7 +262,7 @@ private fun MarkdownBody(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         var child = node.firstChild
         while (child != null) {
-            MarkdownNode(child, baseFontSize, baseLineHeight, citation, tableActions)
+            MarkdownNode(child, plainTexts, baseFontSize, baseLineHeight, citation, tableActions)
             child = child.next
         }
     }
@@ -240,6 +271,7 @@ private fun MarkdownBody(
 @Composable
 private fun MarkdownNode(
     node: Node,
+    plainTexts: Map<Node, String>,
     baseFontSize: Float,
     baseLineHeight: Float,
     citation: CitationRenderConfig,
@@ -256,7 +288,7 @@ private fun MarkdownNode(
                 else -> baseFontSize
             }
             Text(
-                text = nodeText(node),
+                text = nodeText(node, plainTexts),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontSize = size.sp,
                     fontWeight = FontWeight.Bold,
@@ -265,7 +297,7 @@ private fun MarkdownNode(
         }
         is Paragraph -> {
             val inlineContent = mutableMapOf<String, InlineTextContent>()
-            val annotated = renderInline(node, citation, inlineContent)
+            val annotated = renderInline(node, plainTexts, citation, inlineContent)
             Text(
                 text = annotated,
                 inlineContent = inlineContent,
@@ -285,6 +317,7 @@ private fun MarkdownNode(
             ) {
                 MarkdownBody(
                     node,
+                    plainTexts,
                     modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
                     baseFontSize = baseFontSize,
                     baseLineHeight = baseLineHeight,
@@ -309,6 +342,7 @@ private fun MarkdownNode(
                         )
                         MarkdownBody(
                             item,
+                            plainTexts,
                             modifier = Modifier.padding(start = 4.dp),
                             baseFontSize = baseFontSize,
                             baseLineHeight = baseLineHeight,
@@ -322,13 +356,13 @@ private fun MarkdownNode(
             }
         }
         is ThematicBreak -> HorizontalDivider(color = cs.outlineVariant)
-        is TableBlock -> MarkdownTableView(node, baseFontSize, baseLineHeight, citation, tableActions)
+        is TableBlock -> MarkdownTableView(node, plainTexts, baseFontSize, baseLineHeight, citation, tableActions)
         is Image -> Text(
             text = "[image ${node.destination}]",
             style = MaterialTheme.typography.bodySmall,
             color = cs.onSurfaceVariant,
         )
-        else -> MarkdownBody(node, Modifier, baseFontSize, baseLineHeight, citation, tableActions)
+        else -> MarkdownBody(node, plainTexts, Modifier, baseFontSize, baseLineHeight, citation, tableActions)
     }
 }
 
@@ -513,6 +547,7 @@ private fun cellText(cell: Node): String = buildString {
 @Composable
 private fun MarkdownTableView(
     table: TableBlock,
+    plainTexts: Map<Node, String>,
     baseFontSize: Float,
     baseLineHeight: Float,
     citation: CitationRenderConfig,
@@ -632,6 +667,7 @@ private fun MarkdownTableView(
                         if (model.header.isNotEmpty()) {
                             TableRowView(
                                 cells = model.header,
+                                plainTexts = plainTexts,
                                 header = true,
                                 columnCount = model.columnCount,
                                 columnWidth = columnWidth,
@@ -648,6 +684,7 @@ private fun MarkdownTableView(
                         bodyRows.forEachIndexed { index, cells ->
                             TableRowView(
                                 cells = cells,
+                                plainTexts = plainTexts,
                                 header = false,
                                 columnCount = model.columnCount,
                                 columnWidth = columnWidth,
@@ -879,6 +916,7 @@ private fun MarkdownTableRowPager(
 @Composable
 private fun TableRowView(
     cells: List<TableCell>,
+    plainTexts: Map<Node, String>,
     header: Boolean,
     columnCount: Int,
     columnWidth: androidx.compose.ui.unit.Dp,
@@ -904,6 +942,7 @@ private fun TableRowView(
             for (i in 0 until columnCount) {
                 TableCellView(
                     cell = cells.getOrNull(i),
+                    plainTexts = plainTexts,
                     header = header,
                     columnWidth = columnWidth,
                     weight = weights.getOrElse(i) { 1f },
@@ -931,6 +970,7 @@ private fun TableRowView(
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.TableCellView(
     cell: TableCell?,
+    plainTexts: Map<Node, String>,
     header: Boolean,
     columnWidth: androidx.compose.ui.unit.Dp,
     weight: Float,
@@ -943,7 +983,7 @@ private fun androidx.compose.foundation.layout.RowScope.TableCellView(
 ) {
     val cs = MaterialTheme.colorScheme
     val inlineContent = mutableMapOf<String, InlineTextContent>()
-    val annotated = cell?.let { renderInline(it, citation, inlineContent) } ?: AnnotatedString("")
+    val annotated = cell?.let { renderInline(it, plainTexts, citation, inlineContent) } ?: AnnotatedString("")
     val cellColor = if (header) cs.onSurface else cs.onSurface.copy(alpha = 0.90f)
     Box(
         modifier = Modifier
@@ -1033,6 +1073,7 @@ private fun CodeBlockView(code: String?) {
 @Composable
 private fun renderInline(
     node: Node,
+    plainTexts: Map<Node, String>,
     citation: CitationRenderConfig,
     inlineContent: MutableMap<String, InlineTextContent>,
 ): AnnotatedString {
@@ -1042,7 +1083,7 @@ private fun renderInline(
     return buildAnnotatedString {
         var child = node.firstChild
         while (child != null) {
-            appendInlineStyled(child, codeBackground, linkColor, citation, inlineContent)
+            appendInlineStyled(child, plainTexts, codeBackground, linkColor, citation, inlineContent)
             child = child.next
         }
     }
@@ -1051,6 +1092,7 @@ private fun renderInline(
 @Composable
 private fun AnnotatedString.Builder.appendInlineStyled(
     node: Node,
+    plainTexts: Map<Node, String>,
     codeBackground: Color,
     linkColor: Color,
     citation: CitationRenderConfig,
@@ -1059,19 +1101,19 @@ private fun AnnotatedString.Builder.appendInlineStyled(
     when (node) {
         is Text -> append(node.literal ?: "")
         is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight(600))) {
-            appendInlineChildren(node, codeBackground, linkColor, citation, inlineContent)
+            appendInlineChildren(node, plainTexts, codeBackground, linkColor, citation, inlineContent)
         }
         is Emphasis -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
-            appendInlineChildren(node, codeBackground, linkColor, citation, inlineContent)
+            appendInlineChildren(node, plainTexts, codeBackground, linkColor, citation, inlineContent)
         }
         is Strikethrough -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
-            appendInlineChildren(node, codeBackground, linkColor, citation, inlineContent)
+            appendInlineChildren(node, plainTexts, codeBackground, linkColor, citation, inlineContent)
         }
         is Code -> withStyle(SpanStyle(background = codeBackground, fontFamily = FontFamily.Monospace)) {
             append(node.literal ?: "")
         }
         is Link -> {
-            val label = nodeText(node).trim()
+            val label = nodeText(node, plainTexts).trim()
             val onTap = citation.onTap
             if (onTap != null) {
                 // RikkaHub MarkdownNew.kt: [citation,domain](id) → circular
@@ -1120,20 +1162,21 @@ private fun AnnotatedString.Builder.appendInlineStyled(
                 ),
             )
             withLink(link) {
-                appendInlineChildren(node, codeBackground, linkColor, citation, inlineContent)
+                appendInlineChildren(node, plainTexts, codeBackground, linkColor, citation, inlineContent)
             }
         }
         is Image -> withStyle(SpanStyle(color = linkColor)) {
             append("[image ${node.destination}]")
         }
         is SoftLineBreak -> append(" ")
-        else -> appendInlineChildren(node, codeBackground, linkColor, citation, inlineContent)
+        else -> appendInlineChildren(node, plainTexts, codeBackground, linkColor, citation, inlineContent)
     }
 }
 
 @Composable
 private fun AnnotatedString.Builder.appendInlineChildren(
     node: Node,
+    plainTexts: Map<Node, String>,
     codeBackground: Color,
     linkColor: Color,
     citation: CitationRenderConfig,
@@ -1141,7 +1184,7 @@ private fun AnnotatedString.Builder.appendInlineChildren(
 ) {
     var child = node.firstChild
     while (child != null) {
-        appendInlineStyled(child, codeBackground, linkColor, citation, inlineContent)
+        appendInlineStyled(child, plainTexts, codeBackground, linkColor, citation, inlineContent)
         child = child.next
     }
 }
@@ -1232,15 +1275,20 @@ private fun citationInlineContent(text: String, onClick: () -> Unit): InlineText
     }
 }
 
-/** Plain text of a node: concatenation of descendant Text literals. */
-private fun nodeText(node: Node): String = buildString {
-    var child = node.firstChild
-    while (child != null) {
-        if (child is Text) append(child.literal ?: "")
-        else append(nodeText(child))
-        child = child.next
+/**
+ * Plain text of a node: looked up in the map [collectPlainText] built during
+ * parsing, with a live walk as the fallback for trees that did not go through
+ * [parseMarkdownSource] (e.g. hand-built nodes in a test).
+ */
+private fun nodeText(node: Node, plainTexts: Map<Node, String>): String =
+    plainTexts[node] ?: buildString {
+        var child = node.firstChild
+        while (child != null) {
+            if (child is Text) append(child.literal ?: "")
+            else append(nodeText(child, plainTexts))
+            child = child.next
+        }
     }
-}
 
 /**
  * Normalize Cherry-style `[cite:id]` (optionally comma-separated,
