@@ -4,13 +4,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -24,26 +28,35 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
+import org.commonmark.ext.gfm.tables.TableBlock
+import org.commonmark.ext.gfm.tables.TableCell
+import org.commonmark.ext.gfm.tables.TableRow
 import org.commonmark.ext.gfm.tables.TablesExtension
 import org.commonmark.node.BlockQuote
 import org.commonmark.node.Code
@@ -225,12 +238,403 @@ private fun MarkdownNode(
             }
         }
         is ThematicBreak -> HorizontalDivider(color = cs.outlineVariant)
+        is TableBlock -> MarkdownTableView(node, baseFontSize, baseLineHeight, citation)
         is Image -> Text(
             text = "[image ${node.destination}]",
             style = MaterialTheme.typography.bodySmall,
             color = cs.onSurfaceVariant,
         )
         else -> MarkdownBody(node, Modifier, baseFontSize, baseLineHeight, citation)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GFM table (markdown_with_highlight.dart `_MarkdownTableBlock` L3223-3436)
+//
+// The Flutter original builds a fully custom table via gpt_markdown's
+// `tableBuilder`: 0.5dp inside borders, primary-tinted header row, 10/9 cell
+// padding, 13sp semibold header / 13.5sp regular body, wrapped in a rounded
+// card. Tables with >= 4 columns keep a fixed minimum column width and scroll
+// horizontally instead of squeezing. The Compose port matches those metrics;
+// the original's toolbar (copy / export CSV / save image) and row pager are
+// deliberately omitted — they are desktop/first-class features backed by
+// platform IO that has no Compose counterpart yet.
+// ---------------------------------------------------------------------------
+
+private const val TABLE_HEADER_SP = 13f
+private const val TABLE_BODY_SP = 13.5f
+private const val TABLE_LINE_HEIGHT_MULT = 1.42f
+internal val TABLE_CELL_PADDING_H = 10.dp
+internal val TABLE_CELL_PADDING_V = 9.dp
+private val TABLE_CARD_RADIUS = 12.dp
+private val TABLE_BORDER_WIDTH = 0.5.dp
+private val TABLE_INSET_VERTICAL = 6.dp
+private const val TABLE_HEADER_ALPHA_DARK = 0.15f
+private const val TABLE_HEADER_ALPHA_LIGHT = 0.07f
+private const val TABLE_BORDER_ALPHA_DARK = 0.22f
+private const val TABLE_BORDER_ALPHA_LIGHT = 0.30f
+internal const val TABLE_MIN_COLUMN_DP = 112f
+private const val TABLE_MAX_COLUMN_DP = 178f
+private const val TABLE_SCROLL_COLUMN_THRESHOLD = 4
+
+/**
+ * Safety multiplier applied to each column's measured ink width before it
+ * becomes a `Row` weight. 1.12 covers the gap between `TextMeasurer`'s ink
+ * width and the width the text actually occupies once the cell's line box is
+ * laid out (letter-spacing rounding, italic overhang), so a column is never
+ * assigned exactly its text width and forced to wrap.
+ */
+private const val TABLE_COLUMN_SLACK = 1.12f
+
+/** The original reserves 16dp of horizontal slack when sizing columns. */
+private val TABLE_INSET_H_TOTAL = 16.dp
+
+/**
+ * A parsed GFM table: the header row plus the body rows.
+ *
+ * The extension nests rows under section wrappers
+ * (`TableBlock → TableHead/TableBody → TableRow → TableCell`), so rows are
+ * collected by walking the whole subtree rather than only the direct children.
+ * commonmark flags the header on the *cells* (`TableCell.isHeader()`), not on
+ * the `TableRow`.
+ */
+internal data class TableModel(
+    val header: List<TableCell>,
+    val body: List<List<TableCell>>,
+) {
+    val columnCount: Int
+        get() = maxOf(
+            header.size,
+            body.maxOfOrNull { it.size } ?: 0,
+        )
+}
+
+internal fun parseTable(table: TableBlock): TableModel {
+    val rows = mutableListOf<List<TableCell>>()
+    fun collectRows(node: Node) {
+        var child = node.firstChild
+        while (child != null) {
+            if (child is TableRow) {
+                val cells = mutableListOf<TableCell>()
+                var cell = child.firstChild
+                while (cell != null) {
+                    if (cell is TableCell) cells.add(cell)
+                    cell = cell.next
+                }
+                rows.add(cells)
+            } else {
+                collectRows(child)
+            }
+            child = child.next
+        }
+    }
+    collectRows(table)
+    // The extension always emits the header row first and flags its cells.
+    val header = rows.firstOrNull()?.takeIf { row -> row.any { it.isHeader } }.orEmpty()
+    val body = if (header.isEmpty()) rows else rows.drop(1)
+    return TableModel(header, body)
+}
+
+/**
+ * Per-column natural widths, measured on the real text instead of guessed from
+ * character counts. The Flutter original uses `FlexColumnWidth`, which lays
+ * columns out from their intrinsic text widths; a character-count heuristic
+ * mis-sizes CJK badly (a 2-glyph header like "排名" measured as 2 units against
+ * a 9-character body cell, crushing the column). Measuring with the same
+ * [TextMeasurer] and text style the cells will use reproduces that behaviour.
+ */
+private fun measureColumnWidths(
+    measurer: TextMeasurer,
+    model: TableModel,
+    cellStyle: TextStyle,
+): List<Float> {
+    return (0 until model.columnCount).map { col ->
+        val headerWidth = model.header.getOrNull(col)
+            ?.let { measurer.measure(cellText(it), cellStyle).size.width }
+            ?: 0
+        val bodyWidth = model.body.maxOfOrNull { row ->
+            row.getOrNull(col)?.let { measurer.measure(cellText(it), cellStyle).size.width } ?: 0
+        } ?: 0
+        maxOf(headerWidth, bodyWidth).toFloat()
+    }
+}
+
+/**
+ * Turns natural text widths into `Row` weights.
+ *
+ * `Modifier.weight` splits the row proportionally, so the values only need to
+ * be *relative*. Each column contributes its measured text width plus the cell
+ * padding, and a floor keeps a narrow "#"/"排名" column legible instead of
+ * collapsing. The result is intentionally returned **un-normalised** — Compose
+ * normalises by the sum — but every entry is a pixel-scale number so the floor
+ * means the same thing in every table.
+ */
+internal fun columnWeights(
+    naturals: List<Float>,
+    density: Density,
+    columnCount: Int,
+): List<Float> {
+    if (columnCount == 0) return emptyList()
+    val padPx = with(density) { (TABLE_CELL_PADDING_H * 2).toPx() }
+    val minPx = with(density) { TABLE_MIN_COLUMN_DP.dp.toPx() }
+    val weights = FloatArray(columnCount)
+    for (col in 0 until columnCount) {
+        val natural = naturals.getOrElse(col) { 0f }
+        weights[col] = (natural * TABLE_COLUMN_SLACK + padPx).coerceAtLeast(minPx)
+    }
+    // Normalise to sum == columnCount so the weights stay in a sane range and
+    // a single huge cell cannot push every other column below the floor.
+    val sum = weights.sum().takeIf { it > 0f } ?: return List(columnCount) { 1f }
+    val scale = columnCount / sum
+    return weights.map { it * scale }
+}
+
+/** Plain text of a cell, flattened through nested inline nodes. */
+private fun cellText(cell: Node): String = buildString {
+    fun walk(node: Node) {
+        var child = node.firstChild
+        while (child != null) {
+            if (child is org.commonmark.node.Text) append(child.literal ?: "")
+            else walk(child)
+            child = child.next
+        }
+    }
+    walk(cell)
+}
+
+@Composable
+private fun MarkdownTableView(
+    table: TableBlock,
+    baseFontSize: Float,
+    baseLineHeight: Float,
+    citation: CitationRenderConfig,
+) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = isSystemInDarkTheme()
+    val model = parseTable(table)
+    if (model.columnCount == 0) return
+
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val measureStyle = MaterialTheme.typography.bodyMedium.copy(
+        fontSize = TABLE_BODY_SP.sp,
+        lineHeight = TABLE_BODY_SP.sp * TABLE_LINE_HEIGHT_MULT,
+    )
+
+    val borderColor = cs.outlineVariant.copy(
+        alpha = if (isDark) TABLE_BORDER_ALPHA_DARK else TABLE_BORDER_ALPHA_LIGHT,
+    )
+    val headerBg = cs.primary.copy(
+        alpha = if (isDark) TABLE_HEADER_ALPHA_DARK else TABLE_HEADER_ALPHA_LIGHT,
+    )
+    val scrollable = model.columnCount >= TABLE_SCROLL_COLUMN_THRESHOLD
+    val scrollState = rememberScrollState()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = TABLE_INSET_VERTICAL)
+            .clip(RoundedCornerShape(TABLE_CARD_RADIUS))
+            .background(cs.primary.copy(alpha = if (isDark) 0.045f else 0.018f))
+            .border(0.8.dp, borderColor, RoundedCornerShape(TABLE_CARD_RADIUS))
+            .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
+    ) {
+        BoxWithConstraints {
+            // Non-scrolling tables mirror FlexColumnWidth: every column gets at
+            // least its measured text width, then the leftover space is shared
+            // out proportionally by `weight`. Scrolling tables instead pin a
+            // fixed legible column width so >= 4 columns overflow sideways,
+            // exactly like _compactColumnWidth (L3522).
+            val weights = if (scrollable) {
+                List(model.columnCount) { 1f }
+            } else {
+                columnWeights(
+                    naturals = measureColumnWidths(measurer, model, measureStyle),
+                    density = density,
+                    columnCount = model.columnCount,
+                )
+            }
+            val columnWidth = if (scrollable) {
+                // _compactColumnWidth (markdown_with_highlight.dart L3522):
+                // >= 4 columns show ~2.45 at a time, clamped to a legible min.
+                val available = maxWidth - TABLE_INSET_H_TOTAL
+                (available / 2.45f)
+                    .coerceIn(TABLE_MIN_COLUMN_DP.dp, TABLE_MAX_COLUMN_DP.dp)
+            } else {
+                maxWidth / model.columnCount
+            }
+            Column(
+                modifier = Modifier.then(
+                    if (scrollable) Modifier.width(columnWidth * model.columnCount)
+                    else Modifier.fillMaxWidth(),
+                ),
+            ) {
+                if (model.header.isNotEmpty()) {
+                    TableRowView(
+                        cells = model.header,
+                        header = true,
+                        columnCount = model.columnCount,
+                        columnWidth = columnWidth,
+                        weights = weights,
+                        scrollable = scrollable,
+                        rowBackground = headerBg,
+                        bottomBorder = true,
+                        baseFontSize = baseFontSize,
+                        baseLineHeight = baseLineHeight,
+                        citation = citation,
+                    )
+                }
+                model.body.forEachIndexed { index, cells ->
+                    TableRowView(
+                        cells = cells,
+                        header = false,
+                        columnCount = model.columnCount,
+                        columnWidth = columnWidth,
+                        weights = weights,
+                        scrollable = scrollable,
+                        rowBackground = null,
+                        // The original's TableBorder draws only *inside* rules;
+                        // the outer frame is the rounded card behind this
+                        // Column. Drawing a bottom rule on every row but the
+                        // last reproduces that (and avoids the stray vertical
+                        // line a `Column.border` produced inside the scroll
+                        // container).
+                        bottomBorder = index < model.body.lastIndex,
+                        baseFontSize = baseFontSize,
+                        baseLineHeight = baseLineHeight,
+                        citation = citation,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TableRowView(
+    cells: List<TableCell>,
+    header: Boolean,
+    columnCount: Int,
+    columnWidth: androidx.compose.ui.unit.Dp,
+    weights: List<Float>,
+    scrollable: Boolean,
+    rowBackground: Color?,
+    bottomBorder: Boolean,
+    baseFontSize: Float,
+    baseLineHeight: Float,
+    citation: CitationRenderConfig,
+) {
+    val cs = MaterialTheme.colorScheme
+    val borderColor = cs.outlineVariant.copy(
+        alpha = if (isSystemInDarkTheme()) TABLE_BORDER_ALPHA_DARK else TABLE_BORDER_ALPHA_LIGHT,
+    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .then(if (rowBackground != null) Modifier.background(rowBackground) else Modifier)
+                .fillMaxWidth(),
+        ) {
+            for (i in 0 until columnCount) {
+                TableCellView(
+                    cell = cells.getOrNull(i),
+                    header = header,
+                    columnWidth = columnWidth,
+                    weight = weights.getOrElse(i) { 1f },
+                    scrollable = scrollable,
+                    rightBorder = i < columnCount - 1,
+                    borderColor = borderColor,
+                    baseFontSize = baseFontSize,
+                    baseLineHeight = baseLineHeight,
+                    citation = citation,
+                )
+            }
+        }
+        // Inside-only horizontal rule, like TableBorder(horizontalInside).
+        // Applied to the row's *bottom* edge so consecutive rows produce one
+        // rule between them rather than two stacked 1px lines.
+        if (bottomBorder) {
+            HorizontalDivider(
+                thickness = TABLE_BORDER_WIDTH,
+                color = borderColor,
+            )
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.TableCellView(
+    cell: TableCell?,
+    header: Boolean,
+    columnWidth: androidx.compose.ui.unit.Dp,
+    weight: Float,
+    scrollable: Boolean,
+    rightBorder: Boolean,
+    borderColor: Color,
+    baseFontSize: Float,
+    baseLineHeight: Float,
+    citation: CitationRenderConfig,
+) {
+    val cs = MaterialTheme.colorScheme
+    val inlineContent = mutableMapOf<String, InlineTextContent>()
+    val annotated = cell?.let { renderInline(it, citation, inlineContent) } ?: AnnotatedString("")
+    val cellColor = if (header) cs.onSurface else cs.onSurface.copy(alpha = 0.90f)
+    Box(
+        modifier = Modifier
+            // Scrolling tables need a fixed column width to be wider than the
+            // viewport; non-scrolling ones share the available width by weight.
+            .then(if (scrollable) Modifier.width(columnWidth) else Modifier.weight(weight))
+            .padding(horizontal = TABLE_CELL_PADDING_H, vertical = TABLE_CELL_PADDING_V)
+            // Interior vertical rule on the trailing edge only, matching
+            // TableBorder(verticalInside) — the outer frame belongs to the
+            // rounded card, so the last column draws no line and no cell draws
+            // one on its leading edge (that would double up with its neighbour).
+            .then(
+                if (rightBorder) {
+                    Modifier.drawBehind {
+                        val stroke = TABLE_BORDER_WIDTH.toPx()
+                        drawRect(
+                            color = borderColor,
+                            topLeft = androidx.compose.ui.geometry.Offset(size.width - stroke, 0f),
+                            size = androidx.compose.ui.geometry.Size(stroke, size.height),
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
+        Text(
+            text = annotated,
+            inlineContent = inlineContent,
+            // The Box has already resolved this cell's width (weight or fixed
+            // columnWidth), so `fillMaxWidth` wraps the text inside it. Without
+            // it an unbreakable run — a latin token glued to a full-width comma
+            // such as "RikkaHub、" — lays out wider than the column and paints
+            // past the table's right edge. Alignment is preserved because the
+            // Box still positions the (now full-width) Text by `contentAlignment`
+            // via the inner `Text`'s own textAlign below.
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = when (cell?.alignment) {
+                TableCell.Alignment.CENTER -> androidx.compose.ui.text.style.TextAlign.Center
+                TableCell.Alignment.RIGHT -> androidx.compose.ui.text.style.TextAlign.End
+                else -> androidx.compose.ui.text.style.TextAlign.Start
+            },
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = (if (header) TABLE_HEADER_SP else TABLE_BODY_SP).sp,
+                lineHeight = (if (header) TABLE_HEADER_SP else TABLE_BODY_SP).sp * TABLE_LINE_HEIGHT_MULT,
+                fontWeight = if (header) FontWeight(600) else FontWeight.Normal,
+                color = cellColor,
+                // Emoji glyphs carry a taller fallback font, which inflates
+                // rows that contain them (medals in the first column, etc.).
+                // Trimming the line box to the first/last baseline keeps every
+                // row at the intended 1.42 height, like the original's fixed
+                // `height: 1.42` text style.
+                lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+                    alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+                    trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
+                ),
+            ),
+        )
     }
 }
 
@@ -319,16 +723,15 @@ private fun AnnotatedString.Builder.appendInlineStyled(
                     return
                 }
                 // Historical [cite:id] / [citation:ref] markers, normalized to
-                // [citation](id) by preprocessCitations — resolve the domain
-                // against this message's search results.
+                // [citation](id) by preprocessCitations — resolve the numeric
+                // index against this message's search results.
                 if (label.equals("citation", ignoreCase = true)) {
                     val ref = parseCitationRef(node.destination ?: "")
                     if (ref != null) {
                         val info = citation.resolver?.invoke(ref.id)
                         val text = when {
-                            !info?.domain.isNullOrEmpty() -> info!!.domain
-                            ref.indexText != ref.id -> ref.indexText
                             info?.index != null -> info.index.toString()
+                            ref.indexText != ref.id -> ref.indexText
                             else -> "?"
                         }
                         inlineContent.putIfAbsent(
@@ -377,45 +780,87 @@ private fun AnnotatedString.Builder.appendInlineChildren(
 }
 
 /**
- * Inline citation capsule — RikkaHub MarkdownNew.kt shape (circular pill,
- * centered 10sp monospace Thin label, width 7sp per char, height 1em, tap
- * opens the source) with the ORIGINAL project's colors (primary 20% bg +
- * primary label, markdown_with_highlight.dart linkBuilder). `coerceAtLeast(20)`
- * only guards the short legacy index fallback; real domains (≥3 chars) match
- * RikkaHub's `(domain.length * 7).sp` exactly. FontFamily.Monospace substitutes
- * RikkaHub's bundled JetBrains Mono (no such asset in Memo).
+ * Inline citation capsule — a small numbered badge derived from the original
+ * project (`markdown_with_highlight.dart` linkBuilder L441-472). The original's
+ * 20dp pill sits as tall as the line box and reads as a heavy blob
+ * mid-sentence, so the badge is deliberately shrunk to a subtle marker:
+ * 16dp tall, 8dp radius (= height / 2, fully round), 16dp minimum width,
+ * 10sp label, 16%-tinted primary background.
+ *
+ * Vertical placement: `PlaceholderVerticalAlign.TextCenter` centers the badge
+ * on the line box, which already sits slightly above the CJK glyph baseline —
+ * the original's extra -2dp lift therefore pushed the badge visibly above the
+ * text. A small downward nudge instead lands it on the visual center of the
+ * glyphs, which is what the eye reads as "aligned".
+ *
+ * The label is always the resolved numeric index — never the domain.
  */
+private val CITATION_BADGE_HEIGHT = 16.dp
+private val CITATION_BADGE_MIN_WIDTH = 16.dp
+private val CITATION_BADGE_H_PADDING = 3.dp
+private const val CITATION_BADGE_LABEL_SP = 10f
+private const val CITATION_BADGE_GLYPH_DP = 6f
+private const val CITATION_BADGE_ALPHA = 0.16f
+private val CITATION_BADGE_BASELINE_NUDGE = 1.dp
+private val CITATION_BADGE_SIDE_GAP = 2.dp
+
 @Composable
 private fun citationInlineContent(text: String, onClick: () -> Unit): InlineTextContent {
     val cs = MaterialTheme.colorScheme
+    // InlineTextContent sizes placeholders in TextUnits, so convert the fixed
+    // dp metrics to sp with the current font scale to keep the badge stable
+    // when the user scales text.
+    val density = LocalDensity.current
+    val pillHeight = with(density) { CITATION_BADGE_HEIGHT.toSp() }
+    // A placeholder must be sized up front: estimate the glyph run, add the
+    // side padding, and coerce to the minimum round-badge width.
+    // A placeholder must be sized up front: estimate the glyph run, add the
+    // side padding, then reserve a little breathing room on each side so the
+    // badge does not collide with the preceding glyph run (the original pads
+    // the capsule by 1.5dp horizontally for the same reason).
+    val slotWidth = with(density) {
+        ((text.length * CITATION_BADGE_GLYPH_DP).dp + CITATION_BADGE_H_PADDING * 2)
+            .coerceAtLeast(CITATION_BADGE_MIN_WIDTH)
+            .plus(CITATION_BADGE_SIDE_GAP * 2)
+            .toSp()
+    }
+    val pillRadius = with(density) { (CITATION_BADGE_HEIGHT / 2).toPx() }
+    val nudgeY = with(density) { CITATION_BADGE_BASELINE_NUDGE.toPx() }
     return InlineTextContent(
         Placeholder(
-            width = (text.length * 7).coerceAtLeast(20).sp,
-            height = 1.em,
-            placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+            width = slotWidth,
+            height = pillHeight,
+            // TextCenter centers on the line box, which floats above the CJK
+            // glyphs; AboveBaseline seats the badge on the text baseline, which
+            // is what reads as horizontally aligned with the surrounding text.
+            placeholderVerticalAlign = PlaceholderVerticalAlign.AboveBaseline,
         ),
     ) {
         Box(
             modifier = Modifier
-                .clickable(onClick = onClick)
                 .fillMaxSize()
-                .clip(CircleShape)
-                // Capsule colors follow the ORIGINAL project (primary 20% bg +
-                // primary label); only the RikkaHub shape/layout is ported.
-                .background(cs.primary.copy(alpha = 0.2f)),
+                .graphicsLayer { translationY = nudgeY }
+                .padding(horizontal = CITATION_BADGE_SIDE_GAP),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = text,
-                modifier = Modifier.wrapContentSize(),
-                style = TextStyle(
-                    fontSize = 10.sp,
-                    lineHeight = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = cs.primary,
-                    fontWeight = FontWeight.Thin,
-                ),
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(onClick = onClick)
+                    .clip(RoundedCornerShape(pillRadius))
+                    .background(cs.primary.copy(alpha = CITATION_BADGE_ALPHA)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = text,
+                    modifier = Modifier.wrapContentSize(),
+                    style = TextStyle(
+                        fontSize = CITATION_BADGE_LABEL_SP.sp,
+                        lineHeight = CITATION_BADGE_LABEL_SP.sp,
+                        color = cs.primary,
+                    ),
+                )
+            }
         }
     }
 }
@@ -493,14 +938,13 @@ internal data class CitationCapsule(val key: String, val text: String)
 /**
  * Resolve a `[citation,X](Y)` / `[cite,X](Y)` link into a capsule.
  *
- * Models drift from the prompted `[citation,domain](id)` to the shorter
- * `[cite,domain](id)` spelling, and sometimes echo the id into the label
- * (`[cite,e2dce5](e2dce5)`); both spellings are accepted here. The capsule
- * key prefers a 6-char id token (RikkaHub's gate — Memo search ids are
- * `UUID.take(6)`) taken from the destination first, then the label; a URL
- * destination renders a capsule that opens the link directly. Display text:
- * the model-supplied domain when the label carries one, otherwise the domain
- * resolved from this message's search results, else the raw label metadata.
+ * Models drift from the prompted `[cite:id]` to the comma-metadata spelling
+ * (`[citation,domain](id)` / `[cite,domain](id)`); both are accepted here. The
+ * capsule key prefers a 6-char id token (Memo search ids are `UUID.take(6)`)
+ * taken from the destination first, then the label; a URL destination renders
+ * a capsule that opens the link directly. The label metadata is ignored for
+ * display — the capsule always shows the numeric index, like the original
+ * project; it falls back to "?" when no index can be resolved.
  */
 internal fun resolveCitationCapsule(
     label: String,
@@ -518,10 +962,14 @@ internal fun resolveCitationCapsule(
     val key = listOf(dest, meta).firstOrNull { it.length == 6 && it.isCitationIndex() }
         ?: dest.takeIf { it.contains('.') || it.contains('/') }
         ?: return null
+    val info = resolver?.invoke(key)
     val text = when {
-        meta.contains('.') -> meta
-        else -> resolver?.invoke(key)?.domain?.takeIf { it.isNotEmpty() } ?: meta
-    }.ifEmpty { "?" }
+        info?.index != null -> info.index.toString()
+        // Unresolvable id: fall back to a bare numeric label when the metadata
+        // already is one, otherwise "?" (same terminal case as the original).
+        meta.toIntOrNull() != null -> meta
+        else -> "?"
+    }
     return CitationCapsule(key, text)
 }
 

@@ -196,6 +196,18 @@ object ChatStyleSpec {
     const val SEND_DISABLED_BG_ALPHA = 0.12f
     const val SEND_DISABLED_FG_ALPHA = 0.38f
 
+    /** CIB:3264-3327 `AnimatedSwitcher` — 200ms scale+fade between send/stop. */
+    const val SEND_ICON_SWITCH_MS = 200
+
+    /**
+     * `assets/icons/stop.svg` — a 14×14 rounded square (rx 2) inside a 24
+     * viewBox. Kept as SVG-space numbers so the shape scales exactly like the
+     * original instead of being approximated by a stock icon.
+     */
+    const val STOP_SVG_VIEWBOX_DP = 24f
+    const val STOP_SVG_SIDE_DP = 14f
+    const val STOP_SVG_RADIUS_DP = 2f
+
     /** CIB composer — text 15sp (mobile), hint onSurface@0.45. */
     const val INPUT_TEXT_SP = 15f
     const val INPUT_HINT_ALPHA = 0.45f
