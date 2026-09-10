@@ -99,6 +99,11 @@ data class ChatTimelineSettings(
     val showToolResultSummary: Boolean = false,
     val hideToolResultImages: Boolean = false,
     val enableReasoningMarkdown: Boolean = true,
+    // 用户（user）消息侧 —— settings_provider.dart:1068-1085（三个默认都是 true），
+    // 由 chat_message_widget.dart:1719-1735 的用户头消费。
+    val showUserAvatar: Boolean = true,
+    val showUserName: Boolean = true,
+    val showUserTimestamp: Boolean = true,
 ) {
     companion object {
         fun fromPrefs(read: (key: String) -> String?): ChatTimelineSettings {
@@ -111,6 +116,9 @@ data class ChatTimelineSettings(
                 showToolResultSummary = bool("display_show_tool_result_summary_v1", false),
                 hideToolResultImages = bool("display_hide_tool_result_images_v1", false),
                 enableReasoningMarkdown = bool("display_enable_reasoning_markdown_v1", true),
+                showUserAvatar = bool("display_show_user_avatar_v1", true),
+                showUserName = bool("display_show_user_name_v1", true),
+                showUserTimestamp = bool("display_show_user_timestamp_v1", true),
             )
         }
     }

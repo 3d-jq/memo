@@ -696,12 +696,16 @@ fun ChatContent(
         }
     }
     // settings_provider.dart:1069 —— display_show_model_icon_v1 默认 true。
+    // 设置页（ChatItemDisplaySettingsScreen）的 display_* 开关走
+    // readLocal/writeLocal（SharedPreferences），这里必须同样读 readLocal，
+    // 否则永远只能拿到默认值（此前误用 readJson，开关实际是失效的）。
     val showModelIcon = remember(conversationId) {
-        com.psyche.memo.DefaultModelPrefs.parseJsonBool(
-            container.preferenceRepository.readJson("display_show_model_icon_v1"),
-            default = true,
-        )
+        container.preferenceRepository.readLocal("display_show_model_icon_v1")
+            ?.let { it == "1" }
+            ?: true
     }
+    // 用户资料（user_provider.dart）：消息头与抽屉用户栏共用同一份。
+    val userProfile by container.userProfileStore.profile
     val resolvedAssistantLabel = assistantRow?.name?.trim()?.takeIf { it.isNotEmpty() }
         ?: stringResource(UiR.string.message_export_sheet_assistant)
 
@@ -1063,6 +1067,7 @@ fun ChatContent(
                             onSuggestionTap = { vm.sendSuggestion(it) },
                             assistantLabel = resolvedAssistantLabel,
                             assistant = assistantRow,
+                            userProfile = userProfile,
                             showModelIcon = showModelIcon,
                             versionCount = versionInfo[msg.groupId]?.size ?: 1,
                             versionIndex = versionInfo[msg.groupId]
@@ -1720,6 +1725,8 @@ private fun MessageRow(
     assistantLabel: String,
     /** 当前助手：消息头在「助手头像 / 模型图标」之间二选一（CMW:2787-2802）。 */
     assistant: com.psyche.memo.data.model.Assistant? = null,
+    /** 用户资料（user_provider.dart）：用户头的头像/名字。 */
+    userProfile: UserProfileStore.Profile = UserProfileStore.Profile(),
     /** display_show_model_icon_v1，默认 true（settings_provider.dart:1069）。 */
     showModelIcon: Boolean = true,
     versionCount: Int,
@@ -1870,42 +1877,45 @@ private fun MessageRow(
     ) {
         if (isUser) {
             // Header: name 13px α0.7 + timestamp 11px α0.5 (right-aligned) +
-            // 32 用户头像（CMW:1773-1807 + 1590-1659；默认分支 Lucide.User 18
-            // primary 于 primary@0.1 圆底）。
+            // 用户头像（CMW:1773-1809）：名字/时间戳/头像分别受
+            // display_show_user_name_v1 / _timestamp_v1 / _avatar_v1 控制，
+            // 头像四态（emoji/url/file/空回退 User 图标）取自 UserProvider。
+            val userLabel = userProfile.name.ifEmpty {
+                stringResource(UiR.string.user_provider_default_user_name)
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = stringResource(UiR.string.user_provider_default_user_name),
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = cs.onSurface.copy(alpha = 0.7f),
-                        ),
-                    )
-                    Spacer(Modifier.height(ChatStyleSpec.NAME_TIME_GAP_DP.dp))
-                    Text(
-                        text = timeLabel,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
-                            color = cs.onSurface.copy(alpha = 0.5f),
-                        ),
-                    )
+                    if (timelineSettings.showUserName) {
+                        Text(
+                            text = userLabel,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = cs.onSurface.copy(alpha = 0.7f),
+                            ),
+                        )
+                    }
+                    // 名与时间戳同时显示时才留那 2dp（CMW:1790-1792）。
+                    if (timelineSettings.showUserName && timelineSettings.showUserTimestamp) {
+                        Spacer(Modifier.height(ChatStyleSpec.NAME_TIME_GAP_DP.dp))
+                    }
+                    if (timelineSettings.showUserTimestamp) {
+                        Text(
+                            text = timeLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                color = cs.onSurface.copy(alpha = 0.5f),
+                            ),
+                        )
+                    }
                 }
-                Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
-                Box(
-                    modifier = Modifier
-                        .size(ChatStyleSpec.AVATAR_SIZE_DP.dp)
-                        .background(
-                            cs.primary.copy(alpha = ChatStyleSpec.AVATAR_BG_ALPHA),
-                            CircleShape,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Lucide.User,
-                        contentDescription = null,
-                        tint = cs.primary,
-                        modifier = Modifier.size(ChatStyleSpec.AVATAR_ICON_DP.dp),
+                if (timelineSettings.showUserAvatar) {
+                    Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
+                    UserAvatar(
+                        profile = userProfile,
+                        name = userLabel,
+                        size = ChatStyleSpec.AVATAR_SIZE_DP.dp,
+                        fallback = UserAvatarFallback.Icon,
                     )
                 }
             }

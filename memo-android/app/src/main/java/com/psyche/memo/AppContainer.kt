@@ -72,6 +72,11 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         com.psyche.memo.ui.MemoryProviderV2(preferenceRepository)
     }
 
+    /** 用户资料（user_provider.dart：user_name / avatar_type / avatar_value）。 */
+    val userProfileStore: com.psyche.memo.ui.UserProfileStore by lazy {
+        com.psyche.memo.ui.UserProfileStore(preferenceRepository)
+    }
+
     /** Search service settings (search_service_rows + preference keys). */
     val searchSettingsRepository: com.psyche.memo.data.repo.SearchSettingsRepository by lazy {
         com.psyche.memo.data.repo.SearchSettingsRepository(database.writableDatabase, preferenceRepository)

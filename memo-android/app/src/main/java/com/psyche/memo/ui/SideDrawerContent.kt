@@ -85,6 +85,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -131,7 +132,6 @@ fun SideDrawerContent(
      * 同步，Android 端需手动通知。 */
     onConversationTitleChanged: (String) -> Unit = {},
     assistantName: String? = null,
-    userName: String? = null,
     forceSelectionMode: Boolean = false,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -149,6 +149,11 @@ fun SideDrawerContent(
     // 全局当前助手（assistant_provider.currentAssistantId）：抽屉助手卡显示它，
     // 会话列表按它过滤；切换即 setCurrentAssistant。
     val currentAssistantId by container.currentAssistantId.collectAsState()
+    // 用户资料（user_provider.dart）：用户栏头像/名字与两个编辑入口。
+    val userProfile by container.userProfileStore.profile
+    var userAvatarEditRequested by remember { mutableStateOf(false) }
+    var userNicknameEditRequested by remember { mutableStateOf(false) }
+
     // 助手卡头像用（AssistantAvatar 四态：http / 本地文件 / emoji / 首字母）。
     val currentAssistant = remember(currentAssistantId) {
         currentAssistantId?.let { id ->
@@ -187,8 +192,11 @@ fun SideDrawerContent(
         Haptics.light(view)
         if (recent != null) onSelect(recent.id) else onNew()
     }
-    val userLabel = userName?.takeIf { it.isNotBlank() }
-        ?: stringResource(UiR.string.user_provider_default_user_name)
+    // 用户栏名字来自 UserProvider（user_name），未设置过时用本地化默认名 ——
+    // 原版 side_drawer 的 widget.userName 也是从 UserProvider 透传进来的。
+    val userLabel = userProfile.name.ifEmpty {
+        stringResource(UiR.string.user_provider_default_user_name)
+    }
     val searchHint = stringResource(UiR.string.side_drawer_search_hint)
     val historyCd = stringResource(UiR.string.side_drawer_history)
     val settingsCd = stringResource(UiR.string.side_drawer_settings)
@@ -729,27 +737,29 @@ fun SideDrawerContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Spacer(Modifier.width(6.dp))
-            // Default avatar: initial letter on a primary-15% circle
-            // (memo avatarWidget default branch).
+            // 用户头像：四态（emoji/url/file/空回退首字母）来自 UserProvider，
+            // 空态是名字首字母（side_drawer.dart:1670-1765 avatarWidget）；
+            // 点击打开头像 sheet（`_editAvatar`）。
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(cs.primary.copy(alpha = 0.15f), CircleShape),
+                    .clip(CircleShape)
+                    .clickable { userAvatarEditRequested = true },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = userLabel.firstOrNull()?.toString() ?: "?",
-                    style = TextStyle(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = cs.primary,
-                    ),
+                UserAvatar(
+                    profile = userProfile,
+                    name = userLabel,
+                    size = 40.dp,
+                    fallback = UserAvatarFallback.Initial,
                 )
             }
             Spacer(Modifier.width(20.dp))
             Text(
                 text = userLabel,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { userNicknameEditRequested = true },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = TextStyle(
@@ -788,6 +798,24 @@ fun SideDrawerContent(
             }
         }
         } // end !selectionMode bottom bar
+    }
+
+    // 用户头像 sheet（`_editAvatar`）与昵称对话框（`_editUserName`）。
+    if (userAvatarEditRequested) {
+        UserAvatarEditor(
+            store = container.userProfileStore,
+            onDismiss = { userAvatarEditRequested = false },
+        )
+    }
+    if (userNicknameEditRequested) {
+        NicknameDialog(
+            initial = userProfile.name,
+            onDismiss = { userNicknameEditRequested = false },
+            onConfirm = { name ->
+                container.userProfileStore.setName(name)
+                userNicknameEditRequested = false
+            },
+        )
     }
 
     // Long-press conversation menu (memo _showChatMenu mobile branch):

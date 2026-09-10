@@ -62,6 +62,64 @@ import java.text.BreakIterator
 import kotlin.random.Random
 
 /**
+ * 头像选择这套 UI 的文案来源：助手编辑页用 `assistant_edit_*`，抽屉里的用户
+ * 头像用 `side_drawer_*`（原版 side_drawer 是各写一份私有实现，这里改成参数化
+ * 共用同一套组件）。
+ */
+internal data class AvatarSheetStrings(
+    val chooseImage: Int,
+    val chooseEmoji: Int,
+    val enterLink: Int,
+    val importQq: Int,
+    val reset: Int,
+    val emojiTitle: Int,
+    val emojiHint: Int,
+    val urlTitle: Int,
+    val urlHint: Int,
+    val qqTitle: Int,
+    val qqHint: Int,
+    val qqRandom: Int,
+    val save: Int,
+    val cancel: Int,
+) {
+    companion object {
+        val Assistant = AvatarSheetStrings(
+            chooseImage = UiR.string.assistant_edit_avatar_choose_image,
+            chooseEmoji = UiR.string.assistant_edit_avatar_choose_emoji,
+            enterLink = UiR.string.assistant_edit_avatar_enter_link,
+            importQq = UiR.string.assistant_edit_avatar_import_q_q,
+            reset = UiR.string.assistant_edit_avatar_reset,
+            emojiTitle = UiR.string.assistant_edit_emoji_dialog_title,
+            emojiHint = UiR.string.assistant_edit_emoji_dialog_hint,
+            urlTitle = UiR.string.assistant_edit_image_url_dialog_title,
+            urlHint = UiR.string.assistant_edit_image_url_dialog_hint,
+            qqTitle = UiR.string.assistant_edit_q_q_avatar_dialog_title,
+            qqHint = UiR.string.assistant_edit_q_q_avatar_dialog_hint,
+            qqRandom = UiR.string.assistant_edit_q_q_avatar_random_button,
+            save = UiR.string.assistant_edit_emoji_dialog_save,
+            cancel = UiR.string.assistant_edit_emoji_dialog_cancel,
+        )
+
+        val User = AvatarSheetStrings(
+            chooseImage = UiR.string.side_drawer_choose_image,
+            chooseEmoji = UiR.string.side_drawer_choose_emoji,
+            enterLink = UiR.string.side_drawer_enter_link,
+            importQq = UiR.string.side_drawer_import_from_q_q,
+            reset = UiR.string.side_drawer_reset,
+            emojiTitle = UiR.string.side_drawer_emoji_dialog_title,
+            emojiHint = UiR.string.side_drawer_emoji_dialog_hint,
+            urlTitle = UiR.string.side_drawer_image_url_dialog_title,
+            urlHint = UiR.string.side_drawer_image_url_dialog_hint,
+            qqTitle = UiR.string.side_drawer_q_q_avatar_dialog_title,
+            qqHint = UiR.string.side_drawer_q_q_avatar_input_hint,
+            qqRandom = UiR.string.side_drawer_random_q_q,
+            save = UiR.string.side_drawer_save,
+            cancel = UiR.string.side_drawer_cancel,
+        )
+    }
+}
+
+/**
  * `_showAvatarPicker` (assistant_settings_edit_basic_tab.dart L517-617) — five
  * 48dp `IosCardPress` rows; each row pops the sheet *before* running its action,
  * as the source does.
@@ -69,6 +127,7 @@ import kotlin.random.Random
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AvatarPickerSheet(
+    strings: AvatarSheetStrings = AvatarSheetStrings.Assistant,
     onDismiss: () -> Unit,
     onChooseImage: () -> Unit,
     onChooseEmoji: () -> Unit,
@@ -97,23 +156,23 @@ internal fun AvatarPickerSheet(
                     .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
             )
             Spacer(Modifier.height(10.dp))
-            AvatarPickerRow(stringResource(UiR.string.assistant_edit_avatar_choose_image)) {
+            AvatarPickerRow(stringResource(strings.chooseImage)) {
                 onDismiss()
                 onChooseImage()
             }
-            AvatarPickerRow(stringResource(UiR.string.assistant_edit_avatar_choose_emoji)) {
+            AvatarPickerRow(stringResource(strings.chooseEmoji)) {
                 onDismiss()
                 onChooseEmoji()
             }
-            AvatarPickerRow(stringResource(UiR.string.assistant_edit_avatar_enter_link)) {
+            AvatarPickerRow(stringResource(strings.enterLink)) {
                 onDismiss()
                 onEnterLink()
             }
-            AvatarPickerRow(stringResource(UiR.string.assistant_edit_avatar_import_q_q)) {
+            AvatarPickerRow(stringResource(strings.importQq)) {
                 onDismiss()
                 onImportQq()
             }
-            AvatarPickerRow(stringResource(UiR.string.assistant_edit_avatar_reset)) {
+            AvatarPickerRow(stringResource(strings.reset)) {
                 onDismiss()
                 onReset()
             }
@@ -171,6 +230,7 @@ private fun AvatarPickerRow(text: String, onTap: () -> Unit) {
  */
 @Composable
 internal fun EmojiPickerDialog(
+    strings: AvatarSheetStrings = AvatarSheetStrings.Assistant,
     onDismiss: () -> Unit,
     onPick: (String) -> Unit,
 ) {
@@ -188,7 +248,7 @@ internal fun EmojiPickerDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
         containerColor = semantic.overlaySurface(cs),
-        title = { Text(stringResource(UiR.string.assistant_edit_emoji_dialog_title)) },
+        title = { Text(stringResource(strings.emojiTitle)) },
         text = {
             Column {
                 Box(
@@ -205,7 +265,7 @@ internal fun EmojiPickerDialog(
                 Spacer(Modifier.height(12.dp))
                 AvatarDialogField(
                     value = text,
-                    placeholder = stringResource(UiR.string.assistant_edit_emoji_dialog_hint),
+                    placeholder = stringResource(strings.emojiHint),
                     onValueChange = { text = it },
                     onSubmit = { confirm() },
                 )
@@ -241,7 +301,7 @@ internal fun EmojiPickerDialog(
         confirmButton = {
             TextButton(onClick = { confirm() }, enabled = valid) {
                 Text(
-                    text = stringResource(UiR.string.assistant_edit_emoji_dialog_save),
+                    text = stringResource(strings.save),
                     style = TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         color = if (valid) cs.primary else cs.onSurface.copy(alpha = 0.38f),
@@ -251,7 +311,7 @@ internal fun EmojiPickerDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(UiR.string.assistant_edit_emoji_dialog_cancel))
+                Text(stringResource(strings.cancel))
             }
         },
     )
@@ -262,6 +322,7 @@ internal fun EmojiPickerDialog(
  */
 @Composable
 internal fun AvatarUrlDialog(
+    strings: AvatarSheetStrings = AvatarSheetStrings.Assistant,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
 ) {
@@ -275,11 +336,11 @@ internal fun AvatarUrlDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
         containerColor = semantic.overlaySurface(cs),
-        title = { Text(stringResource(UiR.string.assistant_edit_image_url_dialog_title)) },
+        title = { Text(stringResource(strings.urlTitle)) },
         text = {
             AvatarDialogField(
                 value = text,
-                placeholder = stringResource(UiR.string.assistant_edit_image_url_dialog_hint),
+                placeholder = stringResource(strings.urlHint),
                 onValueChange = { text = it },
                 onSubmit = { if (valid) onSave(trimmed) },
             )
@@ -287,7 +348,7 @@ internal fun AvatarUrlDialog(
         confirmButton = {
             TextButton(onClick = { onSave(trimmed) }, enabled = valid) {
                 Text(
-                    text = stringResource(UiR.string.assistant_edit_image_url_dialog_save),
+                    text = stringResource(strings.save),
                     style = TextStyle(
                         fontWeight = FontWeight.SemiBold,
                         color = if (valid) cs.primary else cs.onSurface.copy(alpha = 0.38f),
@@ -297,7 +358,7 @@ internal fun AvatarUrlDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(UiR.string.assistant_edit_image_url_dialog_cancel))
+                Text(stringResource(strings.cancel))
             }
         },
     )
@@ -312,6 +373,7 @@ internal fun AvatarUrlDialog(
  */
 @Composable
 internal fun QQAvatarDialog(
+    strings: AvatarSheetStrings = AvatarSheetStrings.Assistant,
     onDismiss: () -> Unit,
     onApplyUrl: (String) -> Unit,
     onRandom: () -> Unit,
@@ -326,11 +388,11 @@ internal fun QQAvatarDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
         containerColor = semantic.overlaySurface(cs),
-        title = { Text(stringResource(UiR.string.assistant_edit_q_q_avatar_dialog_title)) },
+        title = { Text(stringResource(strings.qqTitle)) },
         text = {
             AvatarDialogField(
                 value = text,
-                placeholder = stringResource(UiR.string.assistant_edit_q_q_avatar_dialog_hint),
+                placeholder = stringResource(strings.qqHint),
                 numeric = true,
                 onValueChange = { text = it },
                 onSubmit = { if (valid) onApplyUrl(qqAvatarUrl(trimmed)) },
@@ -338,17 +400,17 @@ internal fun QQAvatarDialog(
         },
         dismissButton = {
             TextButton(onClick = onRandom) {
-                Text(stringResource(UiR.string.assistant_edit_q_q_avatar_random_button))
+                Text(stringResource(strings.qqRandom))
             }
         },
         confirmButton = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onDismiss) {
-                    Text(stringResource(UiR.string.assistant_edit_q_q_avatar_dialog_cancel))
+                    Text(stringResource(strings.cancel))
                 }
                 TextButton(onClick = { onApplyUrl(qqAvatarUrl(trimmed)) }, enabled = valid) {
                     Text(
-                        text = stringResource(UiR.string.assistant_edit_q_q_avatar_dialog_save),
+                        text = stringResource(strings.save),
                         style = TextStyle(
                             fontWeight = FontWeight.SemiBold,
                             color = if (valid) cs.primary else cs.onSurface.copy(alpha = 0.38f),
