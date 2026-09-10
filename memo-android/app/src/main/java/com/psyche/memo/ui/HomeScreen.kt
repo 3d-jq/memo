@@ -2612,15 +2612,15 @@ private fun ChatInputBar(
                     // CIB:2779-2782 —— 原版是 border:none + contentPadding
                     // (vertical:2, horizontal:0) 的裸输入框：M3 TextField 自带
                     // 16dp 横向内边距（会把打字区左右收窄）与 56dp 最小高，改用
-                    // BasicTextField 复刻——横向零内边距；最小高 48dp =
-                    // InputDecorator 的 kMinInteractiveDimension（非 dense 字段
-                    // 的 minContainerHeight，input_decorator.dart L1120-1123），
-                    // 单行时文本垂直居中（interactiveAdjustment 语义），多行时
-                    // 内容撑高。
+                    // BasicTextField 复刻——横向零内边距，单行时文本垂直居中
+                    // （interactiveAdjustment 语义），多行时内容撑高。
+                    // 最小高按用户要求定：原版 kMinInteractiveDimension 是
+                    // 48dp（M3 非 dense 字段默认 56dp），用户两次反馈上下留白
+                    // 偏小 → 48 → 56 → 64。
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 48.dp),
+                            .heightIn(min = 64.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
                         BasicTextField(
