@@ -461,6 +461,13 @@ fun ChatContent(
         if (titleRefreshTick > 0) vm.refreshTitle()
     }
     val messages by vm.messages.collectAsState()
+    // 最后一条助手消息的 id。原来每个 LazyColumn item 内都要
+    // `messages.lastOrNull { it.role == "assistant" }`（每条 O(n) → O(n²)），
+    // 而且 item 闭包捕获整个 messages 列表，流式时每帧更新都会让所有可见行重组。
+    // 这里算一次，item 内只比较 id 值。
+    val lastAssistantId = remember(messages) {
+        messages.lastOrNull { it.role == "assistant" }?.id
+    }
     val suggestions by vm.suggestions.collectAsState()
     val input by vm.input.collectAsState()
     val streaming by vm.streaming.collectAsState()
@@ -975,9 +982,9 @@ fun ChatContent(
                         bottom = ChatStyleSpec.LIST_BOTTOM_PADDING_DP.dp,
                     ),
                 ) {
-                    items(messages, key = { it.id }) { msg ->
-                        val isLastAssistant = msg.role == "assistant" &&
-                            messages.lastOrNull { it.role == "assistant" }?.id == msg.id
+                    // contentType 让 LazyColumn 按 user/assistant 复用两种布局。
+                    items(messages, key = { it.id }, contentType = { it.role }) { msg ->
+                        val isLastAssistant = msg.id == lastAssistantId
                         val canSelect = msg.role == "user" || msg.role == "assistant"
                         Row(verticalAlignment = Alignment.Top) {
                             if (selecting && canSelect) {
@@ -1706,6 +1713,9 @@ private fun MessageRow(
     val cs = MaterialTheme.colorScheme
     val rowView = LocalView.current
     val isUser = msg.role == "user"
+    // 时间戳文本：滚动时每行都会重组，格式化一次就够（头部 user/assistant
+    // 两个分支共用）。
+    val timeLabel = remember(msg.timestamp) { timeStr(msg.timestamp) }
     // 暗色判定（chat_input_bar.dart:2547 同款口径）。
     val isDark = cs.surface.luminance() < 0.5f
     // 每条消息外边距：用户 h16 / 助手 h20，垂直 12（CMW:1768 / 2780）。
@@ -1834,7 +1844,7 @@ private fun MessageRow(
                     )
                     Spacer(Modifier.height(ChatStyleSpec.NAME_TIME_GAP_DP.dp))
                     Text(
-                        text = timeStr(msg.timestamp),
+                        text = timeLabel,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 11.sp,
                             color = cs.onSurface.copy(alpha = 0.5f),
@@ -1887,7 +1897,7 @@ private fun MessageRow(
                     )
                     Spacer(Modifier.height(ChatStyleSpec.NAME_TIME_GAP_DP.dp))
                     Text(
-                        text = timeStr(msg.timestamp),
+                        text = timeLabel,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontSize = 11.sp,
                             color = cs.onSurface.copy(alpha = 0.5f),
@@ -3015,10 +3025,15 @@ private fun InputIconAsset(
     }
 }
 
-private fun timeStr(millis: Long): String {
-    val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-    return fmt.format(Date(millis))
-}
+/**
+ * Shared formatter: constructing a SimpleDateFormat per call is one of the
+ * heavier allocations in a list row, and this runs for every message header on
+ * every recomposition while scrolling. SimpleDateFormat is not thread-safe, but
+ * this is only touched from composition on the UI thread.
+ */
+private val TIME_FORMATTER = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+private fun timeStr(millis: Long): String = TIME_FORMATTER.format(Date(millis))
 
 
 /**

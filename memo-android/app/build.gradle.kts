@@ -50,6 +50,17 @@ kotlin {
     }
 }
 
+// Compose 稳定性配置：把含 List 字段的消息/助手等模型显式声明为 stable，
+// 让聊天列表的 item 能按引用跳过重组（详见 app/compose_compiler_config.conf）。
+composeCompiler {
+    stabilityConfigurationFiles.add(
+        layout.projectDirectory.file("compose_compiler_config.conf"),
+    )
+    // 稳定性/可跳过性报告（build/compose_reports，不进仓库）：用来验证
+    // 上面的配置确实让聊天相关 composable 变成 skippable。
+    reportsDestination = layout.buildDirectory.dir("compose_reports")
+}
+
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:ui"))

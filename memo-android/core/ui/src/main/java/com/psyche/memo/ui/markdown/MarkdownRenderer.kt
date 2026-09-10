@@ -36,11 +36,14 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,6 +83,11 @@ import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.ImageDown
 import com.psyche.memo.ui.R
 import com.psyche.memo.ui.theme.alphaBlend
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
@@ -176,9 +184,20 @@ fun MarkdownText(
 ) {
     if (markdown.isEmpty()) return
     val citation = CitationRenderConfig(onCitationTap, citationInfoResolver)
-    // Only normalize when citation handling is wired for this message.
-    val source = if (onCitationTap != null) preprocessCitations(markdown) else markdown
-    val root = MarkdownRenderer.parse(source)
+    // 首帧同步解析（避免空白闪烁），之后的内容变化在 Default 线程解析，并用
+    // mapLatest 丢弃过期请求 —— RikkaHub Markdown.kt:240-252 同款做法。流式输出
+    // 时内容每个 chunk 都变，主线程不再被 CommonMark 解析阻塞，这是滚动掉帧的
+    // 主要来源；未变化的内容由 distinctUntilChanged + drop(1) 直接跳过。
+    var root by remember { mutableStateOf(parseMarkdownSource(markdown, onCitationTap != null)) }
+    val latest by rememberUpdatedState(markdown to (onCitationTap != null))
+    LaunchedEffect(Unit) {
+        snapshotFlow { latest }
+            .distinctUntilChanged()
+            .drop(1)
+            .mapLatest { (md, withCitations) -> parseMarkdownSource(md, withCitations) }
+            .flowOn(Dispatchers.Default)
+            .collect { root = it }
+    }
     MarkdownBody(
         node = root,
         modifier = modifier,
@@ -187,6 +206,17 @@ fun MarkdownText(
         citation = citation,
         tableActions = tableActions,
     )
+}
+
+/**
+ * One parse pipeline for [MarkdownText]: citation preprocessing only runs when
+ * tap handling is wired for this message, then the CommonMark parse. Called both
+ * synchronously (first frame) and on [Dispatchers.Default] for streaming
+ * updates.
+ */
+private fun parseMarkdownSource(markdown: String, withCitations: Boolean): Node {
+    val source = if (withCitations) preprocessCitations(markdown) else markdown
+    return MarkdownRenderer.parse(source)
 }
 
 @Composable
