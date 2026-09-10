@@ -3,12 +3,15 @@ package com.psyche.memo.ui.snackbar
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.EaseOut
-import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,7 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -131,6 +134,9 @@ fun AppSnackBarOverlay(content: @Composable () -> Unit) {
                     isTop = i == 0,
                     visualIndex = i,
                     onDismiss = { dismiss(entry) },
+                    // Swiping throws the toast off-screen; fading it out again
+                    // afterwards is what made the gesture feel like it stalled.
+                    onSwipedOut = { SnackbarManager.entries.remove(entry) },
                 )
             }
         }
@@ -143,6 +149,7 @@ private fun ToastItem(
     isTop: Boolean,
     visualIndex: Int,
     onDismiss: () -> Unit,
+    onSwipedOut: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -157,6 +164,17 @@ private fun ToastItem(
     }
 
     // Swipe-up offset (negative = up); top toast only.
+    // snackbar.dart compares in logical pixels (dp): dismiss when dragged past
+    // -40dp *or* flicked faster than 300dp/s, and animate out to -150dp. Compose
+    // drag deltas and velocities are device pixels, so convert — using the raw
+    // px numbers made the threshold 3x too sensitive on a 3x-density screen and
+    // the fly-out 3x too short, which is why the toast stopped mid-air and then
+    // faded for another 300ms instead of leaving smoothly.
+    val density = LocalDensity.current
+    val dismissDistancePx = with(density) { 40.dp.toPx() }
+    val flyOutDistancePx = with(density) { 150.dp.toPx() }
+    val dismissVelocityPxPerSec = with(density) { 300.dp.toPx() }
+
     val dragOffset = remember { mutableFloatStateOf(0f) }
     val dismissing = remember { mutableStateOf(false) }
     val interactiveScale by animateFloatAsState(
@@ -164,6 +182,10 @@ private fun ToastItem(
         animationSpec = tween(150),
         label = "toastScale",
     )
+    val dragState = rememberDraggableState { delta ->
+        // Downward swipes are ignored (snackbar.dart: only upward dismisses).
+        if (delta < 0f) dragOffset.floatValue = min(0f, dragOffset.floatValue + delta)
+    }
 
     val fade = entry.anim.value
     val baseOpacity = 1f - (visualIndex * 0.2f)
@@ -206,40 +228,47 @@ private fun ToastItem(
                         onDismiss()
                     }
                 }
-                .pointerInput(isTop) {
-                    if (!isTop) return@pointerInput
-                    detectVerticalDragGestures(
-                        onVerticalDrag = { change, dragAmount ->
-                            // Only upward swipes (dy <= 0) move the toast.
-                            if (dragAmount < 0f) {
-                                dragOffset.floatValue = min(0f, dragOffset.floatValue + dragAmount)
+                // `draggable` (not detectVerticalDragGestures) because it hands
+                // back the fling velocity, which the dismiss rule needs: a short
+                // flick faster than 300dp/s closes the toast even when it never
+                // travelled 40dp.
+                .draggable(
+                    state = dragState,
+                    orientation = Orientation.Vertical,
+                    enabled = isTop && !dismissing.value,
+                    onDragStopped = { velocity ->
+                        if (dismissing.value) return@draggable
+                        if (
+                            dragOffset.floatValue < -dismissDistancePx ||
+                            velocity < -dismissVelocityPxPerSec
+                        ) {
+                            dismissing.value = true
+                            scope.launch {
+                                // Carry the finger's velocity into the fly-out so
+                                // the toast keeps the speed it was thrown with.
+                                val anim = Animatable(dragOffset.floatValue)
+                                anim.animateTo(
+                                    targetValue = -flyOutDistancePx,
+                                    animationSpec = tween(220, easing = EaseOut),
+                                    initialVelocity = velocity,
+                                ) { dragOffset.floatValue = value }
+                                onSwipedOut()
                             }
-                            change.consume()
-                        },
-                        onDragEnd = {
-                            if (dismissing.value) return@detectVerticalDragGestures
-                            if (dragOffset.floatValue < -40f) {
-                                dismissing.value = true
-                                scope.launch {
-                                    animate(
-                                        initialValue = dragOffset.floatValue,
-                                        targetValue = -150f,
-                                        animationSpec = tween(250, easing = EaseOut),
-                                    ) { v, _ -> dragOffset.floatValue = v }
-                                    onDismiss()
-                                }
-                            } else {
-                                scope.launch {
-                                    animate(
-                                        initialValue = dragOffset.floatValue,
-                                        targetValue = 0f,
-                                        animationSpec = tween(250, easing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)),
-                                    ) { v, _ -> dragOffset.floatValue = v }
-                                }
+                        } else {
+                            scope.launch {
+                                val anim = Animatable(dragOffset.floatValue)
+                                anim.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(
+                                        dampingRatio = 0.85f,
+                                        stiffness = Spring.StiffnessMediumLow,
+                                    ),
+                                    initialVelocity = velocity,
+                                ) { dragOffset.floatValue = value }
                             }
-                        },
-                    )
-                }
+                        }
+                    },
+                )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
