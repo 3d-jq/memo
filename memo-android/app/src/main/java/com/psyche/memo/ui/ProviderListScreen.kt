@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,13 +24,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -56,10 +63,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Check
-import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CircleDot
 import com.composables.icons.lucide.CloudDownload
 import com.composables.icons.lucide.Folder
+import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Search
@@ -70,11 +77,12 @@ import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.model.ProviderConfig
 import com.psyche.memo.data.repo.ProviderRepository
-import com.psyche.memo.ui.reorder.ReorderableColumn
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.SnackbarManager
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /** One row in the providers list (providers_page._Provider). */
 internal data class ProviderItem(
@@ -83,6 +91,71 @@ internal data class ProviderItem(
     val enabled: Boolean,
     val modelCount: Int,
 )
+
+/**
+ * Applies one reorder step to [keys] — the Kotlin twin of the
+ * `add(to, removeAt(from))` move that `providers_page.onReorder` performs
+ * (`sh.calvin.reorderable`'s `onMove` fires repeatedly during a drag, so this
+ * is called once per crossing, not once per drop).
+ *
+ * Returns `null` when the move must be ignored: out-of-range indices (the
+ * library can emit stale layout indices when the list recomposes mid-drag) or
+ * a no-op move. Returning null rather than clamping is deliberate — clamping
+ * would silently reorder against the wrong indices.
+ */
+internal fun applyProviderMove(keys: List<String>, from: Int, to: Int): List<String>? {
+    if (from !in keys.indices || to !in keys.indices || from == to) return null
+    return keys.toMutableList().apply { add(to, removeAt(from)) }
+}
+
+/**
+ * Merge the fixed built-in keys with the stored provider rows, apply the saved
+ * display order and filter by [searchQuery] — the Kotlin twin of
+ * `providers_page.build`'s base + dynamic merge.
+ *
+ * Stored keys are folded onto their canonical built-in spelling first
+ * (`"zhipu ai"` → `"Zhipu AI"`). Without that fold a hand-typed key rendered
+ * the same provider twice *and* handed two LazyList items the same render key,
+ * which corrupts `ReorderableItem` reuse — the cards collapsed and overlapped.
+ * The startup migration drops the duplicate row; this fold keeps the list
+ * correct for anything that still slips through.
+ *
+ * [dragOrder] short-circuits the store lookup while a drag is in flight so the
+ * list follows the finger instead of a stale persisted order.
+ */
+internal fun buildProviderItems(
+    providers: List<Pair<String, ProviderConfig>>,
+    searchQuery: String,
+    dragOrder: List<String>? = null,
+    applyOrder: (List<String>) -> List<String>,
+): List<ProviderItem> {
+    val cfgMap = providers.toMap()
+    val canonicalOf = providers.associate { (storedKey, _) ->
+        storedKey to ProviderRepository.canonicalizeKey(storedKey)
+    }
+    val allKeys = LinkedHashSet<String>().apply {
+        addAll(ProviderRepository.BUILTIN_KEYS)
+        addAll(canonicalOf.values)
+    }.toList()
+    val orderedKeys = dragOrder ?: applyOrder(allKeys)
+
+    return orderedKeys.map { key ->
+        // Prefer the canonical row's config; fall back to whichever stored row
+        // carries the non-canonical spelling of this key.
+        val cfg = cfgMap[key]
+            ?: canonicalOf.entries.firstOrNull { it.value == key }?.let { cfgMap[it.key] }
+        ProviderItem(
+            key = key,
+            name = cfg?.name?.takeIf { it.isNotEmpty() } ?: key,
+            enabled = cfg?.enabled ?: false,
+            modelCount = cfg?.models?.size ?: 0,
+        )
+    }.filter { item ->
+        searchQuery.isBlank() ||
+            item.name.contains(searchQuery, ignoreCase = true) ||
+            item.key.contains(searchQuery, ignoreCase = true)
+    }
+}
 
 /**
  * Providers page — 1:1 port of kelivo providers_page.dart:
@@ -99,7 +172,6 @@ fun ProvidersScreen(
     onOpenGroups: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
     val view = LocalView.current
 
     val repo = remember(container) {
@@ -121,6 +193,12 @@ fun ProvidersScreen(
     var showImportSheet by remember { mutableStateOf(false) }
     var showGroupPickerFor by remember { mutableStateOf<String?>(null) }
     var showExportFor by remember { mutableStateOf<String?>(null) }
+    // Live display order during a drag. `null` means "derive from the store".
+    // While a drag is in flight `onMove` fires repeatedly (the library expects
+    // the caller to apply every move immediately), so we keep the in-progress
+    // order here and only persist on settle — otherwise every crossing frame
+    // would hit the preference store and re-derive the whole list.
+    var dragOrder by remember { mutableStateOf<List<String>?>(null) }
 
     // Reload on entry (add/import sheets mutate the store); first sweep drops
     // empty builtin rows left by earlier test builds (KelivoIN / dup Tensdaq).
@@ -130,29 +208,13 @@ fun ProvidersScreen(
     }
 
     // Merge builtin + dynamic keys, then apply saved order (providers_page.build).
-    val items: List<ProviderItem> = remember(providers, searchQuery) {
-        val dbKeys = providers.map { it.first }
-        val cfgMap = providers.toMap()
-        val allKeys = ProviderRepository.BUILTIN_KEYS + dbKeys.filterNot { it in ProviderRepository.BUILTIN_KEYS }
-        val orderedKeys = repo.applyOrder(allKeys.distinct())
-        orderedKeys.map { key ->
-            val cfg = cfgMap[key]
-            val name = cfg?.name?.takeIf { it.isNotEmpty() } ?: key
-            ProviderItem(
-                key = key,
-                name = name,
-                enabled = cfg?.enabled ?: false,
-                modelCount = cfg?.models?.size ?: 0,
-            )
-        }.filter { item ->
-            searchQuery.isBlank() ||
-                item.name.contains(searchQuery, ignoreCase = true) ||
-                item.key.contains(searchQuery, ignoreCase = true)
-        }
-    }
-
-    fun persistOrder() {
-        repo.setOrder(items.map { it.key })
+    val items: List<ProviderItem> = remember(providers, searchQuery, dragOrder) {
+        buildProviderItems(
+            providers = providers,
+            searchQuery = searchQuery,
+            dragOrder = dragOrder,
+            applyOrder = { repo.applyOrder(it) },
+        )
     }
 
     fun toggleSelect(key: String) {
@@ -209,60 +271,79 @@ fun ProvidersScreen(
             onChanged = { searchQuery = it },
         )
 
-        // ---- List card (LazyColumn clipped inside the rounded card) ----
+        // ---- List (RikkaHub SettingProviderPage pattern: standalone cards,
+        // spacedBy gaps, drag via the trailing handle) ----
         Box(modifier = Modifier.weight(1f)) {
             val reorderEnabled = !selectMode && searchQuery.isBlank()
-            ReorderableColumn(
-                items = items,
-                keyOf = { it.key },
-                reorderEnabled = reorderEnabled,
-                onMove = { from, to ->
-                    // The reorderable lib can fire with stale layout indices when
-                    // items re-compose mid-drag (crash: Index 29 of length 29).
-                    // Validate against the current snapshot; drop invalid moves
-                    // (clamping could silently reorder against wrong indices).
-                    val snapshot = items
-                    if (from in snapshot.indices && to in snapshot.indices) {
-                        val reorderedItems = snapshot.toMutableList()
-                        val movedItem = reorderedItems.removeAt(from)
-                        reorderedItems.add(to, movedItem)
-                        repo.setOrder(reorderedItems.map { it.key })
-                        val cfgMap = providers.toMap()
-                        providers = reorderedItems.map { item -> item.key to (cfgMap[item.key] ?: ProviderConfig(id = item.key, name = item.name)) }
+            val lazyListState = rememberLazyListState()
+            val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+                // from.index/to.index are LazyColumn indices. The list has no
+                // header/footer items (RikkaHub's layout), so they equal the
+                // data indices — a header item would shift them by 1 and make
+                // every crossing reorder the wrong pair, which is what piled
+                // sibling cards on top of the dragged one.
+                val guarded = !(searchQuery.isNotEmpty() || selectMode)
+                val moved = if (guarded) applyProviderMove(items.map { it.key }, from.index, to.index) else null
+                // Hold the live order locally; the LaunchedEffect below
+                // persists it once on release. Writing the store on every
+                // crossing frame used to re-derive the whole list mid-drag,
+                // which is what made the list jump back to its old order.
+                if (moved != null) dragOrder = moved
+            }
+            // Settled: persist the order the user actually dropped.
+            LaunchedEffect(reorderableState.isAnyItemDragging) {
+                if (!reorderableState.isAnyItemDragging) {
+                    val settled = dragOrder
+                    if (settled != null) {
+                        repo.setOrder(settled)
+                        dragOrder = null
                     }
-                },
+                }
+            }
+            LazyColumn(
+                state = lazyListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp)
-                    .background(
-                        semantic.surfaceCard,
-                        RoundedCornerShape(12.dp),
-                    )
-                    .border(
-                        0.6.dp,
-                        cs.outlineVariant.copy(alpha = if (semantic.isDark) 0.08f else 0.06f),
-                        RoundedCornerShape(12.dp),
-                    ),
-                header = {
-                    item { Spacer(Modifier.height(4.dp)) }
-                },
-                footer = {
-                    item { Spacer(Modifier.height(4.dp)) }
-                },
-            ) { item, isDragging ->
-                Column {
-                    ProviderListRow(
-                        item = item,
-                        config = providers.toMap()[item.key],
-                        selectMode = selectMode,
-                        selected = selected.contains(item.key),
-                        onToggleSelect = { toggleSelect(item.key) },
-                        onOpen = {
-                            if (selectMode) toggleSelect(item.key)
-                            else onOpenProvider(item.key)
-                        },
-                    )
-                    if (item != items.last()) DividerLine()
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(items, key = { it.key }) { item ->
+                    ReorderableItem(state = reorderableState, key = item.key) { isDragging ->
+                        ProviderCard(
+                            item = item,
+                            config = providers.toMap()[item.key],
+                            selectMode = selectMode,
+                            selected = selected.contains(item.key),
+                            isDragging = isDragging,
+                            onToggleSelect = { toggleSelect(item.key) },
+                            onOpen = {
+                                if (selectMode) toggleSelect(item.key)
+                                else onOpenProvider(item.key)
+                            },
+                            dragHandle = {
+                                if (!selectMode) {
+                                    IconButton(
+                                        onClick = {},
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .longPressDraggableHandle(
+                                                enabled = reorderEnabled,
+                                                onDragStarted = { Haptics.medium(view) },
+                                                onDragStopped = { Haptics.light(view) },
+                                            ),
+                                    ) {
+                                        Icon(
+                                            Lucide.GripVertical,
+                                            contentDescription = null,
+                                            tint = cs.onSurface.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
 
@@ -444,15 +525,19 @@ private fun ProvidersSearchField(
     }
 }
 
-/** One provider row (providers_page._ProviderRow). */
+/** One provider card (RikkaHub SettingProviderPage ProviderItem style:
+ * standalone card, 40dp avatar, name + status/model-count pills, trailing
+ * drag handle. Disabled providers use errorContainer like RikkaHub. */
 @Composable
-private fun ProviderListRow(
+private fun ProviderCard(
     item: ProviderItem,
     config: ProviderConfig?,
     selectMode: Boolean,
     selected: Boolean,
+    isDragging: Boolean,
     onToggleSelect: () -> Unit,
     onOpen: () -> Unit,
+    dragHandle: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -461,59 +546,80 @@ private fun ProviderListRow(
     val statusBg = if (enabled) semantic.success.copy(alpha = 0.12f) else semantic.warning.copy(alpha = 0.15f)
     val statusFg = if (enabled) semantic.success else semantic.warning
 
-    Row(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .scale(if (isDragging) 0.95f else 1f),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (enabled) semantic.surfaceCard else cs.errorContainer,
+        ),
+        onClick = onOpen,
     ) {
-        // Select-mode checkbox area (width animates 0 <-> 28).
-        if (selectMode) {
-            Box(modifier = Modifier.width(28.dp)) {
-                IosCheckbox(
-                    value = selected,
-                    onValueChanged = { onToggleSelect() },
-                    size = 20.dp,
-                    hitTestSize = 22.dp,
-                    borderWidth = 1.6.dp,
-                    activeColor = cs.primary,
-                    borderColor = cs.onSurface.copy(alpha = 0.35f),
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Select-mode checkbox area (width animates 0 <-> 28).
+            if (selectMode) {
+                Box(modifier = Modifier.width(28.dp)) {
+                    IosCheckbox(
+                        value = selected,
+                        onValueChanged = { onToggleSelect() },
+                        size = 20.dp,
+                        hitTestSize = 22.dp,
+                        borderWidth = 1.6.dp,
+                        activeColor = cs.primary,
+                        borderColor = cs.onSurface.copy(alpha = 0.35f),
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+            }
+            // Avatar 40dp with the 22dp brand/initial avatar inside (RikkaHub 40dp).
+            Box(modifier = Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                ProviderAvatarSmall(
+                    providerKey = item.key,
+                    displayName = config?.name?.takeIf { it.isNotEmpty() } ?: item.name,
+                    size = 22.dp,
                 )
             }
-            Spacer(Modifier.width(4.dp))
-        }
-        // Avatar slot 36 with 22dp brand/initial avatar.
-        Box(modifier = Modifier.width(36.dp), contentAlignment = Alignment.Center) {
-            ProviderAvatarSmall(
-                providerKey = item.key,
-                displayName = config?.name?.takeIf { it.isNotEmpty() } ?: item.name,
-                size = 22.dp,
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = config?.name?.takeIf { it.isNotEmpty() } ?: item.name,
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        Spacer(Modifier.width(8.dp))
-        // Status pill: success ON / warning OFF.
-        Surface(color = statusBg, shape = RoundedCornerShape(999.dp)) {
-            Text(
-                text = stringResource(
-                    if (enabled) com.psyche.memo.ui.R.string.providers_page_enabled_status
-                    else com.psyche.memo.ui.R.string.providers_page_disabled_status,
-                ),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, color = statusFg),
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            )
-        }
-        if (!selectMode) {
-            Spacer(Modifier.width(4.dp))
-            Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.9f), modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = config?.name?.takeIf { it.isNotEmpty() } ?: item.name,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Status pill: success ON / warning OFF.
+                    Surface(color = statusBg, shape = RoundedCornerShape(999.dp)) {
+                        Text(
+                            text = stringResource(
+                                if (enabled) com.psyche.memo.ui.R.string.providers_page_enabled_status
+                                else com.psyche.memo.ui.R.string.providers_page_disabled_status,
+                            ),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, color = statusFg),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                    // Model-count pill.
+                    if (item.modelCount > 0) {
+                        Surface(color = cs.primary.copy(alpha = 0.08f), shape = RoundedCornerShape(999.dp)) {
+                            Text(
+                                text = item.modelCount.toString() + stringResource(
+                                    if (item.modelCount == 1) com.psyche.memo.ui.R.string.providers_page_models_count_single_suffix
+                                    else com.psyche.memo.ui.R.string.providers_page_models_count_suffix,
+                                ),
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, color = cs.primary),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            dragHandle()
         }
     }
 }
@@ -618,16 +724,4 @@ private fun GlassCircleButton(
         @Suppress("UNUSED_EXPRESSION")
         semantic.isDark
     }
-}
-
-/** Hairline divider between provider rows (_iosDivider). */
-@Composable
-private fun DividerLine() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 60.dp)
-            .height(0.6.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)),
-    )
 }

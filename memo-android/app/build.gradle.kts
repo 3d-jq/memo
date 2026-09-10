@@ -83,6 +83,7 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.pdfbox.android)
     implementation(libs.exp4j)
+    implementation(libs.reorderable)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.compose.ui.tooling)
