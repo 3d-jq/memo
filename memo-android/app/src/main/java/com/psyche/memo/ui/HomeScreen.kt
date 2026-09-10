@@ -2589,17 +2589,13 @@ private fun ChatInputBar(
                                 ) {
                                     // CIB:1763-1773 —— 模型按钮：选中模型后显示
                                     // CurrentModelIcon。底色透明（原版
-                                    // backgroundColor: Colors.transparent），
-                                    // 图标单色化到与本排其他按钮相同的
-                                    // onSurface 色（RikkaHub ModelSelectorButton
-                                    // 用 AutoAIIcon(color = Transparent) + CSS
-                                    // fill: contentColor 同款做法），避免彩色
-                                    // logo 在按钮排里显得突兀。
+                                    // backgroundColor: Colors.transparent，
+                                    // RikkaHub ModelSelectorButton 同样是
+                                    // AutoAIIcon(color = Color.Transparent)），
+                                    // 品牌图标保留原本的品牌色，只有深色模式下
+                                    // 需要反色的 mono 资产才 tint onSurface
+                                    // （model_icon.dart 的 assetNeedsDarkInvert）。
                                     val modelAsset = modelIconAsset
-                                    val actionTint = cs.onSurface.copy(
-                                        alpha = if (isDark) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
-                                        else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
-                                    )
                                     if (modelAsset != null || !modelIconInitial.isNullOrEmpty()) {
                                         IconButton(
                                             onClick = onSelectModel,
@@ -2609,13 +2605,17 @@ private fun ChatInputBar(
                                                 coil.compose.AsyncImage(
                                                     model = modelAsset,
                                                     contentDescription = stringResource(UiR.string.chat_input_bar_select_model_tooltip),
-                                                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(actionTint),
+                                                    colorFilter = if (isDark && BrandAssets.assetNeedsDarkInvert(modelAsset)) {
+                                                        androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
+                                                    } else {
+                                                        null
+                                                    },
                                                     modifier = Modifier.size(20.dp),
                                                 )
                                             } else {
                                                 Text(
                                                     text = modelIconInitial!!.trim().take(1).uppercase(),
-                                                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = actionTint),
+                                                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Bold, color = cs.primary),
                                                 )
                                             }
                                         }
@@ -2926,10 +2926,12 @@ private fun InputIconAsset(
     active: Boolean = false,
 ) {
     IconButton(onClick = onClick, modifier = Modifier.size(32.dp)) {
-        coil.compose.AsyncImage(
-            model = asset,
-            contentDescription = label,
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+        // SVG brand glyphs are tinted (kelivo's SvgPicture/Image with
+        // colorBlendMode srcIn) so a mono logo stays legible in both themes;
+        // raster brand icons keep their own colours, like RikkaHub's
+        // AutoAIIcon, which only injects a fill for SVGs.
+        val tint = if (asset.endsWith(".svg")) {
+            androidx.compose.ui.graphics.ColorFilter.tint(
                 if (active) {
                     cs.primary
                 } else {
@@ -2938,7 +2940,14 @@ private fun InputIconAsset(
                         else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
                     )
                 },
-            ),
+            )
+        } else {
+            null
+        }
+        coil.compose.AsyncImage(
+            model = asset,
+            contentDescription = label,
+            colorFilter = tint,
             modifier = Modifier.size(20.dp),
         )
     }

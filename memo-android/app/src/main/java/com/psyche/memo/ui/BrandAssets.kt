@@ -101,13 +101,18 @@ object BrandAssets {
         Regex("longcat") to "longcat-color.svg",
         Regex("iflow|心流") to "iflow-color.svg",
         Regex("sora") to "sora-color.svg",
-        Regex("bing|必应") to "bing-color.svg",
+        // bing/linkup ship as PNG on purpose: RikkaHub's AIIconMatcher resolves
+        // both to `bing.png` / `linkup.png` — its only entries for these two —
+        // because their SVG forms do not render reliably on Android (bing's
+        // gradient fills carry a gradientTransform androidsvg cannot resolve,
+        // linkup's use <mask>, which androidsvg does not implement).
+        Regex("bing|必应") to "bing.png",
         Regex("tavily") to "tavily-color.svg",
         Regex("anysearch") to "anysearch.svg",
         Regex("parallel") to "parallel.svg",
         Regex("^you(?:\\.com)?(?:\\s+search)?\$") to "you.svg",
         Regex("exa") to "exa-color.svg",
-        Regex("linkup") to "linkup.svg",
+        Regex("linkup") to "linkup.png",
         Regex("brave") to "brave-color.svg",
         Regex("jina") to "jina-color.svg",
         Regex("searxng") to "searxng-color.svg",
