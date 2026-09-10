@@ -109,6 +109,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -137,6 +138,8 @@ import com.psyche.memo.ui.chat.AskUserInteractionService
 import com.psyche.memo.ui.chat.AskUserResult
 import com.psyche.memo.ui.chat.ToolApprovalService
 import com.psyche.memo.ui.chat.ToolUiPart
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -735,6 +738,32 @@ fun ChatContent(
         if (streaming && autoStick && messages.isNotEmpty()) {
             timelineListState.animateScrollToItem(messages.lastIndex)
         }
+    }
+    // 滚到顶部附近自动加载更早的历史 —— message_list_view.dart:1816-1830
+    // （isNearTop = 距顶 <= 96 逻辑像素，120ms 节流；Compose 侧用
+    // index==0 + firstVisibleItemScrollOffset 表达同样的判定）。
+    // 前插之后把视口锚回原内容：LazyColumn 按 index 保持位置，不补偿会直接
+    // 跳到新加载内容的顶部；锚回后 firstVisibleItemIndex 变成插入条数（≠0），
+    // near-top 自然变 false，用户继续往上滑才会触发下一页。
+    val hasMoreBefore by vm.hasMoreBefore.collectAsState()
+    val historyTriggerDensity = LocalDensity.current
+    androidx.compose.runtime.LaunchedEffect(vm, hasMoreBefore) {
+        if (!hasMoreBefore) return@LaunchedEffect
+        val nearTopThresholdPx =
+            with(historyTriggerDensity) { HISTORY_LOAD_TRIGGER_DP.dp.toPx() }.toInt()
+        snapshotFlow {
+            timelineListState.firstVisibleItemIndex == 0 &&
+                timelineListState.firstVisibleItemScrollOffset <= nearTopThresholdPx
+        }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect {
+                val anchorOffset = timelineListState.firstVisibleItemScrollOffset
+                val inserted = vm.loadOlderMessages()
+                if (inserted > 0) {
+                    timelineListState.requestScrollToItem(inserted, anchorOffset)
+                }
+            }
     }
     fun jumpAdjacentQuestion(previous: Boolean) {
         val visible = timelineListState.layoutInfo.visibleItemsInfo
@@ -3031,6 +3060,9 @@ private fun InputIconAsset(
  * every recomposition while scrolling. SimpleDateFormat is not thread-safe, but
  * this is only touched from composition on the UI thread.
  */
+/** 距顶多少 dp 内触发往前加载历史（message_list_view.dart:1816 的 96 逻辑像素）。 */
+private const val HISTORY_LOAD_TRIGGER_DP = 96f
+
 private val TIME_FORMATTER = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
 private fun timeStr(millis: Long): String = TIME_FORMATTER.format(Date(millis))

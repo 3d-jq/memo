@@ -199,6 +199,66 @@ class ChatViewModel(
     private val _suggestions = kotlinx.coroutines.flow.MutableStateFlow<List<String>>(emptyList())
     val suggestions: kotlinx.coroutines.flow.StateFlow<List<String>> = _suggestions
 
+    /**
+     * 是否还有更早的历史（chat_service.dart `LoadedTimelinePage.hasMoreBefore`：
+     * 首页窗口的起始逻辑索引 > 0）。列表滚到顶部附近时用 [loadOlderMessages]
+     * 往前翻页。
+     */
+    private val _hasMoreBefore = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val hasMoreBefore: kotlinx.coroutines.flow.StateFlow<Boolean> = _hasMoreBefore
+
+    /** 翻页互斥：一次只加载一页，避免滚动回调里并发触发。 */
+    private var loadingOlder = false
+
+    /**
+     * 往前加载一页历史 —— chat_controller.dart:384 `loadMoreBefore` →
+     * `loadTimelinePage(beforeRevisionId: 首页第一条)`，每页 [HISTORY_PAGE_SIZE]
+     * （chat_service.dart `defaultHistoryPageSize = 20`）。
+     *
+     * 返回新插入的条数：调用方拿它把视口锚回原来的内容 —— Compose 的
+     * LazyColumn 在头部插入后是按 index 保持位置的，不补偿会直接跳到新加载的顶部。
+     */
+    suspend fun loadOlderMessages(): Int {
+        if (isTemporary) return 0
+        if (loadingOlder || !_hasMoreBefore.value) return 0
+        val current = _messages.value
+        if (current.isEmpty()) return 0
+        loadingOlder = true
+        return try {
+            // 已经加载过的消息/版本组不再插入（同 group_id 的其它版本由
+            // collapseVersions 的语义保持唯一）。
+            val existingIds = current.mapTo(HashSet()) { it.id }
+            val existingGroups = current.mapTo(HashSet()) { it.groupId }
+            var beforeId = current.first().id
+            var guard = 0
+            while (guard++ < 5) {
+                val rows = withContext(Dispatchers.IO) {
+                    container.messageDao.getBefore(conversationId, beforeId, HISTORY_PAGE_SIZE)
+                }
+                if (rows.isEmpty()) {
+                    _hasMoreBefore.value = false
+                    return 0
+                }
+                val older = rows
+                    .filter { it.id !in existingIds && it.groupId !in existingGroups }
+                    .map { it.toUi() }
+                if (older.isNotEmpty()) {
+                    _messages.value = older + _messages.value
+                    // 取满一页就认为可能还有更多（原版 hasMoreBefore 同义）；
+                    // 下一页取空时上面会把标记清掉。
+                    _hasMoreBefore.value = rows.size >= HISTORY_PAGE_SIZE
+                    return older.size
+                }
+                // 这一页全是被折叠掉的版本行 → 继续往前翻。
+                beforeId = rows.first().id
+            }
+            _hasMoreBefore.value = false
+            0
+        } finally {
+            loadingOlder = false
+        }
+    }
+
     private suspend fun reloadTail() {
         val loaded = withContext(Dispatchers.IO) {
             container.messageDao.getTail(conversationId)
@@ -212,6 +272,11 @@ class ChatViewModel(
         }
         _versionInfo.value = versions
         _messages.value = loaded.collapseVersions()
+        // 首页窗口（40 条）之后还有没有更早的：总数比窗口大就说明有
+        // （原版 LoadedTimelinePage.hasMoreBefore = start > 0 的等价判断）。
+        _hasMoreBefore.value = withContext(Dispatchers.IO) {
+            container.messageDao.count(conversationId) > loaded.size
+        }
         _sendEnabled.value = true
     }
 
@@ -1939,6 +2004,12 @@ class ChatViewModel(
     companion object {
         /** `display_auto_collapse_thinking_v1` — "auto-collapse thinking" setting. */
         private const val AUTO_COLLAPSE_THINKING_KEY = "display_auto_collapse_thinking_v1"
+
+        /**
+         * 往前翻页的每页条数 —— chat_service.dart `defaultHistoryPageSize = 20`
+         * （首屏窗口是 `defaultTimelineInitialSlots = 40`，见 MessageDao.getTail）。
+         */
+        private const val HISTORY_PAGE_SIZE = 20
 
         fun factory(container: AppContainerImpl, conversationId: String) =
             object : ViewModelProvider.Factory {
