@@ -733,6 +733,17 @@ fun ChatContent(
             }
         }
     }
+    // 进入会话先落到最新一条 —— RikkaHub ChatPage.kt:170-183 同款：首次拿到
+    // 非空消息时滚到底（requestScrollToItem 传入末条 index），之后置位不再触发，
+    // 免得抢用户的滚动。此前 LazyListState 默认停在 index 0，打开长会话看到的
+    // 是最旧那一页。
+    var listInitialized by remember(conversationId) { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(messages) {
+        if (!listInitialized && messages.isNotEmpty()) {
+            timelineListState.requestScrollToItem(messages.lastIndex)
+            listInitialized = true
+        }
+    }
     // 流式期间贴底跟随；用户上滑（autoStick=false）后停止。
     androidx.compose.runtime.LaunchedEffect(messages, streaming, autoStick) {
         if (streaming && autoStick && messages.isNotEmpty()) {
