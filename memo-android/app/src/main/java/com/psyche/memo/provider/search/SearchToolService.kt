@@ -37,16 +37,13 @@ Response format:
 - items[]: search results, each with index (result number), id (short unique id), title, url, text
 - answer: an optional pre-synthesized answer (may be absent)
 
-Citations:
-- After using results, add `[citation,domain](id)` after the sentence.
-- Multiple citations are allowed.
-- If no results are cited, omit citations.""".trim()
+Cite: append [cite:id] immediately after each statement a result supports, using that result's exact `id` field.""".trim()
 
     val SYSTEM_PROMPT = """
 <citations>
-When a statement in your answer is based on a search_web result, append a citation marker immediately after that statement: [citation,domain](id), where id is the exact `id` field of the supporting result item and domain is the site domain of that result's url (e.g. example.com).
-- Example: "The capital of France is Paris. [citation,example.com](abc123)"
-- Chain markers when several results support one statement: [citation,a.com](abc123) [citation,b.com](def456)
+When a statement in your answer is based on a search_web result, append a citation marker immediately after that statement: [cite:id], where id is the exact `id` field of the supporting result item.
+- Example: "The event took place yesterday afternoon. [cite:a1b2c3]"
+- Chain markers when several results support one statement: [cite:a1b2c3][cite:d4e5f6]
 - Copy ids exactly as returned by the tool. Never invent, renumber, or reuse ids from other results.
 - Place markers inline right after the supported statement (after its punctuation). Do not collect them at the end of the response, and do not add a "References" or "Sources" section — the app renders citations from the inline markers.
 - Statements from your own knowledge take no marker.

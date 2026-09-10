@@ -10,6 +10,10 @@ import org.junit.Test
  * `[citation:ref]` markers become `[citation](id)` markdown links so the
  * renderer draws them as numbered capsules, and the ref parser mirrors the
  * Flutter `_parseCitationRef` rules (index:id, pure index, id-only).
+ *
+ * Capsule labels are always numeric indices (original-project behaviour);
+ * domain metadata carried by drifted `[citation,domain](id)` spellings is
+ * accepted but never displayed.
  */
 class MarkdownCitationTest {
 
@@ -76,52 +80,77 @@ class MarkdownCitationTest {
         assertNull(parseCitationRef(":")) // empty index + id
     }
 
-    // resolveCitationCapsule — [citation,domain](id) / [cite,domain](id)
+    // resolveCitationCapsule — [citation,domain](id) / [cite,domain](id).
+    // The label metadata is parsed but never displayed: the capsule shows the
+    // numeric index resolved from the message's search results (original
+    // project behaviour), falling back to "?" when no index is available.
 
     @Test
-    fun citeCommaPrefixRendersCapsuleWithDomain() {
+    fun citeCommaPrefixRendersNumericCapsule() {
         // Device-observed drift: glm writes [cite,domain](id) instead of the
         // prompted [citation,domain](id) — both must become capsules.
         val c = resolveCitationCapsule("cite,news.cn", "a1b2c3", null)!!
         assertEquals("a1b2c3", c.key)
-        assertEquals("news.cn", c.text)
+        assertEquals("?", c.text)
     }
 
     @Test
-    fun canonicalCitationCommaPrefixUnchanged() {
-        val c = resolveCitationCapsule("citation,example.com", "abc123", null)!!
+    fun canonicalCitationCommaPrefixResolvesIndexFromSearchResults() {
+        val c = resolveCitationCapsule("citation,example.com", "abc123") {
+            CitationInfo(domain = "example.com", index = 2)
+        }!!
         assertEquals("abc123", c.key)
-        assertEquals("example.com", c.text)
+        assertEquals("2", c.text)
     }
 
     @Test
     fun prefixMatchIsCaseInsensitive() {
-        val c = resolveCitationCapsule("CITE,news.cn", "a1b2c3", null)!!
-        assertEquals("news.cn", c.text)
+        val c = resolveCitationCapsule("CITE,news.cn", "a1b2c3") {
+            CitationInfo(index = 7)
+        }!!
+        assertEquals("7", c.text)
     }
 
     @Test
-    fun idEchoLabelResolvesDomainFromSearchResults() {
+    fun idEchoLabelResolvesIndexFromSearchResults() {
         // [cite,e2dce5](e2dce5): the label carries the id, not a domain —
         // the display text comes from the message's search results.
         val c = resolveCitationCapsule("cite,e2dce5", "e2dce5") {
             CitationInfo(domain = "news.cn", index = 1)
         }!!
         assertEquals("e2dce5", c.key)
-        assertEquals("news.cn", c.text)
+        assertEquals("1", c.text)
     }
 
     @Test
-    fun idEchoLabelFallsBackToRawMetadataWhenUnresolved() {
+    fun domainMetadataIsNeverDisplayed() {
+        // Even when the model supplies a real domain, the capsule shows digits.
+        val c = resolveCitationCapsule("citation,www.example.co.uk", "abc123") {
+            CitationInfo(domain = "www.example.co.uk", index = 3)
+        }!!
+        assertEquals("3", c.text)
+    }
+
+    @Test
+    fun unresolvedIdFallsBackToQuestionMark() {
         val c = resolveCitationCapsule("cite,e2dce5", "e2dce5", null)!!
-        assertEquals("e2dce5", c.text)
+        assertEquals("?", c.text)
+    }
+
+    @Test
+    fun numericMetadataSurvivesWhenUnresolved() {
+        // Legacy [citation,3](...) style metadata is still a usable number.
+        val c = resolveCitationCapsule("citation,3", "abc123", null)!!
+        assertEquals("3", c.text)
     }
 
     @Test
     fun urlDestinationCapsuleOpensLinkDirectly() {
-        val c = resolveCitationCapsule("citation,example.com", "https://example.com/a", null)!!
+        val c = resolveCitationCapsule("citation,example.com", "https://example.com/a") {
+            CitationInfo(index = 5)
+        }!!
         assertEquals("https://example.com/a", c.key)
-        assertEquals("example.com", c.text)
+        assertEquals("5", c.text)
     }
 
     @Test

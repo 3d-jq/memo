@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -92,7 +93,20 @@ class SearchToolServiceTest {
 
     @Test
     fun `system prompt documents the citation contract`() {
-        assertTrue(SearchToolService.SYSTEM_PROMPT.contains("[citation,domain](id)"))
+        // Original project prompts the bare `[cite:id]` marker; the renderer
+        // turns it into a numbered capsule.
+        assertTrue(SearchToolService.SYSTEM_PROMPT.contains("[cite:id]"))
         assertTrue(SearchToolService.SYSTEM_PROMPT.contains("<citations>"))
+    }
+
+    @Test
+    fun `tool description documents the cite contract`() {
+        assertTrue(SearchToolService.TOOL_DESCRIPTION.contains("[cite:id]"))
+        assertFalse(SearchToolService.TOOL_DESCRIPTION.contains("[citation,domain]"))
+    }
+
+    @Test
+    fun `citation prompts never ask for domain metadata`() {
+        assertFalse(SearchToolService.SYSTEM_PROMPT.contains("[citation,domain]"))
     }
 }
