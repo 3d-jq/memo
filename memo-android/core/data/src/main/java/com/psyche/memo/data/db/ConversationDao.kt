@@ -61,6 +61,23 @@ class ConversationDao(private val db: SQLiteDatabase) {
         )
     }
 
+    /**
+     * Persist a generated conversation summary plus the message count at which
+     * it was produced (home_view_model.dart updateConversationSummary). The
+     * count drives the next-summary threshold.
+     */
+    fun updateSummary(
+        id: String,
+        summary: String,
+        lastSummarizedMessageCount: Int,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        db.execSQL(
+            "UPDATE conversation_rows SET summary = ?, last_summarized_message_count = ?, updated_at = ? WHERE id = ?",
+            arrayOf<Any>(summary, lastSummarizedMessageCount, now, id),
+        )
+    }
+
     fun updatePinned(id: String, pinned: Boolean, now: Long = System.currentTimeMillis()) {
         db.execSQL(
             "UPDATE conversation_rows SET is_pinned = ?, updated_at = ? WHERE id = ?",

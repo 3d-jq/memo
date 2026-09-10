@@ -50,6 +50,7 @@ import com.composables.icons.lucide.ListChecks
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Pin
 import com.composables.icons.lucide.PinOff
+import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Shuffle
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Languages
@@ -125,6 +126,10 @@ fun SideDrawerContent(
     onOpenTranslate: () -> Unit = {},
     onEditAssistant: (String) -> Unit = {},
     onManageTags: (String) -> Unit = {},
+    /** 会话标题被本抽屉改写（重命名 / 重新生成标题）后回调其 id，供聊天页
+     * 刷新顶栏——Flutter 端靠共享 _conversationsCache + notifyListeners 自动
+     * 同步，Android 端需手动通知。 */
+    onConversationTitleChanged: (String) -> Unit = {},
     assistantName: String? = null,
     userName: String? = null,
     forceSelectionMode: Boolean = false,
@@ -829,6 +834,20 @@ fun SideDrawerContent(
                     renameTarget = target
                 }
                 MenuRow(
+                    icon = Lucide.RefreshCw,
+                    label = stringResource(UiR.string.side_drawer_menu_regenerate_title),
+                    color = cs.onSurface,
+                ) {
+                    menuFor = null
+                    scope.launch {
+                        runCatching {
+                            com.psyche.memo.TitleSummaryGenerator.generateTitle(container, target.id, force = true)
+                        }
+                        reload()
+                        onConversationTitleChanged(target.id)
+                    }
+                }
+                MenuRow(
                     icon = Lucide.Pin,
                     label = stringResource(
                         if (target.isPinned) UiR.string.side_drawer_menu_unpin
@@ -957,6 +976,7 @@ fun SideDrawerContent(
                     if (name.isNotBlank()) {
                         container.conversationDao.updateTitle(target.id, name.trim())
                         reload()
+                        onConversationTitleChanged(target.id)
                     }
                 }) { Text(stringResource(UiR.string.side_drawer_menu_rename)) }
             },
