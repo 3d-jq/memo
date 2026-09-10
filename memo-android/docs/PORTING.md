@@ -49,7 +49,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | `ReorderableColumn` | core/ui/ui/reorder/ | 长按拖拽列表（已带 animateItem+zIndex）；**LazyColumn，只能当页面根** |
 | `ReorderableInlineColumn` | core/ui/ui/reorder/ | 同款拖拽的非滚动版（库的 Column 版 `ReorderableColumn`），嵌在外层 LazyColumn/滚动容器里用这个（=Flutter `shrinkWrap+NeverScrollableScrollPhysics`） |
 | `Haptics.light(view)` / `SnackbarManager.show(AppNotification(message,type))` | core | 触感/吐司 |
-| Lucide 图标 | `com.composables.icons.lucide.Lucide.*` | **Wand2 叫 `WandSparkles`**；RTL 图标必须 `Icons.AutoMirrored` 变体 |
+| Lucide 图标 | `com.composables.icons.lucide.Lucide.*` | **用法固定两行、缺一不可**：① `import com.composables.icons.lucide.<Icon>`（`<Icon>` 是 `Lucide` 的**扩展属性**）；② `import com.composables.icons.lucide.Lucide`（receiver 类型）；③ 调用写 **`Lucide.<Icon>`**（裸写 `<Icon>` 会报 `receiver type mismatch`；只写 `Lucide.<Icon>` 不给 ① 会报 `Unresolved`）。`Box` 与 Compose layout `Box` 冲突 → 用 `import com.composables.icons.lucide.Box as BoxIcon` + `Lucide.BoxIcon`。**Wand2 叫 `WandSparkles`**；RTL 图标必须 `Icons.AutoMirrored` 变体 |
 
 ## 3. 数据要点
 
@@ -72,6 +72,19 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 10. **Robolectric 下不能测 FileProvider**：`androidx.core.content.FileProvider` 按 authority 静态缓存 `PathStrategy`，root 指向首测的临时 dataDir；Robolectric 每测换临时目录 → 后续用例必报 `Failed to find configured root`。解法：把纯逻辑（路径解析/落盘）拆成 internal 函数测，FileProvider 包装层留薄壳（`ImageViewer.kt` `materializeShareablePath` + `resolveShareableImage` 即此模式）。
 11. `chartSeries` 调色板数必须 ≥ 实际用色分类数：`indexOf % size` 取模回卷会把第 N+1 类染成第 1 类颜色（存储 10 分类撞 8 色板事故，f5be77d 补到 10 色）。`RoundedCornerShape(50)` 无单位会被 `ShapePercentRegressionTest` 拦（一律 `.dp`）。
 12. `combinedClickable` 与 `clickable` 叠加在同一 modifier 链 = 双注册手势（先加 clickable 再加 combinedClickable 时 tap 触发两次回调）：只用 `combinedClickable(onClick, onLongClick)` 一个，并 `@OptIn(ExperimentalFoundationApi::class)`。
+13. **思考段（reasoning segment）折叠时机必须发生在「流式过程中」，不是整轮结束**（`stream_controller.dart`）：原项目共 **6 个**「思考阶段结束」触发点——① L853 工具调用开始 ② L1232 正文开始到达 ③ L1280 流正常结束 ④ L1339 用户取消 ⑤ L1355 出错 ⑥ `finishReasoningIfNeeded` 兜底。每处都是三步：打 `finishedAt` → 若 `display_auto_collapse_thinking_v1` 开启则 `expanded = false`。**只在最终结束统一折叠 = 回归**（思考卡会一直转、直到整轮回复完才折）。归口实现：`StreamChunkHandler(autoCollapse, onSegmentClosed)` 在 `appendText` 首字到达 / 工具调用开始时调 `closeOpenSegment()`；取消路径走 `ChatViewModel.stop()` → `ReasoningSegmentCodec.finishLastOpenSegment`（纯函数，带单测）。别处不要再自己折一遍。
+14. **JUnit `assertEquals` 的装箱陷阱**：`finishedAt: Long?` 断言要写 `1000L`，写 `1000` 会重载到 `assertEquals(Object, Object)` = `Integer vs Long` 失败（错误文案 `expected: java.lang.Integer<1000> but was: java.lang.Long<1000>`）。
+15. **commonmark GFM 表格的 AST 结构**：`TableBlock → TableHead/TableBody → TableRow → TableCell`——**中间有 `TableHead`/`TableBody` 包装层**，直接扫 `table.firstChild` 拿 `TableRow` 会一无所获，必须递归收集。表头标记在 **`TableCell.isHeader()`**（`TableRow` **没有** `isHeader`）；`TableCell.Alignment` 是嵌套枚举（`LEFT/CENTER/RIGHT`）。
+16. **测试里写 markdown 多行字符串**：`"""...""".trimIndent()` 的前导缩进会让 commonmark 把它当 **indented code block** 而不是表格/列表。测试源一律用 flush-left 的单行 `\n` 拼接。
+17. **Compose 表格列宽别按字符数算**：CJK 与拉丁字的宽度差异巨大，`"排名"`(2 字) 与 `"2 小时 45 分钟"`(9 字符) 按字符数算权重差 6 倍，第一列会被压到 1/6 宽、整列裁掉。用 `TextMeasurer` 实测（`rememberTextMeasurer()`，与单元格同一 `TextStyle`）来近似原项目的 `FlexColumnWidth`。
+18. **`Modifier.border()` 不要用来画表格外框**：`TableRowView`/外层 `Column` 上用 `border` 会在滚动容器里画出一条贯穿全高的多余竖线（`Column.border` 的高度按内容撑开但与实际不符）。外框交给圆角卡片，内部线用 `HorizontalDivider`（行底边、最后一行不画）+ `Modifier.drawBehind`（单元格右边界、最后一列不画）。
+19. **单元格 `Text` 必须显式吃满列宽**：长「拉丁+全角标点」串（如 `RikkaHub、`）在无宽度约束时会按 ink 宽度排版，直接溢出到表格右边界之外。给 `Text` 加 `Modifier.fillMaxWidth()`，对齐交给 `textAlign`（不要把 `contentAlignment` 留在外层 Box 上，两者会打架）。
+20. **`GraphicsLayer` 截图：先拷成软件位图再合成**。`rememberGraphicsLayer()` 在 `androidx.compose.ui.graphics`（`GraphicsLayerScopeKt`），类型是 `androidx.compose.ui.graphics.layer.GraphicsLayer`。录制是 `DrawScope` 上的扩展（**不是** `GraphicsLayer` 成员）：`layer.record(IntSize) { this@drawContent.drawContent() }`；回放用 `androidx.compose.ui.graphics.layer.drawLayer(layer)`（**注意在 `.layer` 包，不是 `.drawscope`**）。`toImageBitmap()` 是 **suspend 成员方法**（无顶层扩展可 import），返回 **hardware bitmap**——`asAndroidBitmap()` 后**不能**直接喂软件 `Canvas`（抛 `Software rendering doesn't support hardware bitmaps`），必须 `copy(Bitmap.Config.ARGB_8888, false)` 拷出来。
+21. **截图导出必须合成到不透明底**：Compose 截下的图层是**半透明**的——卡片自身没有不透明底，靠页面 `surface` 透出。直接 `compress()` 写文件时所有透明像素变黑，表现是「上半正常、下半发暗」（表头恰好有 `alphaBlend` 不透明填充所以亮、主体行没有所以黑）。先 `canvas.drawColor(主题 surface)` 再 `drawBitmap`。原项目同样记录过这点：`markdown_with_highlight.dart` L3269 `_capturingTableImage`「Capture must be opaque」。
+22. **半透明色调要用 `alphaBlend` 合成，不要直接画低 α 的 `primary`**：原项目 `headerFill = Color.alphaBlend(primary@α, surface)`，得到的是**不透明**色。直接 `Modifier.background(primary.copy(alpha = 0.045f))` 会透出页面背景、发灰发浑（深色模式下 `primary` 是浅色，尤其明显）。现成工具：`com.psyche.memo.ui.theme.alphaBlend(fg, fgAlpha: Double, bg)`（注意 α 是 `Double`）。
+23. **别在子组件里自己读 `isSystemInDarkTheme()`**：`TableRowView` 曾内部自读系统深色做边框 α，与外层传入的 `isDark` 不一致（忽略主题覆盖时二者会打架）。深色判定应由调用方传入、全程透传。
+24. **平台能力放不进 `core:ui`**：`core:ui` 无 `activity.compose`、无 app 依赖，不能用 `rememberLauncherForActivityResult`、也拿不到 `IosIconButton`（在 app 模块）。剪贴板 / SAF / MediaStore 这类平台动作一律由 app 注入（本次为 `MarkdownTableActions`，null 即不画对应按钮）。
+25. **吞异常会让 UI 不可诊断**：存图失败原样只显示 `保存失败: png`，无法定位。改为返回真实错误消息后一眼看到 `Software rendering doesn't support hardware bitmaps`。平台 IO 的 `catch` 应把 `e.message` 透出到提示里。
 
 ## 5. 批次进度（收工更新）
 
@@ -136,6 +149,179 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | 存储-1 | 存储主页分类 + 上传管理器补完整（4270bae）：主页拆「空间总览」「存储分类」两组；`StorageFileEntry` 加 source（USER_UPLOAD=upload/ 附件、ASSISTANT=images/ 生成图，对齐 Dart `StorageFileSource`）；`UploadManagerSection` 重写为原项目 `_UploadManager` 形态——排序 pills（最新/最旧/最大/最小）+ 图片页来源筛选 pills（全部/用户上传/助手发出）+ 计数/全选/已选删除条 + **图片 3 列缩略图网格**（AsyncImage File+Crop、选中 primary 1.5dp 边框 + IosCheckbox 角标、**点击开 ImageViewerOverlay、长按勾选**）+ 非图片文件行（Paperclip + 名 + 大小·时间）；删除后 uploadRefreshKey 重载 + refresh() 刷报表、陈旧选中清理；LOGS 类别补「查看日志」按钮（→log_viewer）、LOCAL_SNAPSHOTS 补「管理副本」入口（→local_snapshots） | ✅ 4270bae / 793c956（动作入口） |
 | 存储-2 | 用量条撞色修复（用户反馈图片/缓存同色，f5be77d）：根因 chartSeries 仅 8 色、存储 10 分类 `%size` 取模回卷（CACHE→槽0 撞 IMAGES、LOGS→槽1 撞 FILES）；亮/暗色板各补 2 色（亮 DB2777 粉 + 4F46E5 靛；暗 F472B6 + 818CF8）到 10 色；**测试**：`StorageBarColorsTest` 三断言（色板覆盖分类数/全异色/images≠cache）+ SemanticColorsTest 色板断言同步 | ✅ f5be77d |
 | 收尾-9 | 图片查看器底部玻璃功能栏 + 完整变换（用户反馈「预览没做完整、底部有功能栏」，0aa9e9d）：`ImageViewerOverlay`（chat/ImageViewer.kt）补原项目 `_buildActionChrome`——底部毛玻璃面板（r30、黑 26% + 白 16% hairline）内 44dp 玻璃圆钮：保存（Download，从右上孤图标移入）· 分享（Share2）｜左右镜像（FlipHorizontal2）· 上下镜像（FlipVertical2）· 左旋（RotateCcw）· 右旋（RotateCw）；顶部 关闭 + 磨砂 pill 计数器（对齐 _GlassLabel）；变换改 **per-image 状态**（`ImageViewerTransform(scale/panX/panY/flipX/flipY/quarterTurns)` 存 List，对齐 `_displayTransforms` 数组——翻页不串状态、翻回保留）；分享链路：本地文件 FileProvider 直发、http/data: 落 cacheDir/share（`file_paths.xml` 补 `images/` root）；拆 `materializeShareablePath`（纯逻辑）+ 薄包装便于测试。**测试**：`ImageViewerShareTest` 5 例。**未移植**：复制（桌面专属 compact 外）、缩放三钮（桌面）、拖拽关图、桌面翻页箭头 | ✅ 0aa9e9d |
+| 默认模型-生成 | 标题/对话总结真实 LLM 生成（补「默认模型」两块短板，`title_model_v1`/`summary_model_v1` 之前只作压缩兜底）：`TitleSummaryGenerator`（generateTitle 回退 title→chat→selected、generateSummary 回退 summary→title→chat→selected，门控对齐 home_view_model.dart——`title_generation_enabled_v1` / `assistant.allowPastConversationRecall && generateConversationSummary` / `recentChatsSummaryMessageCount` 阈值；占位符 `{content}{locale}` / `{previous_summary}{user_messages}`）；`core/common` 纯逻辑 `TitleText`(buildContent 取最近 12 轮尾 3000 字 + parseTitle 去围栏/引号/空白) / `SummaryText`(buildContent 拼接新用户消息头截 2000 字 + parseSummary)；`ConversationDao.updateSummary`；`ChatViewModel` 回复完成 finally 自动触发 maybeGenerateTitle/Summary；`SideDrawerContent` 长按菜单「重新生成标题」(`side_drawer_menu_regenerate_title`，force=true)；单测 `TitleTextTest`/`SummaryTextTest` 全绿，quality_gate 通过 | ✅ 本轮 |
+| 修复 | 顶栏标题不刷新（用户实测：侧栏标题变了、对话界面还是"新对话"）：根因=Flutter `chat_service` 持**共享** `_conversationsCache`，抽屉与顶栏都读它，任意处写标题后 `notifyListeners()` 双方自动同步（`renameConversation` L2628-2632）；Android 端无此共享层——顶栏读 `ChatViewModel.title`（进会话时一次性快照，L159），抽屉读自己的列表，二者独立。**修复**：① `TitleSummaryGenerator.generateTitle` 返回类型 `Boolean`→`String?`（带回新标题），自动生成路径直接写 `title.value`（对齐 home_view_model L1531-1536 的 `updateCurrentConversation`+`notifyListeners`）；② 新增 `ChatViewModel.refreshTitle()`（重读库里标题写 `title`）+ `TitleText.shouldRefreshCurrent(changedId, currentId)` 纯逻辑（只刷新当前展示会话）；③ `SideDrawerContent` 新增 `onConversationTitleChanged` 回调，手动「重新生成标题」与**手动重命名**都触发；④ HomeScreen 用 `titleRefreshTick` 计数信号经 `ChatContent` 通知 `vm.refreshTitle()`。**顺带修复**：抽屉手动重命名此前同样不刷新顶栏（同一根因，历史遗留）。单测 `TitleTextTest` 补 4 例 `shouldRefreshCurrent` | ✅ 本轮 |
+| 修复 | 思考卡折叠态冷启动回退（用户实测：手动折叠思考卡，冷启动又展开）：根因=`ChatViewModel.encodeSegments` **每次增量/落库都把全部 segment 重算成 `expanded = !autoCollapse`**，覆盖用户的展开/折叠点击（Flutter `stream_controller.dart:776` 明确注释「Do not reset r.expanded here - preserve user's toggle state during streaming」，只有**新建** segment 才赋初始态）。**修复**：① `core:data` 新增纯逻辑 `ReasoningSegmentCodec.applyInitialExpanded`（新段赋 `!autoCollapse`、老段保留）与 `collapseFinishedSegments`（流结束且开自动折叠时才折起已结束段）；② `encodeSegments` 走上述逻辑 + `seenSegmentIndices` 跟踪已出现下标（每轮生成清空，续写路径用库里已 decode 的下标预填充）；③ 流正常结束补最后一段 `finishedAt` 后再折叠（对齐 L1246-1255）；④ `persistAssistant`/`persistFinal` 支持传入已算好的 `segmentsJson`，**落库走与 UI 同一编码路径**（此前落库用 `ReasoningSegmentCodec.encode(closed)` 绕过修正，是冷启动回退的直接原因）；⑤ `onPersist` lambda 加第三参 `segmentsJson`。单测 `ReasoningSegmentExpandedTest` 7 例（新段初始/老段保留/重复编码稳定/结束折叠/开关关闭保留/端到端） | ✅ 本轮 |
+| 修复 | **HTML 表格渲染**（用户实测「对话界面表格这些无法渲染」）：根因=`TablesExtension` 早已开启，但 `MarkdownRenderer` 的 `when (node)` **完全没有表格分支**，`TableBlock` 掉进 `else` 被当段落纵向堆叠 → 单元格变成一堆独立段落。**移植**（`markdown_with_highlight.dart` `_MarkdownTableBlock` L3223-3436 + `_MarkdownTableCell` L3763-3816）：① 解析层 `TableModel`/`parseTable`——extension 结构是 `TableBlock → TableHead/TableBody → TableRow → TableCell`（**中间有 section 包装层**，必须递归收集；表头标记在 `TableCell.isHeader()`，`TableRow` **没有** `isHeader`）；② 样式：表头 13sp/w600、正文 13.5sp、`height 1.42`、单元格 padding 10×9、表头 primary 底（暗 α0.15 / 亮 α0.07）、`outlineVariant` 边框（暗 α0.22 / 亮 α0.30）、移动端 r12 圆角卡片 + 0.8dp hairline 外框；③ **边框只画内部线**（对齐 `TableBorder(horizontalInside/verticalInside)`）：行用 `HorizontalDivider` 画底边（最后一行不画）、单元格 `drawBehind` 画右边界（最后一列不画）——外框交给圆角卡片。早期用 `Column.border()` 画外框，在滚动容器里会画出一条贯穿全高的多余竖线（已修）；④ **列宽按 `TextMeasurer` 实测**（对齐 `FlexColumnWidth`）而非字符数：早期版本按字符数算权重，`"排名"`(2 字) vs `"2 小时 45 分钟"`(9 字符) 差 6 倍 → 第一列被压到 1/6 宽、整列被裁（用户明确不满「你自己手写 问题太大了」）。调研 mikepenz 库后发现其表格要求 JetBrains `ASTNode`、与现有 commonmark AST 不兼容（换库 = 重写整条解析链 + 迁 citation 胶囊），且库也是等宽列，**用户拍板不换库**；⑤ ≥4 列走 `_compactColumnWidth`（L3522）：`((maxWidth-16)/2.45).clamp(112dp,178dp)` 固定列宽 + `horizontalScroll`；⑥ emoji 撑高行：`LineHeightStyle(alignment=Center, trim=Trim.Both)` 压回 1.42 行高；⑦ 长 CJK+拉丁串（`"RikkaHub、"`）会溢出列宽 → 单元格 `Text` 加 `Modifier.fillMaxWidth()` 强制换行；⑧ **工具栏与行分页已补齐**（`_MarkdownTableToolbar` L3843-3930 + `_buildRowPager` L3438）：38dp 条（`headerBg` 底、底边 `outlineVariant` α0.20/0.28、0.6dp hairline）左侧「表格」标签（12sp/w600/α0.80）+ 右侧三个 `IosIconButton`（size 15 / minSize 32 / padding 7 / α0.68，各裹一层 Flutter `Tooltip` → M3 `TooltipBox + PlainTooltip`，tap 触发）：**复制**（tap=复制 markdown、长按=复制为图片）、**保存图片**（tap=存相册 `Pictures/Memo`）、**导出 CSV**（tap=SAF `CreateDocument("text/csv")`，文件名 `{stem}_{iso}.csv`，提示走 `message_export_sheet_exported_as/failed`）。序列化 `MarkdownTableText`（`toCsv`/`toMarkdown`/`csvCell`）逐行对齐 `_rowsToCsv`/`_rowsToMarkdown`/`_csvCell`（L4014-4075，CRLF 连接、`|---|` 分隔行、`\\`/`\|`/`<br>` 转义、仅必要时加引号）。行分页：`_initialRows=40` 首屏、`_rowPageSize=100` 每次展开，`large_content_show_more(remaining)`/`large_content_collapse`。平台动作经 `MarkdownTableActions` 由 app 注入（`core:ui` 拿不到剪贴板/MediaStore/SAF），空值即不画该按钮。**踩坑**：① `GraphicsLayer.toImageBitmap()` 返回 **hardware bitmap**，软件 `Canvas` 拒画（`Software rendering doesn't support hardware bitmaps`）——必须先 `copy(ARGB_8888, false)`；② 截下的图层是**半透明**的（卡片靠页面 `surface` 透底），直接写文件透明像素变黑 → 导出图「上亮下暗」，须合成到不透明底（原项目 `_capturingTableImage` L3269 注释同样记载 *"Capture must be opaque"*）；③ 表头/主体底色是 `Color.alphaBlend(primary@α, surface)` 的**不透明合成**（暗 0.15/0.04、亮 0.07/0.015），不是直接画半透明 `primary`——后者叠在页面背景上会发灰发浑。**测试**：`MarkdownTableTextTest` 14 例（CSV 引号/CRLF、markdown 补齐列/转义/trim、空输入）+ `MarkdownTableLayoutTest` 补 6 例工具栏 widget 测试（无 actions 不渲染 / 全接线三按钮 / null 即隐藏 / 复制与导出回调拿到正确序列化 / 不撑破视口）。**测试**：`core:ui` `MarkdownTableTest` 12 例（表头标记/列数取最宽行/单列/内联样式保留/对齐/空表头/列宽算术 5 例）+ `app` `MarkdownTableLayoutTest` 4 例 Robolectric 布局断言（**锁「内容绝不越过视口右边界」**，正是几轮返工踩的坑） | ✅ 本轮 |
+| 修复 | **stop 按钮样式**（用户实测「输入框这个 stop 这个样式 太丑了」）：根因=用了 `Lucide.CircleStop`（圆圈带叉），与原项目不符；且缺切换动画。**移植**（`chat_input_bar.dart` `_CompactSendButton` L3264-3327 + `assets/icons/stop.svg`）：① 图标改为**自绘 14×14、rx2 实心圆角方块**（stop.svg 是 24 viewBox 内的实心方块 `fill=currentColor`，不是描边圆圈）——`ChatStopSquare(color, size)` 按 viewBox 比例换算；② `AnimatedContent` + `scaleIn/scaleOut` + `fadeIn/fadeOut` `tween(200ms)` 表达原项目 `AnimatedSwitcher(duration 200ms)` 的 Scale+Fade 切换；③ 常量进 `ChatStyleSpec`（`SEND_ICON_SWITCH_MS=200`、`STOP_SVG_VIEWBOX_DP=24`、`STOP_SVG_SIDE_DP=14`、`STOP_SVG_RADIUS_DP=2`）；④ **顺带清 2 个既有 warning**：`LocalClipboardManager`（已 deprecated）→ `LocalClipboard` + suspend `setClipEntry(ClipEntry(ClipData))`；`if (visible && toolPart != null)` → `if (visible)` | ✅ 本轮 |
+| 修复 | **聊天建议残留**（用户实测「我添加了聊天建议模型 后面去掉了 但是后面还会出现」「聊天建议 去掉了 对话里的聊天建议也没有消失」）：**核实结论——`resetSuggestionModel` 把 enabled 写成 `true` 是原项目既定设计**（`settings_provider.dart` L3917-3925；其 `resetTitleModel` L3654-3662 同构；单测 `'reset follows the current chat model until disabled'` 已固化），语义是「重置=改用当前对话模型」（行 tooltip 就是「使用当前对话模型」）——**不是移植 bug，不改**。真正的移植缺口有两处：① **对话界面建议气泡的外层门控缺失**（`home_page.dart:1285-1288`：`suggestions: suggestionsEnabled ? (conversation.chatSuggestions ?? []) : const []`）——禁用后**已显示的建议应立刻消失**（不删库、只门控展示）。Android 端此前直接渲染 `chatSuggestions` 无门控 → 已在 `HomeScreen` 补 `suggestionsEnabled`（读 `suggestion_generation_enabled_v1`，经新增纯函数 `DefaultModelPrefs.parseJsonBool` 解析）+ 门控条件；② **发送/重新生成时清建议缺失**（`home_view_model.dart` L421/L496/L529/L1104/L1355 调 `_clearSuggestionsFor`）→ 新增 `ChatViewModel.clearSuggestions()`（内存置空 + `writeSuggestions(emptyList())`），在 `send()` 与 `regenerate()` 调用。**标题模型**经核实**没有对应的 UI 门控**（标题直接渲染在顶栏），只有「重置≠禁用」的语义陷阱，属原项目设计，不改。`DefaultModelPrefsTest` 补 4 例 `parseJsonBool`（含 `"true"` 带引号宽容行为单列一例锁定既有语义） | ✅ 本轮 |
+
+## 5.9 全量缺口审计（2026-09-09 系统普查，Flutter vs Android 逐域比对）
+
+方法：`lib/features` 16 域 + `lib/desktop` 全页面类名 → 对比 Android `*Screen/*Sheet`，逐项 `grep` 验证实现真实性（非壳子）。**结论：页面级覆盖率约 95%，剩余缺口集中在 3 块。**
+
+### P0 — backup 全域（唯一的大块真空）
+- **现状**：Android 仅 `BackupScreen.kt` / `LocalSnapshotsScreen.kt` **UI 壳**（页面结构、开关行、ARB 文案都已 1:1 对齐 `backup_page.dart` L303-840），但所有行为回调为空——不落库、不执行。
+- **Flutter 规模**：`lib/core/services/backup/` **29 文件 / 20429 行**（`data_sync.dart` 3998、`cherry_importer.dart` 1874、`chatbox_importer.dart` 1434、`chatbox_backup_archive.dart` 1414、`restore_bundle_staging.dart` 1356、`s3_client.dart` 1144、`cherry_direct_backup_reader.dart` 1060、`restore_receipt/…_mover/…_lock/…_lease/…_cutover_executor/…_durability/…_startup_gate/…_previous_*` 等）+ `lib/features/backup/` 5128 行（`backup_page.dart` 2913、`local_snapshots_page.dart` 948、进度弹窗/提醒/续跑/前向兼容同意对话框）。
+- **子系统拆分建议**（按依赖顺序，每块独立可交付）：
+  1. **`BackupProvider` 抽象 + 本地文件导入导出**（`data_sync.dart` 的 bundle 编解码 + `native_file_save`；产出 `.memo` zip：conversations/messages/assistants/世界书/快捷短语/设置）
+  2. **WebDAV**（PUT/GET/PROPFIND + 远端列表 + 保留策略）
+  3. **S3**（`s3_client.dart` 签名 V4 + 分片/并发）
+  4. **本地快照**（`local_snapshot_store.dart` + `local_snapshot_scheduler.dart` 频率/保留数/空间上限/通知 + 7 个 settings）
+  5. **恢复链路**（`restore_*` 一整套：暂存 → 校验 → 租约锁 → cutover → 回滚；含 `forward_compat_consent_dialog` 前向兼容闸门）
+  6. **Cherry Studio / Chatbox 导入**（可选，纯 importer）
+- **依赖 RikkaHub 参考**：`D:\program\.rikkahub-ref` 的 `data-sync` 模块（WebDAV/S3/备份语义）+ `app` 侧调度，按工作约定"功能/逻辑直接搬 RikkaHub"。
+
+### P1 — 小项（各 < 200 行，可一并做）
+- **保持屏幕常亮**：**不移植**（2026-09-09 用户明确"这个我不要"，已否决）。Flutter `core/services/screen_wakelock.dart`（引用计数 + 10s 延迟释放 + `reassert()` 恢复重开；设置键 `display_keep_screen_on_during_generation_v1`）→ Android 不做，设置页也不加行。若日后要恢复，落地方式为 `ChatViewModel` 生成起/止 acquire/release + `Activity.addFlags(FLAG_KEEP_SCREEN_ON)`。
+- **健康数据设置页**：**不移植** —— Flutter `healthSupported = iosDeviceToolsSupported && _healthDataAvailable`，纯 HealthKit，Android 无对应能力（`Assistant.healthDataTypeIds` 字段保留为数据兼容即可，已存在）。
+- **联网搜索引用胶囊**：**改回原项目样式**（2026-09-10 用户明确"显示改成圆形、不显示链接、改成数字那种，就是原项目那种"，且"不考虑兼容性，一锤定音"）。撤销此前"整体换 RikkaHub 域名胶囊"的例外：
+  - **胶囊**（`core/ui/.../MarkdownRenderer.kt` `citationInlineContent`，度量抽成 `CITATION_BADGE_*` 常量便于微调）：**16dp 高** + 圆角 8dp（=高度/2，即全圆）+ **最小 16dp 宽** + 左右 3dp 内边距 + **10sp** 常规字重 + `primary` **16%** 底 + 左右各 2dp 外边距（= 原项目 `EdgeInsets.symmetric(horizontal: 1.5)` 的等价留白，防角标与前面文字粘连）。**注**：原项目是 20dp 高 / 12sp / 20% 底（`markdown_with_highlight.dart` L441-472），2026-09-10 用户实测后要求"小一点，有点影响阅读、太显眼"，故整体缩小一档 —— 这是**用户明确认可的偏离子项**，不要再改回 20dp。
+  - **垂直对齐（Compose 专属坑）**：`PlaceholderVerticalAlign` 必须用 **`AboveBaseline`**（坐在文字基线上），**不能**照抄原项目的 `TextCenter + translate(0,-2)`。Compose 的 `TextCenter` 对齐的是**行盒中心**，该位置浮在 CJK 字形上方，再叠加 -2dp 上移会让角标明显悬空（用户实测反馈"和输出文字没有水平对齐"）。改用 `AboveBaseline` 后仅需轻微下移 1dp 微调即可视觉齐平。
+  - **标签**：**恒为数字序号**（`CitationInfo.index`），永不显示域名。`resolveCitationCapsule` 忽略 label 里的 domain 元数据；数字解不出时回落 `?`（元数据本身是数字则用它）。
+  - **提示词**：回到原项目的 **`[cite:id]`**（`SearchToolService.TOOL_DESCRIPTION` / `SYSTEM_PROMPT`），不再要求模型写 `[citation,domain](id)`。
+  - 历史 `[citation,domain](id)` / `[cite,domain](id)` 仍能被解析（容忍模型漂移），但域名字段被丢弃。
+
+### P2 — 已核实「无需移植」或「已被替代」
+- **migration（Hive→SQLite）**：`hive_to_sqlite_migration_page.dart` 1773 + `service` 2436 行——Flutter 端历史包袱（老用户 Hive 库迁移）；Android 端是全新 SQLite schema，无 Hive 历史用户。**不移植**。仅 `legacy_data_retirement_service.dart`（清 hive 残留文件）的等价能力已在 `StorageSpace.kt` L123/278/350/493 实现（`hiveArtifacts` 识别 + 归类 other + 删除）。
+- **scan（二维码）**：`QrScanPage` 仅被 `import_provider_sheet` 调用；Android `ImportProviderSheet.kt` 已用 quickie（相机扫描）+ zxing（相册解码）覆盖，**无需独立页**。
+- **Desktop\* 四页**（DesktopChat/Home/Settings/TranslatePage）：桌面专属，Android 不移植。
+- **IosBackgroundSettingsPage**：iOS 后台生成专属，不移植。
+
+### 仍挂账（PORTING.md 既有 ⬜，非本次新发现）
+S5 搜索 kelivo + 启动自测（不移植）、MCP-3（OAuth + 会话内 sheet；STDIO 桌面专属不移植）、M2d 记忆收尾（哈希冻结/自愈、Smart Add LLM 合并、tab 内条目列表）、UI-7i 图片导出 + 选择态 mini-map、C（tab 布局管理页）、收尾-5（Toast→sonner）。
+
+---
+
+## 5.10 backup 移植详细规格（**实施中**，2026-09-10 起）
+
+> 本节是 backup 域的施工图。通用纪律照旧：纯逻辑进 `core:common`/`core:data` 并带单测；IO 编排进 `core:data`；UI 只做薄壳；每个子块完成即 `bash tools/quality_gate.sh` 全绿再提交。
+
+### 5.10.0 归档格式（**必须逐字节对齐，否则 Flutter 端写的备份安卓读不了、反之亦然**）
+
+来自 `data_sync.dart` L248-280、L1948-1986。
+
+```
+<name>.zip
+├── manifest.json          # UTF-8 JSON，见下
+├── settings.json          # 业务设置快照（13 张实体表 + preference 键）
+├── database/kelivo.db     # 可选（includeChats=true 时）
+├── upload/                # 可选（includeFiles=true 时）用户上传附件
+├── avatars/               # 头像
+├── images/                # 助手生成的图片
+└── fonts/                 # 自定义字体
+```
+
+`manifest.json` 字段（**键名/顺序/semantic 都不能动**）：
+
+| 键 | 值 | 备注 |
+|---|---|---|
+| `format` | `"kelivo-backup"` | 常量 `_backupFormat` |
+| `formatVersion` | `2` | 当前写 2 |
+| `minimumReadableFormatVersion` | `2` | 老版本据此判断能否降级读取 |
+| `payloadKind` | `"sqlite"` \| `"settings-only"` | 由 includeChats 决定 |
+| `createdAtUtc` | ISO8601 UTC | `DateTime.now().toUtc().toIso8601String()` |
+| `appVersion` | `"1.2.5+2073"` | version+buildNumber |
+| `includeChats` / `includeFiles` / `secretsIncluded` | bool | secretsIncluded 恒 true |
+| `businessEntityRowIds` | `Map<String, List<String>>` | model 模式下实体 id 投影，用于 merge 时保持 DB 身份 |
+| `database` | 对象（仅 includeChats） | `{entry:"database/kelivo.db", schemaVersion:3, minimumReadableSchemaVersion:<n>, conversationCount, messageCount}` |
+| `entries` | `Map<name, {bytes, sha256}>` | 每个归档条目的字节数与 SHA-256，restore 时逐条校验 |
+
+**上限常量**（恢复侧防护，`_ExtractionBudget`）：单条目 8 GiB / 总计 16 GiB / 条目数 100000 / manifest 16 MiB / settings 1 GiB。
+
+### 5.10.1 settings.json 快照内容（**等价物已在 Android 侧齐备**）
+
+Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.exportSnapshot(await repo.readSnapshot())`，产出：
+
+- **13 张实体表**（`BusinessEntityKind`，`core/database/business_data.dart` L8-45）：`assistant_rows` / `provider_rows`(PK=`provider_key`) / `provider_group_rows` / `mcp_server_rows` / `world_book_rows` / `assistant_memory_rows` / `quick_phrase_rows` / `search_service_rows` / `tts_service_rows` / `instruction_injection_rows` / `assistant_tag_rows` / `memory_entry_rows` / `user_profile_field_rows`。**Android 侧 13 张表全部存在**（`assets/memo_schema_v3.sql`，共 30 表 17 索引），且 `PayloadEntityDao(table, pk)` 已是通用读写器（`id` / `sort_order` / `payload` / `updated_at`；provider 传 `provider_key`）——**直接复用，不要另写 DAO**。
+- **preference 键**：`SettingsKeyRegistry` 已生成（`tools/settings_keys_gen.py`，源=`business_settings_router.dart` + `business_data.dart`），含 `LOCAL_ONLY_KEYS`(9) / `DISCARDED_KEYS`(6) / `PREFERENCE_KEYS`(~130) / `ENTITY_SOURCE_KEYS`(13) / `PROVIDER_ORDER_KEY`。`PreferenceRepository.readAllRows()` 已能吐出全部 preference_rows。
+- **路由规则**（`classifyBusinessKey`，Android 已实现，**判断顺序不可换**）：ENTITY → PROVIDER_ORDER → LOCAL_ONLY(含 `restore_*` 前缀) → DISCARDED → PREFERENCE(含 `display_*` 前缀) → UNKNOWN。
+- **UNKNOWN 键**：进 preference_rows 原样透传（`readAllRows` 天然覆盖）。
+
+### 5.10.2 密钥策略（**注意：与 S3/WebDAV 无关**）
+
+`secretsIncluded` 恒 true —— provider 的 apiKey 随 `provider_rows.payload` 一起备份（这是原项目行为，已知安全取舍，不要"顺手加固"）。备份**不加密**：Flutter 端 `exportToFile` 也没有口令字段（`backup_page_password` 只属于 WebDAV/S3 远端凭据）。
+
+### 5.10.3 与 Flutter 的差异点（**实施时必须显式决策**）
+
+| 点 | Flutter | Android 落地 |
+|---|---|---|
+| 归档写出 | Dart isolate（`runBackupIsolate`）+ 手写 streaming zip（`_StreamingZipWriter`，含 ZIP64/data descriptor） | 用 `java.util.zip.ZipOutputStream`（Zip64 原生支持，JDK7+）；大文件走 64 KiB buffer 复制，避免 OOM |
+| 归档读出 | `_extractZipSync` + `_BoundedOutputFileStream` 逐条限额 | `ZipInputStream` 逐条 + 自建 `ExtractionBudget` 计数器，限额常量照抄 |
+| 完整性 | 打包后 `_verifyPackedBackupSync` 重读核对 sha256 | 打包后重开 zip 逐条算 SHA-256 比对 manifest.entries |
+| DB 快照 | `chatService.snapshotDatabase(file)`（drift 侧 VACUUM INTO 或复制） | `SQLiteDatabase` 在线备份：优先 `VACUUM INTO '<path>'`（SQLite≥3.27，Android 11+ 有），回落 `db.backup` 式逐页复制（或 `query` 全表重建）；**必须保证 WAL 已合并**，用 `PRAGMA wal_checkpoint(TRUNCATE)` |
+| appData 目录 | `getUploadDirectory()` 等 | `context.filesDir` 下同名子目录（`upload/` `avatars/` `images/` `fonts/`），需核实现有命名 |
+| 文件选择/保存 | `FilePicker` + `NativeFileSave` | SAF：`ActivityResultContracts.OpenDocument`（`application/zip`）/ `CreateDocument("application/zip")`；MIME 过滤比扩展名宽松，读取时兜底校验 zip magic |
+| 进度 | `BackupProgressSink(phase/processed/total/unit/cancellable)` | 同构 Kotlin `sealed class BackupPhase` + `data class BackupProgress` + `fun interface BackupProgressSink`；协程 `ensureActive()` 实现取消 |
+
+### 5.10.4 子块拆分与顺序（每块独立可交付 + 可测）
+
+| # | 子块 | 产出 | 依赖 | 状态 |
+|---|---|---|---|---|
+| 1 | **归档格式 + 本地导出/导入** | `core:data/backup/BackupArchiveCodec.kt`(纯逻辑 zip 读写+manifest) / `BackupSnapshotBuilder`(13 表+prefs+db 快照) / `LocalFileExporter` / `LocalFileRestorer` / `BackupScreen` 4 行接线 / SAF 选择器 | 无 | 🚧 本轮 |
+| 2 | **恢复模式（overwrite / merge）** | merge 语义：实体按 id upsert + preference 逐键覆盖 + 会话按 id 去重；`RestoreMode` 已在 Flutter 定义 | 1 | ⬜ |
+| 3 | **本地快照** | `LocalSnapshotStore`(快照文件管理/保留数/空间上限) + `LocalSnapshotScheduler`(频率) + `LocalSnapshotsScreen` 接线 + 7 个 settings | 1 | ⬜ |
+| 4 | **备份提醒** | `BackupReminder`(启用/频率/上次备份时间) + 完成时 `recordBackupCompleted()` + 3 行接线 | 1 | ⬜ |
+| 5 | **WebDAV** | `WebDavClient`(PROPFIND/PUT/GET/DELETE + Basic auth) + `WebDavConfig` model + 服务器设置子页 + 测试连接 + 远端列表 + 恢复 | 1 | ⬜ |
+| 6 | **S3** | `S3Client`(SigV4 + list/put/get/delete) + `S3Config` model + 服务器设置子页 + 测试连接 + 恢复 | 1 | ⬜ |
+| 7 | **前向兼容闸门** | `minimumReadableFormatVersion` / `minimumReadableSchemaVersion` 判定 + 同意对话框（`forward_compat_consent_dialog`） | 2 | ⬜ |
+| 8 | **Cherry Studio / Chatbox 导入** | 两个 importer（可选，纯数据转换） | 2 | ⬜ |
+
+#### 子块 1 进展明细（2026-09-10）
+
+**已完成 —— 格式层（`core:data/backup/`，4 文件 / 58 单测全绿）**
+
+| 文件 | 职责 | 对应 Flutter |
+|---|---|---|
+| `BackupManifest.kt` | manifest 编解码 + 版本闸门 + 恢复上限常量。`BackupManifestCodec.encode/decode/acceptsFormat/declaresNewerBuild` | `_buildBackupManifestJson` L1948-1986、`_acceptsArchiveFormat` L1624、`_declaresNewerBuild` L1645 |
+| `BackupArchiveGuards.kt` | `ExtractionBudget`(总量/条目数上限) + `BoundedEntryBudget`(单条目 + 声明大小校验) + `ZipEntryNames.validate/validateRoot`(穿越/盘符/根目录白名单) + `CollisionLedger`(重名拒绝，大小写折叠) | `_ExtractionBudget` L3359、`_BoundedOutputFileStream` L3373、`_validatedZipEntryName` L1334、`_validateZipPathPrefixes` L1355 |
+| `BackupArchiveCodec.kt` | `pack`(entry 顺序 settings→db→upload/avatars/images/fonts→manifest；逐条算字节数+SHA-256) / `extract`(逐条校验摘要+大小) / `verifyPacked` / `readManifest` / `readEntry` | `_StreamingZipWriter` L3535、`_packZipSync` L905、`_extractZipSync` L1183、`_verifyPackedBackupSync` L1029 |
+| `BackupSettingsSnapshot.kt` | `export`：13 实体表 → `settings.json`（provider 出 **map** + `providers_order_v1` 数组、其余出数组按 `(sort_order,id)` 排序；preference 键按 `classifyBusinessKey` 过滤 LOCAL_ONLY/DISCARDED，UNKNOWN 透传） | `exportSnapshot` L269、`exportSnapshotWithRowIds` L295、`_compareRows` L1269、`isProviderOrderOnlyRow` L392 |
+
+**格式层关键结论（实施中已验证，务必遵守）**
+1. **`manifest.entries` 不含 `manifest.json` 自身**，但打包后返回给调用方的 entry 表**含**它（Dart 先序列化 manifest 再加入自身条目）→ 提取时必须跳过 manifest 条目，否则报"未声明条目"。
+2. **entry 顺序固定**：`settings.json` → `database/kelivo.db` → `upload` → `avatars` → `images` → `fonts` → `manifest.json`（`ASSET_ROOTS` 顺序优先于调用方传入的 map 顺序）。
+3. **重名检查大小写折叠**（Windows/macOS 文件系统会折叠）。
+4. **`providers_order_v1` 包含 order-only 哨兵行**，但 provider map 排除它们（`PROVIDER_ORDER_ONLY_PAYLOAD = {"enabled":"__kelivo_provider_order_only__"}`）。
+5. **根目录白名单**：`upload` / `avatars` / `images` / `fonts` / `database` + 两个顶层文件 `manifest.json` / `settings.json`。
+6. 已用 JDK `ZipOutputStream`（原生 ZIP64）替代 Dart 手写 streaming zip —— 只保留格式语义部分（命名/顺序/摘要/限额）。
+
+**已完成 —— 服务层 + UI 接线（子块 1 主链路已通）**
+
+| 文件 | 职责 | 对应 Flutter |
+|---|---|---|
+| `core/data/backup/BackupProgress.kt` | `BackupPhase`(16 项，wire 值对齐 Dart)、`BackupProgressUnit`、`BackupProgress(fraction)`、`BackupProgressSink`、`BackupCancelledException`、`ProgressBridge` | `backup_progress.dart` |
+| `core/data/backup/MemoBackupService.kt` | 公开门面：`exportToCache` / `restoreFromFile` / `peekManifest` / `defaultArchiveName`（`kelivo_backup_<ISO8601冒号换破折号>.zip`）；`BackupManifestView` / `RestoreReportView(skippedConversations)`；builder/restorer 抛的 `IllegalStateException("备份已取消")` → `BackupCancelledException` | `data_sync.dart` L515 等 |
+| `app/ui/backup/BackupProgressDialog.kt` | `TaskProgressDialogCard`(padding 20/18/20/16、14sp bold 标题 + 18dp 图标、6dp 圆角条、13sp phase label + spinner/百分比、12sp@60% subtitle)、`BackupProgressBar`(null = 不定态来回扫)、`backupPhaseIcon` / `backupPhaseLabelRes` / `backupProgressSubtitle`、`formatBytes` / `formatCount` | `task_progress_dialog.dart` + `backup_progress_dialog.dart` |
+| `app/ui/backup/BackupImportModeDialog.kt` | 导入模式二选一（覆写 / 合并），按压 scale 0.98 + r14 hairline + 40dp primary 10% 图标砖 | `_chooseImportModeDialog` |
+| `app/ui/backup/BackupTaskRunner.kt` | 进度对话框生命周期编排：IO 执行 + `AtomicBoolean` 取消轮询 + 成功 600ms 延时 + 失败保留对话框 + 错误吐司 | `backup_task_runner.dart` |
+| `app/ui/backup/BackupRestartDialog.kt` | 恢复后重启提示（含 skipped 变体）+ `restartApp()` = `AlarmManager.setExactAndAllowWhileIdle` + `Process.killProcess` | `backup_restart_dialog.dart` |
+| `app/ui/BackupScreen.kt` | §1 两开关接真实 state；§4「导出到文件」`CreateDocument("application/zip")` / 「导入备份文件」`OpenDocument` → cache → `peekManifest` 校验 → 模式对话框 → 恢复。§2/3/5/6 仍为壳 | `backup_page.dart` |
+
+**测试**：`app/src/test/.../backup/BackupProgressUiTest.kt`（8 例：16 phase 图标/标签全枚举覆盖、图标分组与 Dart 一致、标签无意外共享、`formatBytes` 十进制单位与 TB 封顶、`formatCount` 千分位）。
+**质量门禁**：`bash tools/quality_gate.sh` 全绿 ✔
+
+**子块 1 踩坑记录（务必遵守）**
+- **Lucide 图标必须两行 import 齐全**：`import com.composables.icons.lucide.<Icon>`（扩展属性）+ `import com.composables.icons.lucide.Lucide`（receiver），调用写 `Lucide.<Icon>`。裸写 `<Icon>` 报 `receiver type mismatch`；只写 `Lucide.<Icon>` 缺第一条 import 报 `Unresolved`。
+- **`Box` 图标与 Compose layout `Box` 冲突** → `import com.composables.icons.lucide.Box as BoxIcon`，调用 `Lucide.BoxIcon`。
+- **`BackupRestorer` 的 phase 常量必须用 Dart wire 值**（`reading_settings` / `validating` / `staging_candidate` / `finalizing`），否则进度标签全退化成 "Preparing"。
+- 批量正则改图标时**注意别误伤类型名**（`java.io.File` 被误加 `Lucide.` 前缀）。
+
+**待完成（子块 1 剩余）**
+- 前置兼容闸门对话框（最小版：格式版本过高时提示）
+- 真机验证（装机由用户自行测试）
+
+**子块 2~8 未开始**
+- 2 merge 恢复、3 本地快照、4 备份提醒、5 WebDAV、6 S3、7 前向兼容闸门（完整版）、8 Cherry / Chatbox 导入
+
+### 5.10.5 已有可复用资产（**别重造**）
+- `PayloadEntityDao`（13 表通用 CRUD，`core:data/db/`）
+- `PreferenceRepository.readAllRows()/writeJson()/readLocal()/writeLocal()/readAllLocal()`
+- `SettingsKeyRegistry` + `classifyBusinessKey`（`core:data/settings/`）
+- `ConversationDao` / `MessageDao`（会话与消息）
+- `MemoSchema`（`DB_NAME="memo.db"`、`DB_VERSION=3`、`EXPECTED_TABLES=29`）
+- `BackupScreen.kt` / `LocalSnapshotsScreen.kt`（UI 壳，结构已 1:1，只需接线）
+- `BackupSwitchRow` / `BackupSection` / `BackupPlaceholderRow`（BackupScreen 内私有组件）
 
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 

@@ -9,7 +9,12 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import com.psyche.memo.ui.markdown.MarkdownTableActions
 import com.psyche.memo.ui.markdown.MarkdownText
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -109,6 +114,105 @@ class MarkdownTableLayoutTest {
         compose.waitForIdle()
         assertTrue(
             "single-column table fits the viewport (root right=${rootRight()})",
+            rootRight() <= 360f + 1f,
+        )
+    }
+
+    // ── Toolbar (_MarkdownTableToolbar) ──────────────────────────────────
+
+    /** Renders [markdown] with [actions] attached, the way HomeScreen does. */
+    private fun renderWithActions(
+        markdown: String,
+        actions: MarkdownTableActions,
+    ) {
+        compose.setContent {
+            MaterialTheme {
+                Box(modifier = Modifier.width(360.dp)) {
+                    MarkdownText(markdown = markdown, tableActions = actions)
+                }
+            }
+        }
+    }
+
+    private val threeColumnTable =
+        "| A | B | C |\n" +
+            "|---|---|---|\n" +
+            "| 1 | 2 | 3 |"
+
+    @Test
+    fun `toolbar is absent when no actions are supplied`() {
+        // Without injected platform actions there is nothing to tap, so the
+        // bar must not appear — the original only builds it when the host
+        // supplies handlers.
+        renderInViewport(threeColumnTable)
+        compose.waitForIdle()
+        compose.onNodeWithText("Table").assertDoesNotExist()
+    }
+
+    @Test
+    fun `toolbar shows the label and every wired button`() {
+        renderWithActions(
+            threeColumnTable,
+            MarkdownTableActions(
+                onCopyMarkdown = {},
+                onCopyImage = {},
+                onExportCsv = {},
+                onSaveImage = {},
+            ),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithText("Table").assertExists()
+        compose.onNodeWithContentDescription("Table copied.").assertExists()
+        compose.onNodeWithContentDescription("Save to Gallery").assertExists()
+        compose.onNodeWithContentDescription("Export CSV").assertExists()
+    }
+
+    @Test
+    fun `toolbar omits buttons whose action is null`() {
+        // Only a markdown copy handler: the two image buttons must vanish.
+        renderWithActions(threeColumnTable, MarkdownTableActions(onCopyMarkdown = {}))
+        compose.waitForIdle()
+        compose.onNodeWithText("Table").assertExists()
+        compose.onNodeWithContentDescription("Table copied.").assertExists()
+        compose.onNodeWithContentDescription("Save to Gallery").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Export CSV").assertDoesNotExist()
+    }
+
+    @Test
+    fun `tapping copy hands the markdown serialisation to the host`() {
+        var copied: String? = null
+        renderWithActions(
+            threeColumnTable,
+            MarkdownTableActions(onCopyMarkdown = { copied = it }),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Table copied.").performClick()
+        compose.waitForIdle()
+        assertEquals("| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |", copied)
+    }
+
+    @Test
+    fun `tapping export hands CSV to the host`() {
+        var csv: String? = null
+        renderWithActions(
+            threeColumnTable,
+            MarkdownTableActions(onExportCsv = { csv = it }),
+        )
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Export CSV").performClick()
+        compose.waitForIdle()
+        assertEquals("A,B,C\r\n1,2,3", csv)
+    }
+
+    @Test
+    fun `toolbar keeps the table inside its viewport`() {
+        renderWithActions(
+            threeColumnTable,
+            MarkdownTableActions(onCopyMarkdown = {}, onExportCsv = {}, onSaveImage = {}),
+        )
+        compose.waitForIdle()
+        assertTrue(
+            "toolbar must not widen the card past its viewport (root right=${rootRight()})",
             rootRight() <= 360f + 1f,
         )
     }

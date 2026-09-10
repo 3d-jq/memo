@@ -1665,6 +1665,9 @@ private fun MessageRow(
         val url = item?.url ?: if (id.contains('/') || id.contains('.')) id else null
         if (!url.isNullOrEmpty()) com.psyche.memo.ui.chat.openExternal(context, url)
     }
+    // 表格工具栏（_MarkdownTableToolbar）：复制 / 存图 / 导出 CSV 的平台侧实现，
+    // 由 app 注入给 core:ui（core:ui 拿不到剪贴板、MediaStore、SAF）。
+    val tableActions = com.psyche.memo.ui.chat.rememberMarkdownTableActions()
     // CMW:3707-3711 的第三分支 _buildToolMessage(1662-1706)：role == tool 的
     // 消息没有头像/气泡/操作行，正文本身就是 {tool, arguments, result, metadata}，
     // 渲染成 h16 v6 里的一张工具卡；按显示设置不可见时整条不占位。
@@ -1876,6 +1879,7 @@ private fun MessageRow(
                                     baseLineHeight = 23.55f,
                                     onCitationTap = handleCitationTap,
                                     citationInfoResolver = citationResolver,
+                                    tableActions = tableActions,
                                 )
                             is com.psyche.memo.ui.chat.AssistantBlock.Thinking ->
                                 com.psyche.memo.ui.chat.ChainOfThoughtCard(

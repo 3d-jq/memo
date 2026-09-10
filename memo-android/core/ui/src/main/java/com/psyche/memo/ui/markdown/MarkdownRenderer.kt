@@ -1,8 +1,10 @@
 package com.psyche.memo.ui.markdown
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +15,9 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
@@ -21,17 +25,34 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
@@ -49,9 +70,17 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.Download
+import com.composables.icons.lucide.ImageDown
+import com.psyche.memo.ui.R
+import com.psyche.memo.ui.theme.alphaBlend
+import kotlinx.coroutines.launch
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
 import org.commonmark.ext.gfm.tables.TableBlock
@@ -116,6 +145,25 @@ private data class CitationRenderConfig(
     val resolver: ((String) -> CitationInfo?)? = null,
 )
 
+/**
+ * Platform hooks for the table toolbar. `core:ui` owns the toolbar's look and
+ * knows how to serialise the table; the host supplies clipboard / file / image
+ * behaviour, which needs Android APIs this module deliberately does not hold.
+ *
+ * Null means "this action is unavailable here" and its button is not drawn —
+ * e.g. a preview that has no Activity to launch a document picker from.
+ */
+data class MarkdownTableActions(
+    /** Copy the GFM pipe table. */
+    val onCopyMarkdown: ((String) -> Unit)? = null,
+    /** Copy the rendered table as an image. */
+    val onCopyImage: ((androidx.compose.ui.graphics.ImageBitmap) -> Unit)? = null,
+    /** Write a CSV file (SAF picker in the host). */
+    val onExportCsv: ((String) -> Unit)? = null,
+    /** Save the rendered table image to the gallery. */
+    val onSaveImage: ((androidx.compose.ui.graphics.ImageBitmap) -> Unit)? = null,
+)
+
 @Composable
 fun MarkdownText(
     markdown: String,
@@ -124,6 +172,7 @@ fun MarkdownText(
     baseLineHeight: Float = 23.55f,
     onCitationTap: ((String) -> Unit)? = null,
     citationInfoResolver: ((String) -> CitationInfo?)? = null,
+    tableActions: MarkdownTableActions? = null,
 ) {
     if (markdown.isEmpty()) return
     val citation = CitationRenderConfig(onCitationTap, citationInfoResolver)
@@ -136,6 +185,7 @@ fun MarkdownText(
         baseFontSize = baseFontSize,
         baseLineHeight = baseLineHeight,
         citation = citation,
+        tableActions = tableActions,
     )
 }
 
@@ -146,11 +196,12 @@ private fun MarkdownBody(
     baseFontSize: Float,
     baseLineHeight: Float,
     citation: CitationRenderConfig,
+    tableActions: MarkdownTableActions?,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         var child = node.firstChild
         while (child != null) {
-            MarkdownNode(child, baseFontSize, baseLineHeight, citation)
+            MarkdownNode(child, baseFontSize, baseLineHeight, citation, tableActions)
             child = child.next
         }
     }
@@ -162,6 +213,7 @@ private fun MarkdownNode(
     baseFontSize: Float,
     baseLineHeight: Float,
     citation: CitationRenderConfig,
+    tableActions: MarkdownTableActions?,
 ) {
     val cs = MaterialTheme.colorScheme
     when (node) {
@@ -207,6 +259,7 @@ private fun MarkdownNode(
                     baseFontSize = baseFontSize,
                     baseLineHeight = baseLineHeight,
                     citation = citation,
+                    tableActions = tableActions,
                 )
             }
         }
@@ -230,6 +283,7 @@ private fun MarkdownNode(
                             baseFontSize = baseFontSize,
                             baseLineHeight = baseLineHeight,
                             citation = citation,
+                            tableActions = tableActions,
                         )
                     }
                     index++
@@ -238,13 +292,13 @@ private fun MarkdownNode(
             }
         }
         is ThematicBreak -> HorizontalDivider(color = cs.outlineVariant)
-        is TableBlock -> MarkdownTableView(node, baseFontSize, baseLineHeight, citation)
+        is TableBlock -> MarkdownTableView(node, baseFontSize, baseLineHeight, citation, tableActions)
         is Image -> Text(
             text = "[image ${node.destination}]",
             style = MaterialTheme.typography.bodySmall,
             color = cs.onSurfaceVariant,
         )
-        else -> MarkdownBody(node, Modifier, baseFontSize, baseLineHeight, citation)
+        else -> MarkdownBody(node, Modifier, baseFontSize, baseLineHeight, citation, tableActions)
     }
 }
 
@@ -255,10 +309,14 @@ private fun MarkdownNode(
 // `tableBuilder`: 0.5dp inside borders, primary-tinted header row, 10/9 cell
 // padding, 13sp semibold header / 13.5sp regular body, wrapped in a rounded
 // card. Tables with >= 4 columns keep a fixed minimum column width and scroll
-// horizontally instead of squeezing. The Compose port matches those metrics;
-// the original's toolbar (copy / export CSV / save image) and row pager are
-// deliberately omitted — they are desktop/first-class features backed by
-// platform IO that has no Compose counterpart yet.
+// horizontally instead of squeezing. The Compose port matches those metrics
+// and reproduces the toolbar (_MarkdownTableToolbar L3843-3930: a 38dp label
+// row with copy / save-image / export-CSV buttons) plus the row pager
+// (_buildRowPager L3438: 40 rows up front, 100 more per tap).
+//
+// The toolbar's *actions* are injected via MarkdownTableActions — this module
+// serialises the table but leaves clipboard / SAF / gallery work to the host,
+// which owns the Activity. A null action hides its button.
 // ---------------------------------------------------------------------------
 
 private const val TABLE_HEADER_SP = 13f
@@ -269,13 +327,33 @@ internal val TABLE_CELL_PADDING_V = 9.dp
 private val TABLE_CARD_RADIUS = 12.dp
 private val TABLE_BORDER_WIDTH = 0.5.dp
 private val TABLE_INSET_VERTICAL = 6.dp
-private const val TABLE_HEADER_ALPHA_DARK = 0.15f
-private const val TABLE_HEADER_ALPHA_LIGHT = 0.07f
+private const val TABLE_HEADER_ALPHA_DARK = 0.15
+private const val TABLE_HEADER_ALPHA_LIGHT = 0.07
+private const val TABLE_BODY_ALPHA_DARK = 0.04
+private const val TABLE_BODY_ALPHA_LIGHT = 0.015
 private const val TABLE_BORDER_ALPHA_DARK = 0.22f
 private const val TABLE_BORDER_ALPHA_LIGHT = 0.30f
 internal const val TABLE_MIN_COLUMN_DP = 112f
 private const val TABLE_MAX_COLUMN_DP = 178f
 private const val TABLE_SCROLL_COLUMN_THRESHOLD = 4
+
+/** `_MarkdownTableToolbar` L3843-3930: 38dp label bar above the table body. */
+private val TABLE_TOOLBAR_HEIGHT = 38.dp
+private val TABLE_TOOLBAR_START_PADDING = 12.dp
+private val TABLE_TOOLBAR_END_PADDING = 6.dp
+private const val TABLE_TOOLBAR_LABEL_SP = 12f
+private const val TABLE_TOOLBAR_LABEL_ALPHA = 0.80f
+private const val TABLE_TOOLBAR_ICON_ALPHA = 0.68f
+private const val TABLE_TOOLBAR_BORDER_ALPHA_DARK = 0.20f
+private const val TABLE_TOOLBAR_BORDER_ALPHA_LIGHT = 0.28f
+private val TABLE_TOOLBAR_BORDER_WIDTH = 0.6.dp
+private val TABLE_TOOLBAR_ICON_BUTTON_SIZE = 32.dp
+private val TABLE_TOOLBAR_ICON_SIZE = 15.dp
+private val TABLE_TOOLBAR_ICON_PADDING = 7.dp
+
+/** `_initialRows` / `_rowPageSize` (L3241-3242). */
+private const val TABLE_INITIAL_ROWS = 40
+private const val TABLE_ROW_PAGE_SIZE = 100
 
 /**
  * Safety multiplier applied to each column's measured ink width before it
@@ -408,6 +486,7 @@ private fun MarkdownTableView(
     baseFontSize: Float,
     baseLineHeight: Float,
     citation: CitationRenderConfig,
+    actions: MarkdownTableActions?,
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = isSystemInDarkTheme()
@@ -424,92 +503,349 @@ private fun MarkdownTableView(
     val borderColor = cs.outlineVariant.copy(
         alpha = if (isDark) TABLE_BORDER_ALPHA_DARK else TABLE_BORDER_ALPHA_LIGHT,
     )
-    val headerBg = cs.primary.copy(
-        alpha = if (isDark) TABLE_HEADER_ALPHA_DARK else TABLE_HEADER_ALPHA_LIGHT,
+    // The original blends the primary tint ONTO `surface` (L3260-3266) instead
+    // of drawing a translucent primary: a plain low-alpha wash composites over
+    // whatever sits behind the card and turns muddy grey, which is especially
+    // wrong in dark mode where `primary` is a light colour.
+    val headerBg = alphaBlend(
+        fg = cs.primary,
+        fgAlpha = if (isDark) TABLE_HEADER_ALPHA_DARK else TABLE_HEADER_ALPHA_LIGHT,
+        bg = cs.surface,
+    )
+    val bodyBg = alphaBlend(
+        fg = cs.primary,
+        fgAlpha = if (isDark) TABLE_BODY_ALPHA_DARK else TABLE_BODY_ALPHA_LIGHT,
+        bg = cs.surface,
     )
     val scrollable = model.columnCount >= TABLE_SCROLL_COLUMN_THRESHOLD
     val scrollState = rememberScrollState()
+
+    // Row pager (_initialRows 40, then +100 per tap), like _buildRowPager.
+    var visibleRows by remember(model) { mutableStateOf(TABLE_INITIAL_ROWS) }
+    val bodyRows = model.body.take(visibleRows)
+
+    // The toolbar images the whole card, so capture the frame that holds the
+    // toolbar + table (not just the scrolling viewport) — matching the
+    // original's RepaintBoundary placement.
+    val imageCaptureNeeded = actions?.onCopyImage != null || actions?.onSaveImage != null
+    val boundaryLayer = rememberTableBoundary()
+    val tableRows = if (actions != null) {
+        // Flatten to plain strings once; the toolbar needs them for both the
+        // markdown and CSV serialisations.
+        (listOf(model.header) + model.body)
+            .map { row -> row.map(::cellText) }
+    } else {
+        emptyList()
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = TABLE_INSET_VERTICAL)
             .clip(RoundedCornerShape(TABLE_CARD_RADIUS))
-            .background(cs.primary.copy(alpha = if (isDark) 0.045f else 0.018f))
-            .border(0.8.dp, borderColor, RoundedCornerShape(TABLE_CARD_RADIUS))
-            .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
+            .background(bodyBg)
+            .border(0.8.dp, borderColor, RoundedCornerShape(TABLE_CARD_RADIUS)),
     ) {
-        BoxWithConstraints {
-            // Non-scrolling tables mirror FlexColumnWidth: every column gets at
-            // least its measured text width, then the leftover space is shared
-            // out proportionally by `weight`. Scrolling tables instead pin a
-            // fixed legible column width so >= 4 columns overflow sideways,
-            // exactly like _compactColumnWidth (L3522).
-            val weights = if (scrollable) {
-                List(model.columnCount) { 1f }
-            } else {
-                columnWeights(
-                    naturals = measureColumnWidths(measurer, model, measureStyle),
-                    density = density,
-                    columnCount = model.columnCount,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (imageCaptureNeeded) Modifier.recordTableBoundary(boundaryLayer)
+                    else Modifier,
+                ),
+        ) {
+            if (actions != null) {
+                MarkdownTableToolbar(
+                    isDark = isDark,
+                    headerBg = headerBg,
+                    rows = tableRows,
+                    actions = actions,
+                    boundaryLayer = boundaryLayer,
+                    captureEnabled = imageCaptureNeeded,
                 )
             }
-            val columnWidth = if (scrollable) {
-                // _compactColumnWidth (markdown_with_highlight.dart L3522):
-                // >= 4 columns show ~2.45 at a time, clamped to a legible min.
-                val available = maxWidth - TABLE_INSET_H_TOTAL
-                (available / 2.45f)
-                    .coerceIn(TABLE_MIN_COLUMN_DP.dp, TABLE_MAX_COLUMN_DP.dp)
-            } else {
-                maxWidth / model.columnCount
-            }
-            Column(
-                modifier = Modifier.then(
-                    if (scrollable) Modifier.width(columnWidth * model.columnCount)
-                    else Modifier.fillMaxWidth(),
-                ),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
             ) {
-                if (model.header.isNotEmpty()) {
-                    TableRowView(
-                        cells = model.header,
-                        header = true,
-                        columnCount = model.columnCount,
-                        columnWidth = columnWidth,
-                        weights = weights,
-                        scrollable = scrollable,
-                        rowBackground = headerBg,
-                        bottomBorder = true,
-                        baseFontSize = baseFontSize,
-                        baseLineHeight = baseLineHeight,
-                        citation = citation,
-                    )
+                BoxWithConstraints {
+                    // Non-scrolling tables mirror FlexColumnWidth: every column
+                    // gets at least its measured text width, then the leftover
+                    // space is shared out proportionally by `weight`. Scrolling
+                    // tables instead pin a fixed legible column width so >= 4
+                    // columns overflow sideways, like _compactColumnWidth (L3522).
+                    val weights = if (scrollable) {
+                        List(model.columnCount) { 1f }
+                    } else {
+                        columnWeights(
+                            naturals = measureColumnWidths(measurer, model, measureStyle),
+                            density = density,
+                            columnCount = model.columnCount,
+                        )
+                    }
+                    val columnWidth = if (scrollable) {
+                        // _compactColumnWidth (markdown_with_highlight.dart L3522):
+                        // >= 4 columns show ~2.45 at a time, clamped to a legible min.
+                        val available = maxWidth - TABLE_INSET_H_TOTAL
+                        (available / 2.45f)
+                            .coerceIn(TABLE_MIN_COLUMN_DP.dp, TABLE_MAX_COLUMN_DP.dp)
+                    } else {
+                        maxWidth / model.columnCount
+                    }
+                    Column(
+                        modifier = Modifier.then(
+                            if (scrollable) Modifier.width(columnWidth * model.columnCount)
+                            else Modifier.fillMaxWidth(),
+                        ),
+                    ) {
+                        if (model.header.isNotEmpty()) {
+                            TableRowView(
+                                cells = model.header,
+                                header = true,
+                                columnCount = model.columnCount,
+                                columnWidth = columnWidth,
+                                weights = weights,
+                                scrollable = scrollable,
+                                rowBackground = headerBg,
+                                bottomBorder = true,
+                                baseFontSize = baseFontSize,
+                                baseLineHeight = baseLineHeight,
+                                citation = citation,
+                                isDark = isDark,
+                            )
+                        }
+                        bodyRows.forEachIndexed { index, cells ->
+                            TableRowView(
+                                cells = cells,
+                                header = false,
+                                columnCount = model.columnCount,
+                                columnWidth = columnWidth,
+                                weights = weights,
+                                scrollable = scrollable,
+                                rowBackground = null,
+                                // The original's TableBorder draws only *inside*
+                                // rules; the outer frame is the rounded card. A
+                                // bottom rule on every row but the last
+                                // reproduces that (and avoids the stray vertical
+                                // line a `Column.border` produced in the scroll
+                                // container).
+                                bottomBorder = index < bodyRows.lastIndex,
+                                baseFontSize = baseFontSize,
+                                baseLineHeight = baseLineHeight,
+                                citation = citation,
+                                isDark = isDark,
+                            )
+                        }
+                    }
                 }
-                model.body.forEachIndexed { index, cells ->
-                    TableRowView(
-                        cells = cells,
-                        header = false,
-                        columnCount = model.columnCount,
-                        columnWidth = columnWidth,
-                        weights = weights,
-                        scrollable = scrollable,
-                        rowBackground = null,
-                        // The original's TableBorder draws only *inside* rules;
-                        // the outer frame is the rounded card behind this
-                        // Column. Drawing a bottom rule on every row but the
-                        // last reproduces that (and avoids the stray vertical
-                        // line a `Column.border` produced inside the scroll
-                        // container).
-                        bottomBorder = index < model.body.lastIndex,
-                        baseFontSize = baseFontSize,
-                        baseLineHeight = baseLineHeight,
-                        citation = citation,
-                    )
-                }
+            }
+            if (actions != null) {
+                MarkdownTableRowPager(
+                    totalRows = model.body.size,
+                    visibleRows = visibleRows,
+                    onShowMore = {
+                        visibleRows = minOf(model.body.size, visibleRows + TABLE_ROW_PAGE_SIZE)
+                    },
+                    onCollapse = { visibleRows = TABLE_INITIAL_ROWS },
+                )
             }
         }
     }
 }
 
+/**
+ * Renders the table card's subtree into an offscreen [GraphicsLayer] so the
+ * toolbar can export it as a PNG. This is the Compose equivalent of wrapping
+ * the card in a `RepaintBoundary` and calling `toImage` on it, which is what
+ * the original does (markdown_with_highlight.dart `_captureTablePngBytes`).
+ *
+ * [remember] is intentional: the layer must survive recomposition, and the
+ * recording modifier is only attached when an image action is wired up.
+ */
+@Composable
+private fun rememberTableBoundary(): GraphicsLayer = rememberGraphicsLayer()
+
+/** Records the subtree into [layer] so it can be exported later. */
+private fun Modifier.recordTableBoundary(layer: GraphicsLayer): Modifier = this.drawWithContent {
+    // `record` is a DrawScope extension on GraphicsLayer:
+    // record(size: IntSize, block: DrawScope.() -> Unit). The block paints the
+    // real content into the layer; drawLayer then replays it into the frame.
+    layer.record(IntSize(size.width.toInt(), size.height.toInt())) {
+        this@drawWithContent.drawContent()
+    }
+    drawLayer(layer)
+}
+
+/**
+ * `_MarkdownTableToolbar` (L3843-3930): a 38dp bar showing the "Table" label
+ * with copy / save-image / export-CSV buttons. Buttons whose action is null are
+ * omitted (see [MarkdownTableActions]).
+ */
+@Composable
+private fun MarkdownTableToolbar(
+    isDark: Boolean,
+    headerBg: Color,
+    rows: List<List<String>>,
+    actions: MarkdownTableActions,
+    boundaryLayer: GraphicsLayer,
+    captureEnabled: Boolean,
+) {
+    val cs = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
+    val label = stringResource(R.string.markdown_table_label)
+    val copyLabel = stringResource(R.string.markdown_table_copied_markdown_snackbar)
+    val exportLabel = stringResource(R.string.markdown_table_export_csv_tooltip)
+    val imageLabel = stringResource(R.string.markdown_table_save_image_tooltip)
+    val toolbarRule = cs.outlineVariant.copy(
+        alpha = if (isDark) TABLE_TOOLBAR_BORDER_ALPHA_DARK else TABLE_TOOLBAR_BORDER_ALPHA_LIGHT,
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(TABLE_TOOLBAR_HEIGHT)
+            .background(headerBg)
+            .drawBehind {
+                // Bottom hairline separating the toolbar from the table body.
+                val stroke = TABLE_TOOLBAR_BORDER_WIDTH.toPx()
+                drawRect(
+                    color = toolbarRule,
+                    topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - stroke),
+                    size = androidx.compose.ui.geometry.Size(size.width, stroke),
+                )
+            }
+            .padding(start = TABLE_TOOLBAR_START_PADDING, end = TABLE_TOOLBAR_END_PADDING),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = TABLE_TOOLBAR_LABEL_SP.sp,
+                fontWeight = FontWeight(600),
+                color = cs.onSurfaceVariant.copy(alpha = TABLE_TOOLBAR_LABEL_ALPHA),
+                lineHeight = TABLE_TOOLBAR_LABEL_SP.sp,
+            ),
+        )
+        // Buttons are icon-only; the label lives in contentDescription so
+        // TalkBack reads what a tooltip would show.
+        val copyImage = actions.onCopyImage
+        if (actions.onCopyMarkdown != null || copyImage != null) {
+            // Long-press copies the image, tap copies the markdown — the same
+            // split the original wires with onTap/onLongPress.
+            MarkdownTableIconButton(
+                icon = Lucide.Copy,
+                contentDescription = copyLabel,
+                onLongClick = if (copyImage == null) {
+                    null
+                } else {
+                    {
+                        if (captureEnabled) {
+                            scope.launch { copyImage(boundaryLayer.toImageBitmap()) }
+                        }
+                    }
+                },
+                onClick = { actions.onCopyMarkdown?.invoke(MarkdownTableText.toMarkdown(rows)) },
+            )
+        }
+        val saveImage = actions.onSaveImage
+        if (saveImage != null) {
+            MarkdownTableIconButton(
+                icon = Lucide.ImageDown,
+                contentDescription = imageLabel,
+                onClick = {
+                    if (captureEnabled) {
+                        scope.launch { saveImage(boundaryLayer.toImageBitmap()) }
+                    }
+                },
+            )
+        }
+        val exportCsv = actions.onExportCsv
+        if (exportCsv != null) {
+            MarkdownTableIconButton(
+                icon = Lucide.Download,
+                contentDescription = exportLabel,
+                onClick = { exportCsv(MarkdownTableText.toCsv(rows)) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun MarkdownTableIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+) {
+    val cs = MaterialTheme.colorScheme
+    // The original wraps each button in a Flutter Tooltip; M3's plain tooltip
+    // is the closest equivalent (hover/long-press on desktop, focus on touch).
+    val tipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        modifier = Modifier
+            .size(TABLE_TOOLBAR_ICON_BUTTON_SIZE)
+            .clickable { scope.launch { tipState.show() } },
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(contentDescription) } },
+        state = tipState,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .padding(TABLE_TOOLBAR_ICON_PADDING),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(TABLE_TOOLBAR_ICON_SIZE),
+                tint = cs.onSurfaceVariant.copy(alpha = TABLE_TOOLBAR_ICON_ALPHA),
+            )
+        }
+    }
+}
+
+/**
+ * `_buildRowPager` (L3438): only shown when the body is longer than the initial
+ * page. "Show more" reveals the rest in 100-row chunks; "Collapse" appears once
+ * expanded.
+ */
+@Composable
+private fun MarkdownTableRowPager(
+    totalRows: Int,
+    visibleRows: Int,
+    onShowMore: () -> Unit,
+    onCollapse: () -> Unit,
+) {
+    if (totalRows <= TABLE_INITIAL_ROWS) return
+    val remaining = totalRows - visibleRows
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (visibleRows > TABLE_INITIAL_ROWS) {
+            TextButton(onClick = onCollapse) {
+                Text(stringResource(R.string.large_content_collapse))
+            }
+        }
+        if (remaining > 0) {
+            TextButton(onClick = onShowMore) {
+                Text(stringResource(R.string.large_content_show_more, remaining))
+            }
+        }
+    }
+}
+
+/** `outlineVariant`, matching the table rules. */
 @Composable
 private fun TableRowView(
     cells: List<TableCell>,
@@ -523,10 +859,11 @@ private fun TableRowView(
     baseFontSize: Float,
     baseLineHeight: Float,
     citation: CitationRenderConfig,
+    isDark: Boolean,
 ) {
     val cs = MaterialTheme.colorScheme
     val borderColor = cs.outlineVariant.copy(
-        alpha = if (isSystemInDarkTheme()) TABLE_BORDER_ALPHA_DARK else TABLE_BORDER_ALPHA_LIGHT,
+        alpha = if (isDark) TABLE_BORDER_ALPHA_DARK else TABLE_BORDER_ALPHA_LIGHT,
     )
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
