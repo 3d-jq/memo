@@ -108,6 +108,33 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         com.psyche.memo.provider.search.HttpSearchEngine(httpClient)
     }
 
+    /**
+     * Backup / restore orchestration (archive build, local-file restore).
+     * appVersion is read from the package manager so the manifest records the
+     * real build instead of a hardcoded string.
+     */
+    val backupService: com.psyche.memo.data.backup.MemoBackupService by lazy {
+        com.psyche.memo.data.backup.MemoBackupService(
+            context = appContext,
+            database = database,
+            preferenceRepository = preferenceRepository,
+            appVersion = appVersionString(),
+        )
+    }
+
+    /** `"1.2.5+2073"` — versionName + versionCode, matching Flutter's appVersion. */
+    private fun appVersionString(): String = runCatching {
+        val info = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
+        val versionName = info.versionName ?: "0"
+        @Suppress("DEPRECATION")
+        val versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) {
+            info.longVersionCode
+        } else {
+            info.versionCode.toLong()
+        }
+        "$versionName+$versionCode"
+    }.getOrDefault("0+0")
+
     /** tool_approval_service.dart / ask_user_interaction_service.dart 服务对。 */
     val toolApprovalService: com.psyche.memo.ui.chat.ToolApprovalService by lazy {
         com.psyche.memo.ui.chat.ToolApprovalService()

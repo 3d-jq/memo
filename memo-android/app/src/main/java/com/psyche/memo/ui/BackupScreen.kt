@@ -1,5 +1,7 @@
 package com.psyche.memo.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,33 +22,49 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.composables.icons.lucide.Bell
-import com.composables.icons.lucide.Box
+import com.composables.icons.lucide.Box as BoxIcon
+import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Cable
 import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.Download
-import com.composables.icons.lucide.File
 import com.composables.icons.lucide.FileText
-import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Import
-import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquare
 import com.composables.icons.lucide.Repeat
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Shield
 import com.composables.icons.lucide.Timer
 import com.composables.icons.lucide.Upload
+import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.data.backup.RestoreMode
 import com.psyche.memo.ui.R as UiR
+import com.psyche.memo.ui.backup.BackupImportModeDialog
+import com.psyche.memo.ui.backup.BackupRestartRequiredDialog
+import com.psyche.memo.ui.backup.backupTaskLabels
+import com.psyche.memo.ui.backup.rememberBackupTaskRunner
+import com.psyche.memo.ui.snackbar.AppNotification
+import com.psyche.memo.ui.snackbar.NotificationType
+import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.theme.withAlpha
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * UI shell of `lib/features/backup/pages/backup_page.dart` (BackupPage).
@@ -64,17 +82,161 @@ import com.psyche.memo.ui.theme.withAlpha
  *   6. S3 备份 (S3 Backup)             — 3 nav rows: server settings
  *      (→ sub-page) / test connection / restore
  *
- * Functionality (BackupProvider / WebDAV / S3 / local snapshot) is a later
- * batch — placeholder rows match the original's visual structure (label +
- * chevron) but the sub-pages for WebDAV server / S3 server settings +
- * Cherry Studio import + Chatbox import will be wired in that batch.
+ * Section 4 is live (sub-block 1): export writes the archive and hands it to
+ * SAF, import picks a `.zip`, asks for the restore mode and applies it.
+ * Sections 2, 3, 5 and 6 stay as visual shells until sub-blocks 3-6 land.
  */
 @Composable
 fun BackupScreen(
+    container: AppContainerImpl,
     onBack: () -> Unit,
     onOpenLocalSnapshots: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val runner = rememberBackupTaskRunner()
+
+    // "Chats" / "Files" switches (backup_page.dart L307 / L323). They select
+    // what an export contains, exactly like the original pair of switches.
+    var includeChats by remember { mutableStateOf(true) }
+    var includeFiles by remember { mutableStateOf(true) }
+
+    // Values only a @Composable can resolve, captured so the SAF callbacks
+    // (plain lambdas) can still produce localized messages.
+    val exportTitle = backupTaskLabels(UiR.string.backup_page_export_to_file)
+    val importTitle = backupTaskLabels(UiR.string.backup_page_import_backup_file)
+    val exportFailedPrefix = stringResource(UiR.string.backup_page_export_failed_message, "%s")
+    val restoreFailedPrefix = stringResource(UiR.string.backup_page_restore_failed_message, "%s")
+    val exportedAsTemplate = stringResource(UiR.string.message_export_sheet_exported_as, "%s")
+    val schemaTooNew = stringResource(UiR.string.backup_page_schema_too_new_message)
+
+    // ── pending state carried between the picker activity and its result ───
+    var pendingExport by remember { mutableStateOf<File?>(null) }
+    var restoringFile by remember { mutableStateOf<File?>(null) }
+    var showImportModeDialog by remember { mutableStateOf(false) }
+    var restartReport by remember { mutableStateOf<RestoreReportUi?>(null) }
+
+    fun toast(message: String, type: NotificationType) {
+        SnackbarManager.show(AppNotification(message, type))
+    }
+
+    // ── export: CreateDocument("application/zip") ─────────────────────────
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        val source = pendingExport
+        pendingExport = null
+        if (uri == null || source == null) {
+            source?.delete()
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            val name = source.name
+            val written = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        container.backupService.copyInto(source, out)
+                    } ?: error("无法写入所选位置")
+                }
+            }
+            source.delete()
+            if (written.isSuccess) {
+                toast(exportedAsTemplate.format(name), NotificationType.SUCCESS)
+            } else {
+                toast(
+                    exportFailedPrefix.format(written.exceptionOrNull()?.message ?: name),
+                    NotificationType.ERROR,
+                )
+            }
+        }
+    }
+
+    fun runExport() {
+        scope.launch {
+            var archive: File? = null
+            val ok = runner.run(
+                labels = exportTitle,
+                errorMessage = { exportFailedPrefix.format(it.message ?: it.toString()) },
+            ) { report, isCancelled ->
+                archive = container.backupService.exportToCache(
+                    includeChats = includeChats,
+                    includeFiles = includeFiles,
+                    onProgress = { report(it) },
+                    isCancelled = isCancelled,
+                )
+            }
+            val file = archive ?: return@launch
+            if (!ok) {
+                file.delete()
+                return@launch
+            }
+            // The archive is ready; the picker decides where it lands. The
+            // cache copy is deleted in the result callback either way.
+            pendingExport = file
+            exportLauncher.launch(file.name)
+        }
+    }
+
+    // ── import: OpenDocument → mode dialog → restore ──────────────────────
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            // SAF cannot filter by extension, so copy the picked file to the
+            // cache and let the manifest reader decide whether it is a backup.
+            val staged = withContext(Dispatchers.IO) {
+                runCatching {
+                    val target = File(context.cacheDir, "memo_import_${System.currentTimeMillis()}.zip")
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        target.outputStream().use { out -> input.copyTo(out) }
+                    } ?: error("无法读取所选文件")
+                    target.takeIf { it.length() > 0 } ?: error("所选文件为空")
+                }.getOrNull()
+            }
+            if (staged == null) {
+                toast(restoreFailedPrefix.format("所选文件为空或无法读取"), NotificationType.ERROR)
+                return@launch
+            }
+            if (container.backupService.peekManifest(staged)?.acceptsFormat != true) {
+                staged.delete()
+                toast(schemaTooNew, NotificationType.ERROR)
+                return@launch
+            }
+            restoringFile = staged
+            showImportModeDialog = true
+        }
+    }
+
+    fun runImport(file: File, mode: RestoreMode) {
+        scope.launch {
+            var report: com.psyche.memo.data.backup.RestoreReportView? = null
+            val ok = runner.run(
+                labels = importTitle,
+                errorMessage = { restoreFailedPrefix.format(it.message ?: it.toString()) },
+            ) { progress, isCancelled ->
+                report = container.backupService.restoreFromFile(
+                    archive = file,
+                    mode = mode,
+                    onProgress = { progress(it) },
+                    isCancelled = isCancelled,
+                )
+            }
+            file.delete()
+            val done = report
+            if (ok && done != null) {
+                // The database swap closes and reopens the live connection, so
+                // every cached repository in the container is stale; the same
+                // restart prompt Flutter shows is the honest answer here too.
+                restartReport = RestoreReportUi(
+                    skippedConversations = done.skippedConversations,
+                    details = reportDetails(done),
+                )
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -95,22 +257,22 @@ fun BackupScreen(
                 BackupSwitchRow(
                     Lucide.MessageSquare,
                     stringResource(UiR.string.backup_page_chats_label),
-                    value = false,
-                    onChange = {},
+                    value = includeChats,
+                    onChange = { includeChats = it },
                 )
                 BackupDivider()
                 BackupSwitchRow(
                     Lucide.FileText,
                     stringResource(UiR.string.backup_page_files_label),
-                    value = false,
-                    onChange = {},
+                    value = includeFiles,
+                    onChange = { includeFiles = it },
                 )
             }
 
             Spacer(Modifier.height(18.dp))
             // ── 2. 备份提醒 (Backup Reminder) ─────────────────────────────
             // First row is `_iosSwitchRow` (backup_page.dart L1612); the other
-            // two are `_iosNavRow` (Frequency / Last Backup).
+            // two are `_iosNavRow` (Frequency / Last Backup). Wired in sub-block 4.
             BackupSection(title = stringResource(UiR.string.backup_reminder_section_title)) {
                 BackupSwitchRow(
                     Lucide.Timer,
@@ -136,9 +298,7 @@ fun BackupScreen(
             // ── 3. 本地副本 (Local Copies) ─────────────────────────────────
             // Per `_LocalSnapshotMobileSection` (backup_page.dart L1546-1600):
             // only 2 rows on this page — the Enabled switch + a "Manage copies"
-            // nav row that pushes the LocalSnapshotsPage. All the deeper
-            // settings (interval / keep count / weekly / monthly / space
-            // limit / announce) live on the sub-page, not here.
+            // nav row that pushes the LocalSnapshotsPage. Wired in sub-block 3.
             BackupSection(title = stringResource(UiR.string.local_snapshot_section_title)) {
                 BackupSwitchRow(
                     Lucide.Shield,
@@ -162,29 +322,33 @@ fun BackupScreen(
                     Lucide.Upload,
                     stringResource(UiR.string.backup_page_export_to_file),
                     "",
+                    onTap = { runExport() },
                 )
                 BackupDivider()
                 BackupPlaceholderRow(
                     Lucide.Download,
                     stringResource(UiR.string.backup_page_import_backup_file),
                     "",
+                    // The picker offers every file; the manifest reader rejects
+                    // anything that is not a backup (SAF has no extension filter).
+                    onTap = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
                 )
                 BackupDivider()
                 BackupPlaceholderRow(
-                    Lucide.Box,
+                    Lucide.BoxIcon,
                     stringResource(UiR.string.backup_page_import_from_cherry_studio),
                     "",
                 )
                 BackupDivider()
                 BackupPlaceholderRow(
-                    Lucide.Box,
+                    Lucide.BoxIcon,
                     stringResource(UiR.string.backup_page_import_from_chatbox),
                     "",
                 )
             }
 
             Spacer(Modifier.height(18.dp))
-            // ── 5. WebDAV 备份 (WebDAV Backup) — 3 nav rows ──────────────
+            // ── 5. WebDAV 备份 (WebDAV Backup) — 3 nav rows (sub-block 5) ─
             BackupSection(title = stringResource(UiR.string.backup_page_web_dav_backup)) {
                 BackupPlaceholderRow(
                     Lucide.Settings,
@@ -206,7 +370,7 @@ fun BackupScreen(
             }
 
             Spacer(Modifier.height(18.dp))
-            // ── 6. S3 备份 (S3 Backup) — 3 nav rows ─────────────────────
+            // ── 6. S3 备份 (S3 Backup) — 3 nav rows (sub-block 6) ────────
             BackupSection(title = stringResource(UiR.string.backup_page_s3_backup)) {
                 BackupPlaceholderRow(
                     Lucide.Settings,
@@ -227,6 +391,54 @@ fun BackupScreen(
                 )
             }
         }
+    }
+
+    // ── dialogs ────────────────────────────────────────────────────────────
+    if (showImportModeDialog) {
+        BackupImportModeDialog(
+            onSelect = { mode ->
+                showImportModeDialog = false
+                val file = restoringFile
+                restoringFile = null
+                if (file != null) runImport(file, mode)
+            },
+            onDismiss = {
+                showImportModeDialog = false
+                restoringFile?.delete()
+                restoringFile = null
+            },
+        )
+    }
+
+    restartReport?.let { report ->
+        BackupRestartRequiredDialog(
+            skippedConversations = report.skippedConversations,
+            details = report.details,
+            onRestart = {
+                restartReport = null
+                com.psyche.memo.ui.backup.restartApp(context)
+            },
+            onDismiss = { restartReport = null },
+        )
+    }
+}
+
+/** What the restart prompt needs from a completed restore. */
+private data class RestoreReportUi(
+    val skippedConversations: Int,
+    val details: String?,
+)
+
+/**
+ * `_doImportLocal`'s summary (`backup_page.dart` L1510): the restart prompt
+ * gets the same counts the Flutter build folds into its `details` string.
+ */
+private fun reportDetails(report: com.psyche.memo.data.backup.RestoreReportView): String? {
+    if (report.entityRowsWritten == 0 && report.preferenceKeysWritten == 0) return null
+    return buildString {
+        append("设置项: ${report.preferenceKeysWritten}")
+        append(" · 实体: ${report.entityRowsWritten}")
+        if (report.databaseRestored) append(" · 会话已恢复")
     }
 }
 

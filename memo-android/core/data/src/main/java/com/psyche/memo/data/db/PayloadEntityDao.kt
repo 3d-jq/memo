@@ -53,6 +53,28 @@ class PayloadEntityDao(
         db.delete(table, "$primaryKey = ?", arrayOf(id))
     }
 
+    /**
+     * Replaces the whole table with [rows] and returns how many were written.
+     *
+     * Used by backup restore: the archive is the complete truth for a table, so
+     * rows absent from it must disappear rather than linger as ghosts. Callers
+     * are expected to be inside a transaction.
+     */
+    fun replaceAll(rows: List<Row>): Int {
+        db.delete(table, null, null)
+        val now = System.currentTimeMillis()
+        for (row in rows) {
+            val values = ContentValues().apply {
+                put(primaryKey, row.id)
+                put("sort_order", row.sortOrder)
+                put("payload", row.payload)
+                put("updated_at", if (row.updatedAt != 0L) row.updatedAt else now)
+            }
+            db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        }
+        return rows.size
+    }
+
     /** Next sort_order (max + 1, 0 when empty) — matches drift semantics. */
     fun nextSortOrder(): Int {
         db.rawQuery("SELECT COALESCE(MAX(sort_order), -1) + 1 FROM \"$table\"", null).use { cursor ->

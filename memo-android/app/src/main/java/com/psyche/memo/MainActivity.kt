@@ -384,6 +384,7 @@ private fun AppThemeAndContent(
                     // lib/features/backup/pages/backup_page.dart BackupPage).
                     composable("backup") {
                         BackupScreen(
+                            container = container,
                             onBack = { navController.popBackStack() },
                             onOpenLocalSnapshots = { navController.navigate("local_snapshots") },
                         )
