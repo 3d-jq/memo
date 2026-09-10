@@ -18,6 +18,10 @@ class MemoApplication : Application(), ImageLoaderFactory {
         // per-key fill-missing pass): builtin keys without a provider_rows row
         // get their pristine default config (baseUrl/label/enabled verbatim
         // from ProviderConfig.defaultsFor). Idempotent.
+        // The migration runs first so a hand-typed key ("zhipu ai") is folded
+        // onto its canonical spelling before the fill-missing pass would seed a
+        // second row for the same provider.
+        container.providerRepository.migrateNonCanonicalBuiltinKeys()
         container.providerRepository.ensureBuiltinDefaultsSeeded()
         // PDFBox needs its resource loader before the first PDF extraction.
         com.psyche.memo.provider.DocumentTextExtractor.init(this)

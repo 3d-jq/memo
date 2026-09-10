@@ -448,7 +448,7 @@ private fun ModelTile(
 
 /** model_tag_wrap.dart — chat-type + I/O modality + tools/reasoning pills. */
 @Composable
-private fun ModelTagRow(modelId: String) {
+internal fun ModelTagRow(modelId: String) {
     val cs = MaterialTheme.colorScheme
     val traits = remember(modelId) { com.psyche.memo.ModelRegistry.infer(modelId) }
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {

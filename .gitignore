@@ -75,3 +75,9 @@ memo-android/local.properties
 memo-android/keystore.properties
 memo-android/keystore/
 memo-android/**/*.apk
+
+# workbuddy 运行时数据（并行模型工作区，不入库）
+.workbuddy/*.db
+.workbuddy/*.db-journal
+.workbuddy/*.png
+.workbuddy/shots/

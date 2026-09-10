@@ -33,6 +33,7 @@ fun <T> ReorderableColumn(
     onMove: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
     reorderEnabled: Boolean = true,
+    onDragStateChange: (Boolean) -> Unit = {},
     contentPadding: androidx.compose.foundation.layout.PaddingValues = androidx.compose.foundation.layout.PaddingValues(0.dp),
     header: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null,
     footer: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null,
@@ -41,6 +42,11 @@ fun <T> ReorderableColumn(
     val listState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
         onMove(from.index, to.index)
+    }
+    // Report drag start/end so the caller can hold a live order while dragging
+    // and persist exactly once on release.
+    androidx.compose.runtime.LaunchedEffect(reorderableState.isAnyItemDragging) {
+        onDragStateChange(reorderableState.isAnyItemDragging)
     }
 
     androidx.compose.foundation.lazy.LazyColumn(
@@ -55,14 +61,19 @@ fun <T> ReorderableColumn(
             ReorderableItem(
                 state = reorderableState,
                 key = itemKey,
-                // Siblings glide into their new slots while a card is
-                // dragged (without this they teleport, visually piling
-                // up under/over the dragged card).
-                modifier = Modifier.animateItem(),
+                // Do NOT add Modifier.animateItem() here: the library already
+                // applies item placement animation internally (its
+                // `animateItemPlacement` flag) *and* translates the dragged
+                // item via graphicsLayer. A second animateItem() on top makes
+                // the dragged card and its siblings animate from two sources,
+                // which is what made the cards pile up and overlap mid-drag.
             ) { isDragging ->
                 androidx.compose.foundation.layout.Column(
                     modifier = Modifier
-                        .zIndex(if (isDragging) 1f else 0f)
+                        // Only the dragged card needs to float above the rest.
+                        // zIndex on every item (0f included) creates a stacking
+                        // context per item and is not needed for siblings.
+                        .then(if (isDragging) Modifier.zIndex(1f) else Modifier)
                         .alpha(if (isDragging) 0.95f else 1f)
                         .scale(if (isDragging) 0.98f else 1f)
                         .longPressDraggableHandle(enabled = reorderEnabled),
@@ -106,12 +117,13 @@ fun <T> ReorderableColumnWithHandle(
             ReorderableItem(
                 state = reorderableState,
                 key = keyOf(item),
-                modifier = Modifier.animateItem(),
+                // No Modifier.animateItem(): see ReorderableColumn above — the
+                // library animates placement itself.
             ) { isDragging ->
                 val handle = Modifier.longPressDraggableHandle(enabled = handleEnabled)
                 Column(
                     modifier = Modifier
-                        .zIndex(if (isDragging) 1f else 0f)
+                        .then(if (isDragging) Modifier.zIndex(1f) else Modifier)
                         .alpha(if (isDragging) 0.95f else 1f)
                         .scale(if (isDragging) 0.98f else 1f),
                 ) {

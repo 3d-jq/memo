@@ -109,6 +109,48 @@ class ProviderRepository(
         }
     }
 
+    /**
+     * Collapse builtin rows stored under a non-canonical spelling
+     * (`"zhipu ai"` → `"Zhipu AI"`) onto the canonical key. Older builds let
+     * the user type a key verbatim, so the same provider could exist twice:
+     * once seeded, once hand-written. The list then rendered two rows sharing
+     * one LazyList key, which corrupts item reuse (cards collapse/overlap).
+     *
+     * The non-canonical row usually carries the real user data (API key,
+     * models), so it wins: it is renamed when the canonical row is absent or
+     * carries no user data, otherwise the two are merged field-wise. The old
+     * preference order entry is rewritten too.
+     *
+     * Idempotent; returns the keys whose spelling changed.
+     */
+    fun migrateNonCanonicalBuiltinKeys(): List<String> {
+        val renamed = mutableListOf<String>()
+        val orderBefore = order()
+        val orderAfter = orderBefore.toMutableList()
+
+        for (row in providerDao.getAll()) {
+            val canonical = canonicalBuiltinKey(row.id) ?: continue
+            if (canonical == row.id) continue
+
+            val incoming = runCatching { ProviderConfig.fromJsonString(json, row.payload) }.getOrNull() ?: continue
+            val target = getConfig(canonical)
+
+            val merged = resolveMigrationTarget(target, incoming)
+            if (merged != null) {
+                saveConfig(merged.copy(id = canonical))
+            }
+            providerDao.delete(row.id)
+
+            renamed += row.id
+        }
+
+        if (renamed.isNotEmpty()) {
+            val next = renameOrderEntries(orderBefore, renamed.map { it to canonicalizeKey(it) }.toMap())
+            if (next != orderBefore) setOrder(next)
+        }
+        return renamed
+    }
+
     // ---- ordering (providers_order_v1) ----
 
     fun order(): List<String> {
@@ -339,6 +381,83 @@ class ProviderRepository(
         val BUILTIN_KEYS = listOf(
             "OpenAI", "SiliconFlow", "Gemini", "OpenRouter", "MemoIN", "Tensdaq",
             "DeepSeek", "AIhubmix", "Aliyun", "Zhipu AI", "Claude", "Grok", "ByteDance",
+        )
+
+        /**
+         * Case/space-insensitive lookup from any stored key to the canonical
+         * built-in spelling. Older builds persisted hand-typed keys verbatim
+         * (the device DB carries `"zhipu ai"` next to the seeded `"Zhipu AI"`),
+         * which made the list render the same provider twice and — worse —
+         * handed two LazyList items the same render key. Returns null when the
+         * key belongs to no built-in.
+         */
+        fun canonicalBuiltinKey(key: String): String? {
+            val normalized = key.trim().lowercase()
+            return BUILTIN_KEYS.firstOrNull { it.lowercase() == normalized }
+        }
+
+        /**
+         * Fold a stored key onto its canonical built-in spelling, leaving
+         * user-added providers untouched.
+         */
+        fun canonicalizeKey(key: String): String = canonicalBuiltinKey(key) ?: key
+
+        /**
+         * Rewrite every occurrence of a renamed key, dropping the duplicates
+         * that collapse into one canonical entry while keeping first-seen
+         * position (so the user's ordering survives the merge).
+         */
+        fun renameOrderEntries(order: List<String>, renames: Map<String, String>): List<String> {
+            if (renames.isEmpty()) return order
+            return order.map { renames[it] ?: it }.distinct()
+        }
+
+        /** True when the config holds data a pristine default would not. */
+        fun hasUserData(cfg: ProviderConfig): Boolean =
+            cfg.apiKey.isNotBlank() || cfg.models.isNotEmpty() || !cfg.apiKeys.isNullOrEmpty()
+
+        /**
+         * Decide what the canonical row should become after folding a
+         * non-canonical row onto it:
+         * - no canonical row yet → the incoming config becomes canonical,
+         * - canonical row exists and the incoming row holds user data → merge
+         *   field-wise ([mergeOnto]),
+         * - canonical row exists and the incoming row is empty/default → null
+         *   (nothing to write; the canonical row already has everything).
+         */
+        fun resolveMigrationTarget(
+            canonical: ProviderConfig?,
+            incoming: ProviderConfig,
+        ): ProviderConfig? = when {
+            canonical == null -> incoming
+            hasUserData(incoming) -> mergeOnto(canonical, incoming)
+            else -> null
+        }
+
+        /**
+         * Fold [incoming] (non-canonical row) over [base] (canonical row):
+         * non-blank scalars and non-empty collections from [incoming] win, so
+         * the row the user actually filled in is preserved.
+         */
+        fun mergeOnto(base: ProviderConfig, incoming: ProviderConfig): ProviderConfig = base.copy(
+            name = incoming.name.takeIf { it.isNotBlank() } ?: base.name,
+            apiKey = incoming.apiKey.takeIf { it.isNotBlank() } ?: base.apiKey,
+            baseUrl = incoming.baseUrl.takeIf { it.isNotBlank() } ?: base.baseUrl,
+            providerType = incoming.providerType ?: base.providerType,
+            chatPath = incoming.chatPath ?: base.chatPath,
+            useResponseApi = incoming.useResponseApi ?: base.useResponseApi,
+            vertexAI = incoming.vertexAI ?: base.vertexAI,
+            location = incoming.location ?: base.location,
+            projectId = incoming.projectId ?: base.projectId,
+            serviceAccountJson = incoming.serviceAccountJson ?: base.serviceAccountJson,
+            models = (base.models + incoming.models).distinct(),
+            modelOverrides = base.modelOverrides + incoming.modelOverrides,
+            customHeaders = if (incoming.customHeaders.isNotEmpty()) incoming.customHeaders else base.customHeaders,
+            customBody = if (incoming.customBody.isNotEmpty()) incoming.customBody else base.customBody,
+            multiKeyEnabled = incoming.multiKeyEnabled ?: base.multiKeyEnabled,
+            apiKeys = if (!incoming.apiKeys.isNullOrEmpty()) incoming.apiKeys else base.apiKeys,
+            avatarType = incoming.avatarType ?: base.avatarType,
+            avatarValue = incoming.avatarValue ?: base.avatarValue,
         )
 
         /**

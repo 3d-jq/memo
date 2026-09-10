@@ -36,6 +36,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,6 +64,7 @@ import com.composables.icons.lucide.Cloud
 import com.composables.icons.lucide.KeyRound
 import com.composables.icons.lucide.Power
 import com.composables.icons.lucide.Zap
+import com.composables.icons.lucide.CheckCheck
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.EyeOff
@@ -69,6 +72,7 @@ import com.composables.icons.lucide.HeartPulse
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Trash2
+import com.composables.icons.lucide.X
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.db.PayloadEntityDao
@@ -92,6 +96,7 @@ import kotlinx.serialization.json.Json
  */
 private val detailJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun ProviderDetailScreen(
     container: AppContainerImpl,
@@ -118,11 +123,12 @@ fun ProviderDetailScreen(
     var showNetwork by remember { mutableStateOf(false) }
     var showMultiKey by remember { mutableStateOf(false) }
     var showBalance by remember { mutableStateOf(false) }
-    var testModel by remember { mutableStateOf<String?>(null) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    // Model selection mode, hoisted so the AppBar can drive it (L208-233).
+    var modelSelectMode by remember { mutableStateOf(false) }
+    val selectedModels = remember { mutableStateListOf<String>() }
     val deletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_deleted_snackbar)
     val testOkTemplate = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_test_success_message)
-    var showApiKey by remember { mutableStateOf(false) }
 
     // Immediate save (debounced 400ms) whenever the config changes.
     LaunchedEffect(providerId) {
@@ -190,6 +196,21 @@ fun ProviderDetailScreen(
                     }
                 }
             } else {
+                // Multi-select entry: CheckCheck to enter, X to leave
+                // (provider_detail_page L208-233).
+                IconActionButton(
+                    if (modelSelectMode) Lucide.X else Lucide.CheckCheck,
+                    cs.onSurface,
+                    if (modelSelectMode) {
+                        stringResource(com.psyche.memo.ui.R.string.provider_detail_page_cancel_button)
+                    } else {
+                        stringResource(com.psyche.memo.ui.R.string.mcp_assistant_sheet_select_all)
+                    },
+                ) {
+                    Haptics.light(view)
+                    modelSelectMode = !modelSelectMode
+                    if (!modelSelectMode) selectedModels.clear()
+                }
                 IconActionButton(Lucide.Trash2, cs.onSurface, stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_title)) {
                     showDelete = true
                 }
@@ -220,7 +241,9 @@ fun ProviderDetailScreen(
                     cfg = cfg,
                     container = container,
                     onCfgChange = { cfg = it },
-                    onTestModel = { testModel = it },
+                    selectMode = modelSelectMode,
+                    selected = selectedModels,
+                    onSelectModeChange = { modelSelectMode = it },
                     onReload = {
                         // Reload from provider_rows so a detail-sheet save
                         // (which writes the DB directly) is reflected here.
@@ -746,19 +769,74 @@ private fun ModelsTab(
     cfg: ProviderConfig,
     container: AppContainerImpl,
     onCfgChange: (ProviderConfig) -> Unit,
-    onTestModel: (String) -> Unit,
+    selectMode: Boolean,
+    selected: MutableList<String>,
+    onSelectModeChange: (Boolean) -> Unit,
     onReload: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
     var showCreate by remember { mutableStateOf(false) }
     var detailModel by remember { mutableStateOf<String?>(null) }
     var fetching by remember { mutableStateOf(false) }
+    // Connection-check state per model id (_detectionResults / _pendingModels /
+    // _currentDetectingModel collapsed into one map).
+    val checks = remember { mutableStateMapOf<String, ModelCheckResult>() }
+    var detecting by remember { mutableStateOf(false) }
+    var deleteAllConfirm by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<List<String>?>(null) }
+
     val models = cfg.models
     val modelDeletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_model_deleted_snackbar)
+    val undoLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_undo_button)
+    val confirmTitle = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_confirm_delete_title)
+    val confirmContent = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_confirm_delete_content)
+    val cancelLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_cancel_button)
+    val deleteLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_button)
+    val deleteAllTooltip = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_all_models_tooltip)
+    val deleteAllWarning = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_all_models_warning)
 
     fun saveModels(next: List<String>) {
         onCfgChange(cfg.copy(models = next))
+    }
+
+    /**
+     * Deletes [ids] and shows the undo snackbar. Mirrors `_confirmDeleteModels`
+     * (L3148-3214) + the slidable action's delete body (L1623-1708): the models,
+     * their overrides and every reference to them (assistant chat model,
+     * conversation pin, pinned favourites) all go, and undo restores the models
+     * at their original indices.
+     */
+    fun deleteModels(ids: List<String>) {
+        if (ids.isEmpty()) return
+        val idSet = ids.toSet()
+        val previousOverrides = ids.mapNotNull { id -> cfg.modelOverrides[id]?.let { id to it } }.toMap()
+        val indexed = ids.mapNotNull { id -> models.indexOf(id).takeIf { it >= 0 }?.let { it to id } }
+        saveModels(models.filterNot { it in idSet })
+        container.clearModelReferences(cfg.id, ids)
+        SnackbarManager.show(
+            AppNotification(
+                message = modelDeletedMessage,
+                type = NotificationType.INFO,
+                actionLabel = undoLabel,
+                onAction = {
+                    // Restore at the original positions (ascending, so an
+                    // earlier insert never shifts a later target index).
+                    val restored = models.toMutableList()
+                    indexed.sortedBy { it.first }.forEach { (index, id) ->
+                        restored.add(index.coerceAtMost(restored.size), id)
+                    }
+                    onCfgChange(
+                        cfg.copy(
+                            models = restored,
+                            modelOverrides = cfg.modelOverrides + previousOverrides,
+                        ),
+                    )
+                },
+            ),
+        )
     }
 
     Column(
@@ -785,96 +863,86 @@ private fun ModelsTab(
             ReorderableColumn(
                 items = models,
                 keyOf = { it },
+                reorderEnabled = !selectMode,
                 onMove = { from, to ->
-                    val next = models.toMutableList()
-                    val moved = next.removeAt(from)
-                    next.add(to, moved)
-                    saveModels(next)
+                    // Disabled in selection mode, matching onReorderItem's own
+                    // `if (_isSelectionMode) return;` guard (L1494).
+                    val next = if (selectMode) null else applyModelMove(models, from, to)
+                    if (next != null) saveModels(next)
                 },
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
                     .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
                     .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
-            ) { model, isDragging ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onTestModel(model) }
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = model,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Icon(
-                        Lucide.Settings2,
-                        contentDescription = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_edit_tooltip),
-                        tint = cs.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier
-                            .size(34.dp)
-                            .padding(7.dp)
-                            .clickable { detailModel = model },
-                    )
-                    Icon(
-                        Lucide.Trash2,
-                        contentDescription = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_model_button),
-                        tint = cs.error,
-                        modifier = Modifier
-                            .size(34.dp)
-                            .padding(7.dp)
-                            .clickable {
-                                saveModels(models - model)
-                                SnackbarManager.show(
-                                    AppNotification(message = modelDeletedMessage, type = NotificationType.SUCCESS),
-                                )
-                            },
-                    )
-                }
+            ) { model, _ ->
+                ModelRowWithSwipe(
+                    modelId = model,
+                    cfg = cfg,
+                    selectMode = selectMode,
+                    selected = selected.contains(model),
+                    check = checks[model],
+                    onToggleSelect = {
+                        if (selected.contains(model)) selected.remove(model) else selected.add(model)
+                    },
+                    onEdit = { detailModel = model },
+                    onRequestDelete = { pendingDelete = listOf(model) },
+                )
             }
         }
 
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp)
-                    .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
-                    .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                    .clickable(enabled = !fetching) { fetching = true },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (fetching) {
-                    androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        ModelActionToolbar(
+            selectMode = selectMode,
+            fetching = fetching,
+            detecting = detecting,
+            hasModels = models.isNotEmpty(),
+            allSelected = selected.size == models.size && models.isNotEmpty(),
+            selectionCount = selected.size,
+            hasFailed = models.any { checks[it]?.state == ModelCheckState.FAILURE },
+            onFetch = { fetching = true },
+            onAddNew = { showCreate = true },
+            onDeleteAll = { deleteAllConfirm = true },
+            onToggleSelectAll = {
+                Haptics.light(view)
+                if (selected.size == models.size) {
+                    selected.clear()
                 } else {
-                    Text(
-                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_fetch_models_button),
-                        style = MaterialTheme.typography.labelLarge.copy(color = cs.primary),
-                    )
+                    selected.clear()
+                    selected.addAll(models)
                 }
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp)
-                    .background(cs.primary, RoundedCornerShape(12.dp))
-                    .clickable { showCreate = true },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_add_new_model_button),
-                    style = MaterialTheme.typography.labelLarge.copy(color = cs.onPrimary, fontWeight = FontWeight.SemiBold),
-                )
-            }
-        }
+            },
+            onDetect = {
+                scope.launch {
+                    detecting = true
+                    val targets = selected.toList()
+                    checks.clear()
+                    targets.forEach { checks[it] = ModelCheckResult(ModelCheckState.PENDING) }
+                    // Serial, 500ms apart (_startDetection L3216-3274).
+                    targets.forEach { id ->
+                        checks[id] = ModelCheckResult(ModelCheckState.RUNNING)
+                        val (ok, message) = runConnectionCheck(container, cfg, id)
+                        checks[id] = if (ok) {
+                            ModelCheckResult(ModelCheckState.SUCCESS)
+                        } else {
+                            ModelCheckResult(ModelCheckState.FAILURE, message)
+                        }
+                        kotlinx.coroutines.delay(500)
+                    }
+                    detecting = false
+                }
+            },
+            onDeleteFailed = {
+                val failed = models.filter { checks[it]?.state == ModelCheckState.FAILURE }
+                if (failed.isNotEmpty()) pendingDelete = failed
+            },
+            onDeleteSelected = {
+                if (selected.isNotEmpty()) pendingDelete = selected.toList()
+            },
+        )
     }
 
-    // Fetch executes against the provider's /models endpoint (core:llm).
+    // ---- Fetch executes against the provider's /models endpoint (core:llm). ----
     LaunchedEffect(fetching) {
         if (!fetching) return@LaunchedEffect
         val client = container.clientFor(cfg.classifiedKind())
@@ -912,4 +980,81 @@ private fun ModelsTab(
             },
         )
     }
+
+    // ---- Delete confirmation (single row / failed set / selection). ----
+    pendingDelete?.let { ids ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(confirmTitle) },
+            text = { Text(confirmContent) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteModels(ids)
+                    pendingDelete = null
+                    if (selectMode) {
+                        selected.clear()
+                        onSelectModeChange(false)
+                    }
+                }) {
+                    Text(deleteLabel, color = cs.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text(cancelLabel) }
+            },
+        )
+    }
+
+    if (deleteAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { deleteAllConfirm = false },
+            title = { Text(deleteAllTooltip) },
+            text = { Text(deleteAllWarning) },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteAllConfirm = false
+                    container.clearModelReferences(cfg.id, models)
+                    saveModels(emptyList())
+                }) {
+                    Text(deleteLabel, color = cs.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteAllConfirm = false }) { Text(cancelLabel) }
+            },
+        )
+    }
 }
+
+/**
+ * One reorder step applied to a model list — the same
+ * `add(to, removeAt(from))` move the providers list uses, shared so both have
+ * identical stale-index behaviour (reject, never clamp).
+ */
+internal fun applyModelMove(models: List<String>, from: Int, to: Int): List<String>? {
+    if (from !in models.indices || to !in models.indices || from == to) return null
+    return models.toMutableList().apply { add(to, removeAt(from)) }
+}
+
+/** Runs one non-streaming probe against a single model. Returns ok to message. */
+private suspend fun runConnectionCheck(
+    container: AppContainerImpl,
+    cfg: ProviderConfig,
+    modelId: String,
+): Pair<Boolean, String> {
+    val client = container.clientFor(cfg.classifiedKind())
+    val result = runCatching {
+        client.complete(
+            com.psyche.memo.llm.client.LlmRequest(
+                providerId = cfg.id,
+                modelId = modelId,
+                messages = listOf(com.psyche.memo.llm.client.LlmMessage(role = "user", content = "hi")),
+                apiKey = cfg.apiKey,
+                baseUrl = container.baseUrlFor(cfg.id),
+                chatPath = cfg.chatPath,
+            ),
+        )
+    }
+    return if (result.isSuccess) true to modelId else false to (result.exceptionOrNull()?.message ?: "error")
+}
+

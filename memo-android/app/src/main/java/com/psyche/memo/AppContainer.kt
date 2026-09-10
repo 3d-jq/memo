@@ -233,6 +233,52 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         return prefs.getString("base_url_$providerId", null)
             ?: com.psyche.memo.llm.client.LlmDefaults.baseUrlFor(providerId)
     }
+
+    /**
+     * Drops every reference to the given models of [providerKey].
+     *
+     * Port of `_clearAssistantSelectionsForModels` (provider_detail_page.dart
+     * L3083-3118) plus the deletion path's own cleanup (L1651-1662). Deleting a
+     * model from a provider must not leave an assistant, a conversation or the
+     * pinned list pointing at a model that no longer exists — otherwise the
+     * chat silently falls back or errors on send.
+     *
+     * Three stores are swept:
+     * 1. `assistant_rows` — an assistant whose `chatModelProvider`/`chatModelId`
+     *    match loses its chat-model binding (back to "follow default").
+     * 2. `conversation_rows` — a conversation pinning the model is reset to null.
+     * 3. `pinned_models_v1` — the "providerKey::modelId" favourites list.
+     */
+    fun clearModelReferences(providerKey: String, modelIds: List<String>) {
+        if (modelIds.isEmpty()) return
+        val wanted = modelIds.toSet()
+
+        runCatching {
+            val store = assistantStore
+            store.getAll()
+                .filter { it.chatModelProvider == providerKey && it.chatModelId in wanted }
+                .forEach { store.update(it.copy(chatModelProvider = null, chatModelId = null)) }
+        }
+
+        runCatching {
+            conversationDao.getAll()
+                .filter { it.chatModelProvider == providerKey && it.chatModelId in wanted }
+                .forEach { conversationDao.setChatModel(it.id, null, null) }
+        }
+
+        runCatching {
+            val pinned = com.psyche.memo.ui.readPinnedModels(this)
+            val kept = pinned.filterNot { entry ->
+                val separator = entry.indexOf("::")
+                separator > 0 &&
+                    entry.substring(0, separator) == providerKey &&
+                    entry.substring(separator + 2) in wanted
+            }.toSet()
+            if (kept.size != pinned.size) {
+                com.psyche.memo.ui.writePinnedModels(this, kept)
+            }
+        }
+    }
 }
 
 /**
