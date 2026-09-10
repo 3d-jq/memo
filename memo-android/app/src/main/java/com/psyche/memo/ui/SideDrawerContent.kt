@@ -801,12 +801,13 @@ fun SideDrawerContent(
     }
 
     // 用户头像 sheet（`_editAvatar`）与昵称对话框（`_editUserName`）。
-    if (userAvatarEditRequested) {
-        UserAvatarEditor(
-            store = container.userProfileStore,
-            onDismiss = { userAvatarEditRequested = false },
-        )
-    }
+    // UserAvatarEditor 必须常驻组合（内部用 open/step 决定渲染），不能用
+    // if 包住：点「选图」会先关 sheet 卸载组件，相册 launcher 一起被注销。
+    UserAvatarEditor(
+        store = container.userProfileStore,
+        open = userAvatarEditRequested,
+        onDismiss = { userAvatarEditRequested = false },
+    )
     if (userNicknameEditRequested) {
         NicknameDialog(
             initial = userProfile.name,

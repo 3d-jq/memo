@@ -54,13 +54,21 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun UserAvatarEditor(
     store: UserProfileStore,
+    open: Boolean,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     // sheet → 子弹窗的单向流转（原版同样是先 pop sheet 再开弹窗）。
+    //
+    // 关键：本组件必须**常驻组合**。AvatarPickerSheet 每一行都是「先 onDismiss
+    // 再执行 action」，如果调用方用 if (open) 包住本组件，点「选图」会先卸载
+    // 组件 → rememberLauncherForActivityResult 注销 → 系统选择器返回时没有接收
+    // 方（emoji/链接/QQ 同样什么都不会弹出）。所以用 open + step 两个状态决定
+    // 渲染，而不是让调用方决定挂载。
     var step by remember { mutableStateOf(Step.Sheet) }
+    androidx.compose.runtime.LaunchedEffect(open) { if (open) step = Step.Sheet }
 
     // `_pickLocalImage` L3693-3733 —— 相册选图后复制进应用目录（content://
     // URI 重启后失效），并按原版的 maxWidth 1024 / quality 90 压缩；失败时
@@ -117,6 +125,11 @@ internal fun UserAvatarEditor(
             }
         }
     }
+
+    // open=false 且停在 sheet 步骤 → 完全空闲（用户取消 / 未打开）。
+    // 子弹窗步骤不受 open 影响：sheet 关闭时把 step 切成 Emoji/Url/Qq，
+    // 这时要继续渲染子弹窗。
+    if (!open && step == Step.Sheet) return
 
     when (step) {
         Step.Sheet -> AvatarPickerSheet(
