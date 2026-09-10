@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1132,6 +1133,32 @@ fun ChatContent(
                 )
             }
         } else {
+        // 模型按钮品牌图标（CurrentModelIcon：modelId 优先、providerKey 兜底；
+        // 无 asset 用首字母圆；都没选显示 Boxes）。
+        val modelIconAsset = remember(providerId, modelId) {
+            val mid = modelId.takeIf { it.isNotEmpty() }
+            val pid = providerId.takeIf { it.isNotEmpty() }
+            if (mid == null && pid == null) null
+            else BrandAssets.assetForName(mid.orEmpty())
+                ?: pid?.let { BrandAssets.assetForName(it) }
+        }
+        val modelIconInitial = modelId.ifEmpty { providerId }
+        // 搜索按钮（CIB:1782-1863）：当前助手启用搜索 → 所选搜索服务的品牌
+        // 图标；未启用 → Globe。内置搜索（builtinSearchActive）未移植，恒 false。
+        val assistantForSearch = container.currentAssistant()
+        val searchActive = assistantForSearch?.searchEnabled == true
+        // showSearchSheet 关闭后重组时重算，让 sheet 里改的服务/开关即时反映。
+        val searchSvc = remember(container, showSearchSheet, searchActive) {
+            if (!searchActive) null
+            else runCatching {
+                val svcs = container.searchSettingsRepository.services()
+                val i = container.searchSettingsRepository.selectedIndex()
+                    .coerceIn(0, (svcs.size - 1).coerceAtLeast(0))
+                svcs.getOrNull(i)
+            }.getOrNull()
+        }
+        val searchSvcName = searchSvc?.let { stringResource(com.psyche.memo.ui.SearchServiceUi.nameRes(it)) }
+        val searchIconAsset = searchSvcName?.let { BrandAssets.assetForName(it) }
         ChatInputBar(
             input = input,
             streaming = streaming,
@@ -1145,6 +1172,10 @@ fun ChatContent(
             onStop = vm::stop,
             onSelectModel = { showModelSheet = true },
             onOpenSearch = { showSearchSheet = true },
+            modelIconAsset = modelIconAsset,
+            modelIconInitial = modelIconInitial,
+            searchActive = searchActive,
+            searchIconAsset = searchIconAsset,
             onOpenTools = {
                 worldBooksAvailable = runCatching {
                     com.psyche.memo.data.repo.WorldBookRepository(
@@ -2293,6 +2324,15 @@ private fun ChatInputBar(
     onOpenMcp: () -> Unit = {},
     onSelectModel: () -> Unit,
     onOpenSearch: () -> Unit = {},
+    // 模型按钮（chat_input_bar.dart CIB:1763-1773 + model_icon.dart
+    // CurrentModelIcon）：选中模型后按钮显示品牌图标圆（modelIconAsset），
+    // 无品牌资产时用首字母圆（modelIconInitial）；两者都空 → Boxes。
+    modelIconAsset: String? = null,
+    modelIconInitial: String? = null,
+    // 搜索按钮（CIB:1782-1863）：searchActive 时显示所选搜索服务的品牌
+    // 图标（searchIconAsset），否则 Globe。
+    searchActive: Boolean = false,
+    searchIconAsset: String? = null,
     onOpenTools: () -> Unit = {},
     onQuickPhrase: () -> Unit = {},
     attachments: List<ChatViewModel.PendingAttachment> = emptyList(),
@@ -2547,18 +2587,69 @@ private fun ChatInputBar(
                                         ChatStyleSpec.INPUT_ACTIONS_GAP_DP.dp,
                                     ),
                                 ) {
-                                    InputIcon(
-                                        Lucide.Boxes,
-                                        stringResource(UiR.string.chat_input_bar_select_model_tooltip),
-                                        onSelectModel,
-                                        cs,
-                                    )
-                                    InputIcon(
-                                        Lucide.Globe,
-                                        stringResource(UiR.string.chat_input_bar_online_search_tooltip),
-                                        onOpenSearch,
-                                        cs,
-                                    )
+                                    // CIB:1763-1773 —— 模型按钮：选中模型后
+                                    // 显示 CurrentModelIcon（28 圆底 + 品牌图标/
+                                    // 首字母），未选择时 Boxes。
+                                    val modelAsset = modelIconAsset
+                                    if (modelAsset != null || !modelIconInitial.isNullOrEmpty()) {
+                                        IconButton(
+                                            onClick = onSelectModel,
+                                            modifier = Modifier.size(32.dp),
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .background(
+                                                        cs.primary.copy(alpha = if (isDark) 0.18f else 0.1f),
+                                                        CircleShape,
+                                                    ),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                if (modelAsset != null) {
+                                                    coil.compose.AsyncImage(
+                                                        model = modelAsset,
+                                                        contentDescription = stringResource(UiR.string.chat_input_bar_select_model_tooltip),
+                                                        colorFilter = if (isDark && BrandAssets.assetNeedsDarkInvert(modelAsset)) {
+                                                            androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
+                                                        } else {
+                                                            null
+                                                        },
+                                                        modifier = Modifier.size(14.dp),
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        text = modelIconInitial!!.trim().take(1).uppercase(),
+                                                        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = cs.primary),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        InputIcon(
+                                            Lucide.Boxes,
+                                            stringResource(UiR.string.chat_input_bar_select_model_tooltip),
+                                            onSelectModel,
+                                            cs,
+                                        )
+                                    }
+                                    // CIB:1811-1863 —— 搜索按钮：启用搜索时显示
+                                    // 所选服务的品牌图标（active 色），否则 Globe。
+                                    if (searchActive && searchIconAsset != null) {
+                                        InputIconAsset(
+                                            searchIconAsset,
+                                            stringResource(UiR.string.chat_input_bar_online_search_tooltip),
+                                            onOpenSearch,
+                                            cs,
+                                            active = true,
+                                        )
+                                    } else {
+                                        InputIcon(
+                                            Lucide.Globe,
+                                            stringResource(UiR.string.chat_input_bar_online_search_tooltip),
+                                            onOpenSearch,
+                                            cs,
+                                        )
+                                    }
                                     // CIB:1880-1920 —— Brain 按钮渲染当前预算图标
                                     // （ReasoningIcons.budgetIcon），点开预算 sheet。
                                     InputIconAsset(
@@ -2837,16 +2928,21 @@ private fun InputIconAsset(
     label: String,
     onClick: () -> Unit,
     cs: androidx.compose.material3.ColorScheme,
+    active: Boolean = false,
 ) {
     IconButton(onClick = onClick, modifier = Modifier.size(32.dp)) {
         coil.compose.AsyncImage(
             model = asset,
             contentDescription = label,
             colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
-                cs.onSurface.copy(
-                    alpha = if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
-                    else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
-                ),
+                if (active) {
+                    cs.primary
+                } else {
+                    cs.onSurface.copy(
+                        alpha = if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
+                        else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
+                    )
+                },
             ),
             modifier = Modifier.size(20.dp),
         )
