@@ -41,7 +41,10 @@ fun <T> ReorderableColumn(
 ) {
     val listState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
-        onMove(from.index, to.index)
+        onMove(
+            dataIndexOf(items, keyOf, from.key, from.index),
+            dataIndexOf(items, keyOf, to.key, to.index),
+        )
     }
     // Report drag start/end so the caller can hold a live order while dragging
     // and persist exactly once on release.
@@ -104,7 +107,10 @@ fun <T> ReorderableColumnWithHandle(
 ) {
     val listState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(listState) { from, to ->
-        onMove(from.index, to.index)
+        onMove(
+            dataIndexOf(items, keyOf, from.key, from.index),
+            dataIndexOf(items, keyOf, to.key, to.index),
+        )
     }
 
     androidx.compose.foundation.lazy.LazyColumn(
@@ -206,4 +212,26 @@ fun <T> ReorderableInlineColumnWithHandle(
             }
         }
     }
+}
+
+/**
+ * Maps one of the library's lazy-list indices onto a data index.
+ *
+ * `sh.calvin.reorderable` reports positions in the whole lazy list, so any
+ * header/footer item a caller renders ahead of the data shifts every index by
+ * its count. Feeding those raw indices to `onMove` silently reorders the wrong
+ * pair — the drag then desyncs from the layout and siblings pile up on the
+ * dragged card. Item keys are unaffected by that offset, so resolve through
+ * them first; a target that is a non-data item (header/footer) falls back to a
+ * clamped index, which lands on the list boundary.
+ *
+ * Idempotent when there is no header/footer: a data key resolves to its own
+ * index, so existing callers behave exactly as before.
+ */
+internal fun <T> dataIndexOf(items: List<T>, keyOf: (T) -> Any, key: Any?, lazyIndex: Int): Int {
+    if (key != null) {
+        val byKey = items.indexOfFirst { keyOf(it) == key }
+        if (byKey >= 0) return byKey
+    }
+    return lazyIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
 }
