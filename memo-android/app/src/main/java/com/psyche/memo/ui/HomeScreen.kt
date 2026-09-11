@@ -316,9 +316,6 @@ fun HomeScreen(
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
     // 全屏手势只挂这一处：主内容和抽屉是兄弟节点，各挂一份会让同一次拖动被两个
     // pointerInput 同时处理（offset 加两次、settle 触发两次 → 抖动）。
-    // 24dp 在 3x 屏上只有 72px，从稍靠里的位置起手就拉不动（用户反馈"手势失效"）。
-    // 放宽到 48dp，仍是"左边缘起手"的语义。
-    val drawerEdgePx = androidx.compose.ui.platform.LocalDensity.current.run { 48.dp.toPx() }
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -326,7 +323,6 @@ fun HomeScreen(
             .clipToBounds()
             .drawerDragGesture(
                 widthPx = drawerWidthPx,
-                edgePx = drawerEdgePx,
                 contentOffsetPx = contentOffsetPx,
                 velocityPx = dragVelocityPx,
                 lastUptimeMillis = lastMoveUptime,
@@ -3120,7 +3116,6 @@ private fun timeStr(millis: Long): String = TIME_FORMATTER.format(Date(millis))
  */
 private fun Modifier.drawerDragGesture(
     widthPx: Float,
-    edgePx: Float,
     contentOffsetPx: androidx.compose.runtime.MutableFloatState,
     velocityPx: androidx.compose.runtime.MutableFloatState,
     lastUptimeMillis: androidx.compose.runtime.MutableLongState,
@@ -3135,10 +3130,9 @@ private fun Modifier.drawerDragGesture(
     val slopPx = max(viewConfiguration.touchSlop, with(density) { 18.dp.toPx() })
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
-        // 关闭态只有从左边缘起手才算「拉抽屉」（原版 edgeOnly，24dp）；打开态
-        // 任意位置都能拖回去。
+        // 起手位置不限：用户要的是「在对话界面任意位置横滑就能拉出侧边栏」。
+        // 方向仍然门控（见下），所以反方向拖动不会被吃掉。
         val startedOpen = contentOffsetPx.floatValue > 0f
-        if (!startedOpen && down.position.x > edgePx) return@awaitEachGesture
         velocityPx.floatValue = 0f
         var pastSlop = false
         var totalDx = 0f
