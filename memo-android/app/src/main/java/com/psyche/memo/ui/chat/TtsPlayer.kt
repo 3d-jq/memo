@@ -100,8 +100,16 @@ object TtsPlayer {
         engine?.setOnUtteranceProgressListener(utteranceListener)
     }
 
-    /** Pause stops the engine; resume restarts at the current chunk. */
+    /**
+     * Pause stops the engine; resume restarts at the current chunk. After a
+     * session finished, the same button replays it (upstream `togglePause`
+     * delegates to `replay()` when the status is ended).
+     */
     fun togglePause() {
+        if (_state.value.status == TtsPlaybackStatus.ENDED) {
+            speakFromStart()
+            return
+        }
         if (!_state.value.isActive) return
         val engineRef = engine ?: return
         if (paused) {
@@ -116,13 +124,22 @@ object TtsPlayer {
         syncSpeaking()
     }
 
-    /** Ends the session but keeps the pill visible so it can be replayed. */
+    /**
+     * The X button: ends the session and takes the pill away (`_stopInternal`
+     * resets to an idle state, so `isPlayerVisible` turns false). A session that
+     * finished on its own instead stays on screen with a replay button.
+     */
     fun stop() {
         session++
         runCatching { engine?.stop() }
         pendingText = null
+        chunks = emptyList()
+        timeline = null
+        currentChunk = 0
+        chunkOffsetMs = 0L
         paused = false
-        finish(TtsPlaybackStatus.ENDED, null)
+        _state.value = TtsPlaybackState(speed = _state.value.speed)
+        syncSpeaking()
     }
 
     fun seekBackward() = seekRelative(-SEEK_STEP_MS)
