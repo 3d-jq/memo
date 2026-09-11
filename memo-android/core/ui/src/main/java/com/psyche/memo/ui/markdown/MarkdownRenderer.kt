@@ -1007,7 +1007,30 @@ private fun TableRowView(
         Row(
             modifier = Modifier
                 .then(if (rowBackground != null) Modifier.background(rowBackground) else Modifier)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                // 竖线画在**整行**上，而不是每个单元格各自画：同一行里单元格高度
+                // 可能不同（多行文字 vs 单行），各画各的会让短的那条只到半截 ——
+                // 用户看到的"竖线没接满"。Flutter 的 TableBorder(verticalInside)
+                // 是整表统一画的，这里等价还原。
+                .drawBehind {
+                    if (columnCount <= 1) return@drawBehind
+                    val weightTotal = weights.sum().takeIf { it > 0f } ?: return@drawBehind
+                    val stroke = TABLE_BORDER_WIDTH.toPx()
+                    var x = 0f
+                    for (i in 0 until columnCount - 1) {
+                        x += if (scrollable) {
+                            size.width / columnCount
+                        } else {
+                            size.width * weights.getOrElse(i) { 1f } / weightTotal
+                        }
+                        drawLine(
+                            color = borderColor,
+                            start = androidx.compose.ui.geometry.Offset(x, 0f),
+                            end = androidx.compose.ui.geometry.Offset(x, size.height),
+                            strokeWidth = stroke,
+                        )
+                    }
+                },
         ) {
             for (i in 0 until columnCount) {
                 TableCellView(
@@ -1017,7 +1040,6 @@ private fun TableRowView(
                     columnWidth = columnWidth,
                     weight = weights.getOrElse(i) { 1f },
                     scrollable = scrollable,
-                    rightBorder = i < columnCount - 1,
                     borderColor = borderColor,
                     baseFontSize = baseFontSize,
                     baseLineHeight = baseLineHeight,
@@ -1045,7 +1067,6 @@ private fun androidx.compose.foundation.layout.RowScope.TableCellView(
     columnWidth: androidx.compose.ui.unit.Dp,
     weight: Float,
     scrollable: Boolean,
-    rightBorder: Boolean,
     borderColor: Color,
     baseFontSize: Float,
     baseLineHeight: Float,
@@ -1060,25 +1081,8 @@ private fun androidx.compose.foundation.layout.RowScope.TableCellView(
             // Scrolling tables need a fixed column width to be wider than the
             // viewport; non-scrolling ones share the available width by weight.
             .then(if (scrollable) Modifier.width(columnWidth) else Modifier.weight(weight))
-            .padding(horizontal = TABLE_CELL_PADDING_H, vertical = TABLE_CELL_PADDING_V)
-            // Interior vertical rule on the trailing edge only, matching
-            // TableBorder(verticalInside) — the outer frame belongs to the
-            // rounded card, so the last column draws no line and no cell draws
-            // one on its leading edge (that would double up with its neighbour).
-            .then(
-                if (rightBorder) {
-                    Modifier.drawBehind {
-                        val stroke = TABLE_BORDER_WIDTH.toPx()
-                        drawRect(
-                            color = borderColor,
-                            topLeft = androidx.compose.ui.geometry.Offset(size.width - stroke, 0f),
-                            size = androidx.compose.ui.geometry.Size(stroke, size.height),
-                        )
-                    }
-                } else {
-                    Modifier
-                },
-            ),
+            // 竖线由所在行统一绘制（见 TableRowView），这里不逐单元格画。
+            .padding(horizontal = TABLE_CELL_PADDING_H, vertical = TABLE_CELL_PADDING_V),
     ) {
         Text(
             text = annotated,
