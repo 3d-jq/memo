@@ -27,7 +27,7 @@ internal fun duplicateAssistantLocalFile(
         .lowercase()
         .takeIf { it.isNotEmpty() && it.length <= 6 }
         ?: "jpg"
-    val dir = File(context.filesDir, if (isAvatar) "assistant_avatars" else "assistant_backgrounds")
+    val dir = if (isAvatar) com.psyche.memo.AppDirs.avatars(context) else com.psyche.memo.AppDirs.images(context)
     if (!dir.exists()) dir.mkdirs()
     val prefix = if (isAvatar) "assistant" else "background"
     val dest = File(dir, "${prefix}_${newId}_${System.currentTimeMillis()}.$ext")

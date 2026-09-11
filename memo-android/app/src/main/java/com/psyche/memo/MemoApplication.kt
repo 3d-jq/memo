@@ -22,6 +22,9 @@ class MemoApplication : Application(), ImageLoaderFactory {
         // onto its canonical spelling before the fill-missing pass would seed a
         // second row for the same provider.
         container.preferenceRepository.migrateLegacyLocalSettings()
+        // 旧的自创资产目录（assistant_avatars / user_avatars / assistant_backgrounds）
+        // 搬进原版目录名，否则备份与存储页都找不到头像/背景文件。
+        AssetDirMigration.run(this, container.database)
         container.providerRepository.migrateNonCanonicalBuiltinKeys()
         container.providerRepository.ensureBuiltinDefaultsSeeded()
         // PDFBox needs its resource loader before the first PDF extraction.

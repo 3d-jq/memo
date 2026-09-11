@@ -257,8 +257,7 @@ internal fun NicknameDialog(
 
 private const val NICKNAME_MAX_LENGTH = 24
 
-/** 用户头像目录与压缩参数（对齐 Flutter 的 avatars 目录 + maxWidth1024/quality90）。 */
-private const val USER_AVATAR_DIR = "user_avatars"
+/** 压缩参数（对齐 Flutter 的 maxWidth1024/quality90）；目录与原版一致用 avatars/。 */
 private const val USER_AVATAR_MAX_WIDTH_PX = 1024
 private const val USER_AVATAR_QUALITY = 90
 
@@ -267,7 +266,7 @@ private const val USER_AVATAR_QUALITY = 90
  * L98-148 的 Android 等价物（解码 → 限宽缩放 → JPEG 重编码 → 返回新路径）。
  */
 private fun copyIntoUserAvatars(context: Context, uri: android.net.Uri): String? {
-    val dir = File(context.filesDir, USER_AVATAR_DIR).apply { mkdirs() }
+    val dir = com.psyche.memo.AppDirs.avatars(context)
     val dest = File(dir, "avatar_${System.currentTimeMillis()}.jpg")
     val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
         BitmapFactory.decodeStream(input)

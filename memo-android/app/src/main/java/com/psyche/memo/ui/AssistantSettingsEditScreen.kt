@@ -284,7 +284,7 @@ private fun BasicSettingsTab(
         if (uri != null) {
             avatarScope.launch(Dispatchers.IO) {
                 val copied = runCatching {
-                    val dir = File(context.filesDir, "assistant_avatars").apply { mkdirs() }
+                    val dir = com.psyche.memo.AppDirs.avatars(context)
                     val dest = File(dir, assistantId + "_" + System.currentTimeMillis() + ".jpg")
                     val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
                         android.graphics.BitmapFactory.decodeStream(input)
@@ -573,7 +573,7 @@ private fun BasicSettingsTab(
                 if (uri != null) {
                     scope.launch(Dispatchers.IO) {
                         val copied = runCatching {
-                            val dir = File(context.filesDir, "assistant_backgrounds").apply { mkdirs() }
+                            val dir = com.psyche.memo.AppDirs.images(context)
                             val dest = File(dir, assistantId + "_" + System.currentTimeMillis() + ".jpg")
                             context.contentResolver.openInputStream(uri)?.use { input ->
                                 dest.outputStream().use { input.copyTo(it) }
