@@ -544,9 +544,11 @@ class MemoryPipelineService(
             overrideEn = settings.gateEn,
         )
         gateStep?.appendPrompt(gatePrompt)
-        val gateRaw = runCatching { llmCall(gatePrompt) }.getOrNull()
+        val gateAttempt = runCatching { llmCall(gatePrompt) }
+        val gateRaw = gateAttempt.getOrNull()
         if (gateRaw == null) {
-            gateStep?.finish(MemoryTraceStepStatus.FAILED, "gate_request_failed")
+            val reason = "gate_request_failed:" + (gateAttempt.exceptionOrNull()?.message ?: "unknown")
+            gateStep?.finish(MemoryTraceStepStatus.FAILED, reason)
             skipRemainingSteps(trace, from = MemoryTraceStepKind.EXTRACT)
             return failWindow(
                 failureKey = failureKey,
@@ -554,7 +556,7 @@ class MemoryPipelineService(
                 windowEnd = windowEnd,
                 windowSize = window.size,
                 gate = null,
-                error = "gate_request_failed",
+                error = reason,
             )
         }
         gateStep?.appendResponse(gateRaw)
@@ -600,9 +602,11 @@ class MemoryPipelineService(
             overrideEn = settings.extractEn,
         )
         extractStep?.appendPrompt(extractPrompt)
-        val extractRaw = runCatching { llmCall(extractPrompt) }.getOrNull()
+        val extractAttempt = runCatching { llmCall(extractPrompt) }
+        val extractRaw = extractAttempt.getOrNull()
         if (extractRaw == null) {
-            extractStep?.finish(MemoryTraceStepStatus.FAILED, "extract_request_failed")
+            val reason = "extract_request_failed:" + (extractAttempt.exceptionOrNull()?.message ?: "unknown")
+            extractStep?.finish(MemoryTraceStepStatus.FAILED, reason)
             skipRemainingSteps(trace, from = MemoryTraceStepKind.SMART_ADD)
             return failWindow(
                 failureKey = failureKey,
@@ -610,7 +614,7 @@ class MemoryPipelineService(
                 windowEnd = windowEnd,
                 windowSize = window.size,
                 gate = gate,
-                error = "extract_request_failed",
+                error = reason,
             )
         }
         extractStep?.appendResponse(extractRaw)

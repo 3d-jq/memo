@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -30,7 +31,7 @@ import kotlinx.serialization.json.put
  * a truncated timestamp, which could violate the schema CHECK(sort_order>=0).
  */
 class ProviderRepository(
-    db: SQLiteDatabase,
+    private val db: SQLiteDatabase,
     private val prefs: PreferenceRepository,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -148,7 +149,81 @@ class ProviderRepository(
             val next = renameOrderEntries(orderBefore, renamed.map { it to canonicalizeKey(it) }.toMap())
             if (next != orderBefore) setOrder(next)
         }
+
+        // A renamed row leaves every stored model selection pointing at the old
+        // spelling. Lookups fold it back (AppContainer.providerConfig), but the
+        // stored value is also what the picker compares against to show the
+        // current choice — and what an exact-match lookup downstream would miss.
+        canonicalizeModelBindings(renamed.associateWith { canonicalizeKey(it) })
         return renamed
+    }
+
+    /** Preference keys whose value is a `provider::model` pair. */
+    private val modelSelectionKeys = listOf(
+        "selected_model_v1",
+        "memory_model_v1",
+        "title_model_v1",
+        "summary_model_v1",
+        "suggestion_model_v1",
+        "translate_model_v1",
+        "ocr_model_v1",
+        "compress_model_v1",
+    )
+
+    /**
+     * Rewrites every stored provider key that a rename invalidated: the
+     * `provider::model` preferences, the conversation-level chat model, and the
+     * assistant-level one inside its payload.
+     *
+     * Also folds non-canonical builtin spellings it finds without a rename, so a
+     * restored backup carrying upstream spellings is cleaned up on the next
+     * launch.
+     */
+    private fun canonicalizeModelBindings(renames: Map<String, String>) {
+        fun fold(key: String): String? {
+            val canonical = canonicalizeKey(key)
+            if (canonical != key) return canonical
+            return renames[key]
+        }
+
+        for (prefKey in modelSelectionKeys) {
+            val raw = prefs.readJson(prefKey) ?: continue
+            val value = runCatching { Json.parseToJsonElement(raw).jsonPrimitive.content }.getOrNull() ?: continue
+            val separator = value.indexOf("::")
+            if (separator <= 0) continue
+            val folded = fold(value.substring(0, separator)) ?: continue
+            prefs.writeJson(prefKey, JsonPrimitive(folded + value.substring(separator)).toString())
+        }
+
+        // Value-driven: an earlier launch may already have renamed the row, so
+        // the stale spelling only exists in the stored bindings by now.
+        val staleConversations = mutableListOf<Pair<String, String>>()
+        db.rawQuery(
+            "SELECT id, chat_model_provider FROM conversation_rows WHERE chat_model_provider IS NOT NULL",
+            null,
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(0)
+                val provider = cursor.getString(1) ?: continue
+                val folded = fold(provider) ?: continue
+                staleConversations.add(id to folded)
+            }
+        }
+        for ((id, folded) in staleConversations) {
+            db.execSQL(
+                "UPDATE conversation_rows SET chat_model_provider = ? WHERE id = ?",
+                arrayOf<Any>(folded, id),
+            )
+        }
+
+        val assistantDao = PayloadEntityDao(db, "assistant_rows", primaryKey = "id")
+        for (row in assistantDao.getAll()) {
+            val obj = runCatching { Json.parseToJsonElement(row.payload) as? JsonObject }.getOrNull() ?: continue
+            val provider = (obj["chatModelProvider"] as? JsonPrimitive)?.content ?: continue
+            val folded = fold(provider) ?: continue
+            val updated = JsonObject(obj.toMutableMap().apply { put("chatModelProvider", JsonPrimitive(folded)) })
+            assistantDao.upsert(row.id, updated.toString(), row.sortOrder)
+        }
     }
 
     // ---- ordering (providers_order_v1) ----

@@ -272,10 +272,20 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     fun clientFor(providerId: String): LlmClient =
         llmClients.firstOrNull { it.supports(providerId) } ?: llmClients.first()
 
-    /** Provider API key from the provider_rows payload (multi-key aware). */
+    /**
+     * Provider API key from the provider_rows payload (multi-key aware).
+     *
+     * The key is folded onto the canonical built-in spelling first: a stored
+     * model selection can still carry an older spelling (`"zhipu ai"`) while the
+     * seeded row is `"Zhipu AI"`, and an exact lookup would then read as "no
+     * such provider" — which is how a memory-model call ends up unable to reach
+     * the model at all.
+     */
     fun providerConfig(providerId: String): com.psyche.memo.data.model.ProviderConfig? {
-        val row = PayloadEntityDao(database.readableDatabase, "provider_rows", primaryKey = "provider_key")
-            .get(providerId) ?: return null
+        val dao = PayloadEntityDao(database.readableDatabase, "provider_rows", primaryKey = "provider_key")
+        val row = dao.get(providerId)
+            ?: dao.get(com.psyche.memo.data.repo.ProviderRepository.canonicalizeKey(providerId))
+            ?: return null
         return com.psyche.memo.data.model.ProviderConfig.fromJsonString(
             kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
             row.payload,
@@ -299,13 +309,21 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     fun apiKeyFor(providerId: String): String? =
         providerConfig(providerId)?.effectiveApiKey()
             ?: appContext.getSharedPreferences("memo_providers", Context.MODE_PRIVATE)
-                .getString("api_key_$providerId", null)
+                .let { prefs ->
+                    prefs.getString("api_key_$providerId", null)
+                        ?: prefs.getString(
+                            "api_key_" + com.psyche.memo.data.repo.ProviderRepository.canonicalizeKey(providerId),
+                            null,
+                        )
+                }
 
     fun baseUrlFor(providerId: String): String {
         providerConfig(providerId)?.baseUrl?.takeIf { it.isNotEmpty() }?.let { return it }
+        val canonical = com.psyche.memo.data.repo.ProviderRepository.canonicalizeKey(providerId)
         val prefs = appContext.getSharedPreferences("memo_providers", Context.MODE_PRIVATE)
         return prefs.getString("base_url_$providerId", null)
-            ?: com.psyche.memo.llm.client.LlmDefaults.baseUrlFor(providerId)
+            ?: prefs.getString("base_url_$canonical", null)
+            ?: com.psyche.memo.llm.client.LlmDefaults.baseUrlFor(canonical)
     }
 
     /**
