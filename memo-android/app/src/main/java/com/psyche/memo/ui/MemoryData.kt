@@ -1,6 +1,5 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.data.settings.PreferenceRepository
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
@@ -21,12 +20,11 @@ import kotlinx.serialization.json.put
  * Minimal memory data layer backing the memory settings family
  * (memory_settings/entries/trace/legacy pages).
  *
- * The Dart app stores these as business-entity rows via the chat database
- * (BusinessEntityKind.memoryEntry → `memory_entries_v1`, assistantMemory →
- * `assistant_memories_v1`). The Kotlin side has no business-entity table yet,
- * so per team direction this layer persists through PreferenceRepository JSON
- * using the **original storage key names**, with payloads byte-compatible with
- * `MemoryEntry.toPayload()` / `AssistantMemory.toJson()` from the Dart source.
+ * The Dart app stores these as business-entity rows `memory_entry_rows` /
+ * `assistant_memory_rows`; this layer writes those tables through
+ * [MemoryEntryRowDao] / [AssistantMemoryRowDao], keeping `MemoryEntry.toPayload()`
+ * byte-compatible with the Dart source (the payload is authoritative on read,
+ * the typed columns are the projection used for queries and backups).
  */
 
 enum class MemoryScope(val wire: String) { global("global"), assistant("assistant");
@@ -110,7 +108,7 @@ data class MemoryEntry(
 
         /** memory_entry.dart L107-115 — trim, collapse whitespace, lowercase. */
         fun normalizeContent(content: String): String =
-            content.trim().replace(Regex("\\s+"), " ").lowercase()
+            com.psyche.memo.data.db.normalizeMemoryContent(content)
 
         /** memory_entry.dart L118-126 — `mem_` + 8 hex chars, Random.secure. */
         fun newId(): String {
@@ -128,10 +126,16 @@ private fun kotlinx.serialization.json.JsonElement?.strOrNull(): String? =
 
 /**
  * memory_provider_v2.dart 1:1 surface (minimal): load/create/update/archive/
- * restore/hardDelete/search, backed by the JSON store. Notifies Compose via
- * a version counter — screens read `entries` inside composition.
+ * restore/hardDelete/search, backed by `memory_entry_rows`. Notifies Compose
+ * via a version counter — screens read `entries` inside composition.
+ *
+ * Every mutation re-reads the table before writing (the Dart `JsonBlobStore`
+ * does the same read-modify-write on each call). More than one provider
+ * instance is alive at a time — the container's, plus one per open screen — so
+ * persisting a cached snapshot would silently drop whatever another instance
+ * wrote in the meantime.
  */
-class MemoryProviderV2(private val prefs: PreferenceRepository) {
+class MemoryProviderV2(db: android.database.sqlite.SQLiteDatabase) {
 
     var version by androidx.compose.runtime.mutableIntStateOf(0)
         private set
@@ -140,29 +144,45 @@ class MemoryProviderV2(private val prefs: PreferenceRepository) {
 
     private val store = mutableListOf<MemoryEntry>()
 
+    private val dao = com.psyche.memo.data.db.MemoryEntryRowDao(db)
+
     fun initialize(loadAll: Boolean = false) {
         if (store.isNotEmpty()) return
         loadAll()
     }
 
     fun loadAll() {
-        val raw = prefs.readJson(MEMORY_ENTRIES_KEY)
-        val list = if (raw.isNullOrEmpty()) {
-            emptyList()
-        } else {
-            runCatching {
-                Json.parseToJsonElement(raw).jsonArray.map { MemoryEntry.fromPayload(it.jsonObject) }
-            }.getOrDefault(emptyList())
-        }
+        refresh(readEntries())
+    }
+
+    private fun readEntries(): MutableList<MemoryEntry> =
+        dao.getAll().mapNotNull { row ->
+            runCatching { MemoryEntry.fromPayload(Json.parseToJsonElement(row.payload).jsonObject) }
+                .getOrNull()
+        }.toMutableList()
+
+    private fun refresh(entries: List<MemoryEntry>) {
         store.clear()
-        store.addAll(list.sortedByDescending { it.updatedAt })
+        store.addAll(entries.sortedWith(compareByDescending<MemoryEntry> { it.updatedAt }.thenBy { it.id }))
         version++
     }
 
-    private fun persist() {
-        val arr = JsonArray(store.map { it.toPayload() })
-        prefs.writeJson(MEMORY_ENTRIES_KEY, arr.toString())
-        version++
+    /** Read-modify-write the whole table for one mutation. */
+    private fun mutate(block: (MutableList<MemoryEntry>) -> Unit) {
+        val all = readEntries()
+        block(all)
+        val now = System.currentTimeMillis()
+        dao.replaceAll(
+            all.mapIndexed { index, entry ->
+                com.psyche.memo.data.db.MemoryEntryRowDao.Row.fromPayload(
+                    id = entry.id,
+                    payload = entry.toPayload().toString(),
+                    sortOrder = index,
+                    updatedAt = now,
+                )
+            },
+        )
+        refresh(all)
     }
 
     /** memory_provider_v2.dart L107-119. */
@@ -178,34 +198,28 @@ class MemoryProviderV2(private val prefs: PreferenceRepository) {
             createdAt = now,
             updatedAt = now,
         )
-        store.add(0, entry)
-        persist()
+        mutate { it.add(0, entry) }
         return entry
     }
 
     fun updateContent(id: String, content: String) {
-        val idx = store.indexOfFirst { it.id == id }
-        if (idx < 0) return
-        store[idx] = store[idx].copy(content = content, updatedAt = nowMicros())
-        persist()
+        mutate { all -> all.updateById(id) { it.copy(content = content, updatedAt = nowMicros()) } }
     }
 
     fun updateType(id: String, type: MemoryType) {
-        val idx = store.indexOfFirst { it.id == id }
-        if (idx < 0) return
-        store[idx] = store[idx].copy(type = type, updatedAt = nowMicros())
-        persist()
+        mutate { all -> all.updateById(id) { it.copy(type = type, updatedAt = nowMicros()) } }
     }
 
     fun updateScope(id: String, scope: MemoryScope, assistantId: String? = null) {
-        val idx = store.indexOfFirst { it.id == id }
-        if (idx < 0) return
-        store[idx] = store[idx].copy(
-            scope = scope,
-            assistantId = if (scope == MemoryScope.assistant) assistantId else null,
-            updatedAt = nowMicros(),
-        )
-        persist()
+        mutate { all ->
+            all.updateById(id) {
+                it.copy(
+                    scope = scope,
+                    assistantId = if (scope == MemoryScope.assistant) assistantId else null,
+                    updatedAt = nowMicros(),
+                )
+            }
+        }
     }
 
     fun archive(id: String): Boolean = setStatus(id, MemoryStatus.archived)
@@ -213,26 +227,32 @@ class MemoryProviderV2(private val prefs: PreferenceRepository) {
     fun restore(id: String): Boolean = setStatus(id, MemoryStatus.active)
 
     private fun setStatus(id: String, status: MemoryStatus): Boolean {
-        val idx = store.indexOfFirst { it.id == id }
-        if (idx < 0) return false
-        store[idx] = store[idx].copy(status = status, updatedAt = nowMicros())
-        persist()
-        return true
+        var changed = false
+        mutate { all ->
+            all.updateById(id) {
+                changed = true
+                it.copy(status = status, updatedAt = nowMicros())
+            }
+        }
+        return changed
     }
 
     fun hardDelete(id: String): Boolean {
-        val removed = store.removeAll { it.id == id }
-        if (removed) persist()
+        var removed = false
+        mutate { all -> removed = all.removeAll { it.id == id } }
         return removed
     }
 
     /** memory_provider_v2.dart hardDeleteMany (batch delete). */
     fun hardDeleteMany(ids: List<String>): Int {
         val idSet = ids.toSet()
-        val before = store.size
-        store.removeAll { it.id in idSet }
-        if (before != store.size) persist()
-        return before - store.size
+        var removed = 0
+        mutate { all ->
+            val before = all.size
+            all.removeAll { it.id in idSet }
+            removed = before - all.size
+        }
+        return removed
     }
 
     /** Entries whose assistantId no longer resolves (memory_provider_v2.dart orphanCount). */
@@ -240,10 +260,16 @@ class MemoryProviderV2(private val prefs: PreferenceRepository) {
         store.count { it.scope == MemoryScope.assistant && it.assistantId != null && it.assistantId !in validAssistantIds }
 
     fun deleteOrphanAssistantMemories(validAssistantIds: Set<String>): Int {
-        val before = store.size
-        store.removeAll { it.scope == MemoryScope.assistant && it.assistantId != null && it.assistantId !in validAssistantIds }
-        if (before != store.size) persist()
-        return before - store.size
+        var removed = 0
+        mutate { all ->
+            removed = all.count {
+                it.scope == MemoryScope.assistant && it.assistantId != null && it.assistantId !in validAssistantIds
+            }
+            all.removeAll {
+                it.scope == MemoryScope.assistant && it.assistantId != null && it.assistantId !in validAssistantIds
+            }
+        }
+        return removed
     }
 
     /** memory_provider_v2.dart L120-135 — token search across all entries. */
@@ -263,11 +289,20 @@ class MemoryProviderV2(private val prefs: PreferenceRepository) {
                 (it.scope == MemoryScope.global || (it.scope == MemoryScope.assistant && it.assistantId == assistantId))
         }
 
-    companion object {
-        /** BusinessEntityKind.memoryEntry.sourceKey (business_data.dart L31). */
-        const val MEMORY_ENTRIES_KEY = "memory_entries_v1"
-
+    private companion object {
         private fun nowMicros(): Long = System.currentTimeMillis() * 1000
+
+        /** Applies [transform] in place; returns false without touching anything
+         * when [id] is absent. */
+        private inline fun MutableList<MemoryEntry>.updateById(
+            id: String,
+            transform: (MemoryEntry) -> MemoryEntry,
+        ): Boolean {
+            val index = indexOfFirst { it.id == id }
+            if (index < 0) return false
+            this[index] = transform(this[index])
+            return true
+        }
     }
 }
 
@@ -280,9 +315,9 @@ data class LegacyMemory(
 
 /**
  * Legacy memory store (memory_store.dart + MemoryProvider minimal port),
- * persisted under the original business-entity key.
+ * persisted in `assistant_memory_rows`.
  */
-class LegacyMemoryStore(private val prefs: PreferenceRepository) {
+class LegacyMemoryStore(db: android.database.sqlite.SQLiteDatabase) {
 
     var version by androidx.compose.runtime.mutableIntStateOf(0)
         private set
@@ -291,26 +326,23 @@ class LegacyMemoryStore(private val prefs: PreferenceRepository) {
 
     val memories: List<LegacyMemory> get() = store
 
+    private val dao = com.psyche.memo.data.db.AssistantMemoryRowDao(db)
+
     fun initialize() {
         if (store.isNotEmpty()) return
         loadAll()
     }
 
     fun loadAll() {
-        val raw = prefs.readJson(ASSISTANT_MEMORIES_KEY)
-        val list = if (raw.isNullOrEmpty()) {
-            emptyList()
-        } else {
+        val list = dao.getAll().mapNotNull { row ->
             runCatching {
-                Json.parseToJsonElement(raw).jsonArray.map { o ->
-                    val obj = o.jsonObject
-                    LegacyMemory(
-                        id = obj["id"]?.jsonPrimitive?.longOrNull ?: 0L,
-                        assistantId = obj["assistantId"]?.jsonPrimitive?.content ?: "",
-                        content = obj["content"]?.jsonPrimitive?.content ?: "",
-                    )
-                }
-            }.getOrDefault(emptyList())
+                val obj = Json.parseToJsonElement(row.payload).jsonObject
+                LegacyMemory(
+                    id = obj["id"]?.jsonPrimitive?.longOrNull ?: 0L,
+                    assistantId = obj["assistantId"]?.jsonPrimitive?.content ?: "",
+                    content = obj["content"]?.jsonPrimitive?.content ?: "",
+                )
+            }.getOrNull()
         }
         store.clear()
         store.addAll(list)
@@ -318,14 +350,21 @@ class LegacyMemoryStore(private val prefs: PreferenceRepository) {
     }
 
     private fun persist() {
-        val arr = JsonArray(store.map { m ->
-            buildJsonObject {
-                put("id", m.id)
-                put("assistantId", m.assistantId)
-                put("content", m.content)
-            }
-        })
-        prefs.writeJson(ASSISTANT_MEMORIES_KEY, arr.toString())
+        val now = System.currentTimeMillis()
+        dao.replaceAll(
+            store.mapIndexed { index, m ->
+                com.psyche.memo.data.db.AssistantMemoryRowDao.Row.fromPayload(
+                    id = m.id.toString(),
+                    payload = buildJsonObject {
+                        put("id", m.id)
+                        put("assistantId", m.assistantId)
+                        put("content", m.content)
+                    }.toString(),
+                    sortOrder = index,
+                    updatedAt = now,
+                )
+            },
+        )
         version++
     }
 
@@ -352,10 +391,6 @@ class LegacyMemoryStore(private val prefs: PreferenceRepository) {
         return removed
     }
 
-    companion object {
-        /** BusinessEntityKind.assistantMemory.sourceKey (business_data.dart L18). */
-        const val ASSISTANT_MEMORIES_KEY = "assistant_memories_v1"
-    }
 }
 
 /**

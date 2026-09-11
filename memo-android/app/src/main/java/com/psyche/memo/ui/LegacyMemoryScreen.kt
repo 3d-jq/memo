@@ -78,7 +78,7 @@ fun LegacyMemoryScreen(
     val cs = MaterialTheme.colorScheme
     val app = LocalSemanticColors.current
     val context = LocalContext.current
-    val store = remember { LegacyMemoryStore(container.preferenceRepository) }
+    val store = remember { LegacyMemoryStore(container.database.writableDatabase) }
     val assistants = remember { loadAssistantsSync(container) }
 
     androidx.compose.runtime.LaunchedEffect(Unit) { store.initialize() }

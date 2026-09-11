@@ -54,6 +54,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 搜索体系 S1–S4（定义/8+15 provider 引擎/设置/用量，共 23 个可运行 provider）
 - 翻译页、世界书（页 + 注入引擎，5 注入位置/31 单测）、指令注入、快捷短语、记忆工具 M1/M2a/M2b/M2c、本地工具 L1 + 日历 L2、OCR F4、文档抽取 F3、附件 UI F2
 - 多模态输入引擎 F1、MCP 基础与连接管理 MCP-1/MCP-2、助手 MCP sheet（输入栏 Hammer）
+- **记忆持久化修复（M2d-a）**：`memory_entries_v1` / `assistant_memories_v1` 是 ENTITY 键，走 `PreferenceRepository` 时被静默丢弃（记忆从不落库）→ 改为 `MemoryEntryRowDao` / `AssistantMemoryRowDao` 直写 `memory_entry_rows` / `assistant_memory_rows`（payload 权威 + 类型列投影自愈 schema CHECK），`BackupRestorer` 同步改为投影写入，变更一律读-改-写
 - 聊天周边：Select&Copy/WebView 预览/分享/BoundedLargeTextView、助手壁纸、推理预算全链路、清空/压缩上下文、记忆关于+种子、建议气泡、消息多选+导出（文本）
 - 抽屉全局搜索模式、临时聊天三态、长按会话 sheet + 多选栏、流式呼吸点、iOS 风格控件 + 触觉反馈 + Haptics
 
@@ -69,7 +70,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 待移植 / 剩余（仅以下）
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
-- M2d：记忆收尾（哈希冻结/自愈、Smart Add LLM 去重合并、tab 内记忆条目列表与整理、legacy 记忆模式工具）
+- M2d-b：Smart Add LLM 去重合并、记忆抽取 pipeline（gatekeeper/extractor/distiller + tab 内条目列表与「整理」按钮）、legacy 记忆模式工具
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）

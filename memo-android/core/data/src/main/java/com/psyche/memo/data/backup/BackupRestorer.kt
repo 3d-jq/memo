@@ -2,8 +2,10 @@ package com.psyche.memo.data.backup
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import com.psyche.memo.data.db.AssistantMemoryRowDao
 import com.psyche.memo.data.db.MemoDatabase
 import com.psyche.memo.data.db.MemoSchema
+import com.psyche.memo.data.db.MemoryEntryRowDao
 import com.psyche.memo.data.db.PayloadEntityDao
 import com.psyche.memo.data.settings.KeyDisposition
 import com.psyche.memo.data.settings.PreferenceRepository
@@ -189,15 +191,36 @@ internal class BackupRestorer(
                     val rows = element as? JsonArray ?: continue
                     // Array position becomes the new sort_order, preserving the
                     // ordering the exporting device had.
-                    entityRows += dao.replaceAll(rows.mapIndexed { index, payload ->
-                        val id = payload.idOrNull()
-                        if (id == null) null else PayloadEntityDao.Row(
-                            id = id,
-                            sortOrder = index,
-                            payload = payload.toCompactJson(),
-                            updatedAt = 0L,
+                    val payloads = rows.mapIndexedNotNull { index, payload ->
+                        payload.idOrNull()?.let { id -> Triple(id, payload.toCompactJson(), index) }
+                    }
+                    // memory_entry_rows / assistant_memory_rows carry NOT NULL
+                    // columns beyond the payload (scope / type / status /
+                    // content_normalized / assistant_id …), so the generic DAO
+                    // is rejected by their CHECK constraints — project the
+                    // payload onto the typed columns instead.
+                    entityRows += when (entry.sourceKey) {
+                        "memory_entries_v1" -> MemoryEntryRowDao(db).replaceAll(
+                            payloads.map { (id, json, index) ->
+                                MemoryEntryRowDao.Row.fromPayload(id, json, sortOrder = index)
+                            },
                         )
-                    }.filterNotNull())
+                        "assistant_memories_v1" -> AssistantMemoryRowDao(db).replaceAll(
+                            payloads.map { (id, json, index) ->
+                                AssistantMemoryRowDao.Row.fromPayload(id, json, sortOrder = index)
+                            },
+                        )
+                        else -> dao.replaceAll(
+                            payloads.map { (id, json, index) ->
+                                PayloadEntityDao.Row(
+                                    id = id,
+                                    sortOrder = index,
+                                    payload = json,
+                                    updatedAt = 0L,
+                                )
+                            },
+                        )
+                    }
                 }
             }
             db.setTransactionSuccessful()

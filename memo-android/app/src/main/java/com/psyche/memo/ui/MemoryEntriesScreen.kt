@@ -67,7 +67,7 @@ fun MemoryEntriesScreen(
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val provider = remember { MemoryProviderV2(container.preferenceRepository) }
+    val provider = remember { MemoryProviderV2(container.database.writableDatabase) }
     val assistants = remember { loadAssistantsSync(container) }
 
     var rev by remember { mutableStateOf(0) }

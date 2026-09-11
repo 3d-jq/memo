@@ -67,9 +67,9 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
 
     val assistantStore: AssistantStore by lazy { AssistantStore(database.writableDatabase) }
 
-    /** 长期记忆数据层（memory_entry_rows 以 preference JSON 承载）。 */
+    /** 长期记忆数据层（memory_entry_rows 表 + payload 投影，见 MemoryEntryRowDao）。 */
     val memoryProviderV2: com.psyche.memo.ui.MemoryProviderV2 by lazy {
-        com.psyche.memo.ui.MemoryProviderV2(preferenceRepository)
+        com.psyche.memo.ui.MemoryProviderV2(database.writableDatabase)
     }
 
     /** 用户资料（user_provider.dart：user_name / avatar_type / avatar_value）。 */
