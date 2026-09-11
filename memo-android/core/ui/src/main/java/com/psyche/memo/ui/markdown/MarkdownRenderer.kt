@@ -44,12 +44,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
@@ -626,6 +628,25 @@ private fun MarkdownTableView(
     // original's RepaintBoundary placement.
     val imageCaptureNeeded = actions?.onCopyImage != null || actions?.onSaveImage != null
     val boundaryLayer = rememberTableBoundary()
+
+    // 导出用截图：**先展开到全部行再录**。录制层只包含当前渲染的行，而长表格默认
+    // 只渲染 TABLE_INITIAL_ROWS 行 —— 直接截就是用户看到的"只有一部分"。展开后等
+    // 两帧（一帧应用新状态、一帧把完整高度画进 layer），截完把展开状态还给用户。
+    val captureForExport: (suspend () -> ImageBitmap?)? = if (imageCaptureNeeded) {
+        {
+            val previous = visibleRows
+            if (previous < model.body.size) {
+                visibleRows = model.body.size
+                withFrameNanos { }
+                withFrameNanos { }
+            }
+            val bitmap = runCatching { boundaryLayer.toImageBitmap() }.getOrNull()
+            if (visibleRows != previous) visibleRows = previous
+            bitmap
+        }
+    } else {
+        null
+    }
     val tableRows = if (actions != null) {
         // Flatten to plain strings once; the toolbar needs them for both the
         // markdown and CSV serialisations.
@@ -657,8 +678,7 @@ private fun MarkdownTableView(
                     headerBg = headerBg,
                     rows = tableRows,
                     actions = actions,
-                    boundaryLayer = boundaryLayer,
-                    captureEnabled = imageCaptureNeeded,
+                    capture = captureForExport,
                 )
             }
             Box(
@@ -787,8 +807,8 @@ private fun MarkdownTableToolbar(
     headerBg: Color,
     rows: List<List<String>>,
     actions: MarkdownTableActions,
-    boundaryLayer: GraphicsLayer,
-    captureEnabled: Boolean,
+    /** 截图（已展开全部行）；null = 未接线/不可用。 */
+    capture: (suspend () -> ImageBitmap?)?,
 ) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -841,11 +861,7 @@ private fun MarkdownTableToolbar(
                 onLongClick = if (copyImage == null) {
                     null
                 } else {
-                    {
-                        if (captureEnabled) {
-                            scope.launch { copyImage(boundaryLayer.toImageBitmap()) }
-                        }
-                    }
+                    { capture?.let { shot -> scope.launch { shot()?.let { bmp -> copyImage(bmp) } } } }
                 },
                 onClick = { actions.onCopyMarkdown?.invoke(MarkdownTableText.toMarkdown(rows)) },
             )
@@ -855,11 +871,7 @@ private fun MarkdownTableToolbar(
             MarkdownTableIconButton(
                 icon = Lucide.ImageDown,
                 contentDescription = imageLabel,
-                onClick = {
-                    if (captureEnabled) {
-                        scope.launch { saveImage(boundaryLayer.toImageBitmap()) }
-                    }
-                },
+                onClick = { capture?.let { shot -> scope.launch { shot()?.let { bmp -> saveImage(bmp) } } } },
             )
         }
         val exportCsv = actions.onExportCsv
