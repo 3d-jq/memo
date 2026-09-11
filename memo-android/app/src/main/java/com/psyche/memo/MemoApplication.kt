@@ -4,6 +4,8 @@ import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.SvgDecoder
+import coil.disk.DiskCache
+import java.io.File
 
 class MemoApplication : Application(), ImageLoaderFactory {
 
@@ -52,9 +54,22 @@ class MemoApplication : Application(), ImageLoaderFactory {
             .components {
                 add(SvgDecoder.Factory())
             }
+            // 磁盘缓存放到原版放头像缓存的目录（`cache/avatars`）：远程头像与聊天
+            // 图片都落在这里，存储页的「缓存 → 头像缓存」子项因此是真实数据，
+            // 而不是此前那个永远为 0 的死项（Coil 默认写在系统 cacheDir，存储页
+            // 只统计 filesDir，看不到）。
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(File(filesDir, "cache/avatars"))
+                    .maxSizeBytes(COIL_DISK_CACHE_BYTES)
+                    .build()
+            }
             .build()
 
     companion object {
+        /** Coil 磁盘缓存上限（与原版头像缓存量级相当，够放头像和聊天图）。 */
+        private const val COIL_DISK_CACHE_BYTES = 64L * 1024 * 1024
+
         /**
          * Readable from Activity.attachBaseContext: Application.onCreate always
          * runs before the first activity attaches, so the container (and thus
