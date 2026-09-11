@@ -21,6 +21,7 @@ class MemoApplication : Application(), ImageLoaderFactory {
         // The migration runs first so a hand-typed key ("zhipu ai") is folded
         // onto its canonical spelling before the fill-missing pass would seed a
         // second row for the same provider.
+        container.preferenceRepository.migrateLegacyLocalSettings()
         container.providerRepository.migrateNonCanonicalBuiltinKeys()
         container.providerRepository.ensureBuiltinDefaultsSeeded()
         // PDFBox needs its resource loader before the first PDF extraction.

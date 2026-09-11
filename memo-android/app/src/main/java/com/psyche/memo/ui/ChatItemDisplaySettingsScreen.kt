@@ -147,12 +147,12 @@ fun ChatItemDisplaySettingsScreen(
     }
     LaunchedEffect(Unit) {
         values = switchRows.associate {
-            it.prefsKey to (container.preferenceRepository.readLocal(it.prefsKey)?.let { v -> v == "1" } ?: it.default)
+            it.prefsKey to (container.preferenceRepository.readJson(it.prefsKey)?.let { v -> v == "1" } ?: it.default)
         }
     }
     fun writeBool(key: String, value: Boolean) {
         values = values + (key to value)
-        container.preferenceRepository.writeLocal(key, if (value) "1" else "0")
+        container.preferenceRepository.writeJson(key, if (value) "1" else "0")
     }
 
     Column(

@@ -74,4 +74,33 @@ class PreferenceRepository(
     fun readAllLocal(): Map<String, String> = prefs.all
         .filterValues { it is String }
         .mapValues { it.value as String }
+
+    /**
+     * 一次性迁移：`display_*` 与 `user_name`/`avatar_type`/`avatar_value` 曾经落在
+     * SharedPreferences（与 classifyBusinessKey 的 PREFERENCE 分类不符，备份采集只
+     * 遍历 preference_rows → 备份不含它们）。现在这些键统一走 DB：把 SharedPreferences
+     * 里残留的旧值搬进 preference_rows（DB 已有值不覆盖，保留新写入的），并清掉本地位。
+     *
+     * 幂等：迁移后本地位已清，再跑不会重复搬。
+     */
+    fun migrateLegacyLocalSettings() {
+        val legacyKeys = prefs.all.keys.filter { key ->
+            key.startsWith("display_") || key in LEGACY_USER_KEYS
+        }
+        for (key in legacyKeys) {
+            val raw = prefs.getString(key, null)
+            if (raw.isNullOrEmpty()) {
+                prefs.edit().remove(key).apply()
+                continue
+            }
+            if (readJson(key) == null) {
+                writeJson(key, raw)
+            }
+            prefs.edit().remove(key).apply()
+        }
+    }
+
+    private companion object {
+        val LEGACY_USER_KEYS = setOf("user_name", "avatar_type", "avatar_value")
+    }
 }

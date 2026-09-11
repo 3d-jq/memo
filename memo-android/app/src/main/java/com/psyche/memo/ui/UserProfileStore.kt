@@ -50,10 +50,10 @@ class UserProfileStore(private val prefs: PreferenceRepository) {
     val profile: State<UserProfileStore.Profile> get() = _profile
 
     private fun load(): Profile {
-        val raw = prefs.readLocal(KEY_AVATAR_VALUE)?.takeIf { it.isNotBlank() }
+        val raw = prefs.readJson(KEY_AVATAR_VALUE)?.takeIf { it.isNotBlank() }
         return Profile(
-            name = prefs.readLocal(KEY_NAME)?.takeIf { it.isNotBlank() } ?: "",
-            avatarType = prefs.readLocal(KEY_AVATAR_TYPE)?.takeIf { it.isNotBlank() }
+            name = prefs.readJson(KEY_NAME)?.takeIf { it.isNotBlank() } ?: "",
+            avatarType = prefs.readJson(KEY_AVATAR_TYPE)?.takeIf { it.isNotBlank() }
                 ?.takeIf { raw != null },
             avatarValue = raw,
         )
@@ -67,15 +67,15 @@ class UserProfileStore(private val prefs: PreferenceRepository) {
     fun setName(name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty() || trimmed == _profile.value.name) return
-        prefs.writeLocal(KEY_NAME, trimmed)
+        prefs.writeJson(KEY_NAME, trimmed)
         update(_profile.value.copy(name = trimmed))
     }
 
     fun setAvatarEmoji(emoji: String) {
         val e = emoji.trim()
         if (e.isEmpty()) return
-        prefs.writeLocal(KEY_AVATAR_TYPE, TYPE_EMOJI)
-        prefs.writeLocal(KEY_AVATAR_VALUE, e)
+        prefs.writeJson(KEY_AVATAR_TYPE, TYPE_EMOJI)
+        prefs.writeJson(KEY_AVATAR_VALUE, e)
         update(_profile.value.copy(avatarType = TYPE_EMOJI, avatarValue = e))
     }
 
@@ -83,8 +83,8 @@ class UserProfileStore(private val prefs: PreferenceRepository) {
     fun setAvatarUrl(url: String) {
         val u = url.trim()
         if (u.isEmpty()) return
-        prefs.writeLocal(KEY_AVATAR_TYPE, TYPE_URL)
-        prefs.writeLocal(KEY_AVATAR_VALUE, u)
+        prefs.writeJson(KEY_AVATAR_TYPE, TYPE_URL)
+        prefs.writeJson(KEY_AVATAR_VALUE, u)
         update(_profile.value.copy(avatarType = TYPE_URL, avatarValue = u))
     }
 
@@ -95,8 +95,8 @@ class UserProfileStore(private val prefs: PreferenceRepository) {
     fun setAvatarFilePath(path: String) {
         if (path.isBlank()) return
         val previous = _profile.value
-        prefs.writeLocal(KEY_AVATAR_TYPE, TYPE_FILE)
-        prefs.writeLocal(KEY_AVATAR_VALUE, path)
+        prefs.writeJson(KEY_AVATAR_TYPE, TYPE_FILE)
+        prefs.writeJson(KEY_AVATAR_VALUE, path)
         update(previous.copy(avatarType = TYPE_FILE, avatarValue = path))
         // 旧头像文件与目录后缀一致时才清理，避免误删其它来源的文件。
         val old = previous.avatarValue

@@ -481,7 +481,7 @@ fun ChatContent(
     // SharedPreferences 直读，从显示设置页返回时 NavHost 重建本页即拿到新值。
     val timelineSettings = remember {
         com.psyche.memo.ui.chat.ChatTimelineSettings.fromPrefs { key ->
-            container.preferenceRepository.readLocal(key)
+            container.preferenceRepository.readJson(key)
         }
     }
     // home_page.dart:1285-1288 —— 建议气泡的外层门控：建议生成被禁用时，
@@ -700,7 +700,7 @@ fun ChatContent(
     // readLocal/writeLocal（SharedPreferences），这里必须同样读 readLocal，
     // 否则永远只能拿到默认值（此前误用 readJson，开关实际是失效的）。
     val showModelIcon = remember(conversationId) {
-        container.preferenceRepository.readLocal("display_show_model_icon_v1")
+        container.preferenceRepository.readJson("display_show_model_icon_v1")
             ?.let { it == "1" }
             ?: true
     }
@@ -830,7 +830,7 @@ fun ChatContent(
     val bgAssistantId by container.currentAssistantId.collectAsState()
     val chatBackground = remember(bgAssistantId) { container.currentAssistant()?.background }
     val chatMaskStrength = remember {
-        container.preferenceRepository.readLocal("display_chat_background_mask_strength_v1")
+        container.preferenceRepository.readJson("display_chat_background_mask_strength_v1")
             ?.toFloatOrNull() ?: 1f
     }
     Box(modifier = modifier) {
@@ -1396,7 +1396,7 @@ fun ChatContent(
             }
         val roleNameOf: (com.psyche.memo.ui.chat.MessageExport.ExportMessage) -> String = { m ->
             if (m.role == "user") {
-                container.preferenceRepository.readLocal("user_name")
+                container.preferenceRepository.readJson("user_name")
                     ?.takeIf { it.isNotBlank() }
                     ?: container.appContext.getString(UiR.string.user_provider_default_user_name)
             } else {
