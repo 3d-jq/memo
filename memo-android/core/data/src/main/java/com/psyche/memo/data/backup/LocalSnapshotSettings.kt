@@ -107,38 +107,45 @@ class LocalSnapshotPreferences(private val prefs: PreferenceRepository) {
         writeBool(announceResultKey, settings.announceResult)
     }
 
+    // ── state: device-local, in SharedPreferences ──────────────────────────
+    //
+    // Deliberately *not* in preference_rows: the change fingerprint watches the
+    // database file, so recording a run inside that same file would make every
+    // check look like a change and the "unchanged" gate would never fire.
+    // Upstream keeps them in its preferences blob for the same reason.
+
     fun readState(): LocalSnapshotState {
-        val rawSkip = readString(lastSkipReasonKey)
+        val rawSkip = readLocalString(lastSkipReasonKey)
         return LocalSnapshotState(
-            lastSuccessAt = readInstant(lastSuccessAtKey),
-            lastFailureAt = readInstant(lastFailureAtKey),
-            lastFailureMessage = readString(lastFailureMessageKey),
+            lastSuccessAt = readLocalInstant(lastSuccessAtKey),
+            lastFailureAt = readLocalInstant(lastFailureAtKey),
+            lastFailureMessage = readLocalString(lastFailureMessageKey),
             lastSkipReason = LocalSnapshotSkipReason.entries.firstOrNull { it.wire == rawSkip },
-            failureStreak = readInt(failureStreakKey) ?: 0,
-            fingerprint = DatabaseChangeFingerprint.decode(readString(fingerprintKey)),
-            firstObservedAt = readInstant(firstObservedAtKey),
+            failureStreak = readLocalInt(failureStreakKey) ?: 0,
+            fingerprint = DatabaseChangeFingerprint.decode(readLocalString(fingerprintKey)),
+            firstObservedAt = readLocalInstant(firstObservedAtKey),
         )
     }
 
-    fun recordFirstObserved(at: Instant) = writeString(firstObservedAtKey, at.toString())
+    fun recordFirstObserved(at: Instant) = writeLocalString(firstObservedAtKey, at.toString())
 
     fun recordSuccess(at: Instant, fingerprint: DatabaseChangeFingerprint) {
-        writeString(lastSuccessAtKey, at.toString())
-        writeString(fingerprintKey, fingerprint.encode())
-        writeInt(failureStreakKey, 0)
-        prefs.remove(lastFailureAtKey)
-        prefs.remove(lastFailureMessageKey)
-        prefs.remove(lastSkipReasonKey)
+        writeLocalString(lastSuccessAtKey, at.toString())
+        writeLocalString(fingerprintKey, fingerprint.encode())
+        writeLocalInt(failureStreakKey, 0)
+        prefs.removeLocal(lastFailureAtKey)
+        prefs.removeLocal(lastFailureMessageKey)
+        prefs.removeLocal(lastSkipReasonKey)
     }
 
     fun recordFailure(at: Instant, message: String, previousStreak: Int) {
-        writeString(lastFailureAtKey, at.toString())
-        writeString(lastFailureMessageKey, message)
-        writeInt(failureStreakKey, previousStreak + 1)
-        prefs.remove(lastSkipReasonKey)
+        writeLocalString(lastFailureAtKey, at.toString())
+        writeLocalString(lastFailureMessageKey, message)
+        writeLocalInt(failureStreakKey, previousStreak + 1)
+        prefs.removeLocal(lastSkipReasonKey)
     }
 
-    fun recordSkip(reason: LocalSnapshotSkipReason) = writeString(lastSkipReasonKey, reason.wire)
+    fun recordSkip(reason: LocalSnapshotSkipReason) = writeLocalString(lastSkipReasonKey, reason.wire)
 
     /**
      * Advances the change fingerprint without claiming a copy was written.
@@ -149,8 +156,8 @@ class LocalSnapshotPreferences(private val prefs: PreferenceRepository) {
      * a whole interval longer than the user asked for.
      */
     fun recordUnchanged(fingerprint: DatabaseChangeFingerprint) {
-        writeString(fingerprintKey, fingerprint.encode())
-        writeString(lastSkipReasonKey, LocalSnapshotSkipReason.UNCHANGED.wire)
+        writeLocalString(fingerprintKey, fingerprint.encode())
+        writeLocalString(lastSkipReasonKey, LocalSnapshotSkipReason.UNCHANGED.wire)
     }
 
     // ── preference plumbing (values are JSON text, like the rest of the app) ──
@@ -191,6 +198,18 @@ class LocalSnapshotPreferences(private val prefs: PreferenceRepository) {
 
     private fun readInstant(key: String): Instant? =
         readString(key)?.let { runCatching { Instant.parse(it) }.getOrNull() }
+
+    private fun readLocalString(key: String): String? =
+        prefs.readLocal(key)?.takeIf { it.isNotEmpty() }
+
+    private fun readLocalInt(key: String): Int? = prefs.readLocal(key)?.toIntOrNull()
+
+    private fun readLocalInstant(key: String): Instant? =
+        readLocalString(key)?.let { runCatching { Instant.parse(it) }.getOrNull() }
+
+    private fun writeLocalString(key: String, value: String) = prefs.writeLocal(key, value)
+
+    private fun writeLocalInt(key: String, value: Int) = prefs.writeLocal(key, value.toString())
 
     private fun normalizeInterval(value: Int?): Int = when {
         value == null -> LocalSnapshotSettings.AUTOMATIC_INTERVAL

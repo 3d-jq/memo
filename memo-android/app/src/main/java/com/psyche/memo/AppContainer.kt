@@ -142,7 +142,11 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
      */
     val localSnapshots: com.psyche.memo.data.backup.LocalSnapshotService by lazy {
         com.psyche.memo.data.backup.LocalSnapshotService(
+            // Copies live beside the app's files; the change fingerprint reads
+            // the real database path (`/data/data/<pkg>/databases/memo.db`),
+            // which is *not* under filesDir on Android.
             appDataDirectory = appContext.filesDir,
+            databaseFile = appContext.getDatabasePath(com.psyche.memo.data.db.MemoSchema.DB_NAME),
             backupService = backupService,
             preferences = com.psyche.memo.data.backup.LocalSnapshotPreferences(preferenceRepository),
         )

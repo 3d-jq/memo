@@ -37,6 +37,10 @@ class LocalSnapshotServiceTest {
     fun setUp() {
         container = AppContainerImpl(ApplicationProvider.getApplicationContext())
         container.database.writableDatabase.execSQL("DELETE FROM preference_rows")
+        // The run state lives in SharedPreferences (deliberately — see the
+        // preference class), so clear it too.
+        container.appContext.getSharedPreferences("memo_preferences", android.content.Context.MODE_PRIVATE)
+            .edit().clear().commit()
         preferences = LocalSnapshotPreferences(container.preferenceRepository)
         // Start from an empty snapshots directory: files persist between tests
         // inside one Robolectric sandbox.
@@ -186,6 +190,34 @@ class LocalSnapshotServiceTest {
         val second = container.localSnapshots.runIfDue(now.plus(Duration.ofDays(30)))
         assertEquals(LocalSnapshotRunResult.Skipped(LocalSnapshotSkipReason.UNCHANGED), second)
         assertEquals(1, container.localSnapshots.list().size)
+    }
+
+    @Test
+    fun `the fingerprint reads the live database, not the files directory`() {
+        // Android keeps the database in /data/data/<pkg>/databases, which is not
+        // under filesDir — pointing the fingerprint at filesDir/databases would
+        // make every check read "unchanged" and silently stop the schedule.
+        assertTrue(container.localSnapshots.databaseFile.exists())
+        val fingerprint = DatabaseChangeFingerprint.read(container.localSnapshots.databaseFile)
+        assertTrue(fingerprint.databaseBytes > 0)
+        assertTrue(fingerprint.matches(container.localSnapshots.databaseFile.let { DatabaseChangeFingerprint.read(it) }))
+    }
+
+    @Test
+    fun `a changed database is copied again`() {
+        val now = Instant.parse("2026-09-11T10:00:00Z")
+        preferences.recordFirstObserved(now.minus(Duration.ofDays(30)))
+
+        assertTrue(container.localSnapshots.runIfDue(now) is LocalSnapshotRunResult.Created)
+
+        // Any write moves the -wal sidecar, which is exactly the signal the
+        // schedule is supposed to notice.
+        container.preferenceRepository.writeJson("snapshot_test_marker_v1", "\"changed\"")
+
+        assertTrue(
+            container.localSnapshots.runIfDue(now.plus(Duration.ofDays(2))) is LocalSnapshotRunResult.Created,
+        )
+        assertEquals(2, container.localSnapshots.list().size)
     }
 
     @Test

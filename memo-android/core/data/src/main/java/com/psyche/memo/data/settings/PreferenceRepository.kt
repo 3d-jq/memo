@@ -73,6 +73,11 @@ class PreferenceRepository(
         prefs.edit().putString(key, value).apply()
     }
 
+    /** Removes a device-local key (the sibling of [writeLocal]). */
+    fun removeLocal(key: String) {
+        prefs.edit().remove(key).apply()
+    }
+
     fun readAllLocal(): Map<String, String> = prefs.all
         .filterValues { it is String }
         .mapValues { it.value as String }

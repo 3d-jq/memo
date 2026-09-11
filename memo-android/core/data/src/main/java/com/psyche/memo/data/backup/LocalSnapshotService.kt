@@ -25,14 +25,13 @@ sealed interface LocalSnapshotRunResult {
  */
 class LocalSnapshotService(
     private val appDataDirectory: File,
+    /** Where the live database actually is — the change fingerprint reads it. */
+    val databaseFile: File,
     private val backupService: MemoBackupService,
     private val preferences: LocalSnapshotPreferences,
     private val store: LocalSnapshotStore = LocalSnapshotStore(appDataDirectory),
 ) {
     private val running = AtomicBoolean(false)
-
-    /** `databases/memo.db` inside the app's data directory. */
-    val databaseFile: File get() = File(File(appDataDirectory, "databases"), "memo.db")
 
     /**
      * Takes a copy if one is due. Never throws: a failure here is recorded and
