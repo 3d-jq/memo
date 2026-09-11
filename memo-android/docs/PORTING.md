@@ -188,16 +188,16 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 
 方法：`lib/features` 16 域 + `lib/desktop` 全页面类名 → 对比 Android `*Screen/*Sheet`，逐项 `grep` 验证实现真实性（非壳子）。**结论：页面级覆盖率约 95%，剩余缺口集中在 3 块。**
 
-### P0 — backup 全域（唯一的大块真空）
-- **现状**：Android 仅 `BackupScreen.kt` / `LocalSnapshotsScreen.kt` **UI 壳**（页面结构、开关行、ARB 文案都已 1:1 对齐 `backup_page.dart` L303-840），但所有行为回调为空——不落库、不执行。
-- **Flutter 规模**：`lib/core/services/backup/` **29 文件 / 20429 行**（`data_sync.dart` 3998、`cherry_importer.dart` 1874、`chatbox_importer.dart` 1434、`chatbox_backup_archive.dart` 1414、`restore_bundle_staging.dart` 1356、`s3_client.dart` 1144、`cherry_direct_backup_reader.dart` 1060、`restore_receipt/…_mover/…_lock/…_lease/…_cutover_executor/…_durability/…_startup_gate/…_previous_*` 等）+ `lib/features/backup/` 5128 行（`backup_page.dart` 2913、`local_snapshots_page.dart` 948、进度弹窗/提醒/续跑/前向兼容同意对话框）。
-- **子系统拆分建议**（按依赖顺序，每块独立可交付）：
-  1. **`BackupProvider` 抽象 + 本地文件导入导出**（`data_sync.dart` 的 bundle 编解码 + `native_file_save`；产出 `.memo` zip：conversations/messages/assistants/世界书/快捷短语/设置）
-  2. **WebDAV**（PUT/GET/PROPFIND + 远端列表 + 保留策略）
-  3. **S3**（`s3_client.dart` 签名 V4 + 分片/并发）
-  4. **本地快照**（`local_snapshot_store.dart` + `local_snapshot_scheduler.dart` 频率/保留数/空间上限/通知 + 7 个 settings）
-  5. **恢复链路**（`restore_*` 一整套：暂存 → 校验 → 租约锁 → cutover → 回滚；含 `forward_compat_consent_dialog` 前向兼容闸门）
-  6. **Cherry Studio / Chatbox 导入**（可选，纯 importer）
+### P0 — backup 全域（**已不是真空**：主链路 + 本机副本已通，余下 6 个子块）
+- **现状（2026-09-11）**：归档格式层（manifest/限额/ZIP 读写/校验）、导入导出主链路（SAF 导出 / 导入 + 模式选择 + 进度对话框 + 重启提示 + 实体路由）与**子块 3 本机副本**（保留策略/存储/调度/设置/页面全接线）均已落地并带单测，见 §5.10.4 明细。`BackupScreen` 的 §2/3/5/6 与 `LocalSnapshotsScreen` 已不是空壳。
+- **Flutter 规模**：`lib/core/services/backup/` **29 文件 / 20429 行**（`data_sync.dart` 3998、`cherry_importer.dart` 1874、`chatbox_importer.dart` 1434、`chatbox_backup_archive.dart` 1414、`restore_bundle_staging.dart` 1356、`s3_client.dart` 1144、`cherry_direct_backup_reader.dart` 1060、`restore_receipt/…_mover/…_lock/…_lease/…_cutover_executor/…_durability/…_startup_gate/…_previous_*` 等）+ `lib/features/backup/` 5128 行。我们按子块增量移植，不追求行数对齐。
+- **剩余子块**（编号照 §5.10.4 表）：
+  2. **merge 恢复**（实体按 id upsert + preference 逐键覆盖 + 会话按 id 去重）
+  4. **备份提醒**（`BackupReminderProvider` 五键 enabled/intervalDays/minutesOfDay/enabledAt/lastBackupAt + 每分钟判到期 + 会话内 snooze + `recordBackupCompleted()`）
+  5. **WebDAV**（PUT/GET/PROPFIND/DELETE + Basic auth + 远端列表 + 保留策略）
+  6. **S3**（`s3_client.dart` 签名 V4 + 分片/并发）
+  7. **前向兼容闸门（完整版）**（`minimumReadableFormatVersion` / `minimumReadableSchemaVersion` + 同意对话框；最小版已随子块 1 落地）
+  8. **Cherry Studio / Chatbox 导入**（纯 importer）
 - **依赖 RikkaHub 参考**：`D:\program\.rikkahub-ref` 的 `data-sync` 模块（WebDAV/S3/备份语义）+ `app` 侧调度，按工作约定"功能/逻辑直接搬 RikkaHub"。
 
 ### P1 — 小项（各 < 200 行，可一并做）
@@ -288,13 +288,13 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 
 | # | 子块 | 产出 | 依赖 | 状态 |
 |---|---|---|---|---|
-| 1 | **归档格式 + 本地导出/导入** | `core:data/backup/BackupArchiveCodec.kt`(纯逻辑 zip 读写+manifest) / `BackupSnapshotBuilder`(13 表+prefs+db 快照) / `LocalFileExporter` / `LocalFileRestorer` / `BackupScreen` 4 行接线 / SAF 选择器 | 无 | 🚧 本轮 |
+| 1 | **归档格式 + 本地导出/导入** | `core:data/backup/BackupArchiveCodec.kt`(纯逻辑 zip 读写+manifest) / `BackupSnapshotBuilder`(13 表+prefs+db 快照) / `LocalFileExporter` / `LocalFileRestorer` / `BackupScreen` 4 行接线 / SAF 选择器 | 无 | ✅ 2026-09-10（明细见下） |
 | 2 | **恢复模式（overwrite / merge）** | merge 语义：实体按 id upsert + preference 逐键覆盖 + 会话按 id 去重；`RestoreMode` 已在 Flutter 定义 | 1 | ⬜ |
-| 3 | **本地快照** | `LocalSnapshotStore`(快照文件管理/保留数/空间上限) + `LocalSnapshotScheduler`(频率) + `LocalSnapshotsScreen` 接线 + 7 个 settings | 1 | ⬜ |
+| 3 | **本地快照** | `LocalSnapshotStore`(快照文件管理/保留数/空间上限) + `LocalSnapshotScheduler`(频率) + `LocalSnapshotsScreen` 接线 + 7 个 settings | 1 | ✅ 2026-09-11（批次表「备份-3」，5 文件 + 5 测试类） |
 | 4 | **备份提醒** | `BackupReminder`(启用/频率/上次备份时间) + 完成时 `recordBackupCompleted()` + 3 行接线 | 1 | ⬜ |
 | 5 | **WebDAV** | `WebDavClient`(PROPFIND/PUT/GET/DELETE + Basic auth) + `WebDavConfig` model + 服务器设置子页 + 测试连接 + 远端列表 + 恢复 | 1 | ⬜ |
 | 6 | **S3** | `S3Client`(SigV4 + list/put/get/delete) + `S3Config` model + 服务器设置子页 + 测试连接 + 恢复 | 1 | ⬜ |
-| 7 | **前向兼容闸门** | `minimumReadableFormatVersion` / `minimumReadableSchemaVersion` 判定 + 同意对话框（`forward_compat_consent_dialog`） | 2 | ⬜ |
+| 7 | **前向兼容闸门** | `minimumReadableFormatVersion` / `minimumReadableSchemaVersion` 判定 + 同意对话框（`forward_compat_consent_dialog`） | 2 | 🚧 最小版已落地（`BackupManifestCodec.declaresNewerBuild`），完整版 ⬜ |
 | 8 | **Cherry Studio / Chatbox 导入** | 两个 importer（可选，纯数据转换） | 2 | ⬜ |
 
 #### 子块 1 进展明细（2026-09-10）
@@ -321,7 +321,7 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | 文件 | 职责 | 对应 Flutter |
 |---|---|---|
 | `core/data/backup/BackupProgress.kt` | `BackupPhase`(16 项，wire 值对齐 Dart)、`BackupProgressUnit`、`BackupProgress(fraction)`、`BackupProgressSink`、`BackupCancelledException`、`ProgressBridge` | `backup_progress.dart` |
-| `core/data/backup/MemoBackupService.kt` | 公开门面：`exportToCache` / `restoreFromFile` / `peekManifest` / `defaultArchiveName`（`kelivo_backup_<ISO8601冒号换破折号>.zip`）；`BackupManifestView` / `RestoreReportView(skippedConversations)`；builder/restorer 抛的 `IllegalStateException("备份已取消")` → `BackupCancelledException` | `data_sync.dart` L515 等 |
+| `core/data/backup/MemoBackupService.kt` | 公开门面：`exportToCache` / `restoreFromFile` / `peekManifest` / `defaultArchiveName`（`memo_backup_<ISO8601冒号换破折号>.zip`——**品牌化改名**，原版拼 `kelivo_backup_`；文件名不是格式的一部分，归档内容仍逐字节兼容）；`BackupManifestView` / `RestoreReportView(skippedConversations)`；builder/restorer 抛的 `IllegalStateException("备份已取消")` → `BackupCancelledException` | `data_sync.dart` L515 等 |
 | `app/ui/backup/BackupProgressDialog.kt` | `TaskProgressDialogCard`(padding 20/18/20/16、14sp bold 标题 + 18dp 图标、6dp 圆角条、13sp phase label + spinner/百分比、12sp@60% subtitle)、`BackupProgressBar`(null = 不定态来回扫)、`backupPhaseIcon` / `backupPhaseLabelRes` / `backupProgressSubtitle`、`formatBytes` / `formatCount` | `task_progress_dialog.dart` + `backup_progress_dialog.dart` |
 | `app/ui/backup/BackupImportModeDialog.kt` | 导入模式二选一（覆写 / 合并），按压 scale 0.98 + r14 hairline + 40dp primary 10% 图标砖 | `_chooseImportModeDialog` |
 | `app/ui/backup/BackupTaskRunner.kt` | 进度对话框生命周期编排：IO 执行 + `AtomicBoolean` 取消轮询 + 成功 600ms 延时 + 失败保留对话框 + 错误吐司 | `backup_task_runner.dart` |
@@ -337,12 +337,16 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 - **`BackupRestorer` 的 phase 常量必须用 Dart wire 值**（`reading_settings` / `validating` / `staging_candidate` / `finalizing`），否则进度标签全退化成 "Preparing"。
 - 批量正则改图标时**注意别误伤类型名**（`java.io.File` 被误加 `Lucide.` 前缀）。
 
+#### 子块 3 进展明细（2026-09-11，本机副本）
+
+5 个纯逻辑/IO 文件（`LocalSnapshotRetention` / `LocalSnapshotStore` / `LocalSnapshotSchedule` / `LocalSnapshotSettings` / `LocalSnapshotService`）+ `LocalSnapshotsScreen` 全接线 + 启动与回前台 `maybeRunLocalSnapshot()`；新增 `IcuStrings.kt`（`android.icu.text.MessageFormat`，复数串 `localSnapshotUsage` 等）。**保留策略、调度闸门、两处平台差异（DB 在 `databases/` 下不在 filesDir；运行状态必须放 SharedPreferences 否则写状态即改指纹）详见上方批次表「备份-3」行，勿重犯。** 测试：`LocalSnapshotRetentionTest` / `LocalSnapshotStoreTest` / `LocalSnapshotScheduleTest` / `LocalSnapshotServiceTest`。
+
 **待完成（子块 1 剩余）**
-- 前置兼容闸门对话框（最小版：格式版本过高时提示）
+- 完整前向兼容闸门（最小版已落地：`BackupManifestCodec.declaresNewerBuild` + 导入前 `peekManifest` 校验）
 - 真机验证（装机由用户自行测试）
 
-**子块 2~8 未开始**
-- 2 merge 恢复、3 本地快照、4 备份提醒、5 WebDAV、6 S3、7 前向兼容闸门（完整版）、8 Cherry / Chatbox 导入
+**子块 2 / 4~8 未开始**
+- 2 merge 恢复、4 备份提醒、5 WebDAV、6 S3、7 前向兼容闸门（完整版）、8 Cherry / Chatbox 导入
 
 ### 5.10.5 已有可复用资产（**别重造**）
 - `PayloadEntityDao`（13 表通用 CRUD，`core:data/db/`）
@@ -350,8 +354,43 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 - `SettingsKeyRegistry` + `classifyBusinessKey`（`core:data/settings/`）
 - `ConversationDao` / `MessageDao`（会话与消息）
 - `MemoSchema`（`DB_NAME="memo.db"`、`DB_VERSION=3`、`EXPECTED_TABLES=29`）
-- `BackupScreen.kt` / `LocalSnapshotsScreen.kt`（UI 壳，结构已 1:1，只需接线）
+- `BackupScreen.kt` / `LocalSnapshotsScreen.kt`（已接线，勿当空壳重写）
+- `MemoBackupService`（`exportToCache` / `restoreFromFile` / `peekManifest` / `defaultArchiveName`）+ `BackupRestorer` / `BackupSnapshotBuilder` / `BackupTaskRunner` / `BackupProgressDialog`（导出/恢复/进度对话框/错误吐司全在这条链上）
+- `LocalSnapshotService` / `LocalSnapshotStore` / `LocalSnapshotRetention` / `LocalSnapshotSchedule` / `LocalSnapshotSettings`（本机副本：子块 4 备份提醒、子块 5/6 远端保留策略可复用其保留语义与设置读写模式）
+- `IcuStrings.kt`（`icuString()`，复数/占位符串一律走它，别手拼字符串）
 - `BackupSwitchRow` / `BackupSection` / `BackupPlaceholderRow`（BackupScreen 内私有组件）
+
+## 5.11 有意偏离原版 / 平台差异清单（**勿"修回"**）
+
+做 1:1 对照时看到下列不一致属正常——它们是用户确认过或平台硬约束的结果。**不要按 Flutter 源码改回去**；改回来等于把已修好的 bug 再引一遍。
+
+### 用户明确要求的偏离
+
+| 项 | 原版 | 我们 | 原因 |
+|---|---|---|---|
+| 旧版（V1）记忆模式 | `legacy` 记忆一整套（兼容老用户旧数据） | **不移植**，只保留 V2 | 用户 2026-09-11 拍板：「我们这个是新的，没有这个问题」 |
+| 语音播放图标作用域 | `chat_message_widget.dart:3253-3291` 用**全局** `isActive` ⇒ 读一条消息时**所有**消息都显示停止、暂停态不可见 | `TtsPlaybackState.ownerId` + `messageTtsAction(state,msgId)`：只有被朗读的那条显示停止/继续，其余恒为播放；无 owner 的播放（工具卡重播）不影响任何消息 | 上游行为本身就是 bug（用户实测「点一条播放，所有界面都显示播放」），用户要求按消息归属 |
+| 联网搜索引用胶囊 | 20dp 高 / 12sp / primary 20% 底 | 16dp / 10sp / primary 16% 底（常量 `CITATION_BADGE_*`） | 用户 2026-09-10「小一点，有点影响阅读、太显眼」 |
+| 输入栏最小高 | `kMinInteractiveDimension` 48dp | **64dp**（多行仍随内容长高） | 用户两次「再高一点」；**其余样式参数（圆角 20 / 半透明底 / 描边 / 按钮 32dp）勿动** |
+| 备份建议文件名 | `kelivo_backup_<stamp>.zip` | `memo_backup_<stamp>.zip` | 品牌规则——SAF 保存对话框里这是用户可见字符串；文件名不属于归档格式，内容仍逐字节兼容 |
+| 本机副本文件名 | `kelivo-snapshot-<micros padded 16>.zip` | `memo-snapshot-<nanos>.zip` + `.json` 边车 | 品牌规则（同上）；时间戳改用 nanos，列表忽略外来文件故无兼容问题 |
+| 搜索服务 `kelivo` 类型 | 内置搜索（上游端点 + 内置令牌） | 不移植（S5），编辑器里该 type 显示 Memo 名称 | 品牌规则 |
+
+### 平台差异（Android/Compose 没有等价物或结构不同）
+
+- **TTS 无法暂停**：`android.speech.tts.TextToSpeech` 不支持暂停 utterance ⇒ 暂停 = `stop()`、继续 = 从当前块重讲（`TtsPlaybackController`）；`onInitListener` 只能经构造函数传入。±15s 定位只能定位到块粒度。
+- **快照运行状态在 SharedPreferences**：`last_success` / `failure_streak` / `fingerprint` / `first_observed` 是设备本地状态（写状态若落库就改了数据库指纹 ⇒ `unchanged` 闸门永不生效）；设置在 DB（随备份走）。这几个键在生成的 registry 里是 UNKNOWN，故显式走 `readLocal` / `writeLocal`。
+- **数据库路径**：`context.getDatabasePath("memo.db")`（`/data/data/<pkg>/databases/`），**不在 `filesDir` 下**——指纹与快照都要按它取。
+- **归档 ZIP 实现**：JDK `ZipOutputStream`（原生 ZIP64）替代 Dart 手写 streaming zip，只保留格式语义（命名/顺序/摘要/限额）。
+- **SAF 无法按扩展名过滤**：导入的 16 种扩展名白名单只在读取处兜底。
+- **Compose `TextField` 无 `contentPadding`**：12dp 内边距用外层 `Box` border + padding 等价实现。
+- **图标**：lucide 同名图标；`androidsvg`（coil-svg 底层）不支持 `<mask>` 与带 `gradientTransform` 的 `url(#渐变)` ⇒ 品牌 svg 会渲染空白，改映射到 png（bing/linkup）。
+- **`sh.calvin.reorderable` 的 `onMove` 给的是 LazyColumn 全局索引**：列表里若有 header/footer 占位 item 会整体错位（供应商拖拽重叠 bug 的根因）；`core:ui` 的 `ReorderableColumn` 用 `dataIndexOf()` 反查兜底。
+
+### 已知品牌残留（**待用户拍板**，不是 1:1 要求）
+
+- `AboutScreen.kt` 的「社区与链接」三行仍指向上游：`https://kelivo.psycheas.top/`、`https://github.com/Chevey339/kelivo`、`.../blob/master/LICENSE`。与 AGENTS.md「不得携带 kelivo 链接/端点」冲突；删行还是换成自有仓库属用户决策（AGPL 归属 vs 品牌），**未擅自改**。
+- 内部标识符 `KelivoOptions`（搜索服务编辑器里的上游 type key，非用户可见）——低优先清理，改动会牵到多文件与测试。
 
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 

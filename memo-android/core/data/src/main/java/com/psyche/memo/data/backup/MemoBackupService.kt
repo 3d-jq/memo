@@ -133,15 +133,17 @@ class MemoBackupService(
     }
 
     /**
-     * `kelivo_backup_<ISO8601 with colons as dashes>.zip` — byte-for-byte the
-     * name `data_sync.dart` L515 builds (`DateTime.now().toIso8601String()`
-     * with `:` replaced by `-`), so backups written on either platform look
-     * identical to a user browsing their files.
+     * `memo_backup_<ISO8601 with colons as dashes>.zip` — the same shape
+     * `data_sync.dart` L515 builds (`DateTime.now().toIso8601String()` with `:`
+     * replaced by `-`), under our own brand: the suggested name shows up in the
+     * SAF save dialog, and no user-visible string may carry the upstream name.
+     * The archive *contents* stay byte-compatible either way — only the
+     * suggested file name differs, and it is not part of the format.
      */
     fun defaultArchiveName(now: java.time.LocalDateTime = java.time.LocalDateTime.now()): String {
         val stamp = now.truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
             .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ss.SSS"))
-        return "kelivo_backup_$stamp.zip"
+        return "memo_backup_$stamp.zip"
     }
 
     companion object {

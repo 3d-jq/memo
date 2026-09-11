@@ -21,6 +21,16 @@ don't re-derive from scratch unless RikkaHub doesn't cover the case. The Flutter
 source (`lib/`) remains the primary 1:1 source-of-truth for UI/text parity; RikkaHub
 fills in native-side details and shared feature implementations.
 
+## 有意偏离原版的地方（勿"修回"，除非用户改口）
+
+这些地方**故意**与原版不同（**完整清单见 `memo-android/docs/PORTING.md` §5.11**，含平台差异与踩坑）：
+- **旧版（V1）记忆模式不移植**（用户点名：Memo 无老数据）
+- **语音播放图标按消息归属**：原版 `chat_message_widget.dart:3253-3291` 用全局 `isActive`，读一条消息会让**所有**消息显示停止、且暂停不可见；我们按 `ownerId` 只让被朗读的那条响应（暂停显示"继续"）——用户实测后要求
+- **搜索引用胶囊尺寸**：原版 20dp/12sp/20% 底，用户要求缩小一档（16dp/10sp/16%，全圆）
+- **输入栏样式**：保持 kelivo 原样，但最小高改为 64dp（用户要求）；其余参数勿动
+- **品牌化**：无 kelivo 字样/链接/端点；归档建议名 `memo_backup_<stamp>.zip`、本机副本 `memo-snapshot-<nanos>.zip`
+- ⚠️ **品牌残留待办**：`AboutScreen.kt` 的社区链接三行仍指向上游（`kelivo.psycheas.top` / `Chevey339/kelivo`）——删行或换自有仓库需用户拍板，勿擅自改
+
 ## Native Android port (memo-android)
 
 **Golden rule (user requirement): 1:1 translation of the Flutter source — every
@@ -58,6 +68,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - **旧版（V1）记忆模式不移植（用户点名）**：原版留它是为兼容老数据，Memo 没有 → 设置页旧版开关/旧版只读页/旧版提示词行/legacy 工具定义全部删除；`assistant_memory_rows` + 备份写入保留（归档格式需要），但没有 UI 读它
 - **记忆可见性修复**：`MemoryProviderV2.ensureLoaded()`（此前系统提示词的记忆块与助手记忆 tab 拿到空 store ⇒ 记忆既不注入也不显示）+ 列表/tab 统一用容器级 provider 并跟随 `version` + 助手记忆 tab 补齐可见/归档列表
 - **实体键存储修复（M2d-a 记忆 + 存储-3 TTS）**：ENTITY 键（`memory_entries_v1`/`assistant_memories_v1`/`tts_services_v1`）走 `PreferenceRepository` 时被静默丢弃（read=null、write=no-op）→ 记忆改 `MemoryEntryRowDao`/`AssistantMemoryRowDao` 直写类型表（payload 权威 + 类型列投影自愈 schema CHECK、读-改-写），TTS 改 `PayloadEntityDao("tts_service_rows")`，`BackupRestorer` 对两个记忆表同步改为投影写入；ASR 的 `asr_services_v1` 是 PREFERENCE 键不受影响
+- **悬浮语音播放器（用户点名「语音播放这个样式」）**：`TtsEngine`/`TtsPlaybackController`（分块朗读、暂停=停+重起当前块、±15s 定位、0.8–2.0 变速、200ms/字符估算的时间轴）+ 悬浮胶囊 1:1（双弧进度环/展开控制条/可拖动/自动收起），`TtsPlayer.init` 在 `MemoApplication.onCreate`
 - 聊天周边：Select&Copy/WebView 预览/分享/BoundedLargeTextView、助手壁纸、推理预算全链路、清空/压缩上下文、记忆关于+种子、建议气泡、消息多选+导出（文本）
 - 抽屉全局搜索模式、临时聊天三态、长按会话 sheet + 多选栏、流式呼吸点、iOS 风格控件 + 触觉反馈 + Haptics
 
@@ -74,12 +85,11 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 待移植 / 剩余（仅以下）
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
-
+- 备份剩余（§5.10 子块 2/4~8）：merge 恢复 / 备份提醒 / WebDAV / S3 / 前向兼容闸门 / Cherry·Chatbox 导入
+- 语音剩余：网络 TTS 语音（多 provider 合成 + 缓存）与播放器的「保存音频」按钮
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）
-- 备份（下一批）：merge 恢复 / 备份提醒 / WebDAV / S3 / 前向兼容闸门 / Cherry·Chatbox 导入；语音功能落地
-- 存储-4：本地快照 / 备份提醒 / WebDAV / S3 / 前向兼容闸门 / Cherry·Chatbox 导入（PORTING §5.10 子块 2~8）
 - 图片查看器桌面专属件（复制钮/缩放三钮/拖拽关图/桌面翻页箭头——compact=手机端不含，低优先）
 
 - Build env on this machine: system `JAVA_HOME` points at jdk-13 (breaks AGP) —
