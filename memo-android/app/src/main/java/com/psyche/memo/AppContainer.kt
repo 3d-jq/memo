@@ -108,7 +108,7 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
      * re-renders the section without any nav-result plumbing.
      */
     val ttsServicesStore: com.psyche.memo.ui.TtsServicesStore by lazy {
-        com.psyche.memo.ui.TtsServicesStore(preferenceRepository)
+        com.psyche.memo.ui.TtsServicesStore(database.writableDatabase, preferenceRepository)
     }
     val asrServicesStore: com.psyche.memo.ui.AsrServicesStore by lazy {
         com.psyche.memo.ui.AsrServicesStore(preferenceRepository)

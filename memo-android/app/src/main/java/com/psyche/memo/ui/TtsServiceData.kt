@@ -423,15 +423,26 @@ data class FishAudioTtsOptions(
 }
 
 /**
- * Minimal TTS services store (settings_provider.dart _ttsServicesKey /
- * _ttsSelectedServiceIdKey) on PreferenceRepository JSON.
+ * TTS services store (settings_provider.dart `_ttsServicesKey` /
+ * `_ttsSelectedServiceIdKey`).
+ *
+ * The service list is the `tts_services_v1` **entity**, so it lives in
+ * `tts_service_rows` — routing it through [PreferenceRepository] silently
+ * dropped every write (`classifyBusinessKey` files entity keys as ENTITY, for
+ * which `writeJson` is a no-op). The selected id is an ordinary preference key
+ * and stays on the repository.
  */
-class TtsServicesStore(private val prefs: PreferenceRepository) {
+class TtsServicesStore(
+    db: android.database.sqlite.SQLiteDatabase,
+    private val prefs: PreferenceRepository,
+) {
 
     var version by androidx.compose.runtime.mutableIntStateOf(0)
         private set
 
     val services: List<TtsServiceOptions> get() = store
+
+    private val dao = com.psyche.memo.data.db.PayloadEntityDao(db, TABLE)
 
     var selectedServiceId: String?
         get() = prefs.readJson(SELECTED_KEY)?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() }
@@ -446,10 +457,10 @@ class TtsServicesStore(private val prefs: PreferenceRepository) {
     private val store = mutableListOf<TtsServiceOptions>()
 
     fun load() {
-        val raw = prefs.readJson(SERVICES_KEY) ?: return
-        val list = runCatching {
-            Json.parseToJsonElement(raw).jsonArray.mapNotNull { TtsServiceOptions.fromJson(it.jsonObject) }
-        }.getOrDefault(emptyList())
+        val list = dao.getAll().mapNotNull { row ->
+            runCatching { TtsServiceOptions.fromJson(Json.parseToJsonElement(row.payload).jsonObject) }
+                .getOrNull()
+        }
         store.clear()
         store.addAll(list)
         version++
@@ -458,8 +469,17 @@ class TtsServicesStore(private val prefs: PreferenceRepository) {
     fun setServices(list: List<TtsServiceOptions>) {
         store.clear()
         store.addAll(list)
-        val arr = JsonArray(list.map { it.toJson() })
-        prefs.writeJson(SERVICES_KEY, arr.toString())
+        val now = System.currentTimeMillis()
+        dao.replaceAll(
+            list.mapIndexed { index, service ->
+                com.psyche.memo.data.db.PayloadEntityDao.Row(
+                    id = service.id,
+                    sortOrder = index,
+                    payload = service.toJson().toString(),
+                    updatedAt = now,
+                )
+            },
+        )
         version++
     }
 
@@ -477,7 +497,9 @@ class TtsServicesStore(private val prefs: PreferenceRepository) {
     }
 
     companion object {
-        const val SERVICES_KEY = "tts_services_v1"
+        /** BusinessEntityKind.ttsService.tableName. */
+        const val TABLE = "tts_service_rows"
+
         const val SELECTED_KEY = "tts_selected_service_id_v1"
 
         /** tts_services_page.dart _defaultBaseUrl L2223-2250. */
