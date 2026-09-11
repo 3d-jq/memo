@@ -86,7 +86,8 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
 - 备份剩余（§5.10 子块 2/4~8）：merge 恢复 / 备份提醒 / WebDAV / S3 / 前向兼容闸门 / Cherry·Chatbox 导入
-- **`applyContextLimit` 未实现**：`assistant.limitContextMessages`/`contextMessageSize` 的按条数裁剪在请求链路上缺失（`clearContextLabel` 会显示配置值但从不生效）——会改变发给模型的消息数，属行为变更，待单独一批 + 用户确认（PORTING §5.9 仍挂账有明细）
+- **`applyContextLimit` 未实现**（用户 2026-09-11「先留着」）：`assistant.limitContextMessages`/`contextMessageSize` 的按条数裁剪在请求链路上缺失（`clearContextLabel` 会显示配置值但从不生效）——会改变发给模型的消息数，要做时单开一批 + 用户确认
+- **上下文压缩机制要换掉**（用户 2026-09-11「这个上下文压缩这个机制这个部分 我们要改 不用原项目这个」）：现有实现=原项目那套（LLM 折叠成摘要 + 新建会话），**等用户给新方案**；在此之前不要按原版修、也不要自行设计新机制（PORTING 批次表「待改」行）
 - 语音剩余：网络 TTS 语音（多 provider 合成 + 缓存）与播放器的「保存音频」按钮
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
