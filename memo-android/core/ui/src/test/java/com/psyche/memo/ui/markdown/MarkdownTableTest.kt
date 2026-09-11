@@ -1,6 +1,5 @@
 package com.psyche.memo.ui.markdown
 
-import androidx.compose.ui.unit.Density
 import org.commonmark.ext.gfm.tables.TableBlock
 import org.commonmark.ext.gfm.tables.TableCell
 import org.commonmark.node.Node
@@ -119,83 +118,87 @@ class MarkdownTableTest {
     }
 
     // -----------------------------------------------------------------------
-    // columnWeights (the FlexColumnWidth stand-in used by MarkdownTableView)
+    // columnWidths (the FlexColumnWidth + minIntrinsicWidth stand-in)
     //
-    // Natural widths arrive already measured (TextMeasurer), in px. `weight` is
-    // a *relative* share, so the function normalises its output to sum to
-    // columnCount (average weight 1.0) and these tests assert the relational
-    // properties that matter: monotonicity, the legibility floor, and that a
-    // ragged/absent column is never left with nothing. The regression they
-    // guard against is the old character-count heuristic, which gave "排名"
-    // (2 chars) a sixth of the share of a 9-character cell and cropped the
-    // whole first column off screen.
+    // Natural widths arrive already measured (TextMeasurer) in px, the mins are
+    // the widest unbreakable run per column. The rules under test:
+    //   1. every column gets at least its min + padding - this is what stops a
+    //      long cell ("DeepSeek-V4-Pro ...") from crushing a short one ("时间")
+    //      down to two or three glyphs per line, which is the bug the user hit;
+    //   2. the leftover space is shared out by (natural - min), so wide content
+    //      still wins that part;
+    //   3. the total always equals the available width when it fits.
     // -----------------------------------------------------------------------
 
-    /** 1px == 1dp so the assertions read in dp-sized numbers. */
-    private val unitDensity = Density(1f)
+    private val unitPad = 20f
 
     @Test
-    fun wideColumnOutweighsNarrowOne() {
-        val weights = columnWeights(listOf(40f, 300f), unitDensity, 2)
-        assertEquals(2, weights.size)
+    fun shortColumnKeepsItsMinIntrinsicWidth() {
+        // "时间" column: 40px of text, min run 40px. Right column is huge.
+        val widths = columnWidths(
+            naturals = listOf(40f, 900f),
+            mins = listOf(40f, 120f),
+            availPx = 400f,
+            padPx = unitPad,
+            slack = 1f,
+        )
+        assertEquals(2, widths.size)
         assertTrue(
-            "a 300px column must outweigh a 40px one (weights=$weights)",
-            weights[1] > weights[0],
+            "short column must keep min+padding (widths=$widths)",
+            widths[0] >= 40f + unitPad - 1e-3f,
         )
+        assertTrue("wide column gets the rest (widths=$widths)", widths[1] > widths[0])
     }
 
     @Test
-    fun emptyColumnsShareTheWidthEvenly() {
-        // Both columns have no measurable text, so they must come out equal —
-        // the old heuristic mixed a 0-length column into the same pool as a
-        // 9-glyph one and let the ratio decide everything.
-        val weights = columnWeights(listOf(0f, 0f), unitDensity, 2)
-        assertEquals(weights[0], weights[1], 1e-4f)
-    }
-
-    @Test
-    fun everyColumnGetsAPositiveShare() {
-        // The floor used to be measured in px; after normalisation a column can
-        // only be checked for being non-degenerate, but it must never be zero
-        // (a zero weight collapses the column entirely).
-        val weights = columnWeights(listOf(0f, 400f), unitDensity, 2)
-        weights.forEach { assertTrue("weight $it must be > 0", it > 0f) }
-    }
-
-    @Test
-    fun trailingColumnGetsAUsableShareEvenWithoutText() {
-        // A ragged row can leave the last column's measured width at zero while
-        // the column still needs its padding — the old heuristic dropped it to
-        // a bare 1f and let the column collapse.
-        val weights = columnWeights(listOf(200f), unitDensity, 3)
-        assertEquals(3, weights.size)
-        assertTrue("missing columns still get a usable share", weights[2] > 0f)
-    }
-
-    @Test
-    fun weightsScaleWithMeasuredWidth() {
-        // Two columns, switching which one holds the wide text: the wide side
-        // must always win. (A single column normalises to 1.0 regardless, so
-        // it cannot express this.)
-        val a = columnWeights(listOf(60f, 600f), unitDensity, 2)
-        val b = columnWeights(listOf(600f, 60f), unitDensity, 2)
-        assertTrue("wide column wins on the right (weights=$a)", a[1] > a[0])
-        assertTrue("wide column wins on the left (weights=$b)", b[0] > b[1])
-    }
-
-    @Test
-    fun normalisedWeightsAverageToOne() {
-        val weights = columnWeights(listOf(40f, 300f, 120f), unitDensity, 3)
-        assertEquals(
-            "weights are normalised so their mean is 1.0",
-            3f,
-            weights.sum(),
-            1e-3f,
+    fun widthsFillTheAvailableSpace() {
+        val widths = columnWidths(
+            naturals = listOf(40f, 900f),
+            mins = listOf(40f, 120f),
+            availPx = 400f,
+            padPx = unitPad,
+            slack = 1f,
         )
+        assertEquals(400f, widths.sum(), 1e-3f)
     }
 
     @Test
-    fun zeroColumnsYieldsNoWeights() {
-        assertTrue(columnWeights(emptyList(), unitDensity, 0).isEmpty())
+    fun extraSpaceFavoursTheWiderNaturalColumn() {
+        val widths = columnWidths(
+            naturals = listOf(100f, 300f),
+            mins = listOf(50f, 50f),
+            availPx = 600f,
+            padPx = unitPad,
+            slack = 1f,
+        )
+        assertTrue("wider content takes more of the slack (widths=$widths)", widths[1] > widths[0])
     }
+
+    @Test
+    fun minWidthsWinWhenNothingFits() {
+        // Available space below sum(min): keep every column at its legible floor
+        // (the caller decides whether to scroll) instead of squeezing one away.
+        val widths = columnWidths(
+            naturals = listOf(500f, 500f),
+            mins = listOf(100f, 200f),
+            availPx = 150f,
+            padPx = unitPad,
+            slack = 1f,
+        )
+        assertEquals(120f, widths[0], 1e-3f)
+        assertEquals(220f, widths[1], 1e-3f)
+    }
+
+    @Test
+    fun emptyColumnsShareEqually() {
+        val widths = columnWidths(
+            naturals = listOf(0f, 0f),
+            mins = listOf(0f, 0f),
+            availPx = 200f,
+            padPx = unitPad,
+            slack = 1f,
+        )
+        assertEquals(widths[0], widths[1], 1e-3f)
+    }
+
 }

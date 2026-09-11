@@ -542,34 +542,67 @@ private fun measureColumnWidths(
     }
 }
 
+/** 不可断片段：ASCII 字母数字串（含常见连接符）算一个整体，CJK 可逐字断行。 */
+private val TOKEN_RE = Regex("[A-Za-z0-9_.-]+")
+
 /**
- * Turns natural text widths into `Row` weights.
+ * 每列「最窄也要放得下」的宽度：该列所有单元格里最长的不可断片段。
  *
- * `Modifier.weight` splits the row proportionally, so the values only need to
- * be *relative*. Each column contributes its measured text width plus the cell
- * padding, and a floor keeps a narrow "#"/"排名" column legible instead of
- * collapsing. The result is intentionally returned **un-normalised** — Compose
- * normalises by the sum — but every entry is a pixel-scale number so the floor
- * means the same thing in every table.
+ * 这是 Flutter `Table` 的 `minIntrinsicWidth`：它保证 "2026年"、"DeepSeek-V4-Pro"
+ * 这类内容至少能放下最长的一截，而不是被旁边的长文本列压到每行两三个字。
  */
-internal fun columnWeights(
-    naturals: List<Float>,
-    density: Density,
-    columnCount: Int,
+private fun measureColumnMinWidths(
+    measurer: TextMeasurer,
+    model: TableModel,
+    cellStyle: TextStyle,
 ): List<Float> {
-    if (columnCount == 0) return emptyList()
-    val padPx = with(density) { (TABLE_CELL_PADDING_H * 2).toPx() }
-    val minPx = with(density) { TABLE_MIN_COLUMN_DP.dp.toPx() }
-    val weights = FloatArray(columnCount)
-    for (col in 0 until columnCount) {
-        val natural = naturals.getOrElse(col) { 0f }
-        weights[col] = (natural * TABLE_COLUMN_SLACK + padPx).coerceAtLeast(minPx)
+    val cjkUnit = runCatching { measurer.measure("中", cellStyle).size.width.toFloat() }
+        .getOrDefault(0f)
+    return (0 until model.columnCount).map { col ->
+        val texts = buildList {
+            model.header.getOrNull(col)?.let { add(cellText(it)) }
+            model.body.forEach { row -> row.getOrNull(col)?.let { add(cellText(it)) } }
+        }
+        var widest = cjkUnit
+        for (text in texts) {
+            for (token in TOKEN_RE.findAll(text)) {
+                val w = measurer.measure(token.value, cellStyle).size.width.toFloat()
+                if (w > widest) widest = w
+            }
+        }
+        widest
     }
-    // Normalise to sum == columnCount so the weights stay in a sane range and
-    // a single huge cell cannot push every other column below the floor.
-    val sum = weights.sum().takeIf { it > 0f } ?: return List(columnCount) { 1f }
-    val scale = columnCount / sum
-    return weights.map { it * scale }
+}
+
+/**
+ * 列宽 = 每列的最小可读宽 + 剩余空间按「自然宽 - 最小宽」的比例分配 —— Flutter
+ * `Table` 的 FlexColumnWidth 语义。此前的做法只按自然宽比例分配权重，没有下限，
+ * 长文本列会把短列压到每行两三个字（用户实测："时间"列被挤成 202 / 6年 / 4月）。
+ *
+ * 返回 px；`sum(min) >= avail` 时直接给最小宽（放不下，由外层决定是否横向滚动）。
+ */
+internal fun columnWidths(
+    naturals: List<Float>,
+    mins: List<Float>,
+    availPx: Float,
+    padPx: Float,
+    slack: Float,
+): List<Float> {
+    val n = naturals.size
+    if (n == 0) return emptyList()
+    val minPx = List(n) { i -> mins.getOrElse(i) { 0f } + padPx }
+    val natPx = List(n) { i ->
+        (naturals.getOrElse(i) { 0f } * slack + padPx).coerceAtLeast(minPx[i])
+    }
+    val sumMin = minPx.sum()
+    if (sumMin >= availPx || availPx <= 0f) return minPx
+    val extra = availPx - sumMin
+    val flexSum = List(n) { i -> (natPx[i] - minPx[i]).coerceAtLeast(0f) }.sum()
+    if (flexSum <= 0f) return List(n) { minPx[it] + extra / n }
+    return List(n) { i ->
+        val flex = (natPx[i] - minPx[i]).coerceAtLeast(0f)
+        minPx[i] + extra * flex / flexSum
+    }
 }
 
 /** Plain text of a cell, flattened through nested inline nodes. */
@@ -704,35 +737,31 @@ private fun MarkdownTableView(
                     .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
             ) {
                 BoxWithConstraints {
-                    // Non-scrolling tables mirror FlexColumnWidth: every column
-                    // gets at least its measured text width, then the leftover
-                    // space is shared out proportionally by `weight`. Scrolling
-                    // tables instead pin a fixed legible column width so >= 4
-                    // columns overflow sideways, like _compactColumnWidth (L3522).
-                    val weights = if (scrollable) {
-                        List(model.columnCount) { 1f }
-                    } else {
-                        columnWeights(
-                            naturals = measureColumnWidths(measurer, model, measureStyle),
-                            density = density,
-                            columnCount = model.columnCount,
-                        )
-                    }
-                    val columnWidth = if (scrollable) {
-                        // _compactColumnWidth (markdown_with_highlight.dart L3522):
-                        // >= 4 columns show ~2.45 at a time, clamped to a legible min.
+                    // 列宽（Flutter Table 的语义）：
+                    // - 能横向滚动时（列多）：固定列宽 _compactColumnWidth（L3522），
+                    //   让 >= 4 列的表格往右溢出；
+                    // - 否则：每列先拿到「最小可读宽」（最长不可断片段，等价
+                    //   minIntrinsicWidth），剩余空间再按自然宽比例分配 —— 这正是
+                    //   Flutter 用 FlexColumnWidth 时不会把"时间"列压成每行两三个字
+                    //   的原因。
+                    val cellPadPx = with(density) { (TABLE_CELL_PADDING_H * 2).toPx() }
+                    val widths: List<androidx.compose.ui.unit.Dp> = if (scrollable) {
                         val available = maxWidth - TABLE_INSET_H_TOTAL
-                        (available / 2.45f)
+                        val compact = (available / 2.45f)
                             .coerceIn(TABLE_MIN_COLUMN_DP.dp, TABLE_MAX_COLUMN_DP.dp)
+                        List(model.columnCount) { compact }
                     } else {
-                        maxWidth / model.columnCount
+                        columnWidths(
+                            naturals = measureColumnWidths(measurer, model, measureStyle),
+                            mins = measureColumnMinWidths(measurer, model, measureStyle),
+                            availPx = with(density) { maxWidth.toPx() },
+                            padPx = cellPadPx,
+                            slack = TABLE_COLUMN_SLACK,
+                        ).map { px -> with(density) { px.toDp() } }
                     }
                     Column(
                         modifier = Modifier
-                            .then(
-                                if (scrollable) Modifier.width(columnWidth * model.columnCount)
-                                else Modifier.fillMaxWidth(),
-                            )
+                            .width(widths.fold(0.dp) { acc, w -> acc + w })
                             // 录制层必须挂在**横向滚动容器内部**的这张表上：它的宽度是
                             // 表格的真实宽度（scrollable 时 = 列数 × 列宽，会超出视口）。
                             // 挂在外层时图层宽度只有视口宽，右侧的列根本不在图层里 ——
@@ -748,9 +777,7 @@ private fun MarkdownTableView(
                                 plainTexts = plainTexts,
                                 header = true,
                                 columnCount = model.columnCount,
-                                columnWidth = columnWidth,
-                                weights = weights,
-                                scrollable = scrollable,
+                                widths = widths,
                                 rowBackground = headerBg,
                                 bottomBorder = true,
                                 baseFontSize = baseFontSize,
@@ -765,9 +792,7 @@ private fun MarkdownTableView(
                                 plainTexts = plainTexts,
                                 header = false,
                                 columnCount = model.columnCount,
-                                columnWidth = columnWidth,
-                                weights = weights,
-                                scrollable = scrollable,
+                                widths = widths,
                                 rowBackground = null,
                                 // The original's TableBorder draws only *inside*
                                 // rules; the outer frame is the rounded card. A
@@ -989,9 +1014,7 @@ private fun TableRowView(
     plainTexts: Map<Node, String>,
     header: Boolean,
     columnCount: Int,
-    columnWidth: androidx.compose.ui.unit.Dp,
-    weights: List<Float>,
-    scrollable: Boolean,
+    widths: List<androidx.compose.ui.unit.Dp>,
     rowBackground: Color?,
     bottomBorder: Boolean,
     baseFontSize: Float,
@@ -1014,15 +1037,10 @@ private fun TableRowView(
                 // 是整表统一画的，这里等价还原。
                 .drawBehind {
                     if (columnCount <= 1) return@drawBehind
-                    val weightTotal = weights.sum().takeIf { it > 0f } ?: return@drawBehind
                     val stroke = TABLE_BORDER_WIDTH.toPx()
                     var x = 0f
                     for (i in 0 until columnCount - 1) {
-                        x += if (scrollable) {
-                            size.width / columnCount
-                        } else {
-                            size.width * weights.getOrElse(i) { 1f } / weightTotal
-                        }
+                        x += widths.getOrElse(i) { 0.dp }.toPx()
                         drawLine(
                             color = borderColor,
                             start = androidx.compose.ui.geometry.Offset(x, 0f),
@@ -1037,9 +1055,7 @@ private fun TableRowView(
                     cell = cells.getOrNull(i),
                     plainTexts = plainTexts,
                     header = header,
-                    columnWidth = columnWidth,
-                    weight = weights.getOrElse(i) { 1f },
-                    scrollable = scrollable,
+                    width = widths.getOrElse(i) { 0.dp },
                     borderColor = borderColor,
                     baseFontSize = baseFontSize,
                     baseLineHeight = baseLineHeight,
@@ -1064,9 +1080,7 @@ private fun androidx.compose.foundation.layout.RowScope.TableCellView(
     cell: TableCell?,
     plainTexts: Map<Node, String>,
     header: Boolean,
-    columnWidth: androidx.compose.ui.unit.Dp,
-    weight: Float,
-    scrollable: Boolean,
+    width: androidx.compose.ui.unit.Dp,
     borderColor: Color,
     baseFontSize: Float,
     baseLineHeight: Float,
@@ -1080,8 +1094,8 @@ private fun androidx.compose.foundation.layout.RowScope.TableCellView(
         modifier = Modifier
             // Scrolling tables need a fixed column width to be wider than the
             // viewport; non-scrolling ones share the available width by weight.
-            .then(if (scrollable) Modifier.width(columnWidth) else Modifier.weight(weight))
             // 竖线由所在行统一绘制（见 TableRowView），这里不逐单元格画。
+            .width(width)
             .padding(horizontal = TABLE_CELL_PADDING_H, vertical = TABLE_CELL_PADDING_V),
     ) {
         Text(
