@@ -402,17 +402,21 @@ object MemoryTools {
         args: JsonObject,
     ): String? {
         if (assistant == null) return null
+        // Temporary chats are discarded on exit: reads stay available, but a
+        // recorded trace (title, args, result) would outlive the conversation.
+        val trace = if (isTemporary) null else beginToolTrace(container, assistant, conversationId, name, args)
+
         if (name == CHAT_SEARCH) {
             if (!assistant.allowPastConversationRecall) return null
             return try {
-                chatSearch(container, assistant, conversationId, args)
+                chatSearch(container, assistant, conversationId, args).also { finishToolTrace(trace, it) }
             } catch (e: Exception) {
                 toolError(
                     error = "memory_execution_error",
                     message = e.toString(),
                     tool = name,
                     instruction = "The memory tool failed. Retry only after correcting the parameters, or inform the user about the issue.",
-                )
+                ).also { finishToolTrace(trace, it, "memory_execution_error") }
             }
         }
         if (name !in ENABLE_MEMORY_TOOL_NAMES) return null
@@ -434,7 +438,7 @@ object MemoryTools {
         // never works off a snapshot that missed another instance's writes.
         provider.ensureLoaded()
         return try {
-            when (name) {
+            val result = when (name) {
                 MEMORY_READ -> memoryRead(provider, assistant, args)
                 MEMORY_UPDATE -> memoryUpdate(container, provider, assistant, args)
                 MEMORY_SEARCH_PROFILE -> memorySearchProfile(provider, assistant, args)
@@ -443,14 +447,70 @@ object MemoryTools {
                 UPDATE_USER_PROFILE -> updateUserProfile(container, args)
                 else -> null
             }
+            finishToolTrace(trace, result)
+            result
         } catch (e: Exception) {
-            toolError(
+            val error = toolError(
                 error = "memory_execution_error",
                 message = e.toString(),
                 tool = name,
                 instruction = "The memory tool failed. Retry only after correcting the parameters, or inform the user about the issue.",
             )
+            finishToolTrace(trace, error, "memory_execution_error")
+            error
         }
+    }
+
+    /** `_beginToolTrace` — opens the one-step trace for a tool call. */
+    private fun beginToolTrace(
+        container: AppContainerImpl,
+        assistant: Assistant,
+        conversationId: String?,
+        name: String,
+        args: JsonObject,
+    ): com.psyche.memo.provider.MemoryTraceHandle? = runCatching {
+        val handle = container.memoryTraceRecorder.begin(
+            trigger = com.psyche.memo.provider.MemoryTraceTrigger.TOOL_CALL,
+            scope = com.psyche.memo.provider.memoryTraceScopeOf(assistant.memoryWriteScope),
+            conversationId = conversationId,
+            conversationTitle = conversationId?.let { container.conversationDao.get(it)?.title },
+            assistantId = assistant.id,
+            assistantName = assistant.name,
+        )
+        val step = handle?.beginStep(
+            kind = if (name == CHAT_SEARCH) {
+                com.psyche.memo.provider.MemoryTraceStepKind.CHAT_SEARCH
+            } else {
+                com.psyche.memo.provider.MemoryTraceStepKind.MEMORY_TOOL
+            },
+            label = name,
+        )
+        step?.appendPrompt(args.toString())
+        handle
+    }.getOrNull()
+
+    /** `_finishToolTrace` — records the result and publishes the trace. */
+    private fun finishToolTrace(
+        handle: com.psyche.memo.provider.MemoryTraceHandle?,
+        result: String?,
+        error: String? = null,
+    ) {
+        if (handle == null) return
+        val step = handle.trace.steps.lastOrNull()
+        step?.appendResponse(result ?: "(no result)")
+        // A tool error payload is a failure even though the call returned.
+        val payloadError = error ?: result
+            ?.takeIf { it.contains("\"error\":") }
+            ?.let { step?.label ?: "memory_tool_error" }
+        step?.finish(
+            if (payloadError == null) {
+                com.psyche.memo.provider.MemoryTraceStepStatus.SUCCESS
+            } else {
+                com.psyche.memo.provider.MemoryTraceStepStatus.FAILED
+            },
+            payloadError,
+        )
+        handle.commit(error = payloadError)
     }
 
     // ------------------------------------------------------------------ handlers

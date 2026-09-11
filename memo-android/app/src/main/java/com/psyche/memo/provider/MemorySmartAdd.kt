@@ -246,9 +246,11 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
         candidateIds: Set<String>,
         source: MemorySource,
         mergeableIds: Set<String>? = null,
+        traceStep: MemoryTraceStep? = null,
     ): SmartAddResult {
         val normalized = normalizeDecision(decision, candidateIds, mergeableIds)
         val owner = if (item.scope == MemoryScope.assistant) item.assistantId else null
+        val typeLabel = item.type.wire
         return when (normalized.action) {
             SmartAddAction.SKIP -> SmartAddResult(
                 action = SmartAddAction.SKIP,
@@ -259,12 +261,39 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
             SmartAddAction.NEW -> {
                 val created = repository.create(item.scope, owner, item.type, item.content, source)
                 for (relatedId in normalized.relatedIds) repository.linkBidirectional(created.id, relatedId)
+                traceStep?.addMutation(
+                    MemoryTraceMutation(
+                        kind = MemoryTraceMutationKind.MEMORY_CREATED,
+                        targetId = created.id,
+                        label = "$typeLabel · ${item.scope.wire}",
+                        after = created.content,
+                    ),
+                )
+                for (relatedId in normalized.relatedIds) {
+                    traceStep?.addMutation(
+                        MemoryTraceMutation(
+                            kind = MemoryTraceMutationKind.MEMORY_LINKED,
+                            targetId = created.id,
+                            label = relatedId,
+                        ),
+                    )
+                }
                 SmartAddResult(SmartAddAction.NEW, id = created.id, content = created.content)
             }
 
             SmartAddAction.MERGE -> {
+                val before = if (traceStep == null) null else contentBefore(normalized.targetId)
                 val merged = normalized.mergedContent!!.trim()
                 val updated = repository.updateContent(normalized.targetId!!, merged)
+                traceStep?.addMutation(
+                    MemoryTraceMutation(
+                        kind = MemoryTraceMutationKind.MEMORY_MERGED,
+                        targetId = updated?.id ?: normalized.targetId,
+                        label = typeLabel,
+                        before = before,
+                        after = updated?.content ?: merged,
+                    ),
+                )
                 SmartAddResult(
                     action = SmartAddAction.MERGE,
                     id = updated?.id ?: normalized.targetId,
@@ -274,6 +303,7 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
 
             SmartAddAction.CONFLICT -> {
                 val oldId = normalized.targetId!!
+                val before = if (traceStep == null) null else contentBefore(oldId)
                 repository.archive(oldId)
                 val created = repository.create(item.scope, owner, item.type, item.content, source)
                 repository.linkBidirectional(created.id, oldId)
@@ -281,6 +311,22 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
                     if (relatedId == oldId) continue
                     repository.linkBidirectional(created.id, relatedId)
                 }
+                traceStep?.addMutation(
+                    MemoryTraceMutation(
+                        kind = MemoryTraceMutationKind.MEMORY_ARCHIVED,
+                        targetId = oldId,
+                        label = typeLabel,
+                        before = before,
+                    ),
+                )
+                traceStep?.addMutation(
+                    MemoryTraceMutation(
+                        kind = MemoryTraceMutationKind.MEMORY_CREATED,
+                        targetId = created.id,
+                        label = "$typeLabel · ${item.scope.wire}",
+                        after = created.content,
+                    ),
+                )
                 SmartAddResult(
                     action = SmartAddAction.CONFLICT,
                     id = created.id,
@@ -289,6 +335,12 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
                 )
             }
         }
+    }
+
+    /** An entry's current content, for the trace's before/after values only. */
+    private fun contentBefore(id: String?): String? {
+        if (id == null) return null
+        return runCatching { repository.byIds(listOf(id)).firstOrNull()?.content }.getOrNull()
     }
 
     /** One item (`memory_update` / perItem mode). */
@@ -300,6 +352,7 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
         llmCall: (suspend (String) -> String)? = null,
         overrideZh: String? = null,
         overrideEn: String? = null,
+        traceStep: MemoryTraceStep? = null,
     ): SmartAddResult {
         // Fast path: exact duplicate.
         val exact = repository.findExact(
@@ -329,18 +382,27 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
                 overrideZh = overrideZh,
                 overrideEn = overrideEn,
             )
+            traceStep?.appendPrompt(prompt)
             val raw = runCatching { llmCall(prompt) }.getOrNull()
+            if (raw == null) {
+                traceStep?.appendResponse("<request failed>")
+            } else {
+                traceStep?.appendResponse(raw)
+            }
             val parsed = raw?.let { parsePerItem(it) }
             parsed ?: degradeDecision(visibilityAssistantId, item.type, item.content)
         }
 
-        return applyDecision(
+        val result = applyDecision(
             item = item,
             decision = decision,
             candidateIds = candidateIds,
             mergeableIds = mergeableIds,
             source = source,
+            traceStep = traceStep,
         )
+        traceStep?.parsedResult = result.toToolJson().toString()
+        return result
     }
 
     /** Several items (batched or perItem mode). */
@@ -355,6 +417,7 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
         perItemOverrideEn: String? = null,
         batchOverrideZh: String? = null,
         batchOverrideEn: String? = null,
+        traceStep: MemoryTraceStep? = null,
     ): SmartAddBatchResult {
         if (items.isEmpty()) return SmartAddBatchResult(emptyList(), false)
 
@@ -370,6 +433,7 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
                     llmCall = llmCall,
                     overrideZh = perItemOverrideZh,
                     overrideEn = perItemOverrideEn,
+                    traceStep = traceStep,
                 )
                 results.add(result)
                 if (item.type == MemoryType.identity && result.action != SmartAddAction.SKIP) {
@@ -410,7 +474,9 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
                 overrideZh = batchOverrideZh,
                 overrideEn = batchOverrideEn,
             )
+            traceStep?.appendPrompt(prompt)
             val raw = runCatching { llmCall(prompt) }.getOrNull()
+            traceStep?.appendResponse(raw ?: "<request failed>")
             val parsed = raw?.let { parseBatch(it, pending.size) }
             pending.forEachIndexed { slot, index ->
                 decisions[index] = parsed?.getOrNull(slot)
@@ -435,6 +501,7 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
                 candidateIds = candidateIds,
                 mergeableIds = mergeableIds,
                 source = source,
+                traceStep = traceStep,
             )
             results.add(result)
             if (item.type == MemoryType.identity && result.action != SmartAddAction.SKIP) {

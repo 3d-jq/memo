@@ -186,6 +186,20 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
+     * 记忆流程追踪（memory_trace.dart）：内存环形缓冲（24 条，不落盘），
+     * 后台整理与记忆工具调用都会写一份，供「流程追踪」页查看。
+     */
+    val memoryTraceRecorder: com.psyche.memo.provider.MemoryTraceRecorder
+        get() = com.psyche.memo.provider.MemoryTraceRecorder
+
+    /** `memory_trace_enabled_v1` → recorder（默认开）。 */
+    fun syncMemoryTraceEnabled() {
+        val raw = preferenceRepository.readJson("memory_trace_enabled_v1")
+        val enabled = raw == null || raw == "true"
+        memoryTraceRecorder.enabled = enabled
+    }
+
+    /**
      * 后台记忆整理（memory_pipeline.dart）：Gatekeeper → Extract → Smart Add →
      * Profile Distiller，单并发队列。跟着进程活，聊天侧只负责 schedule。
      */

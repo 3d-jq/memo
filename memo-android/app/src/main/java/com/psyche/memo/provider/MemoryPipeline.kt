@@ -208,6 +208,7 @@ class MemoryProfileDistiller(
         llmCall: suspend (String) -> String,
         overrideZh: String? = null,
         overrideEn: String? = null,
+        traceStep: MemoryTraceStep? = null,
     ): Boolean {
         val identity = provider.visibleFor(assistantId).filter { it.type == MemoryType.identity }
         if (identity.isEmpty()) return true
@@ -222,13 +223,33 @@ class MemoryProfileDistiller(
             overrideEn = overrideEn,
         )
 
-        val raw = runCatching { llmCall(prompt) }.getOrNull() ?: return false
+        traceStep?.appendPrompt(prompt)
+        val raw = runCatching { llmCall(prompt) }.getOrNull()
+        if (raw == null) {
+            traceStep?.appendResponse("<request failed>")
+            return false
+        }
+        traceStep?.appendResponse(raw)
         val parsed = parse(raw)
-        if (!parsed.ok) return false
+        if (!parsed.ok) {
+            traceStep?.parsedResult = "malformed"
+            return false
+        }
+        traceStep?.parsedResult = parsed.fields.joinToString(", ") { "${it.key}=${it.value}" }
 
         for (field in parsed.fields) {
+            val before = profile.firstOrNull { it.key == field.key }?.value
             runCatching {
                 UserProfileRepository.put(container, field.key, field.value, source = "distilled")
+            }.onSuccess {
+                traceStep?.addMutation(
+                    MemoryTraceMutation(
+                        kind = MemoryTraceMutationKind.PROFILE_FIELD_WRITTEN,
+                        targetId = field.key,
+                        before = before,
+                        after = field.value,
+                    ),
+                )
             }
         }
         return true
@@ -390,6 +411,41 @@ class MemoryPipelineService(
     }
 
     private suspend fun runJob(job: Job): MemoryOrganizeResult {
+        val handle = beginJobTrace(job)
+        val result = try {
+            runJobBody(job, handle)
+        } catch (error: Throwable) {
+            handle?.commit(error = error.toString())
+            throw error
+        }
+        handle?.commit(
+            advanced = result.advanced,
+            forcedAdvance = result.forcedAdvance,
+            error = result.error,
+        )
+        return result
+    }
+
+    /** Opens a trace for [job]; null when recording is off or the chat is temporary. */
+    private fun beginJobTrace(job: Job): MemoryTraceHandle? {
+        // Temporary chats are discarded on exit; keep their traces (title, args,
+        // result) out of the viewer.
+        if (job.conversationId == Conversation.TEMPORARY_ID) return null
+        return runCatching {
+            val assistant = container.assistantStore.get(job.assistantId)
+            val conversation = container.conversationDao.get(job.conversationId)
+            container.memoryTraceRecorder.begin(
+                trigger = if (job.force) MemoryTraceTrigger.MANUAL else MemoryTraceTrigger.AUTO_TURNS,
+                scope = memoryTraceScopeOf(assistant?.memoryWriteScope),
+                conversationId = job.conversationId,
+                conversationTitle = conversation?.title,
+                assistantId = assistant?.id ?: job.assistantId,
+                assistantName = assistant?.name,
+            )
+        }.getOrNull()
+    }
+
+    private suspend fun runJobBody(job: Job, trace: MemoryTraceHandle?): MemoryOrganizeResult {
         val provider = container.memoryProviderV2
         provider.ensureLoaded()
         val assistant = container.assistantStore.get(job.assistantId)
@@ -452,6 +508,7 @@ class MemoryPipelineService(
             watermark = watermark,
             window = capped,
             llmCall = { prompt -> MemoryLlm.generateTextWith(container, providerKey, modelId, prompt, thinkingBudget) },
+            trace = trace,
         )
     }
 
@@ -463,6 +520,7 @@ class MemoryPipelineService(
         watermark: Int,
         window: List<Pair<ChatMessage, Int>>,
         llmCall: suspend (String) -> String,
+        trace: MemoryTraceHandle? = null,
     ): MemoryOrganizeResult {
         if (window.isEmpty()) return MemoryOrganizeResult(advanced = false, error = "empty_window")
 
@@ -470,16 +528,27 @@ class MemoryPipelineService(
         val failureKey = "$conversationId|$watermark|$windowEnd"
         val lang = settings.lang
         val conversationText = buildConversationText(window.map { it.first }, lang)
+        trace?.setWindow(
+            watermark = watermark,
+            startOrder = window.first().second,
+            endOrder = windowEnd,
+            size = window.size,
+        )
 
         // ── Gatekeeper ───────────────────────────────────────────────────────
+        val gateStep = trace?.beginStep(MemoryTraceStepKind.GATEKEEPER)
         val gatePrompt = MemoryGatekeeper.buildPrompt(
             lang = lang,
             conversation = conversationText,
             overrideZh = settings.gateZh,
             overrideEn = settings.gateEn,
         )
+        gateStep?.appendPrompt(gatePrompt)
         val gateRaw = runCatching { llmCall(gatePrompt) }.getOrNull()
-            ?: return failWindow(
+        if (gateRaw == null) {
+            gateStep?.finish(MemoryTraceStepStatus.FAILED, "gate_request_failed")
+            skipRemainingSteps(trace, from = MemoryTraceStepKind.EXTRACT)
+            return failWindow(
                 failureKey = failureKey,
                 conversationId = conversationId,
                 windowEnd = windowEnd,
@@ -487,8 +556,13 @@ class MemoryPipelineService(
                 gate = null,
                 error = "gate_request_failed",
             )
+        }
+        gateStep?.appendResponse(gateRaw)
         val gate = MemoryGatekeeper.parse(gateRaw)
+        gateStep?.parsedResult = gate.name
         if (gate == MemoryGateParseResult.MALFORMED) {
+            gateStep?.finish(MemoryTraceStepStatus.FAILED, "gate_parse_failed")
+            skipRemainingSteps(trace, from = MemoryTraceStepKind.EXTRACT)
             return failWindow(
                 failureKey = failureKey,
                 conversationId = conversationId,
@@ -498,7 +572,9 @@ class MemoryPipelineService(
                 error = "gate_parse_failed",
             )
         }
+        gateStep?.finish(MemoryTraceStepStatus.SUCCESS)
         if (gate == MemoryGateParseResult.SKIP) {
+            skipRemainingSteps(trace, from = MemoryTraceStepKind.EXTRACT)
             advance(conversationId, windowEnd)
             windowFailures.remove(failureKey)
             return MemoryOrganizeResult(advanced = true, gate = gate, windowSize = window.size)
@@ -514,6 +590,7 @@ class MemoryPipelineService(
             lang = lang,
             maxItems = settings.injectionMaxItems,
         )
+        val extractStep = trace?.beginStep(MemoryTraceStepKind.EXTRACT)
         val extractPrompt = MemoryExtractor.buildPrompt(
             lang = lang,
             conversation = conversationText,
@@ -522,8 +599,12 @@ class MemoryPipelineService(
             overrideZh = settings.extractZh,
             overrideEn = settings.extractEn,
         )
+        extractStep?.appendPrompt(extractPrompt)
         val extractRaw = runCatching { llmCall(extractPrompt) }.getOrNull()
-            ?: return failWindow(
+        if (extractRaw == null) {
+            extractStep?.finish(MemoryTraceStepStatus.FAILED, "extract_request_failed")
+            skipRemainingSteps(trace, from = MemoryTraceStepKind.SMART_ADD)
+            return failWindow(
                 failureKey = failureKey,
                 conversationId = conversationId,
                 windowEnd = windowEnd,
@@ -531,8 +612,12 @@ class MemoryPipelineService(
                 gate = gate,
                 error = "extract_request_failed",
             )
+        }
+        extractStep?.appendResponse(extractRaw)
         val extracted = MemoryExtractor.parse(extractRaw)
         if (!extracted.ok) {
+            extractStep?.finish(MemoryTraceStepStatus.FAILED, "extract_parse_failed")
+            skipRemainingSteps(trace, from = MemoryTraceStepKind.SMART_ADD)
             return failWindow(
                 failureKey = failureKey,
                 conversationId = conversationId,
@@ -542,7 +627,22 @@ class MemoryPipelineService(
                 error = "extract_parse_failed",
             )
         }
+        extractStep?.parsedResult = buildJsonObject {
+            put("items", buildJsonArray {
+                extracted.items.forEach { item ->
+                    add(
+                        buildJsonObject {
+                            put("type", item.type.wire)
+                            item.scopeAttr?.let { scope -> put("scope", scope) }
+                            put("content", item.content)
+                        },
+                    )
+                }
+            })
+        }.toString()
+        extractStep?.finish(MemoryTraceStepStatus.SUCCESS)
         if (extracted.items.isEmpty()) {
+            skipRemainingSteps(trace, from = MemoryTraceStepKind.SMART_ADD)
             advance(conversationId, windowEnd)
             windowFailures.remove(failureKey)
             return MemoryOrganizeResult(advanced = true, gate = gate, windowSize = window.size)
@@ -559,6 +659,7 @@ class MemoryPipelineService(
             )
         }
         val smartAdd = MemorySmartAdd(MemoryProviderSmartAddRepository(provider))
+        val smartStep = trace?.beginStep(MemoryTraceStepKind.SMART_ADD)
         val smart = smartAdd.addMany(
             items = smartItems,
             visibilityAssistantId = assistant.id,
@@ -570,19 +671,30 @@ class MemoryPipelineService(
             perItemOverrideEn = settings.smartAddEn,
             batchOverrideZh = settings.smartAddBatchZh,
             batchOverrideEn = settings.smartAddBatchEn,
+            traceStep = smartStep,
         )
+        smartStep?.finish(MemoryTraceStepStatus.SUCCESS)
 
         // ── Profile Distiller (identity changes only) ────────────────────────
         if (smart.identityChanged) {
-            runCatching {
+            val distillStep = trace?.beginStep(MemoryTraceStepKind.PROFILE_DISTILLER)
+            val ok = runCatching {
                 MemoryProfileDistiller(container, provider).run(
                     lang = lang,
                     assistantId = assistant.id,
                     llmCall = llmCall,
                     overrideZh = settings.distillZh,
                     overrideEn = settings.distillEn,
+                    traceStep = distillStep,
                 )
-            }
+            }.getOrDefault(false)
+            distillStep?.finish(
+                if (ok) MemoryTraceStepStatus.SUCCESS else MemoryTraceStepStatus.FAILED,
+                if (ok) null else "distill_failed",
+            )
+        } else {
+            trace?.beginStep(MemoryTraceStepKind.PROFILE_DISTILLER)
+                ?.finish(MemoryTraceStepStatus.SKIPPED)
         }
 
         // Smart Add (including its degraded path) and Distiller failures both
@@ -645,7 +757,24 @@ class MemoryPipelineService(
             ?.content?.toIntOrNull()
     }.getOrNull()
 
+    /** Records a stage the run never reached, so the viewer shows the chain. */
+    private fun skipRemainingSteps(trace: MemoryTraceHandle?, from: MemoryTraceStepKind) {
+        if (trace == null) return
+        val start = ORGANIZE_STAGES.indexOf(from)
+        if (start < 0) return
+        for (index in start until ORGANIZE_STAGES.size) {
+            trace.beginStep(ORGANIZE_STAGES[index])?.finish(MemoryTraceStepStatus.SKIPPED)
+        }
+    }
+
     companion object {
+        private val ORGANIZE_STAGES = listOf(
+            MemoryTraceStepKind.GATEKEEPER,
+            MemoryTraceStepKind.EXTRACT,
+            MemoryTraceStepKind.SMART_ADD,
+            MemoryTraceStepKind.PROFILE_DISTILLER,
+        )
+
         const val QUEUE_LIMIT = 8
         const val FIRST_WINDOW_CAP = 20
         const val MAX_WINDOW_FAILURES = 3
