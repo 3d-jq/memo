@@ -146,18 +146,21 @@ fun MemoApp() {
     val container = rememberAppContainer(context)
     // Mirrors Flutter's MaterialApp(locale: settings.appLocaleForMaterialApp):
     // SYSTEM leaves the platform's language alone, anything else overrides it.
-    var appLocale by remember { mutableStateOf(container.appLocaleStore.read()) }
-    val localizedContext = remember(context, appLocale) { context.withAppLocale(appLocale) }
-    CompositionLocalProvider(LocalContext provides localizedContext) {
-        AppThemeAndContent(
-            container = container,
-            appLocale = appLocale,
-            onLocaleChange = { locale ->
-                container.appLocaleStore.write(locale)
-                appLocale = locale
-            },
-        )
-    }
+    //
+    // 语言切换走「写入 + recreate()」，由 attachBaseContext 在重建时套用新 locale。
+    // **绝不能**在这里用 CompositionLocalProvider 替换 LocalContext：Compose 从
+    // LocalContext 派生 ActivityResultRegistryOwner，包装后的 Context 不是
+    // Activity，会让所有 rememberLauncherForActivityResult 抛
+    // 「No ActivityResultRegistryOwner was provided」（聊天页导出/相册、头像编辑器
+    // 全在内）——语言一切到具体值就必崩。
+    AppThemeAndContent(
+        container = container,
+        appLocale = container.appLocaleStore.read(),
+        onLocaleChange = { locale ->
+            container.appLocaleStore.write(locale)
+            (context as? android.app.Activity)?.recreate()
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
