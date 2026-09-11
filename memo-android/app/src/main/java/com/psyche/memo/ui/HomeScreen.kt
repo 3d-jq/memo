@@ -737,6 +737,20 @@ fun ChatContent(
             }
         }
     }
+    // 后台预热 Markdown 解析缓存（列表稳定 / 非流式时）：滚动到任意一条都命中
+    // 缓存，不会再有"首帧在主线程同步解析 CommonMark"的那一下卡顿。放在 Default
+    // 线程，和渲染不抢主线程。
+    androidx.compose.runtime.LaunchedEffect(messages, streaming) {
+        if (streaming || messages.isEmpty()) return@LaunchedEffect
+        val texts = messages.takeLast(MARKDOWN_PRELOAD_MESSAGES).flatMap { m ->
+            m.parts.filterIsInstance<com.psyche.memo.data.model.TextPart>().map { it.text }
+        }
+        if (texts.isEmpty()) return@LaunchedEffect
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            com.psyche.memo.ui.markdown.preloadMarkdown(texts.map { it to true })
+        }
+    }
+
     // 进入会话先落到最新一条 —— RikkaHub ChatPage.kt:170-183 同款：首次拿到
     // 非空消息时滚到底（requestScrollToItem 传入末条 index），之后置位不再触发，
     // 免得抢用户的滚动。此前 LazyListState 默认停在 index 0，打开长会话看到的
@@ -2370,7 +2384,6 @@ private val InputContainerShape = RoundedCornerShape(20.dp)
  * 源码 chat_input_bar.dart:2620-2621
  * BackdropFilter(filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14))
  */
-private val InputBackdropBlur = 14.dp
 
 /** 源码 lib/core/providers/settings_provider.dart:5094-5095 —— 默认输入框背景透明度 */
 private const val DEFAULT_INPUT_BG_OPACITY_LIGHT = 0.8236f
@@ -2568,8 +2581,11 @@ private fun ChatInputBar(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .blur(InputBackdropBlur)
-                    // 源码 chat_input_bar.dart:2625 —— color: inputFillColor
+                    // 源码 chat_input_bar.dart:2625 —— color: inputFillColor。
+                    // 原版叠的是 BackdropFilter（真模糊背后的聊天内容）；Compose 的
+                    // Modifier.blur 只模糊**自身内容**，而本层内容就是这块纯色 —— 模糊
+                    // 纯色在观感上没有任何变化，却每帧都要走一遍模糊渲染管线。去掉它，
+                    // 视觉一致、省掉一笔常驻开销。
                     .background(color = inputFillColor(cs, isDark), shape = InputContainerShape),
             )
             // 源码 chat_input_bar.dart:2639-2655 / 2830-2949 —— 容器内 Column：
@@ -3081,6 +3097,9 @@ private fun InputIconAsset(
  * every recomposition while scrolling. SimpleDateFormat is not thread-safe, but
  * this is only touched from composition on the UI thread.
  */
+/** 预热 Markdown 解析缓存时最多处理的最近消息条数。 */
+private const val MARKDOWN_PRELOAD_MESSAGES = 60
+
 /** 距顶多少 dp 内触发往前加载历史（message_list_view.dart:1816 的 96 逻辑像素）。 */
 private const val HISTORY_LOAD_TRIGGER_DP = 96f
 

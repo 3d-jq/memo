@@ -219,6 +219,30 @@ private class ParsedMarkdown(
 )
 
 /**
+ * 解析结果缓存（按源文本）。滚动时每条"见过"的消息都能直接命中 —— 否则每次
+ * 滚回一条消息，`MarkdownText` 的首帧同步解析都要在主线程重跑一遍 CommonMark，
+ * 这正是长会话滚动掉帧的主因（RikkaHub 靠段落级 AnnotatedString 缓存达到同样
+ * 效果）。[android.util.LruCache] 自带同步，解析可能在 Default 线程并发调用。
+ *
+ * 条数上限：一条长消息的 AST 不算小，32 条覆盖一屏多一点，超出按 LRU 淘汰。
+ */
+private val parsedCache = android.util.LruCache<String, ParsedMarkdown>(32)
+
+/** 预热：消息列表变化后把这些内容先解析进缓存（调用方放在后台线程）。 */
+fun preloadMarkdown(marks: List<Pair<String, Boolean>>) {
+    for ((markdown, withCitations) in marks) {
+        if (markdown.isEmpty()) continue
+        val key = cacheKey(markdown, withCitations)
+        if (parsedCache.get(key) == null) {
+            runCatching { parsedCache.put(key, parseMarkdown(markdown, withCitations)) }
+        }
+    }
+}
+
+private fun cacheKey(markdown: String, withCitations: Boolean): String =
+    (if (withCitations) "c:" else "p:") + markdown
+
+/**
  * One parse pipeline for [MarkdownText]: citation preprocessing only runs when
  * tap handling is wired for this message, then the CommonMark parse.
  *
@@ -227,6 +251,14 @@ private class ParsedMarkdown(
  * 输出时每帧都得跑一遍。预计算跟着解析一起走后台线程。
  */
 private fun parseMarkdownSource(markdown: String, withCitations: Boolean): ParsedMarkdown {
+    val key = cacheKey(markdown, withCitations)
+    parsedCache.get(key)?.let { return it }
+    val parsed = parseMarkdown(markdown, withCitations)
+    parsedCache.put(key, parsed)
+    return parsed
+}
+
+private fun parseMarkdown(markdown: String, withCitations: Boolean): ParsedMarkdown {
     val source = if (withCitations) preprocessCitations(markdown) else markdown
     val root = MarkdownRenderer.parse(source)
     val plainTexts = HashMap<Node, String>()
