@@ -132,6 +132,8 @@ fun SideDrawerContent(
      * 同步，Android 端需手动通知。 */
     onConversationTitleChanged: (String) -> Unit = {},
     assistantName: String? = null,
+    /** 抽屉当前是否展开 —— 常驻组合后用它驱动"每次展示重新加载"。 */
+    open: Boolean = true,
     forceSelectionMode: Boolean = false,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -144,7 +146,9 @@ fun SideDrawerContent(
         conversations = container.conversationDao.getAll()
     }
 
-    androidx.compose.runtime.LaunchedEffect(selectedId) { reload() }
+    // 抽屉改为常驻组合（避免开合时插拔节点导致布局抖动），所以不能靠"每次重建"
+    // 刷新列表 —— 用 open 作为 key，每次展示时重新加载。
+    androidx.compose.runtime.LaunchedEffect(selectedId, open) { reload() }
 
     // 全局当前助手（assistant_provider.currentAssistantId）：抽屉助手卡显示它，
     // 会话列表按它过滤；切换即 setCurrentAssistant。

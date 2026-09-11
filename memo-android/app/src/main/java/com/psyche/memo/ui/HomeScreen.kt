@@ -316,7 +316,9 @@ fun HomeScreen(
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
     // 全屏手势只挂这一处：主内容和抽屉是兄弟节点，各挂一份会让同一次拖动被两个
     // pointerInput 同时处理（offset 加两次、settle 触发两次 → 抖动）。
-    val drawerEdgePx = androidx.compose.ui.platform.LocalDensity.current.run { 24.dp.toPx() }
+    // 24dp 在 3x 屏上只有 72px，从稍靠里的位置起手就拉不动（用户反馈"手势失效"）。
+    // 放宽到 48dp，仍是"左边缘起手"的语义。
+    val drawerEdgePx = androidx.compose.ui.platform.LocalDensity.current.run { 48.dp.toPx() }
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -360,46 +362,56 @@ fun HomeScreen(
                 titleRefreshTick = titleRefreshTick,
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
-            // Composed only while the drawer presents — a permanently-mounted
-            // gesture layer sits in the hit path and can eat taps.
-            if (presenting) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            val px = contentOffsetPx.floatValue
-                            alpha = if (drawerWidthPx > 0f) 0.12f * px / drawerWidthPx else 0f
-                        }
-                        .background(MaterialTheme.colorScheme.onSurface)
-                        .pointerInput(Unit) {
-                            awaitEachGesture {
-                                awaitFirstDown(requireUnconsumed = false)
-                                val up = waitForUpOrCancellation()
-                                if (up != null && contentOffsetPx.floatValue > 1f) {
-                                    drawerOpen = false
-                                }
-                            }
-                        },
-                )
-            }
-        }
-        // Drawer: layout-offset so the touch region follows the panel.
-        if (presenting) {
+            // 常驻组合：之前用 `if (presenting)` 插拔节点，开合瞬间要新建布局
+            // （抽屉里还带着整套会话列表），表现为"一开始拉就抖一下"。现在只靠
+            // alpha 驱动；关闭时不消费点击，所以不会挡住下面的内容。
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .fillMaxHeight()
-                    .width(drawerWidth)
-                    .offset {
-                        IntOffset(
-                            (contentOffsetPx.floatValue - drawerWidthPx).roundToInt(),
-                            0,
-                        )
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val px = contentOffsetPx.floatValue
+                        alpha = if (drawerWidthPx > 0f) 0.12f * px / drawerWidthPx else 0f
                     }
-                    .background(MaterialTheme.colorScheme.surface),
-            ) {
+                    .background(MaterialTheme.colorScheme.onSurface)
+                    // 只有真的拉开过（presenting）才挂手势处理器：pointerInput 的
+                    // 有无不影响布局，所以不会引起插拔抖动；关闭态则完全不参与命中，
+                    // 点击照常落到聊天页（此前无条件挂载 + 无条件 awaitFirstDown 会
+                    // 让整屏点击失效）。
+                    .then(
+                        if (presenting) {
+                            Modifier.pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    val up = waitForUpOrCancellation()
+                                    if (up != null && contentOffsetPx.floatValue > 1f) {
+                                        down.consume()
+                                        drawerOpen = false
+                                    }
+                                }
+                            }
+                        } else {
+                            Modifier
+                        },
+                    ),
+            )
+        }
+        // Drawer: 常驻组合，layout-offset 驱动（关闭时整块停在屏幕左外）。
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxHeight()
+                .width(drawerWidth)
+                .offset {
+                    IntOffset(
+                        (contentOffsetPx.floatValue - drawerWidthPx).roundToInt(),
+                        0,
+                    )
+                }
+                .background(MaterialTheme.colorScheme.surface),
+        ) {
                 SideDrawerContent(
                     container = container,
+                    open = presenting,
                     selectedId = selectedConversationId,
                     onSelect = { id ->
                         selectedConversationId = id
@@ -423,7 +435,6 @@ fun HomeScreen(
                         }
                     },
                 )
-            }
         }
     }
 }
