@@ -429,6 +429,13 @@ private const val TABLE_HEADER_ALPHA_DARK = 0.15
 private const val TABLE_HEADER_ALPHA_LIGHT = 0.07
 private const val TABLE_BODY_ALPHA_DARK = 0.04
 private const val TABLE_BODY_ALPHA_LIGHT = 0.015
+// 卡片底的 tint 与正文底色不同（原版 L3344-3346 用 0.045/0.018）。
+private const val TABLE_CARD_ALPHA_DARK = 0.045
+private const val TABLE_CARD_ALPHA_LIGHT = 0.018
+// `kBlockFillAlphaTable`（原版 L54）：屏幕上的表头/正文/卡片底色统一乘这个透明度，
+// 好让助手壁纸透出来；只有截图时才用不透明（JPEG 会把透明孔编码成黑，原版 L3267-3274
+// 的注释）。导出路径靠 flattenOntoOpaque 合成到 surface，所以这里始终用 0.72 即可。
+private const val TABLE_FILL_ALPHA = 0.72f
 private const val TABLE_BORDER_ALPHA_DARK = 0.22f
 private const val TABLE_BORDER_ALPHA_LIGHT = 0.30f
 internal const val TABLE_MIN_COLUMN_DP = 112f
@@ -606,16 +613,25 @@ private fun MarkdownTableView(
     // of drawing a translucent primary: a plain low-alpha wash composites over
     // whatever sits behind the card and turns muddy grey, which is especially
     // wrong in dark mode where `primary` is a light colour.
+    // 截图期间用不透明底色（原版 L3269-3274）：0.72 的屏幕透明度会让导出图的
+    // 表头/正文比原版浅一档。声明必须早于下面的底色计算。
+    var capturing by remember(model) { mutableStateOf(false) }
     val headerBg = alphaBlend(
         fg = cs.primary,
         fgAlpha = if (isDark) TABLE_HEADER_ALPHA_DARK else TABLE_HEADER_ALPHA_LIGHT,
         bg = cs.surface,
-    )
+    ).copy(alpha = if (capturing) 1f else TABLE_FILL_ALPHA)
     val bodyBg = alphaBlend(
         fg = cs.primary,
         fgAlpha = if (isDark) TABLE_BODY_ALPHA_DARK else TABLE_BODY_ALPHA_LIGHT,
         bg = cs.surface,
-    )
+    ).copy(alpha = if (capturing) 1f else TABLE_FILL_ALPHA)
+    // 卡片自身的底色（原版 L3344-3347）。
+    val cardBg = alphaBlend(
+        fg = cs.primary,
+        fgAlpha = if (isDark) TABLE_CARD_ALPHA_DARK else TABLE_CARD_ALPHA_LIGHT,
+        bg = cs.surface,
+    ).copy(alpha = if (capturing) 1f else TABLE_FILL_ALPHA)
     val scrollable = model.columnCount >= TABLE_SCROLL_COLUMN_THRESHOLD
     val scrollState = rememberScrollState()
 
@@ -635,11 +651,12 @@ private fun MarkdownTableView(
     val captureForExport: (suspend () -> ImageBitmap?)? = if (imageCaptureNeeded) {
         {
             val previous = visibleRows
-            if (previous < model.body.size) {
-                visibleRows = model.body.size
-                withFrameNanos { }
-                withFrameNanos { }
-            }
+            val needsExpand = previous < model.body.size
+            visibleRows = model.body.size
+            capturing = true
+            withFrameNanos { }
+            withFrameNanos { }
+            if (!needsExpand && previous == model.body.size) visibleRows = previous
             val bitmap = runCatching { boundaryLayer.toImageBitmap() }.getOrNull()
             android.util.Log.d(
                 "TableCapture",
@@ -647,7 +664,8 @@ private fun MarkdownTableView(
                     " layer=${boundaryLayer.size.width}x${boundaryLayer.size.height}" +
                     " bitmap=${bitmap?.width}x${bitmap?.height}",
             )
-            if (visibleRows != previous) visibleRows = previous
+            visibleRows = previous
+            capturing = false
             bitmap
         }
     } else {
@@ -667,7 +685,7 @@ private fun MarkdownTableView(
             .fillMaxWidth()
             .padding(vertical = TABLE_INSET_VERTICAL)
             .clip(RoundedCornerShape(TABLE_CARD_RADIUS))
-            .background(bodyBg)
+            .background(cardBg)
             .border(0.8.dp, borderColor, RoundedCornerShape(TABLE_CARD_RADIUS)),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
