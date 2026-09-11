@@ -82,7 +82,7 @@ class MemoryChatSearchTest {
         seedConversation("c3", "Current", "a1", "kyoto here", 1_700_000_002_000L)
 
         val payload = obj(
-            MemoryTools.handle(
+            handle(
                 container, assistant(), "c3", false,
                 MemoryTools.CHAT_SEARCH, Json.parseToJsonElement("""{"query":"kyoto"}""") as JsonObject,
             )!!,
@@ -101,7 +101,7 @@ class MemoryChatSearchTest {
         seedConversation("c1", "A", "a1", "alpha topic", 1_700_000_000_000L)
         seedConversation("c2", "B", "a1", "alpha again", 1_700_000_001_000L)
         val payload = obj(
-            MemoryTools.handle(
+            handle(
                 container, assistant(), "c9", false,
                 MemoryTools.CHAT_SEARCH,
                 Json.parseToJsonElement("""{"query":"alpha","conversation_id":"c2"}""") as JsonObject,
@@ -114,17 +114,29 @@ class MemoryChatSearchTest {
 
     @Test
     fun `empty query errors and disabled recall falls through`() {
-        val error = MemoryTools.handle(
+        val error = handle(
             container, assistant(), "c1", false,
             MemoryTools.CHAT_SEARCH, Json.parseToJsonElement("""{"query":"  "}""") as JsonObject,
         )!!
         assertTrue(error.contains("invalid_query"))
 
         assertNull(
-            MemoryTools.handle(
+            handle(
                 container, assistant(recall = false), "c1", false,
                 MemoryTools.CHAT_SEARCH, Json.parseToJsonElement("""{"query":"x"}""") as JsonObject,
             ),
         )
+    }
+
+    /** [MemoryTools.handle] is suspend: Smart Add may call the memory model. */
+    private fun handle(
+        container: AppContainerImpl,
+        assistant: Assistant?,
+        conversationId: String?,
+        isTemporary: Boolean,
+        name: String,
+        args: JsonObject,
+    ): String? = kotlinx.coroutines.runBlocking {
+        MemoryTools.handle(container, assistant, conversationId, isTemporary, name, args)
     }
 }

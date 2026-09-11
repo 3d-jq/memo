@@ -393,7 +393,7 @@ object MemoryTools {
      * Handles a memory tool call. Returns null when the tool is not applicable
      * (gates off / unknown name) so the caller can fall through.
      */
-    fun handle(
+    suspend fun handle(
         container: AppContainerImpl,
         assistant: Assistant?,
         conversationId: String?,
@@ -436,7 +436,7 @@ object MemoryTools {
         return try {
             when (name) {
                 MEMORY_READ -> memoryRead(provider, assistant, args)
-                MEMORY_UPDATE -> memoryUpdate(provider, assistant, args)
+                MEMORY_UPDATE -> memoryUpdate(container, provider, assistant, args)
                 MEMORY_SEARCH_PROFILE -> memorySearchProfile(provider, assistant, args)
                 MEMORY_EDIT -> memoryEdit(provider, assistant, args)
                 MEMORY_DELETE -> memoryDelete(provider, assistant, args)
@@ -480,7 +480,19 @@ object MemoryTools {
         }.toString()
     }
 
-    private fun memoryUpdate(provider: MemoryProviderV2, assistant: Assistant, args: JsonObject): String {
+    /**
+     * memory_update (memory_tools.dart `_handleMemoryUpdate`): Smart Add judges
+     * the new content against the closest existing entries — NEW, MERGE into a
+     * candidate, CONFLICT (archive the old entry, keep the new one, link them)
+     * or SKIP. Without a memory model configured the judge degrades to the
+     * exact-duplicate check.
+     */
+    private suspend fun memoryUpdate(
+        container: AppContainerImpl,
+        provider: MemoryProviderV2,
+        assistant: Assistant,
+        args: JsonObject,
+    ): String {
         val typeRaw = args.string("type")
         val type = parseType(typeRaw)
         if (type == null) {
@@ -502,29 +514,25 @@ object MemoryTools {
         val scope = resolveWriteScope(assistant.memoryWriteScope, args.string("scope"))
         val assistantId = if (scope == MemoryScope.assistant) assistant.id else null
 
-        // Smart Add fallback: exact duplicate (normalized) → SKIP, else NEW.
-        val normalized = MemoryEntry.normalizeContent(content)
-        val duplicate = provider.visibleFor(assistant.id)
-            .firstOrNull { MemoryEntry.normalizeContent(it.content) == normalized }
-        if (duplicate != null) {
-            return buildJsonObject {
-                put("action", "SKIP")
-                put("id", duplicate.id)
-                put("reason", "duplicate")
-            }.toString()
-        }
-        val created = provider.create(
-            scope = scope,
-            assistantId = assistantId,
-            type = type,
-            content = content,
+        val settings = com.psyche.memo.ui.MemorySettingsState(container)
+        val lang = settings.resolvedPromptLang()
+        val zh = lang == MemoryPromptLang.zh
+        val adder = MemorySmartAdd(MemoryProviderSmartAddRepository(provider))
+        val result = adder.addOne(
+            item = SmartAddItem(
+                type = type,
+                content = content,
+                scope = scope,
+                assistantId = assistantId,
+            ),
+            visibilityAssistantId = assistant.id,
             source = MemorySource.tool,
+            lang = lang,
+            llmCall = MemoryLlm.callerOrNull(container),
+            overrideZh = settings.prompt(com.psyche.memo.ui.MemoryPromptKind.SMART_ADD, true),
+            overrideEn = settings.prompt(com.psyche.memo.ui.MemoryPromptKind.SMART_ADD, false),
         )
-        return buildJsonObject {
-            put("action", "NEW")
-            put("id", created.id)
-            put("content", created.content)
-        }.toString()
+        return result.toToolJson().toString()
     }
 
     private fun memorySearchProfile(

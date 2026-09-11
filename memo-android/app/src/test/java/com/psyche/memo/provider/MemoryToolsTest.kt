@@ -117,7 +117,7 @@ class MemoryToolsTest {
 
     @Test
     fun `update creates a new entry and duplicate update skips`() {
-        val create = MemoryTools.handle(
+        val create = handle(
             container, assistant(), "c1", false,
             MemoryTools.MEMORY_UPDATE,
             json("""{"type":"identity","content":"The user prefers concise answers."}"""),
@@ -125,7 +125,7 @@ class MemoryToolsTest {
         val createObj = obj(create)
         assertEquals("NEW", str(createObj, "action"))
 
-        val duplicate = MemoryTools.handle(
+        val duplicate = handle(
             container, assistant(), "c1", false,
             MemoryTools.MEMORY_UPDATE,
             json("""{"type":"identity","content":"  the USER prefers concise answers.  "}"""),
@@ -135,13 +135,13 @@ class MemoryToolsTest {
 
     @Test
     fun `update validates type and content`() {
-        val badType = MemoryTools.handle(
+        val badType = handle(
             container, assistant(), "c1", false,
             MemoryTools.MEMORY_UPDATE, json("""{"type":"nope","content":"x"}"""),
         )!!
         assertTrue(badType.contains("invalid_memory_type"))
 
-        val empty = MemoryTools.handle(
+        val empty = handle(
             container, assistant(), "c1", false,
             MemoryTools.MEMORY_UPDATE, json("""{"type":"identity","content":"  "}"""),
         )!!
@@ -150,7 +150,7 @@ class MemoryToolsTest {
 
     @Test
     fun `temporary conversation rejects writes`() {
-        val result = MemoryTools.handle(
+        val result = handle(
             container, assistant(), "c1", true,
             MemoryTools.MEMORY_UPDATE, json("""{"type":"identity","content":"x"}"""),
         )!!
@@ -163,11 +163,11 @@ class MemoryToolsTest {
         provider.create(MemoryScope.global, null, MemoryType.identity, "likes tea", com.psyche.memo.ui.MemorySource.manual)
         provider.create(MemoryScope.global, null, MemoryType.workflow, "uses vim", com.psyche.memo.ui.MemorySource.manual)
 
-        val all = obj(MemoryTools.handle(container, assistant(), "c1", false, MemoryTools.MEMORY_READ, json("{}"))!!)
+        val all = obj(handle(container, assistant(), "c1", false, MemoryTools.MEMORY_READ, json("{}"))!!)
         assertEquals(2, (all["total"] as JsonPrimitive).content.toInt())
 
         val identityOnly = obj(
-            MemoryTools.handle(
+            handle(
                 container, assistant(), "c1", false,
                 MemoryTools.MEMORY_READ, json("""{"type":"identity"}"""),
             )!!,
@@ -181,7 +181,7 @@ class MemoryToolsTest {
         val entry = provider.create(MemoryScope.global, null, MemoryType.voice, "old", com.psyche.memo.ui.MemorySource.manual)
 
         val edit = obj(
-            MemoryTools.handle(
+            handle(
                 container, assistant(), "c1", false,
                 MemoryTools.MEMORY_EDIT, json("""{"id":"${entry.id}","content":"new"}"""),
             )!!,
@@ -189,14 +189,14 @@ class MemoryToolsTest {
         assertEquals("EDIT", str(edit, "action"))
 
         val delete = obj(
-            MemoryTools.handle(
+            handle(
                 container, assistant(), "c1", false,
                 MemoryTools.MEMORY_DELETE, json("""{"id":"${entry.id}"}"""),
             )!!,
         )
         assertEquals("DELETE", str(delete, "action"))
 
-        val missing = MemoryTools.handle(
+        val missing = handle(
             container, assistant(), "c1", false,
             MemoryTools.MEMORY_EDIT, json("""{"id":"mem_deadbeef","content":"x"}"""),
         )!!
@@ -206,17 +206,17 @@ class MemoryToolsTest {
     @Test
     fun `unknown tool names fall through`() {
         assertNull(
-            MemoryTools.handle(container, assistant(), "c1", false, "search_web", json("{}")),
+            handle(container, assistant(), "c1", false, "search_web", json("{}")),
         )
         assertNull(
-            MemoryTools.handle(container, assistant(enableMemory = false), "c1", false, MemoryTools.MEMORY_READ, json("{}")),
+            handle(container, assistant(enableMemory = false), "c1", false, MemoryTools.MEMORY_READ, json("{}")),
         )
     }
 
     @Test
     fun `update user profile validates keys and clears on empty value`() {
         val result = obj(
-            MemoryTools.handle(
+            handle(
                 container, assistant(), "c1", false,
                 MemoryTools.UPDATE_USER_PROFILE,
                 json("""{"fields":[{"key":"preferred_name","value":"Ada"},{"key":"nope","value":"x"},{"key":"location","value":""}]}"""),
@@ -226,5 +226,17 @@ class MemoryToolsTest {
         assertEquals(1, (result["updated"] as kotlinx.serialization.json.JsonArray).size)
         assertEquals(1, (result["cleared"] as kotlinx.serialization.json.JsonArray).size)
         assertEquals(1, (result["rejected"] as kotlinx.serialization.json.JsonArray).size)
+    }
+
+    /** [MemoryTools.handle] is suspend: Smart Add may call the memory model. */
+    private fun handle(
+        container: AppContainerImpl,
+        assistant: Assistant?,
+        conversationId: String?,
+        isTemporary: Boolean,
+        name: String,
+        args: JsonObject,
+    ): String? = kotlinx.coroutines.runBlocking {
+        MemoryTools.handle(container, assistant, conversationId, isTemporary, name, args)
     }
 }

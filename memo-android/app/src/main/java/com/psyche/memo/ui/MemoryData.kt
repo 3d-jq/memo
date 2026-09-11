@@ -202,8 +202,15 @@ class MemoryProviderV2(db: android.database.sqlite.SQLiteDatabase) {
         return entry
     }
 
-    fun updateContent(id: String, content: String) {
-        mutate { all -> all.updateById(id) { it.copy(content = content, updatedAt = nowMicros()) } }
+    fun updateContent(id: String, content: String): MemoryEntry? {
+        var updated: MemoryEntry? = null
+        mutate { all ->
+            all.updateById(id) {
+                updated = it.copy(content = content, updatedAt = nowMicros())
+                updated!!
+            }
+        }
+        return updated
     }
 
     fun updateType(id: String, type: MemoryType) {
@@ -255,9 +262,22 @@ class MemoryProviderV2(db: android.database.sqlite.SQLiteDatabase) {
         return removed
     }
 
+    /**
+     * Idempotent both-ways `relatedIds` link (memory_provider_v2.dart
+     * linkBidirectional). Deliberately leaves the entry's own `updatedAt`
+     * alone: `relatedIds` never reaches the injected block, so bumping it would
+     * change the snapshot hash and force a pointless re-injection.
+     */
+    fun linkBidirectional(a: String, b: String) {
+        if (a == b) return
+        mutate { all ->
+            all.updateById(a) { if (b in it.relatedIds) it else it.copy(relatedIds = it.relatedIds + b) }
+            all.updateById(b) { if (a in it.relatedIds) it else it.copy(relatedIds = it.relatedIds + a) }
+        }
+    }
+
     /** Entries whose assistantId no longer resolves (memory_provider_v2.dart orphanCount). */
-    fun orphanCount(validAssistantIds: Set<String>): Int =
-        store.count { it.scope == MemoryScope.assistant && it.assistantId != null && it.assistantId !in validAssistantIds }
+    fun orphanCount(validAssistantIds: Set<String>): Int =        store.count { it.scope == MemoryScope.assistant && it.assistantId != null && it.assistantId !in validAssistantIds }
 
     fun deleteOrphanAssistantMemories(validAssistantIds: Set<String>): Int {
         var removed = 0
