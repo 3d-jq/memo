@@ -72,8 +72,9 @@ object TtsPlayer {
     val speaking: StateFlow<Boolean>
         get() = controller(null)?.speaking ?: EMPTY_SPEAKING
 
-    fun speak(context: Context, text: String) {
-        controller(context)?.speak(text)
+    /** [ownerId] is the chat message the playback belongs to, when there is one. */
+    fun speak(context: Context, text: String, ownerId: String? = null) {
+        controller(context)?.speak(text, ownerId)
     }
 
     fun togglePause() {

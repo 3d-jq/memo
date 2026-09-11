@@ -137,13 +137,14 @@ class TtsPlaybackController(
     private var paused = false
     private var prepared = false
     private var pendingText: String? = null
+    private var lastOwnerId: String? = null
 
     init {
         engine.listener = this
     }
 
-    /** Starts (or restarts) a session with [text]. */
-    fun speak(text: String) {
+    /** Starts (or restarts) a session with [text], owned by [ownerId] when given. */
+    fun speak(text: String, ownerId: String? = null) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
         val split = TtsTextChunker.split(trimmed, chunkMaxLength)
@@ -154,6 +155,7 @@ class TtsPlaybackController(
         currentChunk = 0
         chunkOffsetMs = 0L
         paused = false
+        lastOwnerId = ownerId
         publish(status = TtsPlaybackStatus.BUFFERING, positionMs = 0L, chunkIndex = 0)
 
         if (prepared) {
@@ -208,6 +210,7 @@ class TtsPlaybackController(
         currentChunk = 0
         chunkOffsetMs = 0L
         paused = false
+        lastOwnerId = null
         setState(TtsPlaybackState(speed = _state.value.speed))
     }
 
@@ -254,6 +257,7 @@ class TtsPlaybackController(
         pendingText = null
         chunks = emptyList()
         timeline = null
+        lastOwnerId = null
         session++
         setState(TtsPlaybackState())
     }
@@ -345,6 +349,7 @@ class TtsPlaybackController(
                 durationMs = timeline?.estimatedDurationMs ?: 0L,
                 currentChunkIndex = chunkIndex,
                 totalChunks = chunks.size,
+                ownerId = lastOwnerId,
             ),
         )
     }
@@ -353,6 +358,7 @@ class TtsPlaybackController(
         setState(
             _state.value.copy(
                 status = status,
+                ownerId = lastOwnerId,
                 positionMs = if (status == TtsPlaybackStatus.ENDED) _state.value.durationMs else _state.value.positionMs,
                 durationMs = timeline?.estimatedDurationMs ?: 0L,
                 totalChunks = chunks.size,

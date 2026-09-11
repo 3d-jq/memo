@@ -221,6 +221,63 @@ class TtsPlaybackControllerTest {
         assertEquals("engine refused", player.state.value.errorMessage)
     }
 
+    // ---- who owns the playback ------------------------------------------------
+
+    @Test
+    fun `the owner travels with the session and is cleared by stop`() {
+        val (engine, player) = controller()
+        player.speak("Hello there.", ownerId = "msg-1")
+        assertEquals("msg-1", player.state.value.ownerId)
+        assertTrue(player.state.value.isOwnedBy("msg-1"))
+        assertFalse("other messages must not react", player.state.value.isOwnedBy("msg-2"))
+
+        engine.startLast()
+        engine.doneLast()
+        // A finished session keeps its owner so the replay is still "that" message.
+        assertEquals("msg-1", player.state.value.ownerId)
+
+        player.stop()
+        assertEquals(null, player.state.value.ownerId)
+        assertFalse(player.state.value.isOwnedBy("msg-1"))
+    }
+
+    @Test
+    fun `pausing keeps the owner and reports resume for it`() {
+        val (engine, player) = controller()
+        player.speak("Hello there.", ownerId = "msg-1")
+        engine.startLast()
+
+        player.togglePause()
+
+        assertEquals("msg-1", player.state.value.ownerId)
+        assertEquals(MessageTtsAction.RESUME, messageTtsAction(player.state.value, "msg-1"))
+        assertEquals(MessageTtsAction.SPEAK, messageTtsAction(player.state.value, "msg-2"))
+    }
+
+    @Test
+    fun `the action row only offers stop to the owner`() {
+        val (engine, player) = controller()
+        player.speak("Hello there.", ownerId = "msg-1")
+        assertEquals(MessageTtsAction.STOP, messageTtsAction(player.state.value, "msg-1"))
+        assertEquals(MessageTtsAction.SPEAK, messageTtsAction(player.state.value, "msg-2"))
+        assertEquals(MessageTtsAction.SPEAK, messageTtsAction(player.state.value, null))
+
+        // A finished session is back to "speak" for its owner too.
+        engine.startLast()
+        engine.doneLast()
+        assertEquals(MessageTtsAction.SPEAK, messageTtsAction(player.state.value, "msg-1"))
+    }
+
+    @Test
+    fun `playback without an owner leaves every message alone`() {
+        val (engine, player) = controller()
+        // The text_to_speech tool card replays raw text: no message owns it.
+        player.speak("Hello there.")
+        engine.startLast()
+        assertEquals(MessageTtsAction.SPEAK, messageTtsAction(player.state.value, "msg-1"))
+        assertEquals(MessageTtsAction.SPEAK, messageTtsAction(player.state.value, null))
+    }
+
     // ---- the id codec these callbacks are routed by ---------------------------
 
     @Test

@@ -121,6 +121,16 @@ data class TtsPlaybackState(
     val totalChunks: Int = 0,
     val errorMessage: String? = null,
     val usingNetwork: Boolean = false,
+    /**
+     * Who asked for this playback (a chat message id), or null when nobody did
+     * (the text_to_speech tool card, an explicit replay of raw text).
+     *
+     * Upstream drives the chat action row from a process-wide `isActive` flag,
+     * so every message showed the stop icon while any one of them was read. The
+     * owner keeps the row honest — only the message being read reacts — and lets
+     * the row show a resume icon while playback is paused.
+     */
+    val ownerId: String? = null,
 ) {
     val isActive: Boolean
         get() = status == TtsPlaybackStatus.BUFFERING ||
@@ -134,6 +144,32 @@ data class TtsPlaybackState(
 
     val chunkProgress: Double
         get() = if (totalChunks <= 0) 0.0 else (currentChunkIndex.toDouble() / totalChunks).coerceIn(0.0, 1.0)
+
+    /** Whether [messageId] is the message this playback belongs to. */
+    fun isOwnedBy(messageId: String?): Boolean = ownerId != null && ownerId == messageId
+}
+
+/** What a chat message's speak button should do right now. */
+enum class MessageTtsAction {
+    /** Start reading this message (also the state after a session ended). */
+    SPEAK,
+
+    /** This message is being read: the button stops it. */
+    STOP,
+
+    /** This message's playback is paused: the button resumes it. */
+    RESUME,
+}
+
+/**
+ * The action row's state for [messageId]: only the owning message reacts, and it
+ * offers STOP while reading and RESUME while paused.
+ */
+fun messageTtsAction(state: TtsPlaybackState, messageId: String?): MessageTtsAction = when {
+    !state.isOwnedBy(messageId) -> MessageTtsAction.SPEAK
+    state.status == TtsPlaybackStatus.PAUSED -> MessageTtsAction.RESUME
+    state.isActive -> MessageTtsAction.STOP
+    else -> MessageTtsAction.SPEAK
 }
 
 /** Where a seek lands: a chunk plus an offset inside it. */
@@ -212,3 +248,23 @@ object TtsPlaybackSpeed {
     /** The engine's own rate axis runs 0.1–1.0, i.e. half the displayed speed. */
     fun toSystemRate(speed: Double): Double = (speed / 2).coerceIn(0.1, 1.0)
 }
+
+/**
+ * `memo_tts_<session>_<chunkIndex>` — the key [TtsPlayer] hands the engine and
+ * matches its callbacks against.
+ *
+ * Both parts are separated explicitly: concatenating them (`"$session$index"`)
+ * is ambiguous once either side reaches two digits, and that let a callback from
+ * a cancelled session be applied to the live one.
+ */
+internal fun ttsUtteranceId(session: Int, chunkIndex: Int): String = "memo_tts_" + session + "_" + chunkIndex
+
+/** Parses [ttsUtteranceId]; null when the id is not one of ours. */
+internal fun parseTtsUtteranceId(value: String?): Pair<Int, Int>? {
+    val match = TTS_UTTERANCE_ID.matchEntire(value ?: return null) ?: return null
+    val session = match.groupValues[1].toIntOrNull() ?: return null
+    val chunk = match.groupValues[2].toIntOrNull() ?: return null
+    return session to chunk
+}
+
+private val TTS_UTTERANCE_ID = Regex("""^memo_tts_(\d+)_(\d+)$""")

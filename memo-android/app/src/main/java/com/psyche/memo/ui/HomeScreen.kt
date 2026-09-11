@@ -79,6 +79,7 @@ import com.composables.icons.lucide.Map
 import com.composables.icons.lucide.MessageCircleDashed
 import com.composables.icons.lucide.MessageCirclePlus
 import com.composables.icons.lucide.Mic
+import com.composables.icons.lucide.Play
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.RefreshCw
@@ -1117,14 +1118,6 @@ fun ChatContent(
                                     if (anchor != null) regenerateFor = anchor
                                 }
                             } else null,
-                            onSpeak = {
-                                // CMW HPC.speakMessage —— 播放中再点即停止。
-                                if (com.psyche.memo.ui.chat.TtsPlayer.speaking.value) {
-                                    com.psyche.memo.ui.chat.TtsPlayer.stop()
-                                } else {
-                                    com.psyche.memo.ui.chat.TtsPlayer.speak(context, msg.content)
-                                }
-                            },
                             onTranslate = { code ->
                                 if (code == com.psyche.memo.ui.chat.TranslateLanguage.CLEAR_TRANSLATION) {
                                     vm.translateMessage(msg.id, code, "", translateFeedback)
@@ -1758,8 +1751,6 @@ private fun MessageRow(
     onRegenerate: (() -> Unit)?,
     /** 助手消息的重新生成（CMW:3239-3249 _confirmRegeneration 确认后执行）。 */
     onRegenerateAssistant: (() -> Unit)? = null,
-    /** Speak 按钮（CMW:3253-3291）：调用方切换 TtsPlayer 播放/停止。 */
-    onSpeak: () -> Unit = {},
     /** Translate 按钮（CMW:3298-3339）：传入所选语言 code（含 __clear__）。 */
     onTranslate: (String) -> Unit = {},
     onEdit: () -> Unit,
@@ -1804,8 +1795,11 @@ private fun MessageRow(
     // 助手操作行：语言选择 sheet + 重新生成确认（CMW:3298-3339 / 1328-1358）。
     var showLanguageSheet by remember { mutableStateOf(false) }
     var showRegenerateConfirm by remember { mutableStateOf(false) }
-    // TTS 播放状态 → Speak/Stop 图标切换（CMW:3253-3291 isActive）。
-    val ttsSpeaking by com.psyche.memo.ui.chat.TtsPlayer.speaking.collectAsState()
+    // TTS 播放状态 → Speak/Stop/Resume 图标。原版用全局 isActive，导致读一条消息
+    // 时**所有**消息都显示停止；这里按 ownerId 只让被朗读的那条消息响应，并在暂停
+    // 时显示继续（用户实测反馈）。
+    val ttsState by com.psyche.memo.ui.chat.TtsPlayer.state.collectAsState()
+    val ttsAction = com.psyche.memo.ui.chat.messageTtsAction(ttsState, msg.id)
     // search_web / builtin_search 工具结果提取为引用来源
     // （chat_message_widget.dart _allSearchItems，从后往前、去重）。
     val searchItems = remember(msg.id, msg.parts) {
@@ -2236,11 +2230,30 @@ private fun MessageRow(
                                 enabled = onRegenerateAssistant != null,
                             )
                             Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
-                            // Speak/Stop：播放中切 CircleStop（CMW:3253-3291）。
+                            // Speak/Stop/Resume：只有被朗读的那条消息切图标。
                             MessageActionIcon(
-                                if (ttsSpeaking) Lucide.CircleStop else Lucide.Volume2,
-                                if (ttsSpeaking) "Stop" else "Speak",
-                                onClick = onSpeak,
+                                when (ttsAction) {
+                                    com.psyche.memo.ui.chat.MessageTtsAction.STOP -> Lucide.CircleStop
+                                    com.psyche.memo.ui.chat.MessageTtsAction.RESUME -> Lucide.Play
+                                    else -> Lucide.Volume2
+                                },
+                                when (ttsAction) {
+                                    com.psyche.memo.ui.chat.MessageTtsAction.STOP -> "Stop"
+                                    com.psyche.memo.ui.chat.MessageTtsAction.RESUME -> "Resume"
+                                    else -> "Speak"
+                                },
+                                onClick = {
+                                    when (ttsAction) {
+                                        com.psyche.memo.ui.chat.MessageTtsAction.STOP ->
+                                            com.psyche.memo.ui.chat.TtsPlayer.stop()
+
+                                        com.psyche.memo.ui.chat.MessageTtsAction.RESUME ->
+                                            com.psyche.memo.ui.chat.TtsPlayer.togglePause()
+
+                                        com.psyche.memo.ui.chat.MessageTtsAction.SPEAK ->
+                                            com.psyche.memo.ui.chat.TtsPlayer.speak(context, msg.content, ownerId = msg.id)
+                                    }
+                                },
                             )
                             Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
                             MessageActionIcon(
