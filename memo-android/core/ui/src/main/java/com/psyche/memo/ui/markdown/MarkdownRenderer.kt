@@ -641,6 +641,12 @@ private fun MarkdownTableView(
                 withFrameNanos { }
             }
             val bitmap = runCatching { boundaryLayer.toImageBitmap() }.getOrNull()
+            android.util.Log.d(
+                "TableCapture",
+                "rows=${model.body.size} cols=${model.columnCount} scrollable=$scrollable" +
+                    " layer=${boundaryLayer.size.width}x${boundaryLayer.size.height}" +
+                    " bitmap=${bitmap?.width}x${bitmap?.height}",
+            )
             if (visibleRows != previous) visibleRows = previous
             bitmap
         }
@@ -664,14 +670,7 @@ private fun MarkdownTableView(
             .background(bodyBg)
             .border(0.8.dp, borderColor, RoundedCornerShape(TABLE_CARD_RADIUS)),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (imageCaptureNeeded) Modifier.recordTableBoundary(boundaryLayer)
-                    else Modifier,
-                ),
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             if (actions != null) {
                 MarkdownTableToolbar(
                     isDark = isDark,
@@ -711,10 +710,19 @@ private fun MarkdownTableView(
                         maxWidth / model.columnCount
                     }
                     Column(
-                        modifier = Modifier.then(
-                            if (scrollable) Modifier.width(columnWidth * model.columnCount)
-                            else Modifier.fillMaxWidth(),
-                        ),
+                        modifier = Modifier
+                            .then(
+                                if (scrollable) Modifier.width(columnWidth * model.columnCount)
+                                else Modifier.fillMaxWidth(),
+                            )
+                            // 录制层必须挂在**横向滚动容器内部**的这张表上：它的宽度是
+                            // 表格的真实宽度（scrollable 时 = 列数 × 列宽，会超出视口）。
+                            // 挂在外层时图层宽度只有视口宽，右侧的列根本不在图层里 ——
+                            // 这就是"横向内容保存不下来"的根因。
+                            .then(
+                                if (imageCaptureNeeded) Modifier.recordTableBoundary(boundaryLayer)
+                                else Modifier,
+                            ),
                     ) {
                         if (model.header.isNotEmpty()) {
                             TableRowView(
