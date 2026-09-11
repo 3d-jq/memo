@@ -346,11 +346,31 @@ class ChatViewModel(
             // Persist user message best-effort (DAO errors surface in logs).
             if (!isTemporary) {
                 withContext(Dispatchers.IO) {
+                    // draft 会话（新建后一条消息都没发）到这一刻才写进历史 —— 原版
+                    // `createDraftConversation` 只在内存里挂着，`_saveConversation`
+                    // 在首条消息落库时才持久化。
+                    ensureConversationRow()
                     container.messageDao.insert(userMessage)
                 }
             }
             startGeneration(userMessage)
         }
+    }
+
+    /**
+     * draft → 持久化：draft 会话只在内存（没有 conversation_rows 行），首条消息落库
+     * 前把它补上，否则这个会话永远不会出现在抽屉的历史列表里。标题留空，等标题生成
+     * 或手动重命名再填。
+     */
+    private suspend fun ensureConversationRow() {
+        if (container.conversationDao.get(conversationId) != null) return
+        container.conversationDao.insert(
+            com.psyche.memo.data.model.Conversation.create(
+                id = conversationId,
+                title = "",
+                assistantId = container.currentAssistantId.value,
+            ),
+        )
     }
 
     fun stop() {

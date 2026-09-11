@@ -215,13 +215,13 @@ fun HomeScreen(
         ) {
             container.conversationDao.delete(currentId)
         }
-        // 新建的会话挂到全局当前助手（chat_service.createDraftConversation 语义），
-        // 否则切换助手后新建的会话会被抽屉按助手过滤掉。
+        // draft 语义（chat_service.createDraftConversation L1869：只在内存，不落库）——
+        // 一条消息都没发的空会话不该出现在历史列表里，等首条消息发送时才写
+        // conversation_rows（见 ChatViewModel.ensureConversationRow）。
         val conv = Conversation.create(
             title = newChatTitle,
             assistantId = container.currentAssistantId.value,
         )
-        container.conversationDao.insert(conv)
         selectedConversationId = conv.id
     }
 
@@ -301,12 +301,13 @@ fun HomeScreen(
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (selectedConversationId == null) {
+            // 有历史就打开最近一条，否则开一个 draft（不入库，发首条消息才落库）。
             val latest = container.conversationDao.getAll().firstOrNull()
-            selectedConversationId = latest?.id ?: run {
-                val conv = Conversation.create(title = newChatTitle)
-                container.conversationDao.insert(conv)
-                conv.id
-            }
+            selectedConversationId = latest?.id
+                ?: Conversation.create(
+                    title = newChatTitle,
+                    assistantId = container.currentAssistantId.value,
+                ).id
         }
     }
 
