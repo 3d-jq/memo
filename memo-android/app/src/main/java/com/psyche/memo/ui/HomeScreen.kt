@@ -326,6 +326,8 @@ fun HomeScreen(
                 contentOffsetPx = contentOffsetPx,
                 velocityPx = dragVelocityPx,
                 lastUptimeMillis = lastMoveUptime,
+                isDrawerOpen = { drawerOpen },
+                onDragStart = { dragJob?.cancel() },
                 onPresent = { presenting = true },
                 onSettle = { open, vx ->
                     drawerOpen = open
@@ -374,7 +376,7 @@ fun HomeScreen(
                     // 点击照常落到聊天页（此前无条件挂载 + 无条件 awaitFirstDown 会
                     // 让整屏点击失效）。
                     .then(
-                        if (presenting) {
+                        if (drawerOpen) {
                             Modifier.pointerInput(Unit) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -3119,6 +3121,11 @@ private fun Modifier.drawerDragGesture(
     contentOffsetPx: androidx.compose.runtime.MutableFloatState,
     velocityPx: androidx.compose.runtime.MutableFloatState,
     lastUptimeMillis: androidx.compose.runtime.MutableLongState,
+    /** 逻辑开合状态（不是动画中的位移）——方向门控必须用它，否则"关闭动画还没跑完"
+     *  会被当成"已打开"，紧接着的反向拖动会被判成反方向而毫无响应。 */
+    isDrawerOpen: () -> Boolean,
+    /** 拖动真正开始时调用：取消正在跑的收尾动画，免得它和手指抢 offset。 */
+    onDragStart: () -> Unit,
     onPresent: () -> Unit,
     onSettle: (open: Boolean, velocityPx: Float) -> Unit,
 ): Modifier = pointerInput(widthPx) {
@@ -3132,7 +3139,7 @@ private fun Modifier.drawerDragGesture(
         val down = awaitFirstDown(requireUnconsumed = false)
         // 起手位置不限：用户要的是「在对话界面任意位置横滑就能拉出侧边栏」。
         // 方向仍然门控（见下），所以反方向拖动不会被吃掉。
-        val startedOpen = contentOffsetPx.floatValue > 0f
+        val startedOpen = isDrawerOpen()
         velocityPx.floatValue = 0f
         var pastSlop = false
         var totalDx = 0f
@@ -3152,6 +3159,7 @@ private fun Modifier.drawerDragGesture(
                 val wrongWay = if (startedOpen) totalDx > 0f else totalDx < 0f
                 if (!wrongWay && kotlin.math.abs(totalDx) > slopPx) {
                     pastSlop = true
+                    onDragStart()
                     onPresent()
                 }
             }
