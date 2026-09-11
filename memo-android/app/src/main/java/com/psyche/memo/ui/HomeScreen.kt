@@ -314,29 +314,33 @@ fun HomeScreen(
     // and the drawer sits flush beside it (no overlap). Full-screen horizontal
     // drag toggles; taps pass through untouched (hand-written detector).
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
+    // 全屏手势只挂这一处：主内容和抽屉是兄弟节点，各挂一份会让同一次拖动被两个
+    // pointerInput 同时处理（offset 加两次、settle 触发两次 → 抖动）。
+    val drawerEdgePx = androidx.compose.ui.platform.LocalDensity.current.run { 24.dp.toPx() }
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
-            .clipToBounds(),
+            .clipToBounds()
+            .drawerDragGesture(
+                widthPx = drawerWidthPx,
+                edgePx = drawerEdgePx,
+                contentOffsetPx = contentOffsetPx,
+                velocityPx = dragVelocityPx,
+                lastUptimeMillis = lastMoveUptime,
+                onPresent = { presenting = true },
+                onSettle = { open, vx ->
+                    drawerOpen = open
+                    settleDrawer(open, velocityPx = vx)
+                },
+            ),
     ) {
         // Chat content: slides right while the drawer opens (layer translate,
         // never recomposes), then sits flush beside the drawer.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationX = contentOffsetPx.floatValue }
-                .drawerDragGesture(
-                    widthPx = drawerWidthPx,
-                    contentOffsetPx = contentOffsetPx,
-                    velocityPx = dragVelocityPx,
-                    lastUptimeMillis = lastMoveUptime,
-                    onPresent = { presenting = true },
-                    onSettle = { open, vx ->
-                        drawerOpen = open
-                        settleDrawer(open, velocityPx = vx)
-                    },
-                ),
+                .graphicsLayer { translationX = contentOffsetPx.floatValue },
         ) {
             ChatContent(
                 container = container,
@@ -392,18 +396,7 @@ fun HomeScreen(
                             0,
                         )
                     }
-                    .background(MaterialTheme.colorScheme.surface)
-                    .drawerDragGesture(
-                        widthPx = drawerWidthPx,
-                        contentOffsetPx = contentOffsetPx,
-                        velocityPx = dragVelocityPx,
-                        lastUptimeMillis = lastMoveUptime,
-                        onPresent = {},
-                        onSettle = { open, vx ->
-                            drawerOpen = open
-                            settleDrawer(open, velocityPx = vx)
-                        },
-                    ),
+                    .background(MaterialTheme.colorScheme.surface),
             ) {
                 SideDrawerContent(
                     container = container,
@@ -3116,6 +3109,7 @@ private fun timeStr(millis: Long): String = TIME_FORMATTER.format(Date(millis))
  */
 private fun Modifier.drawerDragGesture(
     widthPx: Float,
+    edgePx: Float,
     contentOffsetPx: androidx.compose.runtime.MutableFloatState,
     velocityPx: androidx.compose.runtime.MutableFloatState,
     lastUptimeMillis: androidx.compose.runtime.MutableLongState,
@@ -3130,6 +3124,10 @@ private fun Modifier.drawerDragGesture(
     val slopPx = max(viewConfiguration.touchSlop, with(density) { 18.dp.toPx() })
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false)
+        // 关闭态只有从左边缘起手才算「拉抽屉」（原版 edgeOnly，24dp）；打开态
+        // 任意位置都能拖回去。
+        val startedOpen = contentOffsetPx.floatValue > 0f
+        if (!startedOpen && down.position.x > edgePx) return@awaitEachGesture
         velocityPx.floatValue = 0f
         var pastSlop = false
         var totalDx = 0f
@@ -3142,7 +3140,12 @@ private fun Modifier.drawerDragGesture(
             val dx = change.positionChange().x
             if (!pastSlop) {
                 totalDx += dx
-                if (kotlin.math.abs(totalDx) > slopPx) {
+                // 方向门控：关闭态只认右拖、打开态只认左拖。反方向完全不参与，
+                // 因此不会调 onPresent() —— 它会把 presenting 置真、让 `if
+                // (presenting)` 插入 scrim 节点，那一下布局变化正是用户看到的
+                // "界面向反方向也抖一下"。
+                val wrongWay = if (startedOpen) totalDx > 0f else totalDx < 0f
+                if (!wrongWay && kotlin.math.abs(totalDx) > slopPx) {
                     pastSlop = true
                     onPresent()
                 }
