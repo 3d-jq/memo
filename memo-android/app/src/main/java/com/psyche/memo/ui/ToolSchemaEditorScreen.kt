@@ -66,12 +66,8 @@ fun ToolSchemaEditorScreen(
     // Locate the catalog entry (default definition) for this tool.
     val storedLang = container.preferenceRepository.readJson("memory_prompt_lang_v1")
         ?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() } ?: "auto"
-    val legacyMode = runCatching {
-        container.preferenceRepository.readJson("memory_legacy_mode_v1")
-            ?.let { kotlinx.serialization.json.Json.parseToJsonElement(it).jsonPrimitive.booleanOrNull }
-    }.getOrNull() ?: false
-    val entry = remember(toolName, storedLang, legacyMode) {
-        BuiltInToolCatalog.entries(resolvedMemoryPromptLang(storedLang), legacyMode)
+        val entry = remember(toolName, storedLang) {
+        BuiltInToolCatalog.entries(resolvedMemoryPromptLang(storedLang))
             .firstOrNull { it.name == toolName }
     }
     val initialOverride = remember(toolName) { readOverrides(container)[toolName] }

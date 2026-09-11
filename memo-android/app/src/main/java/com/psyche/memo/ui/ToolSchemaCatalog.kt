@@ -106,8 +106,8 @@ object BuiltInToolCatalog {
         else -> true
     }
 
-    /** built_in_tool_catalog.dart entries(lang, legacyMemoryMode). */
-    fun entries(lang: MemoryPromptLang, legacyMemoryMode: Boolean): List<BuiltInToolCatalogEntry> {
+    /** built_in_tool_catalog.dart entries(lang) — the legacy-memory variant is not ported. */
+    fun entries(lang: MemoryPromptLang): List<BuiltInToolCatalogEntry> {
         val out = mutableListOf<BuiltInToolCatalogEntry>()
         out.add(
             BuiltInToolCatalogEntry(
@@ -116,9 +116,7 @@ object BuiltInToolCatalog {
                 group = BuiltInToolGroup.SEARCH,
             ),
         )
-        val memoryDefs: List<JsonObject> =
-            if (legacyMemoryMode) legacyMemoryDefinitions(lang) else catalogMemoryDefinitions(lang)
-        for (def in memoryDefs) {
+        for (def in catalogMemoryDefinitions(lang)) {
             val name = BuiltInToolCatalogEntry.stringAt(def, "function", "name") ?: continue
             out.add(BuiltInToolCatalogEntry(name, def, BuiltInToolGroup.MEMORY))
         }
@@ -221,37 +219,6 @@ object BuiltInToolCatalog {
         defUpdateUserProfile(lang),
         defChatSearch(lang),
     )
-
-    fun legacyMemoryDefinitions(lang: MemoryPromptLang): List<JsonObject> {
-        val zh = lang == MemoryPromptLang.zh
-        return listOf(
-            definition(
-                name = "create_memory",
-                description = if (zh) "新增一条记忆记录。" else "Create a memory record.",
-                properties = listOf(
-                    param("content", "string", if (zh) "记忆记录的内容。" else "The content of the memory record."),
-                ),
-                required = listOf("content"),
-            ),
-            definition(
-                name = "edit_memory",
-                description = if (zh) "更新一条已有的记忆记录。" else "Update an existing memory record.",
-                properties = listOf(
-                    param("id", "integer", if (zh) "记忆记录的 id。" else "The id of the memory record."),
-                    param("content", "string", if (zh) "记忆记录的内容。" else "The content of the memory record."),
-                ),
-                required = listOf("id", "content"),
-            ),
-            definition(
-                name = "delete_memory",
-                description = if (zh) "删除一条记忆记录。" else "Delete a memory record.",
-                properties = listOf(
-                    param("id", "integer", if (zh) "记忆记录的 id。" else "The id of the memory record."),
-                ),
-                required = listOf("id"),
-            ),
-        )
-    }
 
     private fun defMemoryRead(lang: MemoryPromptLang): JsonObject {
         val zh = lang == MemoryPromptLang.zh

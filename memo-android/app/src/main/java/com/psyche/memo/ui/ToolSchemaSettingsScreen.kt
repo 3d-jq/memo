@@ -301,12 +301,8 @@ fun ToolSchemaSettingsScreen(
     // memory_legacy_mode_v1, resolved like resolvedMemoryPromptLang.
     val storedLang = container.preferenceRepository.readJson("memory_prompt_lang_v1")
         ?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() } ?: "auto"
-    val legacyMode = runCatching {
-        container.preferenceRepository.readJson("memory_legacy_mode_v1")
-            ?.let { kotlinx.serialization.json.Json.parseToJsonElement(it).jsonPrimitive.booleanOrNull }
-    }.getOrNull() ?: false
-    val catalog = remember(storedLang, legacyMode) {
-        BuiltInToolCatalog.entries(resolvedMemoryPromptLang(storedLang), legacyMode)
+        val catalog = remember(storedLang) {
+        BuiltInToolCatalog.entries(resolvedMemoryPromptLang(storedLang))
     }
     var overrides by remember { mutableStateOf(readOverrides(container)) }
     var resetDialogVisible by remember { mutableStateOf(false) }

@@ -66,7 +66,6 @@ internal fun MemoryPromptEditOverlay(
     val lang = remember { state.resolvedPromptLang() }
     val isZh = lang == MemoryPromptLang.zh
     val isSmartAdd = entry.kind == MemoryPromptKind.SMART_ADD
-    val isLegacyRules = entry.kind == MemoryPromptKind.LEGACY_RULES
 
     var mainText by remember { mutableStateOf(state.prompt(entry.kind, isZh)) }
     var batchText by remember { mutableStateOf(if (isSmartAdd) state.smartAddBatchPrompt(isZh) else "") }
@@ -119,15 +118,6 @@ internal fun MemoryPromptEditOverlay(
                 style = TextStyle(fontSize = 12.5.sp, lineHeight = 18.sp, color = withAlpha(cs.onSurface, 0.6)),
             )
             Spacer(Modifier.height(14.dp))
-            if (isLegacyRules) {
-                MemoryInfoBanner(
-                    body = stringResource(
-                        UiR.string.legacy_memory_mode_cache_warning,
-                        MemoryPrompts.legacyCurrentTimePlaceholder,
-                    ),
-                )
-                Spacer(Modifier.height(14.dp))
-            }
             if (isSmartAdd) {
                 Text(
                     stringResource(UiR.string.memory_prompt_edit_section_per_item),

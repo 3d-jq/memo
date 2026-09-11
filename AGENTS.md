@@ -54,6 +54,8 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 搜索体系 S1–S4（定义/8+15 provider 引擎/设置/用量，共 23 个可运行 provider）
 - 翻译页、世界书（页 + 注入引擎，5 注入位置/31 单测）、指令注入、快捷短语、记忆工具 M1/M2a/M2b/M2c + **Smart Add 去重合并 M2d-b**（tokenizer/提示词组装/四动作判定/批量，judge 走 `memory_model_v1`）、本地工具 L1 + 日历 L2、OCR F4、文档抽取 F3、附件 UI F2
 - 多模态输入引擎 F1、MCP 基础与连接管理 MCP-1/MCP-2、助手 MCP sheet（输入栏 Hammer）
+- **旧版（V1）记忆模式不移植（用户点名）**：原版留它是为兼容老数据，Memo 没有 → 设置页旧版开关/旧版只读页/旧版提示词行/legacy 工具定义全部删除；`assistant_memory_rows` + 备份写入保留（归档格式需要），但没有 UI 读它
+- **记忆可见性修复**：`MemoryProviderV2.ensureLoaded()`（此前系统提示词的记忆块与助手记忆 tab 拿到空 store ⇒ 记忆既不注入也不显示）+ 列表/tab 统一用容器级 provider 并跟随 `version` + 助手记忆 tab 补齐可见/归档列表
 - **实体键存储修复（M2d-a 记忆 + 存储-3 TTS）**：ENTITY 键（`memory_entries_v1`/`assistant_memories_v1`/`tts_services_v1`）走 `PreferenceRepository` 时被静默丢弃（read=null、write=no-op）→ 记忆改 `MemoryEntryRowDao`/`AssistantMemoryRowDao` 直写类型表（payload 权威 + 类型列投影自愈 schema CHECK、读-改-写），TTS 改 `PayloadEntityDao("tts_service_rows")`，`BackupRestorer` 对两个记忆表同步改为投影写入；ASR 的 `asr_services_v1` 是 PREFERENCE 键不受影响
 - 聊天周边：Select&Copy/WebView 预览/分享/BoundedLargeTextView、助手壁纸、推理预算全链路、清空/压缩上下文、记忆关于+种子、建议气泡、消息多选+导出（文本）
 - 抽屉全局搜索模式、临时聊天三态、长按会话 sheet + 多选栏、流式呼吸点、iOS 风格控件 + 触觉反馈 + Haptics
@@ -70,7 +72,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 待移植 / 剩余（仅以下）
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
-- M2d-c：记忆抽取 pipeline（gatekeeper / extractor / profile distiller / `MemoryPipelineService.runNow` + 自动调度 + tab 内条目列表与「整理」按钮 + trace）、legacy 记忆模式工具
+- M2d-c：记忆抽取 pipeline（gatekeeper / extractor / profile distiller / `MemoryPipelineService.runNow` + 自动调度 + 助手记忆 tab 的「整理」按钮与状态行 + trace）
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）

@@ -68,9 +68,6 @@ internal object MemorySettingsKeys {
     const val MODEL = "memory_model_v1"
     const val MODEL_THINKING = "memory_model_thinking_enabled_v1"
     const val PROMPT_LANG = "memory_prompt_lang_v1"
-    const val LEGACY_MODE = "memory_legacy_mode_v1"
-    const val LEGACY_PROMPT_ZH = "memory_legacy_prompt_zh_v1"
-    const val LEGACY_PROMPT_EN = "memory_legacy_prompt_en_v1"
     const val RULES_ZH = "memory_rules_prompt_zh_v1"
     const val RULES_EN = "memory_rules_prompt_en_v1"
     const val GATE_ZH = "memory_gate_prompt_zh_v1"
@@ -83,8 +80,6 @@ internal object MemorySettingsKeys {
     const val SMART_ADD_BATCH_EN = "memory_smart_add_batch_prompt_en_v1"
     const val PROFILE_DISTILL_ZH = "memory_profile_distill_prompt_zh_v1"
     const val PROFILE_DISTILL_EN = "memory_profile_distill_prompt_en_v1"
-    const val MIGRATE_ZH = "memory_migrate_prompt_zh_v1"
-    const val MIGRATE_EN = "memory_migrate_prompt_en_v1"
     const val INJECTION_MAX_ITEMS = "memory_injection_max_items_v1"
 }
 
@@ -111,10 +106,6 @@ internal class MemorySettingsState(private val container: AppContainerImpl) {
 
     fun writeInt(key: String, value: Int) =
         prefs.writeJson(key, kotlinx.serialization.json.JsonPrimitive(value).toString())
-
-    var legacyMode: Boolean
-        get() = readBool(MemorySettingsKeys.LEGACY_MODE, false)
-        set(value) = writeBool(MemorySettingsKeys.LEGACY_MODE, value)
 
     var promptLang: String
         get() = readString(MemorySettingsKeys.PROMPT_LANG, "auto")
@@ -157,8 +148,6 @@ internal class MemorySettingsState(private val container: AppContainerImpl) {
         MemoryPromptKind.EXTRACT -> readString(if (zh) MemorySettingsKeys.EXTRACT_ZH else MemorySettingsKeys.EXTRACT_EN, if (zh) MemoryPrompts.extractZh else MemoryPrompts.extractEn)
         MemoryPromptKind.SMART_ADD -> readString(if (zh) MemorySettingsKeys.SMART_ADD_ZH else MemorySettingsKeys.SMART_ADD_EN, if (zh) MemoryPrompts.smartAddZh else MemoryPrompts.smartAddEn)
         MemoryPromptKind.DISTILL -> readString(if (zh) MemorySettingsKeys.PROFILE_DISTILL_ZH else MemorySettingsKeys.PROFILE_DISTILL_EN, if (zh) MemoryPrompts.profileDistillZh else MemoryPrompts.profileDistillEn)
-        MemoryPromptKind.MIGRATE -> readString(if (zh) MemorySettingsKeys.MIGRATE_ZH else MemorySettingsKeys.MIGRATE_EN, if (zh) MemoryPrompts.migrateZh else MemoryPrompts.migrateEn)
-        MemoryPromptKind.LEGACY_RULES -> readString(if (zh) MemorySettingsKeys.LEGACY_PROMPT_ZH else MemorySettingsKeys.LEGACY_PROMPT_EN, if (zh) MemoryPrompts.legacyRulesZh else MemoryPrompts.legacyRulesEn)
     }
 
     fun smartAddBatchPrompt(zh: Boolean): String = readString(
@@ -173,8 +162,6 @@ internal class MemorySettingsState(private val container: AppContainerImpl) {
             MemoryPromptKind.EXTRACT -> if (zh) MemorySettingsKeys.EXTRACT_ZH else MemorySettingsKeys.EXTRACT_EN
             MemoryPromptKind.SMART_ADD -> if (zh) MemorySettingsKeys.SMART_ADD_ZH else MemorySettingsKeys.SMART_ADD_EN
             MemoryPromptKind.DISTILL -> if (zh) MemorySettingsKeys.PROFILE_DISTILL_ZH else MemorySettingsKeys.PROFILE_DISTILL_EN
-            MemoryPromptKind.MIGRATE -> if (zh) MemorySettingsKeys.MIGRATE_ZH else MemorySettingsKeys.MIGRATE_EN
-            MemoryPromptKind.LEGACY_RULES -> if (zh) MemorySettingsKeys.LEGACY_PROMPT_ZH else MemorySettingsKeys.LEGACY_PROMPT_EN
         }
         writeString(key, text)
     }
@@ -189,15 +176,13 @@ internal class MemorySettingsState(private val container: AppContainerImpl) {
             MemoryPromptKind.EXTRACT -> if (zh) MemoryPrompts.extractZh else MemoryPrompts.extractEn
             MemoryPromptKind.SMART_ADD -> if (zh) MemoryPrompts.smartAddZh else MemoryPrompts.smartAddEn
             MemoryPromptKind.DISTILL -> if (zh) MemoryPrompts.profileDistillZh else MemoryPrompts.profileDistillEn
-            MemoryPromptKind.MIGRATE -> if (zh) MemoryPrompts.migrateZh else MemoryPrompts.migrateEn
-            MemoryPromptKind.LEGACY_RULES -> if (zh) MemoryPrompts.legacyRulesZh else MemoryPrompts.legacyRulesEn
         }
         setPrompt(main, zh, default)
         if (main == MemoryPromptKind.SMART_ADD) setSmartAddBatchPrompt(zh, if (zh) MemoryPrompts.smartAddBatchZh else MemoryPrompts.smartAddBatchEn)
     }
 }
 
-internal enum class MemoryPromptKind { RULES, GATE, EXTRACT, SMART_ADD, DISTILL, MIGRATE, LEGACY_RULES }
+internal enum class MemoryPromptKind { RULES, GATE, EXTRACT, SMART_ADD, DISTILL }
 
 internal data class PromptEntry(val titleRes: Int, val subtitleRes: Int, val kind: MemoryPromptKind)
 
@@ -208,7 +193,6 @@ private fun promptEntries() = listOf(
     PromptEntry(UiR.string.memory_prompt_edit_extract_title, UiR.string.memory_prompt_edit_extract_subtitle, MemoryPromptKind.EXTRACT),
     PromptEntry(UiR.string.memory_prompt_edit_smart_add_title, UiR.string.memory_prompt_edit_smart_add_subtitle, MemoryPromptKind.SMART_ADD),
     PromptEntry(UiR.string.memory_prompt_edit_distill_title, UiR.string.memory_prompt_edit_distill_subtitle, MemoryPromptKind.DISTILL),
-    PromptEntry(UiR.string.memory_prompt_edit_migrate_title, UiR.string.memory_prompt_edit_migrate_subtitle, MemoryPromptKind.MIGRATE),
 )
 
 private val INJECTION_CUSTOM_SENTINEL = -1
@@ -218,7 +202,6 @@ private val INJECTION_MAX_ITEM_OPTIONS = listOf(5, 10, 20, 30)
 fun MemorySettingsScreen(
     container: AppContainerImpl,
     onBack: () -> Unit,
-    onOpenLegacyMemory: () -> Unit,
     onOpenMemoryTrace: () -> Unit,
     onOpenMemoryAbout: () -> Unit,
     // L369-387: desktop dialogs only; on Android these push pages. Entries page
@@ -257,42 +240,9 @@ fun MemorySettingsScreen(
                 .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),
         ) {
             key(rev) {
-                // ── modeSection (L75-89) ─────────────────────────────────────
-                SettingsSectionHeader(title = stringResource(UiR.string.memory_settings_mode_section))
-                SectionCard {
-                    MemorySettingsSwitchRow(
-                        title = stringResource(UiR.string.legacy_memory_mode_title),
-                        subtitle = stringResource(UiR.string.legacy_memory_mode_subtitle),
-                        checked = state.legacyMode,
-                        onCheckedChange = { state.legacyMode = it; bump() },
-                    )
-                }
-
-                Spacer(Modifier.height(18.dp))
-
-                if (state.legacyMode) {
-                    // ── legacyChildren (L105-129) ────────────────────────────
-                    langSection(state) { bump() }
-                    Spacer(Modifier.height(18.dp))
-                    SettingsSectionHeader(title = stringResource(UiR.string.memory_settings_prompts_section))
-                    SectionCard {
-                        MemoryNavRow(
-                            title = stringResource(UiR.string.memory_settings_legacy_prompt_title),
-                            tip = stringResource(UiR.string.memory_prompt_edit_rules_subtitle),
-                            onTap = { promptEditor = PromptEntry(UiR.string.memory_settings_legacy_prompt_title, UiR.string.memory_prompt_edit_rules_subtitle, MemoryPromptKind.LEGACY_RULES) },
-                        )
-                    }
-                    Spacer(Modifier.height(18.dp))
-                    SettingsSectionHeader(title = stringResource(UiR.string.memory_settings_legacy_section))
-                    SectionCard {
-                        MemoryNavRow(
-                            title = stringResource(UiR.string.memory_settings_legacy_title),
-                            tip = stringResource(UiR.string.memory_settings_legacy_subtitle),
-                            onTap = onOpenLegacyMemory,
-                        )
-                    }
-                } else {
-                    // ── newChildren (L131-234) ───────────────────────────────
+                // The V2 children (L131-234). The legacy-mode branch that used to
+                // wrap them was dropped: it only served data written by the old
+                // app, which a fresh Memo install never has.
                     if (!state.modelSet) {
                         MemoryInfoBanner(body = stringResource(UiR.string.memory_settings_model_tip))
                         Spacer(Modifier.height(12.dp))
@@ -370,11 +320,6 @@ fun MemorySettingsScreen(
                             onTap = {},
                         )
                         SettingsNavRowFull(
-                            title = stringResource(UiR.string.memory_settings_legacy_title),
-                            subtitle = stringResource(UiR.string.memory_settings_legacy_subtitle),
-                            onTap = onOpenLegacyMemory,
-                        )
-                        SettingsNavRowFull(
                             title = stringResource(UiR.string.memory_trace_settings_title),
                             subtitle = stringResource(UiR.string.memory_trace_settings_subtitle),
                             onTap = onOpenMemoryTrace,
@@ -387,7 +332,6 @@ fun MemorySettingsScreen(
                             tip = stringResource(UiR.string.memory_settings_about_subtitle),
                             onTap = onOpenMemoryAbout,
                         )
-                    }
                 }
             }
         }

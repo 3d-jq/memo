@@ -146,13 +146,23 @@ class MemoryProviderV2(db: android.database.sqlite.SQLiteDatabase) {
 
     private val dao = com.psyche.memo.data.db.MemoryEntryRowDao(db)
 
-    fun initialize(loadAll: Boolean = false) {
-        if (store.isNotEmpty()) return
-        loadAll()
+    private var loaded = false
+
+    /**
+     * Loads once per instance. Readers that do not run inside a screen — the
+     * system-prompt memory block, the memory tool — must call this first,
+     * otherwise they see an empty store in a process where no memory screen was
+     * opened yet.
+     */
+    fun ensureLoaded() {
+        if (!loaded) loadAll()
     }
+
+    fun initialize() = ensureLoaded()
 
     fun loadAll() {
         refresh(readEntries())
+        loaded = true
     }
 
     private fun readEntries(): MutableList<MemoryEntry> =
@@ -324,93 +334,6 @@ class MemoryProviderV2(db: android.database.sqlite.SQLiteDatabase) {
             return true
         }
     }
-}
-
-/** assistant_memory.dart 1:1 — legacy read-only memories (§14.5 / D-29). */
-data class LegacyMemory(
-    val id: Long,
-    val assistantId: String,
-    val content: String,
-)
-
-/**
- * Legacy memory store (memory_store.dart + MemoryProvider minimal port),
- * persisted in `assistant_memory_rows`.
- */
-class LegacyMemoryStore(db: android.database.sqlite.SQLiteDatabase) {
-
-    var version by androidx.compose.runtime.mutableIntStateOf(0)
-        private set
-
-    private val store = mutableListOf<LegacyMemory>()
-
-    val memories: List<LegacyMemory> get() = store
-
-    private val dao = com.psyche.memo.data.db.AssistantMemoryRowDao(db)
-
-    fun initialize() {
-        if (store.isNotEmpty()) return
-        loadAll()
-    }
-
-    fun loadAll() {
-        val list = dao.getAll().mapNotNull { row ->
-            runCatching {
-                val obj = Json.parseToJsonElement(row.payload).jsonObject
-                LegacyMemory(
-                    id = obj["id"]?.jsonPrimitive?.longOrNull ?: 0L,
-                    assistantId = obj["assistantId"]?.jsonPrimitive?.content ?: "",
-                    content = obj["content"]?.jsonPrimitive?.content ?: "",
-                )
-            }.getOrNull()
-        }
-        store.clear()
-        store.addAll(list)
-        version++
-    }
-
-    private fun persist() {
-        val now = System.currentTimeMillis()
-        dao.replaceAll(
-            store.mapIndexed { index, m ->
-                com.psyche.memo.data.db.AssistantMemoryRowDao.Row.fromPayload(
-                    id = m.id.toString(),
-                    payload = buildJsonObject {
-                        put("id", m.id)
-                        put("assistantId", m.assistantId)
-                        put("content", m.content)
-                    }.toString(),
-                    sortOrder = index,
-                    updatedAt = now,
-                )
-            },
-        )
-        version++
-    }
-
-    fun add(assistantId: String, content: String): LegacyMemory {
-        val nextId = (store.maxOfOrNull { it.id } ?: 0) + 1
-        val mem = LegacyMemory(id = nextId, assistantId = assistantId, content = content)
-        store.add(mem)
-        persist()
-        return mem
-    }
-
-    fun update(id: Long, content: String): LegacyMemory? {
-        val idx = store.indexOfFirst { it.id == id }
-        if (idx < 0) return null
-        val updated = store[idx].copy(content = content)
-        store[idx] = updated
-        persist()
-        return updated
-    }
-
-    fun delete(id: Long): Boolean {
-        val removed = store.removeAll { it.id == id }
-        if (removed) persist()
-        return removed
-    }
-
 }
 
 /**

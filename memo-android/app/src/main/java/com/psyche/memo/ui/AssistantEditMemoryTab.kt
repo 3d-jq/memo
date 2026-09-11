@@ -44,6 +44,7 @@ import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Sparkles
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.Assistant
@@ -70,6 +71,8 @@ fun AssistantEditMemoryTab(
     var summaryPicker by remember { mutableStateOf(false) }
     var customFrequency by remember { mutableStateOf(false) }
     var customSummary by remember { mutableStateOf(false) }
+    var editorOpen by remember { mutableStateOf(false) }
+    var editorEntry by remember { mutableStateOf<MemoryEntry?>(null) }
 
     Column(
         modifier = Modifier
@@ -168,6 +171,118 @@ fun AssistantEditMemoryTab(
                 )
             }
         }
+
+        // 管理记忆 (assistant_settings_edit_memory_tab.dart L335-479): the add
+        // action, the empty hints and the entries this assistant can see. The
+        // organize action and its status line need the memory pipeline (M2d-c).
+        val provider = container.memoryProviderV2
+        androidx.compose.runtime.LaunchedEffect(Unit) { provider.ensureLoaded() }
+        val rev = provider.version
+        val visible = remember(rev, assistant.id, assistant.enableMemory) {
+            if (assistant.enableMemory) provider.visibleFor(assistant.id) else emptyList()
+        }
+        val archived = remember(rev, assistant.id, assistant.enableMemory) {
+            if (assistant.enableMemory) {
+                provider.visibleFor(assistant.id, includeArchived = true)
+                    .filter { it.status == MemoryStatus.archived }
+            } else {
+                emptyList()
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.assistant_edit_manage_memory_title),
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                modifier = Modifier.weight(1f),
+            )
+            Row(
+                modifier = Modifier
+                    .clickable {
+                        editorEntry = null
+                        editorOpen = true
+                    }
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Plus, contentDescription = null, modifier = Modifier.size(16.dp), tint = cs.primary)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = stringResource(R.string.memory_entry_action_add),
+                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
+                )
+            }
+        }
+
+        if (!assistant.enableMemory) {
+            EmptyHint(stringResource(R.string.memory_entry_empty_disabled))
+        } else if (visible.isEmpty() && archived.isEmpty()) {
+            EmptyHint(stringResource(R.string.memory_entry_empty))
+        }
+
+        visible.forEach { entry ->
+            MemoryEntryCard(
+                entry = entry,
+                useThisAssistantLabel = true,
+                scopeToggleAssistantId = assistant.id,
+                onEdit = {
+                    editorEntry = entry
+                    editorOpen = true
+                },
+                onArchive = { provider.archive(entry.id) },
+                onRestore = { provider.restore(entry.id) },
+                onHardDelete = { provider.hardDelete(entry.id) },
+            )
+        }
+        if (archived.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.memory_entry_archived_section),
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 4.dp),
+            )
+            archived.forEach { entry ->
+                MemoryEntryCard(
+                    entry = entry,
+                    useThisAssistantLabel = true,
+                    scopeToggleAssistantId = assistant.id,
+                    onEdit = {
+                        editorEntry = entry
+                        editorOpen = true
+                    },
+                    onArchive = { provider.archive(entry.id) },
+                    onRestore = { provider.restore(entry.id) },
+                    onHardDelete = { provider.hardDelete(entry.id) },
+                )
+            }
+        }
+    }
+
+    // Same editor the memory list page opens (_showAddEditSheet L49-64): the
+    // default scope follows the assistant's write policy.
+    if (editorOpen) {
+        val closeEditor = {
+            editorOpen = false
+            editorEntry = null
+        }
+        val prefersAssistant = assistant.memoryWriteScope == "alwaysAssistant" ||
+            assistant.memoryWriteScope == "toolDefaultAssistant"
+        MemoryEntryEditSheet(
+            container = container,
+            provider = container.memoryProviderV2,
+            assistants = remember {
+                com.psyche.memo.data.assistant.AssistantStore(container.database.readableDatabase).getAll()
+            },
+            existing = editorEntry,
+            defaultAssistantId = assistant.id,
+            defaultScope = if (editorEntry == null && prefersAssistant) MemoryScope.assistant else MemoryScope.global,
+            onDismiss = closeEditor,
+            onSaved = closeEditor,
+        )
     }
 
     if (frequencyPicker) {
@@ -488,5 +603,18 @@ private fun MemoryNumberDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.search_services_add_dialog_cancel)) }
         },
+    )
+}
+
+/** Empty-state line (assistant_settings_edit_memory_tab.dart L429-450). */
+@Composable
+private fun EmptyHint(text: String) {
+    Text(
+        text = text,
+        style = TextStyle(
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        ),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
 }

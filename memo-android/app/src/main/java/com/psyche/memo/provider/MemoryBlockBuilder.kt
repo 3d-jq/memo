@@ -119,7 +119,9 @@ object MemoryBlockBuilder {
         val maxItems = MemorySettingsState(container).injectionMaxItems
 
         val fields = UserProfileRepository.fields(container)
-        val visible = container.memoryProviderV2.visibleFor(assistant.id)
+        val provider = container.memoryProviderV2
+        provider.ensureLoaded()
+        val visible = provider.visibleFor(assistant.id)
             .filter { it.status == MemoryStatus.active }
         val totalByType = visible.groupingBy { it.type }.eachCount()
         val hasProfile = fields.any { it.value.trim().isNotEmpty() }

@@ -86,7 +86,6 @@ import com.psyche.memo.ui.DebugScreen
 import com.psyche.memo.ui.BackupScreen
 import com.psyche.memo.ui.LocalSnapshotsScreen
 import com.psyche.memo.ui.SponsorScreen
-import com.psyche.memo.ui.LegacyMemoryScreen
 import com.psyche.memo.ui.LogViewerScreen
 import com.psyche.memo.ui.MemoryEntriesScreen
 import com.psyche.memo.ui.MemorySettingsScreen
@@ -598,7 +597,6 @@ private fun AppThemeAndContent(
                         MemorySettingsScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
-                            onOpenLegacyMemory = { navController.navigate("legacy_memory") },
                             onOpenMemoryTrace = { navController.navigate("memory_trace") },
                             onOpenMemoryAbout = { navController.navigate("memory_about") },
                             onOpenMemoryEntries = { navController.navigate("memory_entries") },
@@ -612,12 +610,6 @@ private fun AppThemeAndContent(
                     }
                     composable("memory_trace") {
                         MemoryTraceScreen(
-                            container = container,
-                            onBack = { navController.popBackStack() },
-                        )
-                    }
-                    composable("legacy_memory") {
-                        LegacyMemoryScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
                         )

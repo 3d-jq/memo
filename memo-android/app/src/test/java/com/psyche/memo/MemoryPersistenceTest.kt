@@ -1,7 +1,6 @@
 package com.psyche.memo
 
 import androidx.test.core.app.ApplicationProvider
-import com.psyche.memo.ui.LegacyMemoryStore
 import com.psyche.memo.ui.MemoryProviderV2
 import com.psyche.memo.ui.MemoryScope
 import com.psyche.memo.ui.MemorySource
@@ -29,7 +28,6 @@ class MemoryPersistenceTest {
     fun setUp() {
         container = AppContainerImpl(ApplicationProvider.getApplicationContext())
         container.database.writableDatabase.execSQL("DELETE FROM memory_entry_rows")
-        container.database.writableDatabase.execSQL("DELETE FROM assistant_memory_rows")
     }
 
     @Test
@@ -90,18 +88,6 @@ class MemoryPersistenceTest {
         reloaded.initialize()
 
         assertEquals(emptyList<String>(), reloaded.entries.map { it.id })
-    }
-
-    @Test
-    fun `legacy memories survive a store restart`() {
-        val first = LegacyMemoryStore(container.database.writableDatabase)
-        first.initialize()
-        val added = first.add("a1", "Likes short answers")
-
-        val reloaded = LegacyMemoryStore(container.database.writableDatabase)
-        reloaded.initialize()
-
-        assertEquals(listOf(added), reloaded.memories)
     }
 
     @Test

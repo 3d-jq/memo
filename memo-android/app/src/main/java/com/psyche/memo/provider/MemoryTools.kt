@@ -432,7 +432,7 @@ object MemoryTools {
         // The tool runs against the container's provider instance while screens
         // write through their own; refresh first so a read or a duplicate check
         // never works off a snapshot that missed another instance's writes.
-        provider.loadAll()
+        provider.ensureLoaded()
         return try {
             when (name) {
                 MEMORY_READ -> memoryRead(provider, assistant, args)

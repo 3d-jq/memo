@@ -52,6 +52,14 @@ import com.psyche.memo.ui.theme.withAlpha
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.key
 import com.psyche.memo.AppContainerImpl
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.text.style.TextOverflow
+import com.psyche.memo.ui.theme.AppFontWeights
 
 /**
  * memory_entries_page.dart 1:1 (mobile branches) — global memory list with
@@ -67,12 +75,15 @@ fun MemoryEntriesScreen(
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val provider = remember { MemoryProviderV2(container.database.writableDatabase) }
+    // The container-scoped provider is the instance the chat's memory tool
+    // writes through. Reading it (and its version) keeps this list from going
+    // stale behind a memory the assistant saved while the screen was open —
+    // every mutation refreshes the cache and bumps the version.
+    val provider = container.memoryProviderV2
     val assistants = remember { loadAssistantsSync(container) }
 
-    var rev by remember { mutableStateOf(0) }
-    fun bump() { rev++ }
-    androidx.compose.runtime.LaunchedEffect(Unit) { provider.initialize(loadAll = true) }
+    val rev = provider.version
+    androidx.compose.runtime.LaunchedEffect(Unit) { provider.loadAll() }
 
     var search by remember { mutableStateOf("") }
     var scope by remember { mutableStateOf(ScopeFilter.ALL) }
@@ -116,7 +127,11 @@ fun MemoryEntriesScreen(
     val active = filtered.filter { it.status == MemoryStatus.active }
     val archived = filtered.filter { it.status == MemoryStatus.archived }
 
-    var editor by remember { mutableStateOf<MemoryEntry?>(null) }
+    // The editor sheet distinguishes "closed" from "new entry" (existing == null),
+    // so the open flag is separate from the entry being edited — `editor == null`
+    // alone would keep the sheet composed and visible at all times.
+    var editorOpen by remember { mutableStateOf(false) }
+    var editorEntry by remember { mutableStateOf<MemoryEntry?>(null) }
     var confirm by remember { mutableStateOf<MemoryConfirmRequest?>(null) }
     var scopeSheet by remember { mutableStateOf(false) }
     var typeSheet by remember { mutableStateOf(false) }
@@ -208,7 +223,10 @@ fun MemoryEntriesScreen(
                 label = stringResource(UiR.string.memory_entry_action_add),
                 emphasized = true,
                 icon = Lucide.Plus,
-                onTap = { editor = null },
+                onTap = {
+                    editorEntry = null
+                    editorOpen = true
+                },
             )
         }
 
@@ -243,9 +261,12 @@ fun MemoryEntriesScreen(
                                 if (v) next.add(e.id) else next.remove(e.id)
                                 selected = next
                             },
-                            onEdit = { editor = e },
-                            onArchive = { provider.archive(e.id); bump() },
-                            onRestore = { provider.restore(e.id); bump() },
+                            onEdit = {
+                                    editorEntry = e
+                                    editorOpen = true
+                                },
+                            onArchive = { provider.archive(e.id) },
+                            onRestore = { provider.restore(e.id) },
                             onHardDelete = { confirm = MemoryConfirmRequest.HardDelete(e.id) },
                             scopeToggleAssistantId = currentAssistantId(container),
                             onToggleScope = {
@@ -275,9 +296,12 @@ fun MemoryEntriesScreen(
                                     if (v) next.add(e.id) else next.remove(e.id)
                                     selected = next
                                 },
-                                onEdit = { editor = e },
-                                onArchive = { provider.archive(e.id); bump() },
-                                onRestore = { provider.restore(e.id); bump() },
+                                onEdit = {
+                                    editorEntry = e
+                                    editorOpen = true
+                                },
+                                onArchive = { provider.archive(e.id) },
+                                onRestore = { provider.restore(e.id) },
                                 onHardDelete = { confirm = MemoryConfirmRequest.HardDelete(e.id) },
                                 scopeToggleAssistantId = currentAssistantId(container),
                                 onToggleScope = {
@@ -348,24 +372,30 @@ fun MemoryEntriesScreen(
     }
 
     // Entry editor sheet (showMemoryEntryEditor L1059-1113).
-    editor.let { existing ->
+    if (editorOpen) {
+        val closeEditor = {
+            editorOpen = false
+            editorEntry = null
+        }
         MemoryEntryEditSheet(
             container = container,
             provider = provider,
             assistants = assistants,
-            existing = existing,
+            existing = editorEntry,
             defaultAssistantId = currentAssistantId(container),
-            onDismiss = { editor = null },
-            onSaved = { bump(); editor = null },
+            onDismiss = closeEditor,
+            onSaved = {
+                closeEditor()
+            },
         )
     }
 
     // Confirm host mapping back to actions.
     MemoryConfirmHost(confirm) { request, ok ->
         when (request) {
-            is MemoryConfirmRequest.HardDelete -> if (ok) { provider.hardDelete(request.entryId); bump() }
-            is MemoryConfirmRequest.BatchHardDelete -> if (ok) { provider.hardDeleteMany(selected.toList()); selected = HashSet(); selecting = false; bump() }
-            is MemoryConfirmRequest.OrphanCleanup -> if (ok) { provider.deleteOrphanAssistantMemories(assistants.map { it.id }.toSet()); bump() }
+            is MemoryConfirmRequest.HardDelete -> if (ok) { provider.hardDelete(request.entryId) }
+            is MemoryConfirmRequest.BatchHardDelete -> if (ok) { provider.hardDeleteMany(selected.toList()); selected = HashSet(); selecting = false }
+            is MemoryConfirmRequest.OrphanCleanup -> if (ok) { provider.deleteOrphanAssistantMemories(assistants.map { it.id }.toSet()) }
             is MemoryConfirmRequest.ScopeSwitch -> {
                 val target = pendingScopeEntry
                 if (ok && target != null) {
@@ -374,7 +404,6 @@ fun MemoryEntriesScreen(
                     } else {
                         provider.updateScope(target.id, scope = MemoryScope.assistant, assistantId = currentAssistantId(container))
                     }
-                    bump()
                 }
                 pendingScopeEntry = null
             }
@@ -398,17 +427,21 @@ private fun FilterChipRow(label: String, onTap: () -> Unit, emphasized: Boolean 
 }
 
 /**
- * memory_ui.dart L1115-1433 — MemoryEntryEditForm as a modal bottom sheet
- * (mobile branch L1379-1432).
+ * memory_ui.dart L1115-1433 — the add/edit memory editor as a modal bottom
+ * sheet (mobile branch L1379-1432): overlaySurface with a 16dp top radius,
+ * 10dp above the 40x4 handle, a centered 16sp title, the form list padded
+ * 16/12, and the action row padded 16/0/16/12. The sheet hugs its content up
+ * to 90% of the screen, scrolling inside beyond that.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun MemoryEntryEditSheet(
+internal fun MemoryEntryEditSheet(
     container: AppContainerImpl,
     provider: MemoryProviderV2,
     assistants: List<com.psyche.memo.data.model.Assistant>,
     existing: MemoryEntry?,
     defaultAssistantId: String?,
+    defaultScope: MemoryScope = MemoryScope.global,
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
 ) {
@@ -418,7 +451,7 @@ private fun MemoryEntryEditSheet(
 
     var content by remember { mutableStateOf(existing?.content ?: "") }
     var type by remember { mutableStateOf(existing?.type ?: MemoryType.identity) }
-    var scope by remember { mutableStateOf(existing?.scope ?: MemoryScope.global) }
+    var scope by remember { mutableStateOf(existing?.scope ?: defaultScope) }
     var assistantId by remember { mutableStateOf(existing?.assistantId ?: defaultAssistantId) }
     var saving by remember { mutableStateOf(false) }
     var scopeConfirm by remember { mutableStateOf<Boolean?>(null) }
@@ -458,17 +491,25 @@ private fun MemoryEntryEditSheet(
         saving = false
     }
 
+    // ConstrainedBox(maxHeight: screen * 0.9) around the sheet body (L1386-1388).
+    val maxBodyHeight = with(LocalDensity.current) {
+        (LocalWindowInfo.current.containerSize.height * 0.9f).toDp()
+    }
+
     ModalBottomSheet(
-        dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
         onDismissRequest = onDismiss,
+        containerColor = app.overlaySurface(cs),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
     ) {
         Column(
-            Modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .imePadding()
-                .padding(horizontal = 16.dp),
+                .heightIn(max = maxBodyHeight),
         ) {
-            // Drag handle + title (L1391-1415).
+            Spacer(Modifier.height(10.dp))
+            // Drag handle (L1391-1401).
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Box(
                     Modifier
@@ -478,93 +519,99 @@ private fun MemoryEntryEditSheet(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            Text(
-                title,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Centered title (L1403-1414).
+            Box(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(fontSize = 16.sp, fontWeight = AppFontWeights.semibold, color = cs.onSurface),
+                )
+            }
             Spacer(Modifier.height(8.dp))
 
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                // Content field (_formFields L1230-1248, IosFormTextField).
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(app.surfaceCard, RoundedCornerShape(14.dp))
-                        .padding(1.dp),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .background(app.surfaceCard, RoundedCornerShape(14.dp))
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    ) {
-                        BasicTextField(
-                            value = content,
-                            onValueChange = { content = it },
-                            textStyle = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, color = cs.onSurface),
-                            cursorBrush = SolidColor(cs.primary),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp),
-                        )
-                        if (content.isEmpty()) {
-                            Text(
-                                stringResource(UiR.string.memory_entry_content_hint),
-                                style = TextStyle(fontSize = 14.sp, color = withAlpha(cs.onSurface, 0.4)),
-                            )
-                        }
-                    }
+            // Form list (L1416-1422): padding 16/12/16/12, hugging the content.
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState())
+                    .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 12.dp),
+            ) {
+                MemorySectionCard {
+                    IosFormField(
+                        label = "",
+                        value = content,
+                        onValueChange = { content = it },
+                        inline = false,
+                        minLines = 4,
+                        maxLines = 10,
+                        autofocus = true,
+                        hint = stringResource(UiR.string.memory_entry_content_hint),
+                    )
                 }
                 Spacer(Modifier.height(16.dp))
                 MemorySectionLabel(stringResource(UiR.string.memory_entry_type_label))
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     MemoryType.values().forEach { t ->
                         MemorySelectChip(
                             label = memoryTypeLabel(t),
                             selected = type == t,
                             onTap = { type = t },
                         )
-                        Spacer(Modifier.width(8.dp))
                     }
                 }
                 Spacer(Modifier.height(16.dp))
                 MemorySectionLabel(stringResource(UiR.string.memory_entry_scope_label))
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     MemorySelectChip(
                         label = stringResource(UiR.string.memory_entry_scope_global),
                         selected = scope == MemoryScope.global,
                         onTap = { scope = MemoryScope.global },
                     )
-                    Spacer(Modifier.width(8.dp))
                     MemorySelectChip(
                         label = stringResource(UiR.string.memory_entry_scope_assistant),
                         selected = scope == MemoryScope.assistant,
                         onTap = { scope = MemoryScope.assistant },
                     )
                 }
-                Spacer(Modifier.height(16.dp))
-                MemorySectionLabel(stringResource(UiR.string.memory_ui_assistant_label))
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    assistants.forEach { a ->
-                        MemorySelectChip(
-                            label = a.name,
-                            selected = resolvedAssistantId() == a.id,
-                            onTap = { assistantId = a.id },
-                        )
-                        Spacer(Modifier.width(8.dp))
+                // The assistant picker only exists for assistant-scoped entries
+                // (`allowAssistantPicker && _scope == assistant`, L1281).
+                if (scope == MemoryScope.assistant) {
+                    Spacer(Modifier.height(16.dp))
+                    MemorySectionLabel(stringResource(UiR.string.memory_ui_assistant_label))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        assistants.forEach { a ->
+                            MemorySelectChip(
+                                label = a.name,
+                                selected = resolvedAssistantId() == a.id,
+                                onTap = { assistantId = a.id },
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-            MemorySheetActions(
-                onCancel = onDismiss,
-                onConfirm = { save() },
-                confirmLabel = stringResource(UiR.string.user_profile_save),
-                confirmEnabled = content.trim().isNotEmpty() && !saving,
-            )
-            Spacer(Modifier.height(12.dp))
+            // Actions (L1423-1426): padding 16/0/16/12.
+            Box(Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 12.dp)) {
+                MemorySheetActions(
+                    onCancel = onDismiss,
+                    onConfirm = { save() },
+                    confirmLabel = stringResource(UiR.string.user_profile_save),
+                    confirmEnabled = content.trim().isNotEmpty() && !saving,
+                )
+            }
         }
     }
 

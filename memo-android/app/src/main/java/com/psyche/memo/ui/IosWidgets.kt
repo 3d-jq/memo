@@ -15,11 +15,14 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,6 +66,17 @@ import com.psyche.memo.ui.theme.alphaBlendTranslucent
 import com.psyche.memo.ui.theme.estimateBrightnessIsLight
 import com.psyche.memo.ui.theme.lerpColor
 import com.psyche.memo.ui.theme.withAlpha
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import com.psyche.memo.ui.theme.AppFontWeights
 
 /**
  * Port of `lib/shared/widgets/ios_switch.dart` — 44x26 track, 20 thumb, 220ms
@@ -862,5 +876,130 @@ fun IosIconContentButton(
         contentAlignment = Alignment.Center,
     ) {
         content(tint)
+    }
+}
+
+/**
+ * `IosFormTextField` (shared/widgets/ios_form_text_field.dart) — the filled
+ * label/value field every settings sheet uses. [inline] is the single-line
+ * layout (label left, value box right); `inline = false` stacks the label above
+ * a 12dp box that grows with the text (used by the multi-line editors).
+ *
+ * `_useInlineLabel` in the source defaults to `maxLines == 1`, and the value
+ * colour/hint alpha, the 12/10 outer padding and the 15sp `w400` (the Android
+ * normalization of `w500`) text style match it.
+ */
+@Composable
+internal fun IosFormField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    inline: Boolean = true,
+    fieldWidth: Dp? = null,
+    minLines: Int = 1,
+    maxLines: Int = 1,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    autofocus: Boolean = false,
+    hint: String? = null,
+    textAlign: TextAlign = TextAlign.Start,
+    modifier: Modifier = Modifier,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(autofocus) {
+        if (autofocus) runCatching { focusRequester.requestFocus() }
+    }
+
+    val field: @Composable () -> Unit = {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = maxLines == 1,
+                minLines = minLines,
+                maxLines = maxLines,
+                textStyle = TextStyle(
+                    fontSize = 15.sp,
+                    fontWeight = AppFontWeights.medium,
+                    color = withAlpha(cs.onSurface, 0.92),
+                    lineHeight = if (maxLines > 1) 18.75.sp else 17.25.sp,
+                    textAlign = textAlign,
+                ),
+                cursorBrush = SolidColor(cs.primary),
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (autofocus) Modifier.focusRequester(focusRequester) else Modifier),
+            )
+            if (hint != null && value.isEmpty()) {
+                Text(
+                    text = hint,
+                    maxLines = maxLines,
+                    style = TextStyle(
+                        fontSize = 15.sp,
+                        fontWeight = AppFontWeights.medium,
+                        color = withAlpha(cs.onSurface, if (semantic.isDark) 0.42 else 0.46),
+                    ),
+                )
+            }
+        }
+    }
+
+    if (inline) {
+        Row(
+            modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    fontWeight = AppFontWeights.medium,
+                    color = withAlpha(cs.onSurface, 0.85),
+                ),
+                modifier = if (fieldWidth == null) Modifier.weight(3f) else Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = (if (fieldWidth == null) Modifier.weight(8f) else Modifier.width(fieldWidth))
+                    .heightIn(min = 40.dp)
+                    .background(semantic.surfaceCardFill, RoundedCornerShape(10.dp))
+                    .padding(
+                        horizontal = if (fieldWidth != null && fieldWidth <= 60.dp) 10.dp else 12.dp,
+                        vertical = 9.dp,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                field()
+            }
+        }
+    } else {
+        Column(
+            modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            if (label.isNotEmpty()) {
+                Text(
+                    text = label,
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = AppFontWeights.semibold,
+                        color = withAlpha(cs.onSurface, 0.85),
+                    ),
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(semantic.surfaceCardFill, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                contentAlignment = Alignment.TopStart,
+            ) {
+                field()
+            }
+        }
     }
 }

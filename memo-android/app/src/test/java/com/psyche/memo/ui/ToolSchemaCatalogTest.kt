@@ -22,7 +22,7 @@ import org.junit.Test
  * Expected catalogs mirror the Flutter originals byte-for-byte:
  * - lib/core/services/tools/built_in_tool_catalog.dart (entries/_toolName)
  * - lib/core/services/memory/memory_tools.dart L98-108 (catalog, 7 tools)
- *   and L114-... (legacy, 3 tools).
+ *   (the legacy 3-tool variant is not ported).
  */
 class ToolSchemaCatalogTest {
 
@@ -100,8 +100,8 @@ class ToolSchemaCatalogTest {
 
     // —— BuiltInToolCatalog.entries vs Flutter original ——
 
-    private fun memoryNames(legacy: Boolean): List<String> =
-        BuiltInToolCatalog.entries(MemoryPromptLang.zh, legacy)
+    private fun memoryNames(): List<String> =
+        BuiltInToolCatalog.entries(MemoryPromptLang.zh)
             .filter { it.group == BuiltInToolGroup.MEMORY }
             .map { it.name }
 
@@ -119,16 +119,7 @@ class ToolSchemaCatalogTest {
                 "update_user_profile",
                 "chat_search",
             ),
-            memoryNames(legacy = false),
-        )
-    }
-
-    @Test
-    fun entries_legacyMode_listsAllThreeLegacyMemoryTools() {
-        // memory_tools.dart L114-...: create/edit/delete_memory.
-        assertEquals(
-            listOf("create_memory", "edit_memory", "delete_memory"),
-            memoryNames(legacy = true),
+            memoryNames(),
         )
     }
 
@@ -136,38 +127,28 @@ class ToolSchemaCatalogTest {
     fun entries_everyEntryHasNonBlankDescription() {
         // Regression for "工具也没有对应描述": pre-fix defaultDescription was
         // always null because of the same stringAt bug.
-        for (legacy in listOf(false, true)) {
-            val entries = BuiltInToolCatalog.entries(MemoryPromptLang.en, legacy)
-            assertTrue("catalog should not be empty (legacy=$legacy)", entries.isNotEmpty())
-            for (entry in entries) {
-                assertNotNull(
-                    "missing description for ${entry.name} (legacy=$legacy)",
-                    entry.defaultDescription,
-                )
-                assertTrue(
-                    "blank description for ${entry.name} (legacy=$legacy)",
-                    entry.defaultDescription!!.isNotBlank(),
-                )
-            }
+        val entries = BuiltInToolCatalog.entries(MemoryPromptLang.en)
+        assertTrue("catalog should not be empty", entries.isNotEmpty())
+        for (entry in entries) {
+            assertNotNull("missing description for ${entry.name}", entry.defaultDescription)
+            assertTrue("blank description for ${entry.name}", entry.defaultDescription!!.isNotBlank())
         }
     }
 
     @Test
     fun entries_entryNameMatchesDefinitionName() {
-        for (legacy in listOf(false, true)) {
-            for (entry in BuiltInToolCatalog.entries(MemoryPromptLang.zh, legacy)) {
-                assertEquals(
-                    "entry.name must equal definition function.name",
-                    entry.name,
-                    BuiltInToolCatalogEntry.stringAt(entry.defaultDefinition, "function", "name"),
-                )
-            }
+        for (entry in BuiltInToolCatalog.entries(MemoryPromptLang.zh)) {
+            assertEquals(
+                "entry.name must equal definition function.name",
+                entry.name,
+                BuiltInToolCatalogEntry.stringAt(entry.defaultDefinition, "function", "name"),
+            )
         }
     }
 
     @Test
     fun entries_searchGroupHasSearchWeb_localGroupNonEmpty() {
-        val catalog = BuiltInToolCatalog.entries(MemoryPromptLang.zh, legacyMemoryMode = false)
+        val catalog = BuiltInToolCatalog.entries(MemoryPromptLang.zh)
         assertEquals(
             listOf("search_web"),
             catalog.filter { it.group == BuiltInToolGroup.SEARCH }.map { it.name },
