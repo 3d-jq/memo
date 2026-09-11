@@ -86,6 +86,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
 - 备份剩余（§5.10 子块 2/4~8）：merge 恢复 / 备份提醒 / WebDAV / S3 / 前向兼容闸门 / Cherry·Chatbox 导入
+- **日志接线**：日志页「上下文日志」「应用日志」两个 tab 恒空——写入端已移植但无人调用。上下文要接 `ChatViewModel` 的 history 组装段（打 `_kelivo_ctx_segments` 标签 → `buildSnapshot` → `logSnapshot`）；应用要接约 20 处 FlutterLogger 错误路径（§5.9 仍挂账有明细）
 - 语音剩余：网络 TTS 语音（多 provider 合成 + 缓存）与播放器的「保存音频」按钮
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）

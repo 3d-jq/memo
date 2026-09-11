@@ -219,6 +219,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 ### 仍挂账（PORTING.md 既有 ⬜，非本次新发现）
 S5 搜索 kelivo + 启动自测（不移植）、MCP-3（OAuth + 会话内 sheet；STDIO 桌面专属不移植）、M2d 记忆收尾（哈希冻结/自愈、Smart Add LLM 合并、tab 内条目列表）、UI-7i 图片导出 + 选择态 mini-map、C（tab 布局管理页）、收尾-5（Toast→sonner）。
 - **搜索服务列表出现重复 Bing**（2026-09-10 用户反馈，指示"先不管"）：代码层无重复 bug（编辑器新建用 UUID id、`SearchSettingsRepository.addService` 按 id 去重、列表只渲染表数据）→ 疑为真机数据层两行（默认 `default` 行 + 用户/测试添加的 `bing_local` 行）。若处理：同 type 去重会误伤 searxng/anysearch 等多实例配置，只能针对 `bing_local`（无配置差异）或让用户手删。
+- **日志页「上下文日志」和「应用日志」两个 tab 恒为空**（2026-09-11 用户问"是没有接线吗"）：**写入端已移植、调用端没接**。
+  - 上下文：`ContextLogger` / `ContextLogSnapshot` / `ContextSource` / `ContextLogTailReader` 都在，`LogBootstrap` 还默认开着（`context_log_enabled_v1` default true），但**生产代码零调用**（`logSnapshot` 只有测试调）。缺的是 Flutter `message_builder_service.dart`（12 处）+ `message_generation_service.dart`（1 处）的**组装侧**：边组装边给每段内容打来源标签（`_kelivo_ctx_segments`，记录 source + length + meta，见 `context_log_models.dart:150-260`），请求前 `buildSnapshot`（按标签切片 + `estimateTokens` + `splitMemorySnapshotUserText` 拆记忆前缀与用户正文）再 `logSnapshot`；Flutter 在 `chat_api_service.dart:107` 发请求前把该 key 删掉。Android 侧组装在 `ChatViewModel` 的 history 拼装段（约 L1062-1122：记忆前缀/OCR/附件/系统提示词/世界书），要在这条链上加标签。
+  - 应用：`FlutterLogger` 只挂了崩溃处理器（`installGlobalHandlers` ⇒ 只有崩过才有内容），Flutter 约 20 处显式 `FlutterLogger.log(...)` 错误路径（`sse_framing` 恢复、`stream_chunk_decoder` 解析失败、`chat_api_helpers` 图片降级、`home_view_model`/`chat_actions`/`side_drawer`/`provider_detail_page`/`model_detail_sheet` 的错误）**一处都没接**；Android 对应路径基本是静默 `runCatching` 或只 `Log.e`（前台服务）。且该开关上游默认 false（`flutter_log_enabled_v1`），默认状态本来就看不到。
+  - 三个 tab 里只有**请求日志**是通的（OkHttp `RequestLogInterceptor` → `logs.txt`）。
 
 
 ---
