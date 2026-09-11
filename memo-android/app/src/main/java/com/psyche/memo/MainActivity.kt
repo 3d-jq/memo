@@ -754,6 +754,13 @@ private fun AppThemeAndContent(
                     }
                 }
                 }
+
+                // 全局悬浮语音播放器（app_overlays.dart 的 TtsFloatingPlayer）：
+                // 挂在根 Box 上，浮在任何页面之上；播放结束仍停留，便于重播。
+                com.psyche.memo.ui.chat.TtsFloatingPlayer()
+                androidx.compose.runtime.DisposableEffect(Unit) {
+                    onDispose { com.psyche.memo.ui.chat.TtsPlayer.shutdown() }
+                }
             }
         }
         }
