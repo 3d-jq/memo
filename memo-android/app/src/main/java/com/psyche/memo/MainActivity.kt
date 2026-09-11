@@ -125,6 +125,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // 回前台再让调度跑一次（原版是 launch + resume 两处，时间基判定）。
+        MemoApplication.instance?.container?.maybeRunLocalSnapshot()
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         // singleTop launchMode + notification PendingIntent(CLEAR_TOP|SINGLE_TOP):
@@ -395,6 +401,7 @@ private fun AppThemeAndContent(
                     }
                     composable("local_snapshots") {
                         LocalSnapshotsScreen(
+                            container = container,
                             onBack = { navController.popBackStack() },
                         )
                     }

@@ -383,4 +383,86 @@ internal fun androidx.compose.material3.ColorScheme.surfaceCardColorCompat(): an
     )
 }
 
+// ---------------------------------------------------------------------------
+// Thin shell helpers shared by the backup/sponsor placeholder pages (they were
+// ported with local_snapshots_page.dart, which now also uses them for real).
+// ---------------------------------------------------------------------------
 
+/** Section header + grouped card, as the backup pages lay them out. */
+@Composable
+internal fun ShellSection(
+    title: String,
+    first: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val top = if (first) 6.dp else 0.dp
+    Text(
+        text = title,
+        style = TextStyle(
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+        ),
+        modifier = Modifier.padding(start = 12.dp, top = top, bottom = 6.dp),
+    )
+    SectionCard { content() }
+}
+
+@Composable
+internal fun ShellDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(0.6.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)),
+    )
+}
+
+/**
+ * iOS-style settings row with a trailing [IosSwitch].
+ *
+ * `local_snapshots_page.dart` L2219: the original `_iosSwitchRow` uses
+ * `EdgeInsets.symmetric(horizontal: 12, vertical: 2)` — intentionally tighter
+ * than `_iosNavRow`'s 11dp, so the IosSwitch (26dp) + 4dp pad = 30dp row sits
+ * more compact than the 42dp nav row.
+ */
+@Composable
+internal fun LocalSnapshotSwitchRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    FactoryRowShell(icon, label, value, onChange)
+}
+
+@Composable
+private fun FactoryRowShell(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = cs.onSurface.copy(alpha = 0.9f),
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = label,
+            style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)),
+            modifier = Modifier.weight(1f),
+        )
+        IosSwitch(value = value, onValueChanged = onChange)
+    }
+}

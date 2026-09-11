@@ -136,6 +136,27 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         )
     }
 
+    /**
+     * 本机副本（backup 子块 3）：`<filesDir>/snapshots/` 下的归档 + 保留策略。
+     * 自动/手动都走这里，`runIfDue` 由启动与回前台触发。
+     */
+    val localSnapshots: com.psyche.memo.data.backup.LocalSnapshotService by lazy {
+        com.psyche.memo.data.backup.LocalSnapshotService(
+            appDataDirectory = appContext.filesDir,
+            backupService = backupService,
+            preferences = com.psyche.memo.data.backup.LocalSnapshotPreferences(preferenceRepository),
+        )
+    }
+
+    /**
+     * Launch + resume hook: takes a copy when the schedule says one is due.
+     * Cheap to call — the counters and the change fingerprint decide — and it
+     * never blocks the caller.
+     */
+    fun maybeRunLocalSnapshot() {
+        appScope.launch { runCatching { localSnapshots.runIfDue() } }
+    }
+
     /** `"1.2.5+2073"` — versionName + versionCode, matching Flutter's appVersion. */
     private fun appVersionString(): String = runCatching {
         val info = appContext.packageManager.getPackageInfo(appContext.packageName, 0)

@@ -63,6 +63,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 
 设置、系统与服务壳
 - provider 管理页、语音服务/备份/赞助 UI 壳（BackupScreen/LocalSnapshotsScreen/SponsorScreen）+ TTS/ASR 编辑器全屏化
+- **本机副本（备份子块 3）已落地**：保留策略/存储/调度/设置 + 本机副本页全接线（存一份/恢复/导出/置顶/删除，启动与回前台自动调度）
 - 日志三件套（收尾-6：LogPayloadElider/LogRedactor/RequestLogger/FlutterLogger/ContextLogger/LogBootstrap，64 单测）
 - 关于页闪退修复、智谱 400 修复（applyVendorReasoningKnobs）
 - **设置全站分类化（2026-09-09 用户点名）**：偏好主页 17 行拆 5 组、五个偏好子页/触感页行内分组、关于页（应用信息/社区与链接）、统计页（数据概览/排行榜）、网络代理页（代理设置/连接测试）、存储主页（空间总览/存储分类）——统一 SectionHeader + SectionCard
@@ -77,7 +78,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）
-- 备份/语音功能落地（壳已建，功能走 RikkaHub data-sync + app 模块，下一批）
+- 备份（下一批）：merge 恢复 / 备份提醒 / WebDAV / S3 / 前向兼容闸门 / Cherry·Chatbox 导入；语音功能落地
 - 存储-4：本地快照 / 备份提醒 / WebDAV / S3 / 前向兼容闸门 / Cherry·Chatbox 导入（PORTING §5.10 子块 2~8）
 - 图片查看器桌面专属件（复制钮/缩放三钮/拖拽关图/桌面翻页箭头——compact=手机端不含，低优先）
 

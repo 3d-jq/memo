@@ -43,6 +43,8 @@ class MemoApplication : Application(), ImageLoaderFactory {
         com.psyche.memo.service.ChatNotificationManager.init(this) { key ->
             container.preferenceRepository.readJson(key)
         }
+        // 本机副本：启动时按调度决定要不要存一份（不阻塞启动，指纹/计数自己判定）。
+        container.maybeRunLocalSnapshot()
     }
 
     /**
