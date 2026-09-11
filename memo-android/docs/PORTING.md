@@ -387,9 +387,9 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 - **图标**：lucide 同名图标；`androidsvg`（coil-svg 底层）不支持 `<mask>` 与带 `gradientTransform` 的 `url(#渐变)` ⇒ 品牌 svg 会渲染空白，改映射到 png（bing/linkup）。
 - **`sh.calvin.reorderable` 的 `onMove` 给的是 LazyColumn 全局索引**：列表里若有 header/footer 占位 item 会整体错位（供应商拖拽重叠 bug 的根因）；`core:ui` 的 `ReorderableColumn` 用 `dataIndexOf()` 反查兜底。
 
-### 已知品牌残留（**待用户拍板**，不是 1:1 要求）
+### 已知品牌残留（**用户 2026-09-11 决定：他自己后续替换，暂不处理**）
 
-- `AboutScreen.kt` 的「社区与链接」三行仍指向上游：`https://kelivo.psycheas.top/`、`https://github.com/Chevey339/kelivo`、`.../blob/master/LICENSE`。与 AGENTS.md「不得携带 kelivo 链接/端点」冲突；删行还是换成自有仓库属用户决策（AGPL 归属 vs 品牌），**未擅自改**。
+- `AboutScreen.kt` 的「社区与链接」三行仍指向上游：`https://kelivo.psycheas.top/`、`https://github.com/Chevey339/kelivo`、`.../blob/master/LICENSE`。与 AGENTS.md「不得携带 kelivo 链接/端点」冲突；**用户明确「这个我后面会改成自己的，现在先不着急」** ⇒ 不要代改、也不要再当作待办追问，等他给新 URL（或明确说删行）再动。
 - 内部标识符 `KelivoOptions`（搜索服务编辑器里的上游 type key，非用户可见）——低优先清理，改动会牵到多文件与测试。
 
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）

@@ -29,7 +29,7 @@ fills in native-side details and shared feature implementations.
 - **搜索引用胶囊尺寸**：原版 20dp/12sp/20% 底，用户要求缩小一档（16dp/10sp/16%，全圆）
 - **输入栏样式**：保持 kelivo 原样，但最小高改为 64dp（用户要求）；其余参数勿动
 - **品牌化**：无 kelivo 字样/链接/端点；归档建议名 `memo_backup_<stamp>.zip`、本机副本 `memo-snapshot-<nanos>.zip`
-- ⚠️ **品牌残留待办**：`AboutScreen.kt` 的社区链接三行仍指向上游（`kelivo.psycheas.top` / `Chevey339/kelivo`）——删行或换自有仓库需用户拍板，勿擅自改
+- ⚠️ **品牌残留（用户 2026-09-11：他自己后续替换，暂不处理）**：`AboutScreen.kt` 的社区链接三行仍指向上游（`kelivo.psycheas.top` / `Chevey339/kelivo`）——**勿代改、勿当待办追问**，等用户给新 URL 或说删行；见 PORTING.md §5.11
 
 ## Native Android port (memo-android)
 
