@@ -47,6 +47,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 模型选择 sheet（搜索/收藏/provider chips）+ ModelDetailSheet（编辑/创建双模 + Basic/Advanced/BuiltInTools 三 tab + 可拖拽高度 NestedScrollConnection）
 - 助手列表页 + AssistantStore + seed + assistant_rows PK 修复；拖拽 animateItem+zIndex / 左滑 pane
 - 编辑页骨架 + 分段条 + basic tab（聊天模型/背景/参数 sheet×4/头像 sheet/思考预算）+ 提示词 tab（系统提示词/消息模板/预设对话）+ 记忆/MCP/本地工具/快捷短语/自定义请求/正则/标签 tab
+- 编辑页 tab 布局管理页 C（重排/隐藏/重置 + 提纲模式 + 单 tab 分段页，`AssistantTabLayoutState` 容器级共享）
 - 显示设置 + 子页（ChatItemDisplay 13 / Rendering 8 / Behavior/Startup 20 / Image/MessageStyle/AutoRetry/Haptics）
 
 对话增强与工具
@@ -71,7 +72,6 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - ModelSelectSheet 可拖拽高度（现固定 0.8，原版 DraggableScrollableSheet min0.4/max0.8，待移植 NestedScrollConnection 等价物——ModelDetailSheet 已做同类）
 - M2d：记忆收尾（哈希冻结/自愈、Smart Add LLM 去重合并、tab 内记忆条目列表与整理、legacy 记忆模式工具）
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
-- C：tab 布局管理页（按 preference 重排/隐藏 tab）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）
 - 备份/语音功能落地（壳已建，功能走 RikkaHub data-sync + app 模块，下一批）

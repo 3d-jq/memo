@@ -39,8 +39,10 @@ import androidx.navigation.compose.rememberNavController
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.data.assistant.AssistantStore
 import com.psyche.memo.data.assistant.buildSeedAssistants
+import com.psyche.memo.ui.AssistantDetailSectionScreen
 import com.psyche.memo.ui.AssistantSettingsEditScreen
 import com.psyche.memo.ui.AssistantSettingsScreen
+import com.psyche.memo.ui.AssistantTabLayoutScreen
 import com.psyche.memo.ui.R as UiR
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -645,6 +647,30 @@ private fun AppThemeAndContent(
                         AssistantSettingsEditScreen(
                             container = container,
                             assistantId = entry.arguments?.getString("assistantId").orEmpty(),
+                            onBack = { navController.popBackStack() },
+                            onOpenMemorySettings = { navController.navigate("memory_settings") },
+                            onOpenTabLayout = { navController.navigate("assistant_tab_layout") },
+                            onOpenTabSection = { tabId ->
+                                val id = entry.arguments?.getString("assistantId").orEmpty()
+                                navController.navigate("assistant_section/$id/$tabId")
+                            },
+                        )
+                    }
+                    // assistant_settings_edit_page.dart _AssistantTabLayoutPage
+                    // (pushed from the edit page's Settings2 action).
+                    composable("assistant_tab_layout") {
+                        AssistantTabLayoutScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    // _AssistantDetailSectionPage — one tab's body, reached from
+                    // the outline list when outline mode is on.
+                    composable("assistant_section/{assistantId}/{tabId}") { entry ->
+                        AssistantDetailSectionScreen(
+                            container = container,
+                            assistantId = entry.arguments?.getString("assistantId").orEmpty(),
+                            tabId = entry.arguments?.getString("tabId").orEmpty(),
                             onBack = { navController.popBackStack() },
                             onOpenMemorySettings = { navController.navigate("memory_settings") },
                         )

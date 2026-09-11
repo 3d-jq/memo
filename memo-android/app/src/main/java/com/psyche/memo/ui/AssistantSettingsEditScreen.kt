@@ -63,6 +63,7 @@ import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.MessageCircle
 import com.composables.icons.lucide.MessagesSquare
 import com.composables.icons.lucide.RotateCcw
+import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.X
 import com.composables.icons.lucide.Thermometer
 import com.composables.icons.lucide.User
@@ -74,6 +75,7 @@ import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
+import com.psyche.memo.ui.theme.AppFontWeights
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,9 +84,10 @@ import kotlin.math.roundToInt
 
 /**
  * assistant_settings_edit_page.dart — edit scaffold: AppBar with back +
- * assistant-name title, the 44dp segmented tab bar (8 tabs) above a
- * HorizontalPager, tabs switch closes the IME. Tabs other than basic are
- * ported in follow-up batches and render empty until then.
+ * assistant-name title and the `Settings2` entry to the tab-layout page, the
+ * 44dp segmented tab bar above a HorizontalPager, tabs switch closes the IME.
+ * With outline mode on the tab bar is dropped and the body becomes the section
+ * list (`_AssistantDetailOutlinePage`).
  */
 @Composable
 fun AssistantSettingsEditScreen(
@@ -92,6 +95,8 @@ fun AssistantSettingsEditScreen(
     assistantId: String,
     onBack: () -> Unit,
     onOpenMemorySettings: () -> Unit = {},
+    onOpenTabLayout: () -> Unit = {},
+    onOpenTabSection: (String) -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     var assistant by remember { mutableStateOf<Assistant?>(null) }
@@ -121,8 +126,15 @@ fun AssistantSettingsEditScreen(
             title = assistant?.name?.takeIf { it.isNotBlank() } ?: stringResource(UiR.string.assistant_edit_page_title),
             onBack = onBack,
         ) {
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.width(12.dp))
+            IosIconButton(
+                icon = Lucide.Settings2,
+                onTap = onOpenTabLayout,
+                color = cs.onSurface,
+                size = 21.dp,
+                minSize = 44.dp,
+                semanticLabel = stringResource(UiR.string.assistant_edit_tab_layout_tooltip),
+            )
+            Spacer(Modifier.width(8.dp))
         }
 
         val a = assistant
@@ -136,24 +148,39 @@ fun AssistantSettingsEditScreen(
             return@Column
         }
 
-        // assistant_edit_tab_layout.dart defaultAssistantEditTabIds — the
-        // displayed order comes from there, not from _assistantEditTabSpecs.
-        val tabLabels = listOf(
-            stringResource(UiR.string.assistant_edit_page_basic_tab),
-            stringResource(UiR.string.assistant_edit_page_prompts_tab),
-            stringResource(UiR.string.assistant_edit_page_memory_tab),
-            stringResource(UiR.string.assistant_edit_page_quick_phrase_tab),
-            stringResource(UiR.string.assistant_edit_page_custom_tab),
-            stringResource(UiR.string.assistant_edit_page_regex_tab),
-            stringResource(UiR.string.assistant_edit_page_local_tools_tab),
-            stringResource(UiR.string.assistant_edit_page_mcp_tab),
-        )
-        val pagerState = rememberPagerState { tabLabels.size }
+        // assistant_edit_tab_layout.dart — the displayed order and the hidden
+        // set come from the preference keys, not from the spec declaration order.
+        // Read through the container-scoped state so a reorder or a hide on the
+        // layout page repaints this page immediately, like `context.watch`.
+        val layout = container.assistantTabLayout
+        val useOutline = layout.outlineEnabled
+        val visibleTabs = remember(layout.order, layout.hidden) {
+            visibleAssistantEditTabIds(layout.order, layout.hidden)
+                .mapNotNull { AssistantEditTab.byId(it) }
+        }
+
+        if (useOutline) {
+            AssistantDetailOutline(
+                assistant = a,
+                tabs = visibleTabs,
+                onOpenTab = onOpenTabSection,
+            )
+            return@Column
+        }
+
+        val pagerState = rememberPagerState { visibleTabs.size }
         val scope = rememberCoroutineScope()
         val keyboard = LocalSoftwareKeyboardController.current
         LaunchedEffect(pagerState.settledPage) {
             if (pagerState.settledPage >= 0) keyboard?.hide()
         }
+        // Hiding a tab can shrink the page count under the current page.
+        LaunchedEffect(visibleTabs.size) {
+            if (visibleTabs.isNotEmpty() && pagerState.currentPage > visibleTabs.lastIndex) {
+                pagerState.scrollToPage(visibleTabs.lastIndex)
+            }
+        }
+        val tabLabels = visibleTabs.map { stringResource(it.labelRes) }
 
         // AppBar bottom — 52dp slot: padding 12/2/12/8 around the 44 shell.
         Box(Modifier.fillMaxWidth().height(52.dp).padding(start = 12.dp, top = 2.dp, end = 12.dp, bottom = 8.dp)) {
@@ -164,48 +191,214 @@ fun AssistantSettingsEditScreen(
             )
         }
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            when (page) {
-                0 -> BasicSettingsTab(
+            val tab = visibleTabs.getOrNull(page)
+            if (tab != null) {
+                AssistantEditTabContent(
                     container = container,
-                    assistantId = a.id,
                     assistant = a,
+                    tabId = tab.id,
                     onEdit = ::edit,
                     onReload = { reloadKey++ },
-                )
-                1 -> PromptTab(assistant = a, onEdit = ::edit)
-                2 -> AssistantEditMemoryTab(
-                    container = container,
-                    assistant = a,
-                    onEdit = ::edit,
                     onOpenMemorySettings = onOpenMemorySettings,
                 )
-                3 -> AssistantEditQuickPhraseTab(
-                    container = container,
-                    assistant = a,
-                    onEdit = ::edit,
-                )
-                4 -> AssistantEditCustomRequestTab(
-                    assistant = a,
-                    onEdit = ::edit,
-                )
-                5 -> AssistantEditRegexTab(
-                    container = container,
-                    assistant = a,
-                    onEdit = ::edit,
-                )
-                6 -> AssistantEditLocalToolsTab(
-                    container = container,
-                    assistant = a,
-                    onEdit = ::edit,
-                )
-                7 -> AssistantEditMcpTab(
-                    container = container,
-                    assistant = a,
-                    onEdit = ::edit,
-                )
-                else -> Box(Modifier.fillMaxSize())
             }
         }
+    }
+}
+
+/**
+ * The page body for one tab id — shared by the pager and, in outline mode, by
+ * [_AssistantDetailSectionPage] (`_AssistantDetailSectionPage` L530-595 hosts
+ * the very same `tab.child`).
+ */
+@Composable
+private fun AssistantEditTabContent(
+    container: com.psyche.memo.AppContainerImpl,
+    assistant: Assistant,
+    tabId: String,
+    onEdit: ((Assistant) -> Assistant) -> Unit,
+    onReload: () -> Unit,
+    onOpenMemorySettings: () -> Unit,
+) {
+    when (tabId) {
+        AssistantEditTab.BASIC.id -> BasicSettingsTab(
+            container = container,
+            assistantId = assistant.id,
+            assistant = assistant,
+            onEdit = onEdit,
+            onReload = onReload,
+        )
+        AssistantEditTab.PROMPTS.id -> PromptTab(assistant = assistant, onEdit = onEdit)
+        AssistantEditTab.MEMORY.id -> AssistantEditMemoryTab(
+            container = container,
+            assistant = assistant,
+            onEdit = onEdit,
+            onOpenMemorySettings = onOpenMemorySettings,
+        )
+        AssistantEditTab.QUICK_PHRASE.id -> AssistantEditQuickPhraseTab(
+            container = container,
+            assistant = assistant,
+            onEdit = onEdit,
+        )
+        AssistantEditTab.CUSTOM.id -> AssistantEditCustomRequestTab(
+            assistant = assistant,
+            onEdit = onEdit,
+        )
+        AssistantEditTab.REGEX.id -> AssistantEditRegexTab(
+            container = container,
+            assistant = assistant,
+            onEdit = onEdit,
+        )
+        AssistantEditTab.LOCAL_TOOLS.id -> AssistantEditLocalToolsTab(
+            container = container,
+            assistant = assistant,
+            onEdit = onEdit,
+        )
+        AssistantEditTab.MCP.id -> AssistantEditMcpTab(
+            container = container,
+            assistant = assistant,
+            onEdit = onEdit,
+        )
+        else -> Box(Modifier.fillMaxSize())
+    }
+}
+
+/**
+ * `_AssistantDetailOutlinePage` L412-441 + `_AssistantOutlineHeader` L443-502 —
+ * identity card (82dp avatar, 21sp name, 2-line prompt) above a SectionCard of
+ * nav rows, one per visible tab.
+ */
+@Composable
+private fun AssistantDetailOutline(
+    assistant: Assistant,
+    tabs: List<AssistantEditTab>,
+    onOpenTab: (String) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    androidx.compose.foundation.lazy.LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            start = 16.dp, top = 10.dp, end = 16.dp, bottom = 28.dp,
+        ),
+    ) {
+        item {
+            val rawName = assistant.name.trim()
+            val name = if (rawName.isEmpty()) {
+                stringResource(UiR.string.assistant_edit_page_title)
+            } else {
+                rawName
+            }
+            val prompt = assistant.systemPrompt.trim()
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(semantic.surfaceCard)
+                    .border(0.7.dp, semantic.hairline, RoundedCornerShape(16.dp))
+                    .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AssistantListAvatar(assistant, 82.dp)
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    text = name,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    style = TextStyle(
+                        fontSize = 21.sp,
+                        lineHeight = 24.78.sp,
+                        fontWeight = AppFontWeights.emphasis,
+                        color = cs.onSurface.copy(alpha = 0.94f),
+                    ),
+                )
+                if (prompt.isNotEmpty()) {
+                    Spacer(Modifier.height(9.dp))
+                    Text(
+                        text = prompt,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        style = TextStyle(
+                            fontSize = 13.5.sp,
+                            lineHeight = 18.225.sp,
+                            color = cs.onSurface.copy(alpha = 0.58f),
+                        ),
+                    )
+                }
+            }
+        }
+        item { Spacer(Modifier.height(18.dp)) }
+        item {
+            SectionCard {
+                tabs.forEachIndexed { index, tab ->
+                    EditNavRow(
+                        icon = tab.icon,
+                        label = stringResource(tab.labelRes),
+                        onTap = { onOpenTab(tab.id) },
+                    )
+                    if (index != tabs.lastIndex) DividerRow()
+                }
+            }
+        }
+    }
+}
+
+/**
+ * `_AssistantDetailSectionPage` L530-595 — one tab's body under its own AppBar
+ * (title = tab label). Reached only from the outline list.
+ */
+@Composable
+fun AssistantDetailSectionScreen(
+    container: com.psyche.memo.AppContainerImpl,
+    assistantId: String,
+    tabId: String,
+    onBack: () -> Unit,
+    onOpenMemorySettings: () -> Unit = {},
+) {
+    val cs = MaterialTheme.colorScheme
+    var assistant by remember { mutableStateOf<Assistant?>(null) }
+    var reloadKey by remember { mutableIntStateOf(0) }
+    LaunchedEffect(reloadKey, assistantId) {
+        assistant = withContext(Dispatchers.IO) {
+            AssistantStore(container.database.readableDatabase).get(assistantId)
+        }
+    }
+
+    fun edit(transform: (Assistant) -> Assistant) {
+        val current = assistant ?: return
+        AssistantStore(container.database.writableDatabase).update(transform(current))
+        reloadKey++
+    }
+
+    val tab = AssistantEditTab.byId(tabId) ?: AssistantEditTab.BASIC
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(cs.surface)
+            .windowInsetsPadding(WindowInsets.statusBars),
+    ) {
+        MemoTopBar(title = stringResource(tab.labelRes), onBack = onBack) {
+            Spacer(Modifier.width(12.dp))
+        }
+        val a = assistant
+        if (a == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(UiR.string.assistant_edit_page_not_found),
+                    style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+                )
+            }
+            return@Column
+        }
+        AssistantEditTabContent(
+            container = container,
+            assistant = a,
+            tabId = tab.id,
+            onEdit = ::edit,
+            onReload = { reloadKey++ },
+            onOpenMemorySettings = onOpenMemorySettings,
+        )
     }
 }
 
@@ -878,14 +1071,14 @@ private fun NameField(initial: String, hint: String, onChanged: (String) -> Unit
     )
 }
 
-/** Flutter _iosNavRow — 36dp icon slot, 15sp single-line label, 13sp detail, chevron.
+/** Flutter _iosNavRow — 36dp icon slot, 15sp single-line label, optional 13sp detail, chevron.
  *  `internal` so the new Settings/Provider/Backup/etc. shell screens can
  *  reuse it without duplicating the layout. */
 @Composable
 internal fun EditNavRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    detailText: String,
+    detailText: String? = null,
     onTap: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -907,12 +1100,14 @@ internal fun EditNavRow(
             style = TextStyle(fontSize = 15.sp, color = cs.onSurface),
             modifier = Modifier.weight(1f),
         )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = detailText,
-            maxLines = 1,
-            style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)),
-        )
+        if (detailText != null) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = detailText,
+                maxLines = 1,
+                style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+            )
+        }
         Spacer(Modifier.width(6.dp))
         Icon(
             Lucide.ChevronRight,

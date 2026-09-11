@@ -77,6 +77,15 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         com.psyche.memo.ui.UserProfileStore(preferenceRepository)
     }
 
+    /**
+     * 助手编辑页 tab 布局（mobile_assistant_edit_tab_order_v1 /
+     * mobile_assistant_edit_tab_hidden_v1 / mobile_assistant_detail_outline_enabled_v1）。
+     * 容器级共享，编辑页与布局页读同一份可变状态。
+     */
+    val assistantTabLayout: com.psyche.memo.ui.AssistantTabLayoutState by lazy {
+        com.psyche.memo.ui.AssistantTabLayoutState(preferenceRepository)
+    }
+
     /** Search service settings (search_service_rows + preference keys). */
     val searchSettingsRepository: com.psyche.memo.data.repo.SearchSettingsRepository by lazy {
         com.psyche.memo.data.repo.SearchSettingsRepository(database.writableDatabase, preferenceRepository)
