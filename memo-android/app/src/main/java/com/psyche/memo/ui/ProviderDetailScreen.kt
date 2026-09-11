@@ -135,7 +135,16 @@ fun ProviderDetailScreen(
         snapshotFlow { cfg }
             .debounce(400)
             .collect { latest ->
-                dao.upsert(latest.id, detailJson.encodeToString(ProviderConfig.serializer(), latest), dao.get(latest.id)?.sortOrder ?: 0)
+                runCatching {
+                    dao.upsert(latest.id, detailJson.encodeToString(ProviderConfig.serializer(), latest), dao.get(latest.id)?.sortOrder ?: 0)
+                }.onFailure { e ->
+                    // provider_detail_page.dart:3106-3111 —— 保存失败留一条应用日志
+                    // （写入抛错此前会让这个 collect 直接崩掉，连提示都没有）。
+                    com.psyche.memo.common.logging.FlutterLogger.log(
+                        "[ProviderDetail] save failed: $e\n${e.stackTraceToString()}",
+                        tag = "Provider",
+                    )
+                }
             }
     }
 
@@ -324,7 +333,12 @@ fun ProviderDetailScreen(
             text = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_content)) },
             confirmButton = {
                 TextButton(onClick = {
-                    dao.delete(providerId)
+                    runCatching { dao.delete(providerId) }.onFailure { e ->
+                        com.psyche.memo.common.logging.FlutterLogger.log(
+                            "[ProviderDetail] delete failed: $e\n${e.stackTraceToString()}",
+                            tag = "Provider",
+                        )
+                    }
                     showDelete = false
                     SnackbarManager.show(
                         AppNotification(

@@ -3,6 +3,8 @@ package com.psyche.memo
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.psyche.memo.common.logging.ContextSource
+import com.psyche.memo.common.logging.ContextTag
 import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.data.model.ReasoningPart
@@ -584,6 +586,11 @@ class ChatViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // home_page.dart L1843-1848 —— 压缩失败也写应用日志（页面上仍有 toast）。
+                com.psyche.memo.common.logging.FlutterLogger.log(
+                    "[CompressContext] dialog failed: $e\n${e.stackTraceToString()}",
+                    tag = "HomePage",
+                )
                 onResult(null, e.message ?: "error")
             }
         }
@@ -1060,8 +1067,13 @@ class ChatViewModel(
                     }
                 }.orEmpty()
                 val lastUserIndex = rawMessages.indexOfLast { it.role == "user" }
+                // 上下文日志：组装期给承载注入内容的轮次打来源标签
+                // （context_log_models.dart 的 `_kelivo_ctx_segments`），请求前由
+                // ContextLogAssembler 切片写盘。历史轮次不带标签，读取时按 role 推断。
+                val tagContextLog = com.psyche.memo.logging.ContextLogger.isEnabled
                 val history = rawMessages
                     .mapIndexedNotNull { index, msg ->
+                        val carriesMemory = index == lastUserIndex && memoryPrefix.isNotEmpty()
                         val content = (if (index == lastUserIndex) memoryPrefix else "") +
                             (ocrBlocks[msg.id] ?: "") + (fileBlocks[msg.id] ?: "") +
                             msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
@@ -1079,23 +1091,61 @@ class ChatViewModel(
                             role = msg.role,
                             content = content.ifEmpty { null },
                             parts = attachments,
+                            // 冻结轮次语义（_tagFrozenUserPrompt L479-510）：记忆快照
+                            // 前缀算 memorySnapshot，其余归 chatHistory。
+                            contextTags = if (tagContextLog && carriesMemory) {
+                                listOf(
+                                    ContextTag(
+                                        ContextSource.memorySnapshot,
+                                        memoryPrefix.length,
+                                        mapOf("kind" to "full"),
+                                    ),
+                                    ContextTag(
+                                        ContextSource.chatHistory,
+                                        content.length - memoryPrefix.length,
+                                    ),
+                                )
+                            } else {
+                                emptyList()
+                            },
                         )
                     }
                     .toMutableList()
-                // System prompt injection (message_builder_service.dart): the
-                // assistant prompt plus the search citation block when web
-                // search is on. Appended to an existing system message or
-                // prepended as a new one.
+                // System prompt injection (message_builder_service.dart L167-189):
+                // 助手提示词 + 记忆规则 + 搜索引用块 + 指令注入，按序拼进系统消息；
+                // 世界书随后 wrap 在它外面。每段带来源标签供上下文日志使用。
                 val assistant = container.currentAssistant()
-                val systemPrompt = buildSystemPrompt(assistant)
-                if (systemPrompt.isNotEmpty()) {
+                val systemParts = buildSystemPromptParts(assistant)
+                if (systemParts.isNotEmpty()) {
+                    val assembler = com.psyche.memo.logging.ContextLogAssembler
                     val existing = history.indexOfFirst { it.role == "system" }
                     if (existing >= 0) {
-                        val merged = listOf(history[existing].content, systemPrompt)
-                            .filterNotNull().filter { it.isNotEmpty() }.joinToString("\n\n")
-                        history[existing] = history[existing].copy(content = merged)
+                        val previous = history[existing]
+                        history[existing] = previous.copy(
+                            content = assembler.joinedAppending(previous.content, systemParts),
+                            contextTags = if (!tagContextLog) {
+                                previous.contextTags
+                            } else {
+                                assembler.appendedSystemMessageTags(
+                                    previous.contextTags,
+                                    previous.content,
+                                    systemParts,
+                                )
+                            },
+                        )
                     } else {
-                        history.add(0, LlmMessage(role = "system", content = systemPrompt))
+                        history.add(
+                            0,
+                            LlmMessage(
+                                role = "system",
+                                content = assembler.joinSystemParts(systemParts),
+                                contextTags = if (tagContextLog) {
+                                    assembler.systemMessageTags(systemParts)
+                                } else {
+                                    emptyList()
+                                },
+                            ),
+                        )
                     }
                 }
                 // World book (lorebook) injection. Mirrors
@@ -1113,6 +1163,7 @@ class ChatViewModel(
                         val books = container.worldBookRepository.books()
                         val injected = com.psyche.memo.worldbook.WorldBookInjector.inject(
                             history, books, activeIds,
+                            tagContextLog = tagContextLog,
                         )
                         if (injected !== history) {
                             history.clear()
@@ -1120,6 +1171,17 @@ class ChatViewModel(
                         }
                     }
                 }
+                // context_logger.logPrepared（message_generation_service L253-263）——
+                // 打标签 → stripInternalRevisionIds 之间写一条上下文快照。
+                // Android 的 strip 步骤不存在（标签不在 wire 载荷里）。
+                com.psyche.memo.logging.ContextLogAssembler.logPrepared(
+                    messages = history,
+                    conversationId = conversationId,
+                    assistantName = assistant?.name.orEmpty(),
+                    provider = container.providerConfig(selectedProviderId.value)?.name
+                        ?.takeIf { it.isNotBlank() } ?: selectedProviderId.value,
+                    model = selectedModelId.value,
+                )
                 // Only tools with a native dispatch path are offered:
                 // get_time_info has an executor, ask_user_input_v0 routes to the
                 // interaction service, calendar_create exercises the approval
@@ -1223,8 +1285,10 @@ class ChatViewModel(
                 writeSuggestions(parsed)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
-            } catch (_: Exception) {
-                // 建议生成失败静默（原版只记录日志）。
+            } catch (e: Exception) {
+                // 建议生成失败静默（原版只记录日志）—— home_view_model
+                // _runBackgroundTask(suggestions) 的日志落点。
+                logBackgroundTaskFailure("suggestions", e)
             }
         }
     }
@@ -1249,12 +1313,25 @@ class ChatViewModel(
         viewModelScope.launch {
             runCatching {
                 com.psyche.memo.TitleSummaryGenerator.generateTitle(container, conversationId, force = false)
+            }.onFailure { e ->
+                logBackgroundTaskFailure("title", e)
             }.getOrNull()?.let { generated ->
                 // home_view_model.dart L1531-1536：写库后若会话就是当前会话，
                 // 立即 updateCurrentConversation + notifyListeners，让顶栏刷新。
                 title.value = generated
             }
         }
+    }
+
+    /**
+     * home_view_model `_runBackgroundTask` L296-306 —— 后台任务（标题/摘要/
+     * 记忆整理/建议）失败时写一行应用日志，聊天本身不受影响。
+     */
+    private fun logBackgroundTaskFailure(task: String, error: Throwable) {
+        com.psyche.memo.common.logging.FlutterLogger.log(
+            "[BackgroundTask:$task] failed: ${error.message ?: error}\n${error.stackTraceToString()}",
+            tag = "HomeViewModel",
+        )
     }
 
     /**
@@ -1288,7 +1365,12 @@ class ChatViewModel(
             val assistantId = withContext(Dispatchers.IO) {
                 container.conversationDao.get(conversationId)?.assistantId
             } ?: container.currentAssistantId.value ?: return@launch
-            runCatching { container.memoryPipeline.scheduleIfNeeded(conversationId, assistantId) }
+            runCatching {
+                container.memoryPipeline.scheduleIfNeeded(conversationId, assistantId)
+            }.onFailure { e ->
+                // home_view_model.dart L339-344 —— MemoryPipeline schedule failed。
+                logBackgroundTaskFailure("memory", e)
+            }
         }
     }
 
@@ -1302,6 +1384,8 @@ class ChatViewModel(
         viewModelScope.launch {
             runCatching {
                 com.psyche.memo.TitleSummaryGenerator.generateSummary(container, conversationId)
+            }.onFailure { e ->
+                logBackgroundTaskFailure("summary", e)
             }
         }
     }
@@ -1706,34 +1790,70 @@ class ChatViewModel(
     }
 
     /**
-     * message_builder_service.dart: the assistant system prompt plus the
-     * search citation block when web search is enabled
-     * (injectSearchPrompt L1734-1750).
+     * message_builder_service.dart 的系统消息组装顺序（L167-189）：
+     * 助手系统提示词 → 记忆/回忆规则 → 搜索引用提示词 → 指令注入。
+     * 每一段带自己的 [ContextSource]，上下文日志按它切片（见
+     * [com.psyche.memo.logging.ContextLogAssembler]）。
      */
-    private fun buildSystemPrompt(assistant: com.psyche.memo.data.model.Assistant?): String {
-        val parts = mutableListOf<String>()
-        assistant?.systemPrompt?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(it) }
+    private suspend fun buildSystemPromptParts(
+        assistant: com.psyche.memo.data.model.Assistant?,
+    ): List<Pair<ContextSource, String>> {
+        val parts = mutableListOf<Pair<ContextSource, String>>()
+        fun add(source: ContextSource, text: String?) {
+            text?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(source to it) }
+        }
+        add(ContextSource.systemPrompt, assistant?.systemPrompt)
         // 记忆规则（message_builder.injectMemoryAndRecentChats L1610-1643）：
         // 长期记忆规则与过往回忆规则各自独立门控。
         if (assistant != null && (assistant.enableMemory || assistant.allowPastConversationRecall)) {
             val lang = com.psyche.memo.ui.MemorySettingsState(container).resolvedPromptLang()
             val zh = lang == com.psyche.memo.ui.MemoryPromptLang.zh
             if (assistant.enableMemory) {
-                parts.add(
+                add(
+                    ContextSource.memoryRules,
                     com.psyche.memo.ui.MemorySettingsState(container)
-                        .prompt(com.psyche.memo.ui.MemoryPromptKind.RULES, zh)
-                        .trim(),
+                        .prompt(com.psyche.memo.ui.MemoryPromptKind.RULES, zh),
                 )
             }
             if (assistant.allowPastConversationRecall) {
-                parts.add(com.psyche.memo.ui.MemoryPrompts.rulesPastConversationRecallFor(lang).trim())
+                add(
+                    ContextSource.memoryRules,
+                    com.psyche.memo.ui.MemoryPrompts.rulesPastConversationRecallFor(lang),
+                )
             }
         }
+        // injectSearchPrompt L1732-1746 —— 内置搜索不移植，故 searchEnabled 即注入。
         if (assistant?.searchEnabled == true) {
-            parts.add(com.psyche.memo.provider.search.SearchToolService.SYSTEM_PROMPT)
+            add(
+                ContextSource.searchPrompt,
+                com.psyche.memo.provider.search.SearchToolService.SYSTEM_PROMPT,
+            )
         }
-        return parts.filter { it.isNotEmpty() }.joinToString("\n\n")
+        // injectInstructionPrompts L1748-1772 —— 助手启用中的注入项按顺序合并。
+        add(ContextSource.instructionInjection, activeInstructionPrompts(assistant?.id))
+        return parts
     }
+
+    /**
+     * `InstructionInjectionProvider.activesFor(assistantId)` —— 取该助手（或全局
+     * 分组）启用中的注入项，按列表顺序用空行连接；空提示词忽略。
+     */
+    private suspend fun activeInstructionPrompts(assistantId: String?): String? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val repo = com.psyche.memo.data.repo.InstructionInjectionRepository(
+                    container.database.writableDatabase,
+                    container.preferenceRepository,
+                )
+                val active = repo.activeIds(assistantId).toSet()
+                repo.items()
+                    .filter { it.id in active }
+                    .map { it.prompt.trim() }
+                    .filter { it.isNotEmpty() }
+                    .joinToString("\n\n")
+                    .takeIf { it.isNotEmpty() }
+            }.getOrNull()
+        }
 
     /** takeCallsAfterRound 的 Native 等价 —— 本轮新增（未执行）的工具调用。 */
     private fun takeCallsAfterRound(roundHandler: StreamChunkHandler): List<ToolCallPayload> =

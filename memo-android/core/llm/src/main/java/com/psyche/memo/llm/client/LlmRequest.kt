@@ -1,5 +1,7 @@
 package com.psyche.memo.llm.client
 
+import com.psyche.memo.common.logging.ContextTag
+
 /**
  * Provider-agnostic request payload (P1 subset: text + images as data URIs,
  * tool definitions for P2 tool calls).
@@ -13,6 +15,13 @@ data class LlmMessage(
     val toolCalls: List<LlmToolCall> = emptyList(),
     val toolCallId: String? = null,
     val toolName: String? = null,
+    /**
+     * Context-log tags collected while the request was assembled
+     * (`context_log_models.dart` `_kelivo_ctx_segments`). Never sent: the
+     * provider clients build their JSON field by field, so unlike the
+     * original's map payload nothing has to be stripped before the request.
+     */
+    val contextTags: List<ContextTag> = emptyList(),
 )
 
 /** openai_tool_transcript.dart `openaiToolCallMaps` 单条 —— 上行 assistant tool_call。 */

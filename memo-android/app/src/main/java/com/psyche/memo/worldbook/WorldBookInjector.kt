@@ -4,6 +4,8 @@ import com.psyche.memo.data.model.WorldBook
 import com.psyche.memo.data.model.WorldBookEntry
 import com.psyche.memo.data.model.WorldBookInjectionPosition
 import com.psyche.memo.data.model.WorldBookInjectionRole
+import com.psyche.memo.common.logging.ContextSource
+import com.psyche.memo.common.logging.ContextTag
 import com.psyche.memo.llm.client.LlmMessage
 
 /**
@@ -40,11 +42,18 @@ object WorldBookInjector {
      * spliced in. `books` and `activeIdsForAssistant` are read from
      * [com.psyche.memo.data.repo.WorldBookRepository]; entries whose book is
      * disabled or whose id is not in `activeIdsForAssistant` are ignored.
+     *
+     * [tagContextLog] mirrors the original's `if (ContextLogger.enabled)`
+     * guards (L1902-2020): when set, every message this injector composes
+     * carries a [ContextSource.worldBook] tag (with its injection position) so
+     * the context log can attribute it. Tags already on the system message are
+     * preserved and the world-book blocks wrap around them.
      */
     fun inject(
         apiMessages: List<LlmMessage>,
         books: List<WorldBook>,
         activeIdsForAssistant: List<String>,
+        tagContextLog: Boolean = false,
     ): List<LlmMessage> {
         if (apiMessages.isEmpty() || books.isEmpty() || activeIdsForAssistant.isEmpty()) {
             return apiMessages
@@ -79,10 +88,10 @@ object WorldBookInjector {
             ordered.groupBy { it.first.position }
                 .mapValues { (_, entries) -> entries.map { it.first } }
 
-        mergeSystemPrompt(result, byPosition)
-        insertTop(result, byPosition[WorldBookInjectionPosition.TOP_OF_CHAT].orEmpty())
-        insertBottom(result, byPosition[WorldBookInjectionPosition.BOTTOM_OF_CHAT].orEmpty())
-        insertAtDepth(result, byPosition[WorldBookInjectionPosition.AT_DEPTH].orEmpty())
+        mergeSystemPrompt(result, byPosition, tagContextLog)
+        insertTop(result, byPosition[WorldBookInjectionPosition.TOP_OF_CHAT].orEmpty(), tagContextLog)
+        insertBottom(result, byPosition[WorldBookInjectionPosition.BOTTOM_OF_CHAT].orEmpty(), tagContextLog)
+        insertAtDepth(result, byPosition[WorldBookInjectionPosition.AT_DEPTH].orEmpty(), tagContextLog)
         return result
     }
 
@@ -147,7 +156,11 @@ object WorldBookInjector {
      * message per role: USER → `<system>...</system>` wrapped, ASSISTANT →
      * plain text. Mirrors `createMergedInjectionMessages` L1881-1913.
      */
-    private fun buildInjectionMessages(entries: List<WorldBookEntry>): List<LlmMessage> {
+    private fun buildInjectionMessages(
+        entries: List<WorldBookEntry>,
+        position: WorldBookInjectionPosition,
+        tagContextLog: Boolean,
+    ): List<LlmMessage> {
         if (entries.isEmpty()) return emptyList()
         val byRole = entries
             .filter { it.content.isNotBlank() }
@@ -156,18 +169,26 @@ object WorldBookInjector {
         for ((role, group) in byRole) {
             val merged = group.joinToString("\n") { it.content.trim() }
             if (merged.isEmpty()) continue
-            out += when (role) {
-                WorldBookInjectionRole.ASSISTANT ->
-                    LlmMessage(role = ROLE_ASSISTANT, content = merged)
-                WorldBookInjectionRole.USER ->
-                    LlmMessage(
-                        role = ROLE_USER,
-                        content = wrapSystemTag(merged),
-                    )
+            val content = when (role) {
+                WorldBookInjectionRole.ASSISTANT -> merged
+                WorldBookInjectionRole.USER -> wrapSystemTag(merged)
             }
+            out += LlmMessage(
+                role = if (role == WorldBookInjectionRole.ASSISTANT) ROLE_ASSISTANT else ROLE_USER,
+                content = content,
+                contextTags = if (tagContextLog) {
+                    listOf(ContextTag(ContextSource.worldBook, content.length, position.meta()))
+                } else {
+                    emptyList()
+                },
+            )
         }
         return out
     }
+
+    /** `WorldBookInjectionPosition.toJson()` — the enum's wire spelling. */
+    private fun WorldBookInjectionPosition.meta(): Map<String, String> =
+        mapOf("position" to name)
 
     private fun wrapSystemTag(content: String): String = "<system>\n$content\n</system>"
 
@@ -179,10 +200,13 @@ object WorldBookInjector {
     private fun mergeSystemPrompt(
         result: MutableList<LlmMessage>,
         byPosition: Map<WorldBookInjectionPosition, List<WorldBookEntry>>,
+        tagContextLog: Boolean,
     ) {
         val before = joinContent(byPosition[WorldBookInjectionPosition.BEFORE_SYSTEM_PROMPT])
         val after = joinContent(byPosition[WorldBookInjectionPosition.AFTER_SYSTEM_PROMPT])
         if (before.isEmpty() && after.isEmpty()) return
+        val beforeMeta = WorldBookInjectionPosition.BEFORE_SYSTEM_PROMPT.meta()
+        val afterMeta = WorldBookInjectionPosition.AFTER_SYSTEM_PROMPT.meta()
 
         val systemIndex = result.indexOfFirst { it.role == ROLE_SYSTEM }
         if (systemIndex >= 0) {
@@ -197,7 +221,29 @@ object WorldBookInjector {
                 sb.append('\n')
                 sb.append(after)
             }
-            result[systemIndex] = result[systemIndex].copy(content = sb.toString())
+            val existing = result[systemIndex]
+            // The before-block owns the "\n" that follows it, the after-block
+            // the one that precedes it (L1960-1980). An untagged system
+            // message (no assistant prompt / memory rules / search prompt)
+            // gets one systemPrompt tag so the original text is not attributed
+            // to the world-book block.
+            val tags = if (!tagContextLog) {
+                existing.contextTags
+            } else {
+                buildList {
+                    if (before.isNotEmpty()) {
+                        add(ContextTag(ContextSource.worldBook, before.length + 1, beforeMeta))
+                    }
+                    if (existing.contextTags.isEmpty() && original.isNotEmpty()) {
+                        add(ContextTag(ContextSource.systemPrompt, original.length))
+                    }
+                    addAll(existing.contextTags)
+                    if (after.isNotEmpty()) {
+                        add(ContextTag(ContextSource.worldBook, 1 + after.length, afterMeta))
+                    }
+                }
+            }
+            result[systemIndex] = existing.copy(content = sb.toString(), contextTags = tags)
         } else {
             val sb = StringBuilder()
             if (before.isNotEmpty()) sb.append(before)
@@ -206,14 +252,29 @@ object WorldBookInjector {
                 sb.append(after)
             }
             if (sb.isEmpty()) return
-            result.add(0, LlmMessage(role = ROLE_SYSTEM, content = sb.toString()))
+            val tags = when {
+                !tagContextLog -> emptyList()
+                before.isNotEmpty() && after.isNotEmpty() -> listOf(
+                    ContextTag(ContextSource.worldBook, before.length + 1, beforeMeta),
+                    ContextTag(ContextSource.worldBook, after.length, afterMeta),
+                )
+                before.isNotEmpty() -> listOf(
+                    ContextTag(ContextSource.worldBook, before.length, beforeMeta),
+                )
+                else -> listOf(ContextTag(ContextSource.worldBook, after.length, afterMeta))
+            }
+            result.add(0, LlmMessage(role = ROLE_SYSTEM, content = sb.toString(), contextTags = tags))
         }
     }
 
     /** TOP_OF_CHAT: insert before the first user message (or at end). L2044-2059. */
-    private fun insertTop(result: MutableList<LlmMessage>, entries: List<WorldBookEntry>) {
+    private fun insertTop(
+        result: MutableList<LlmMessage>,
+        entries: List<WorldBookEntry>,
+        tagContextLog: Boolean,
+    ) {
         if (entries.isEmpty()) return
-        val messages = buildInjectionMessages(entries)
+        val messages = buildInjectionMessages(entries, WorldBookInjectionPosition.TOP_OF_CHAT, tagContextLog)
         if (messages.isEmpty()) return
         var idx = result.indexOfFirst { it.role == ROLE_USER }
         if (idx < 0) idx = result.size
@@ -222,9 +283,13 @@ object WorldBookInjector {
     }
 
     /** BOTTOM_OF_CHAT: insert before the last message. L2061-2074. */
-    private fun insertBottom(result: MutableList<LlmMessage>, entries: List<WorldBookEntry>) {
+    private fun insertBottom(
+        result: MutableList<LlmMessage>,
+        entries: List<WorldBookEntry>,
+        tagContextLog: Boolean,
+    ) {
         if (entries.isEmpty()) return
-        val messages = buildInjectionMessages(entries)
+        val messages = buildInjectionMessages(entries, WorldBookInjectionPosition.BOTTOM_OF_CHAT, tagContextLog)
         if (messages.isEmpty()) return
         var idx = if (result.isEmpty()) 0 else result.size - 1
         idx = safeInsertIndex(result, idx)
@@ -237,12 +302,20 @@ object WorldBookInjector {
      * happen at `length - depth`, deepest first, so each subsequent (shallower)
      * insertion lands at the right index. L2076-2105.
      */
-    private fun insertAtDepth(result: MutableList<LlmMessage>, entries: List<WorldBookEntry>) {
+    private fun insertAtDepth(
+        result: MutableList<LlmMessage>,
+        entries: List<WorldBookEntry>,
+        tagContextLog: Boolean,
+    ) {
         if (entries.isEmpty()) return
         val byDepth = entries
             .groupBy { it.injectDepth.coerceIn(1, SCAN_DEPTH_CAP) }
         for (depth in byDepth.keys.sortedDescending()) {
-            val messages = buildInjectionMessages(byDepth[depth].orEmpty())
+            val messages = buildInjectionMessages(
+                byDepth[depth].orEmpty(),
+                WorldBookInjectionPosition.AT_DEPTH,
+                tagContextLog,
+            )
             if (messages.isEmpty()) continue
             val target = (result.size - depth).coerceIn(0, result.size)
             val idx = safeInsertIndex(result, target)

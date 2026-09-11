@@ -1,9 +1,9 @@
 package com.psyche.memo.logging
 
-import com.psyche.memo.ui.ContextLogMessage
-import com.psyche.memo.ui.ContextLogSnapshot
-import com.psyche.memo.ui.ContextSegment
-import com.psyche.memo.ui.ContextSource
+import com.psyche.memo.common.logging.ContextLogMessage
+import com.psyche.memo.common.logging.ContextLogSnapshot
+import com.psyche.memo.common.logging.ContextSegment
+import com.psyche.memo.common.logging.ContextSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json

@@ -75,7 +75,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 设置、系统与服务壳
 - provider 管理页、语音服务/备份/赞助 UI 壳（BackupScreen/LocalSnapshotsScreen/SponsorScreen）+ TTS/ASR 编辑器全屏化
 - **本机副本（备份子块 3）已落地**：保留策略/存储/调度/设置 + 本机副本页全接线（存一份/恢复/导出/置顶/删除，启动与回前台自动调度）
-- 日志三件套（收尾-6：LogPayloadElider/LogRedactor/RequestLogger/FlutterLogger/ContextLogger/LogBootstrap，64 单测）
+- 日志三件套（收尾-6：LogPayloadElider/LogRedactor/RequestLogger/FlutterLogger/ContextLogger/LogBootstrap，64 单测；**2026-09-11 三个 tab 全部通电**：上下文日志补齐组装侧打标签 + `ContextLogAssembler`，应用日志接上 SSE 恢复/provider 解码/后台任务/抽屉/压缩/供应商/模型等失败路径，顺手修掉「指令注入从未进入请求」）
 - 关于页闪退修复、智谱 400 修复（applyVendorReasoningKnobs）
 - **设置全站分类化（2026-09-09 用户点名）**：偏好主页 17 行拆 5 组、五个偏好子页/触感页行内分组、关于页（应用信息/社区与链接）、统计页（数据概览/排行榜）、网络代理页（代理设置/连接测试）、存储主页（空间总览/存储分类）——统一 SectionHeader + SectionCard
 - **设置行 tip 规范（2026-09-09 用户点名）**：不裸排提示词，一律行尾 ⓘ + 浮动气泡（收尾-7）
@@ -86,7 +86,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
 - 备份剩余（§5.10 子块 2/4~8）：merge 恢复 / 备份提醒 / WebDAV / S3 / 前向兼容闸门 / Cherry·Chatbox 导入
-- **日志接线**：日志页「上下文日志」「应用日志」两个 tab 恒空——写入端已移植但无人调用。上下文要接 `ChatViewModel` 的 history 组装段（打 `_kelivo_ctx_segments` 标签 → `buildSnapshot` → `logSnapshot`）；应用要接约 20 处 FlutterLogger 错误路径（§5.9 仍挂账有明细）
+- **`applyContextLimit` 未实现**：`assistant.limitContextMessages`/`contextMessageSize` 的按条数裁剪在请求链路上缺失（`clearContextLabel` 会显示配置值但从不生效）——会改变发给模型的消息数，属行为变更，待单独一批 + 用户确认（PORTING §5.9 仍挂账有明细）
 - 语音剩余：网络 TTS 语音（多 provider 合成 + 缓存）与播放器的「保存音频」按钮
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）

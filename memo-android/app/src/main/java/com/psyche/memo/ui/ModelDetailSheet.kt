@@ -636,7 +636,12 @@ fun ModelDetailSheet(
                 )
             }.onSuccess {
                 withContext(Dispatchers.Main) { onDismiss(true) }
-            }.onFailure {
+            }.onFailure { e ->
+                // model_detail_sheet.dart:837-841 —— ModelDetailSheet save failed。
+                com.psyche.memo.common.logging.FlutterLogger.log(
+                    "[ModelDetailSheet] save failed: $e\n${e.stackTraceToString()}",
+                    tag = "Model",
+                )
                 withContext(Dispatchers.Main) {
                     SnackbarManager.show(
                         AppNotification(message = saveFailedMessage, type = NotificationType.ERROR),

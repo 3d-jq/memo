@@ -873,6 +873,12 @@ fun SideDrawerContent(
                     scope.launch {
                         runCatching {
                             com.psyche.memo.TitleSummaryGenerator.generateTitle(container, target.id, force = true)
+                        }.onFailure { e ->
+                            // side_drawer.dart:972-975 —— 标题生成失败留一条应用日志。
+                            com.psyche.memo.common.logging.FlutterLogger.log(
+                                "[SideDrawer] Regenerate title failed: $e",
+                                tag = "SideDrawer",
+                            )
                         }
                         reload()
                         onConversationTitleChanged(target.id)

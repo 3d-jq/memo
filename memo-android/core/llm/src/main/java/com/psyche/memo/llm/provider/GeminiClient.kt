@@ -169,7 +169,16 @@ class GeminiClient(
     private fun decodeEvent(event: com.psyche.memo.llm.stream.SseEvent, state: GeminiStreamState): List<StreamChunk> {
         val data = event.data
         if (data.isEmpty()) return emptyList()
-        val obj = try { json.parseToJsonElement(data).jsonObject } catch (e: Exception) { return emptyList() }
+        val obj = try {
+            json.parseToJsonElement(data).jsonObject
+        } catch (e: Exception) {
+            // chat_api_helpers.dart:839-845 —— 畸形事件不打断流，但要留痕。
+            com.psyche.memo.common.logging.FlutterLogger.log(
+                "provider=gemini eventType=${event.event ?: "message"} error=$e",
+                tag = "DecoderParseError",
+            )
+            return emptyList()
+        }
         val out = ArrayList<StreamChunk>()
         // Usage first so a Finish emitted below carries the freshest counters.
         (obj["usageMetadata"] as? JsonObject)?.let { um ->

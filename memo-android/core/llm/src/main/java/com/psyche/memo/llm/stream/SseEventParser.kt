@@ -1,5 +1,7 @@
 package com.psyche.memo.llm.stream
 
+import com.psyche.memo.common.logging.FlutterLogger
+
 /**
  * Incremental SSE framer (mirror of Dart SseEventParser in
  * lib/core/services/api/stream/sse_framing.dart).
@@ -13,7 +15,14 @@ package com.psyche.memo.llm.stream
  */
 class SseEventParser(
     private val recoverAdjacentJsonDataRecords: Boolean = false,
-    private val onRecovery: (Int) -> Unit = {},
+    private val onRecovery: (Int) -> Unit = { count ->
+        // sse_framing.dart L235-240 —— 恢复过的畸形流在应用日志里留一条（每个
+        // parser 只报一次）；排查"某个供应商偶发丢字"时这是唯一的线索。
+        FlutterLogger.log(
+            "recoveredAdjacentJsonDataRecords count=$count",
+            tag = "SseFramingRecovery",
+        )
+    },
 ) {
     private val carry = StringBuilder()
     private val dataLines = ArrayList<String>()

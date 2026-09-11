@@ -1,6 +1,12 @@
 package com.psyche.memo.ui
 
 import androidx.compose.foundation.background
+import com.psyche.memo.common.logging.ContextLogMessage
+import com.psyche.memo.common.logging.ContextLogSnapshot
+import com.psyche.memo.common.logging.ContextLogTailCursor
+import com.psyche.memo.common.logging.ContextLogTailReader
+import com.psyche.memo.common.logging.ContextSegment
+import com.psyche.memo.common.logging.ContextSource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable

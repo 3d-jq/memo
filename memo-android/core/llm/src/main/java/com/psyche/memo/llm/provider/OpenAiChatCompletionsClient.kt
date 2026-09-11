@@ -151,7 +151,7 @@ class OpenAiChatCompletionsClient(
             }
             val source: BufferedSource = response.body?.source() ?: throw IOException("no body")
             val parser = SseEventParser(recoverAdjacentJsonDataRecords = true)
-            val decoder = ChatCompletionsDecoder()
+            val decoder = ChatCompletionsDecoder(providerLabel = request.providerId)
             var completed = false
             while (!completed && !source.exhausted()) {
                 val line = source.readUtf8Line() ?: break

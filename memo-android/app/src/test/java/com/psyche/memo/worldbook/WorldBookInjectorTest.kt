@@ -1,14 +1,18 @@
 package com.psyche.memo.worldbook
 
+import com.psyche.memo.common.logging.ContextSource
+import com.psyche.memo.common.logging.ContextTag
 import com.psyche.memo.data.model.WorldBook
 import com.psyche.memo.data.model.WorldBookEntry
 import com.psyche.memo.data.model.WorldBookInjectionPosition
 import com.psyche.memo.data.model.WorldBookInjectionRole
 import com.psyche.memo.llm.client.LlmMessage
+import com.psyche.memo.logging.ContextLogAssembler
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Test
 
 /**
@@ -536,5 +540,99 @@ class WorldBookInjectorTest {
         )
         assertEquals(1, out.size)
         assertEquals("S\nONE\nTWO", out[0].content)
+    }
+
+    // —— context-log tagging ——
+
+    /** Slices a message the way the context-log reader does. */
+    private fun segments(message: LlmMessage) =
+        ContextLogAssembler.segmentsFromTaggedMessage(message)
+
+    @Test
+    fun `tagging is off by default`() {
+        val out = WorldBookInjector.inject(
+            msgs(LlmMessage("user", content = "hi")),
+            listOf(book("b", entries = arrayOf(always("TOP", position = WorldBookInjectionPosition.TOP_OF_CHAT)))),
+            listOf("b"),
+        )
+        assertEquals(emptyList<ContextTag>(), out[0].contextTags)
+    }
+
+    @Test
+    fun `topOfChat injection carries the worldBook tag and position`() {
+        val out = WorldBookInjector.inject(
+            msgs(LlmMessage("user", content = "hi")),
+            listOf(book("b", entries = arrayOf(always("TOP", position = WorldBookInjectionPosition.TOP_OF_CHAT)))),
+            listOf("b"),
+            tagContextLog = true,
+        )
+        val injected = out.first { it.contextTags.isNotEmpty() }
+        val segment = segments(injected).single()
+        assertEquals(ContextSource.worldBook, segment.source)
+        assertEquals(injected.content, segment.text)
+        assertEquals(
+            "TOP_OF_CHAT",
+            (segment.meta?.get("position") as? JsonPrimitive)?.content,
+        )
+    }
+
+    @Test
+    fun `afterSystemPrompt keeps the system tags and appends a worldBook segment`() {
+        val system = LlmMessage(
+            role = "system",
+            content = "PROMPT",
+            contextTags = listOf(ContextTag(ContextSource.systemPrompt, "PROMPT".length)),
+        )
+        val out = WorldBookInjector.inject(
+            msgs(system, LlmMessage("user", content = "hi")),
+            listOf(book("b", entries = arrayOf(always(
+                "AFTER", position = WorldBookInjectionPosition.AFTER_SYSTEM_PROMPT,
+            )))),
+            listOf("b"),
+            tagContextLog = true,
+        )
+        val sys = out.first { it.role == "system" }
+        assertEquals("PROMPT\nAFTER", sys.content)
+        val parts = segments(sys)
+        assertEquals(listOf(ContextSource.systemPrompt, ContextSource.worldBook), parts.map { it.source })
+        assertEquals(listOf("PROMPT", "AFTER"), parts.map { it.text.trimStart('\n') })
+    }
+
+    @Test
+    fun `beforeSystemPrompt owns the separator and keeps the original untouched`() {
+        val system = LlmMessage(
+            role = "system",
+            content = "PROMPT",
+            contextTags = listOf(ContextTag(ContextSource.systemPrompt, "PROMPT".length)),
+        )
+        val out = WorldBookInjector.inject(
+            msgs(system),
+            listOf(book("b", entries = arrayOf(always(
+                "BEFORE", position = WorldBookInjectionPosition.BEFORE_SYSTEM_PROMPT,
+            )))),
+            listOf("b"),
+            tagContextLog = true,
+        )
+        val sys = out.single()
+        val parts = segments(sys)
+        assertEquals(listOf(ContextSource.worldBook, ContextSource.systemPrompt), parts.map { it.source })
+        // The world-book block owns the newline it inserted.
+        assertEquals("BEFORE\n", parts[0].text)
+        assertEquals("PROMPT", parts[1].text)
+    }
+
+    @Test
+    fun `untagged system message gets a systemPrompt tag before the worldBook block`() {
+        val out = WorldBookInjector.inject(
+            msgs(LlmMessage("system", content = "LEGACY")),
+            listOf(book("b", entries = arrayOf(always(
+                "AFTER", position = WorldBookInjectionPosition.AFTER_SYSTEM_PROMPT,
+            )))),
+            listOf("b"),
+            tagContextLog = true,
+        )
+        val parts = segments(out.single())
+        assertEquals(listOf(ContextSource.systemPrompt, ContextSource.worldBook), parts.map { it.source })
+        assertEquals("LEGACY", parts[0].text)
     }
 }

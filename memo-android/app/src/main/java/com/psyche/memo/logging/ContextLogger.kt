@@ -1,7 +1,7 @@
 package com.psyche.memo.logging
 
 import com.psyche.memo.common.logging.LogRedactor
-import com.psyche.memo.ui.ContextLogSnapshot
+import com.psyche.memo.common.logging.ContextLogSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,14 +20,10 @@ import java.util.Date
  * 1:1 port of `lib/core/services/logging/context_logger.dart` (writer side).
  *
  * Writes one JSONL line per turn's assembled context into
- * `<logsDir>/context_logs.txt`. The reader is `LogData.ContextLogTailReader`
- * (also in `com.psyche.memo.ui`), which parses with `ContextLogSnapshot.fromJson`.
- *
- * The actual `buildSnapshot(apiMessages: ...)` helper that converts tagged
- * LLM messages into a snapshot belongs to the chat pipeline batch
- * (see PORTING.md "context logger (assemble side)" — not yet ported).
- * Callers that already have a [ContextLogSnapshot] can call [logSnapshot]
- * directly.
+ * `<logsDir>/context_logs.txt`. The reader is
+ * `com.psyche.memo.common.logging.ContextLogTailReader`, which parses with
+ * `ContextLogSnapshot.fromJson`; the assembler that turns the tagged request
+ * messages into a snapshot is [ContextLogAssembler].
  */
 object ContextLogger {
 

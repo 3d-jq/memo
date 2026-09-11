@@ -1,5 +1,6 @@
 package com.psyche.memo.llm.provider
 
+import com.psyche.memo.common.logging.FlutterLogger
 import com.psyche.memo.llm.stream.DecodeResult
 import com.psyche.memo.llm.stream.SseEvent
 import com.psyche.memo.llm.stream.StreamChunk
@@ -17,6 +18,8 @@ import kotlinx.serialization.json.jsonPrimitive
  */
 class ChatCompletionsDecoder(
     private val needsReasoningEcho: Boolean = false,
+    /** Provider key, only used to label decoder failures in the app log. */
+    private val providerLabel: String = "",
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -48,6 +51,7 @@ class ChatCompletionsDecoder(
         val obj = try {
             json.parseToJsonElement(data).jsonObject
         } catch (e: Exception) {
+            reportParseError(event, e)
             return DecodeResult(chunks = emptyList())
         }
         val chunks = ArrayList<StreamChunk>()
@@ -55,8 +59,17 @@ class ChatCompletionsDecoder(
             parseEvent(obj, chunks)
         } catch (e: Exception) {
             // Malformed payloads never kill the stream; log and continue.
+            reportParseError(event, e)
         }
         return DecodeResult(chunks = chunks, completed = completed)
+    }
+
+    /** chat_api_helpers.dart:839-845 —— DecoderParseError 一行一条。 */
+    private fun reportParseError(event: SseEvent, error: Exception) {
+        FlutterLogger.log(
+            "provider=$providerLabel eventType=${event.event ?: "message"} error=$error",
+            tag = "DecoderParseError",
+        )
     }
 
     fun onClosed(): List<StreamChunk> {

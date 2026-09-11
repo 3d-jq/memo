@@ -157,7 +157,16 @@ class ClaudeClient(
     private fun decodeEvent(event: com.psyche.memo.llm.stream.SseEvent, state: ClaudeStreamState): List<StreamChunk> {
         val data = event.data
         if (data.isEmpty()) return emptyList()
-        val obj = try { json.parseToJsonElement(data).jsonObject } catch (e: Exception) { return emptyList() }
+        val obj = try {
+            json.parseToJsonElement(data).jsonObject
+        } catch (e: Exception) {
+            // chat_api_helpers.dart:839-845 —— 畸形事件不打断流，但要留痕。
+            com.psyche.memo.common.logging.FlutterLogger.log(
+                "provider=claude eventType=${event.event ?: "message"} error=$e",
+                tag = "DecoderParseError",
+            )
+            return emptyList()
+        }
         val out = ArrayList<StreamChunk>()
         when (obj["type"]?.let { (it as? JsonPrimitive)?.content } ?: "") {
             "message_start" -> {
