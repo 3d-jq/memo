@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -96,9 +97,34 @@ private const val SURFACE_ANIMATION_MS = 220
 private const val FADE_MS = 160
 private val BOTTOM_CLEARANCE = 64.dp
 
+/** What the pill's buttons do; swapped out in tests. */
+interface TtsPlayerActions {
+    fun togglePause()
+    fun stop()
+    fun seekBackward()
+    fun seekForward()
+    fun cycleSpeed()
+
+    companion object {
+        val Default = object : TtsPlayerActions {
+            override fun togglePause() = TtsPlayer.togglePause()
+            override fun stop() = TtsPlayer.stop()
+            override fun seekBackward() = TtsPlayer.seekBackward()
+            override fun seekForward() = TtsPlayer.seekForward()
+            override fun cycleSpeed() = TtsPlayer.cyclePlaybackSpeed()
+        }
+    }
+}
+
+/** The pill's drag target, so a UI test can grab it. */
+const val TTS_PLAYER_TAG = "ttsFloatingPlayer"
+
 @Composable
-fun TtsFloatingPlayer(modifier: Modifier = Modifier) {
-    val state by TtsPlayer.state.collectAsState()
+fun TtsFloatingPlayer(
+    modifier: Modifier = Modifier,
+    state: TtsPlaybackState = TtsPlayer.state.collectAsState().value,
+    actions: TtsPlayerActions = TtsPlayerActions.Default,
+) {
     val visible = state.isPlayerVisible
 
     var expanded by remember { mutableStateOf(false) }
@@ -155,6 +181,7 @@ fun TtsFloatingPlayer(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .offset { IntOffset(displayed.x.roundToInt(), displayed.y.roundToInt()) }
                 .width(with(density) { widthPx.toDp() })
+                .testTag(TTS_PLAYER_TAG)
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
@@ -171,6 +198,7 @@ fun TtsFloatingPlayer(modifier: Modifier = Modifier) {
             PlayerSurface(
                 state = state,
                 expanded = expanded,
+                actions = actions,
                 onToggleExpanded = { expanded = !expanded },
             )
         }
@@ -205,6 +233,7 @@ private fun clampPosition(value: Offset, bounds: PlayerBounds): Offset {
 private fun PlayerSurface(
     state: TtsPlaybackState,
     expanded: Boolean,
+    actions: TtsPlayerActions,
     onToggleExpanded: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -242,13 +271,13 @@ private fun PlayerSurface(
             showPlayIcon = showPlayIcon,
             progress = state.progress,
             chunkProgress = state.chunkProgress,
-            onTap = { TtsPlayer.togglePause() },
+            onTap = { actions.togglePause() },
         )
         Spacer(Modifier.width(2.dp))
         PlayerToolIcon(
             tooltip = stringResource(UiR.string.tts_floating_close_tooltip),
             icon = Lucide.X,
-            onClick = { TtsPlayer.stop() },
+            onClick = { actions.stop() },
         )
         Spacer(Modifier.width(2.dp))
         if (controlsWidth > 0.5f) {
@@ -260,15 +289,15 @@ private fun PlayerSurface(
                 PlayerToolIcon(
                     tooltip = stringResource(UiR.string.tts_floating_rewind15_tooltip),
                     icon = Lucide.Rewind,
-                    onClick = { TtsPlayer.seekBackward() },
+                    onClick = { actions.seekBackward() },
                 )
                 Spacer(Modifier.width(2.dp))
-                SpeedButton(speed = state.speed, onClick = { TtsPlayer.cyclePlaybackSpeed() })
+                SpeedButton(speed = state.speed, onClick = { actions.cycleSpeed() })
                 Spacer(Modifier.width(2.dp))
                 PlayerToolIcon(
                     tooltip = stringResource(UiR.string.tts_floating_forward15_tooltip),
                     icon = Lucide.FastForward,
-                    onClick = { TtsPlayer.seekForward() },
+                    onClick = { actions.seekForward() },
                 )
             }
         }
@@ -338,7 +367,7 @@ private fun CircularPlayButton(
         ) {
             Icon(
                 if (showPlayIcon) Lucide.Play else Lucide.Pause,
-                contentDescription = tooltip,
+                contentDescription = null,
                 tint = cs.onPrimaryContainer,
                 modifier = Modifier.size(19.dp),
             )
@@ -376,7 +405,7 @@ private fun PlayerToolIcon(tooltip: String, icon: ImageVector, onClick: () -> Un
         tooltip = tooltip,
         onTap = onClick,
     ) {
-        Icon(icon, contentDescription = tooltip, tint = withAlpha(cs.onSurface, 0.86), modifier = Modifier.size(18.dp))
+        Icon(icon, contentDescription = null, tint = withAlpha(cs.onSurface, 0.86), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -422,7 +451,8 @@ private fun Pressable(
             .scale(scale)
             .clip(shape)
             .background(background)
-            .clickable(interactionSource = interaction, indication = null, onClick = onTap),
+            .clickable(interactionSource = interaction, indication = null, onClick = onTap)
+            .semantics { contentDescription = tooltip },
         contentAlignment = Alignment.Center,
     ) {
         content()

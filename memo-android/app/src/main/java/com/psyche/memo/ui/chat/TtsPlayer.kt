@@ -1,8 +1,6 @@
 package com.psyche.memo.ui.chat
 
 import android.content.Context
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -28,7 +26,6 @@ import com.composables.icons.lucide.RefreshCw
 import com.psyche.memo.ui.R as UiR
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.util.Locale
 
 /**
  * System-engine TTS playback for the chat (chat_message_widget.dart
@@ -44,265 +41,83 @@ import java.util.Locale
  */
 object TtsPlayer {
 
-    /** tts_provider.dart `_systemChunkMaxLength`. */
-    private const val SYSTEM_CHUNK_MAX_LENGTH = 360
+    /**
+     * The engine is created once from the application context, so the flows the
+     * UI collects never swap identity (a lazily-replaced flow would freeze the
+     * chat icon on a stale value — the class of bug this layer exists to avoid).
+     */
+    @Volatile private var controllerRef: TtsPlaybackController? = null
 
-    @Volatile private var engine: TextToSpeech? = null
-    @Volatile private var ready = false
-    @Volatile private var pendingText: String? = null
-
-    private val _state = MutableStateFlow(TtsPlaybackState())
-    val state: StateFlow<TtsPlaybackState> = _state
-
-    /** The chat action row's Speak/Stop icon follows this (isActive). */
-    private val speakingFlow = MutableStateFlow(false)
-    val speaking: StateFlow<Boolean> get() = speakingFlow
-
-    private var chunks: List<TtsTextChunk> = emptyList()
-    private var timeline: TtsPlaybackTimeline? = null
-    private var currentChunk = 0
-    private var chunkOffsetMs = 0L
-    private var session = 0
-    private var paused = false
-
-    fun speak(context: Context, text: String) {
-        val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
-        val split = TtsTextChunker.split(trimmed, SYSTEM_CHUNK_MAX_LENGTH)
-        if (split.isEmpty()) return
-        session++
-        chunks = split
-        timeline = TtsPlaybackTimeline(split)
-        currentChunk = 0
-        chunkOffsetMs = 0L
-        paused = false
-        publish(status = TtsPlaybackStatus.BUFFERING, positionMs = 0L, chunkIndex = 0)
-
-        val existing = engine
-        if (existing != null) {
-            if (ready) playCurrent(existing) else pendingText = trimmed
-            return
-        }
-        pendingText = trimmed
-        // android.jar's TextToSpeech has no setOnInitListener — the callback only
-        // comes through the constructor.
-        engine = TextToSpeech(context.applicationContext) { status ->
-            ready = status == TextToSpeech.SUCCESS
-            val queued = pendingText
-            pendingText = null
-            val initialized = engine
-            if (ready && queued != null && initialized != null) {
-                playCurrent(initialized)
-            } else if (!ready) {
-                finish(TtsPlaybackStatus.ERROR, "tts_unavailable")
+    /** Called from `MemoApplication.onCreate`. */
+    fun init(context: Context) {
+        if (controllerRef != null) return
+        synchronized(this) {
+            if (controllerRef == null) {
+                controllerRef = TtsPlaybackController(SystemTtsEngine(context.applicationContext))
             }
         }
-        engine?.setOnUtteranceProgressListener(utteranceListener)
     }
 
-    /**
-     * Pause stops the engine; resume restarts at the current chunk. After a
-     * session finished, the same button replays it (upstream `togglePause`
-     * delegates to `replay()` when the status is ended).
-     */
+    private fun controller(context: Context?): TtsPlaybackController? {
+        controllerRef?.let { return it }
+        if (context != null) init(context)
+        return controllerRef
+    }
+
+    /** The floating player renders this. */
+    val state: StateFlow<TtsPlaybackState>
+        get() = controller(null)?.state ?: EMPTY_STATE
+
+    /** The chat action row's Speak/Stop icon follows this. */
+    val speaking: StateFlow<Boolean>
+        get() = controller(null)?.speaking ?: EMPTY_SPEAKING
+
+    fun speak(context: Context, text: String) {
+        controller(context)?.speak(text)
+    }
+
     fun togglePause() {
-        if (_state.value.status == TtsPlaybackStatus.ENDED) {
-            speakFromStart()
-            return
-        }
-        if (!_state.value.isActive) return
-        val engineRef = engine ?: return
-        if (paused) {
-            paused = false
-            publish(status = TtsPlaybackStatus.PLAYING, positionMs = currentPosition(), chunkIndex = currentChunk)
-            playCurrent(engineRef)
-        } else {
-            paused = true
-            runCatching { engineRef.stop() }
-            publish(status = TtsPlaybackStatus.PAUSED, positionMs = currentPosition(), chunkIndex = currentChunk)
-        }
-        syncSpeaking()
+        controller(null)?.togglePause()
     }
 
-    /**
-     * The X button: ends the session and takes the pill away (`_stopInternal`
-     * resets to an idle state, so `isPlayerVisible` turns false). A session that
-     * finished on its own instead stays on screen with a replay button.
-     */
     fun stop() {
-        session++
-        runCatching { engine?.stop() }
-        pendingText = null
-        chunks = emptyList()
-        timeline = null
-        currentChunk = 0
-        chunkOffsetMs = 0L
-        paused = false
-        _state.value = TtsPlaybackState(speed = _state.value.speed)
-        syncSpeaking()
+        controller(null)?.stop()
     }
 
-    fun seekBackward() = seekRelative(-SEEK_STEP_MS)
+    fun replay() {
+        controller(null)?.replay()
+    }
 
-    fun seekForward() = seekRelative(SEEK_STEP_MS)
+    fun seekBackward() {
+        controller(null)?.seekBackward()
+    }
+
+    fun seekForward() {
+        controller(null)?.seekForward()
+    }
 
     fun seekRelative(deltaMs: Long) {
-        val engineRef = engine ?: return
-        val timelineRef = timeline ?: return
-        if (chunks.isEmpty() || !_state.value.isActive) return
-        val target = timelineRef.seekTarget(currentPosition(), deltaMs)
-        currentChunk = target.chunkIndex
-        chunkOffsetMs = target.offsetInChunkMs
-        publish(status = TtsPlaybackStatus.PLAYING, positionMs = target.positionMs, chunkIndex = currentChunk)
-        paused = false
-        playCurrent(engineRef)
-    }
-
-    /** `tts.speak` on the current chunk, optionally skipping into it. */
-    fun replay() = speakFromStart()
-
-    fun speakFromStart() {
-        val engineRef = engine ?: return
-        if (chunks.isEmpty()) return
-        currentChunk = 0
-        chunkOffsetMs = 0L
-        paused = false
-        publish(status = TtsPlaybackStatus.PLAYING, positionMs = 0L, chunkIndex = 0)
-        playCurrent(engineRef)
+        controller(null)?.seekRelative(deltaMs)
     }
 
     fun cyclePlaybackSpeed() {
-        setPlaybackSpeed(TtsPlaybackSpeed.next(_state.value.speed))
+        controller(null)?.cyclePlaybackSpeed()
     }
 
     fun setPlaybackSpeed(speed: Double) {
-        val normalized = TtsPlaybackSpeed.normalize(speed)
-        _state.value = _state.value.copy(speed = normalized)
-        val engineRef = engine ?: return
-        runCatching { engineRef.setSpeechRate(TtsPlaybackSpeed.toSystemRate(normalized).toFloat()) }
-        // The rate only applies to utterances started after it was set.
-        if (_state.value.isActive && !paused) playCurrent(engineRef)
+        controller(null)?.setPlaybackSpeed(speed)
     }
 
-    /** Releases the engine (called when the app's root composition goes away). */
     fun shutdown() {
-        runCatching { engine?.stop() }
-        runCatching { engine?.shutdown() }
-        engine = null
-        ready = false
-        pendingText = null
-        chunks = emptyList()
-        timeline = null
-        session++
-        _state.value = TtsPlaybackState()
-        syncSpeaking()
-    }
-
-    // ── internals ─────────────────────────────────────────────────────────────
-
-    private fun playCurrent(tts: TextToSpeech) {
-        val chunk = chunks.getOrNull(currentChunk) ?: run {
-            finish(TtsPlaybackStatus.ENDED, null)
-            return
-        }
-        runCatching {
-            tts.language = Locale.getDefault()
-            tts.setSpeechRate(TtsPlaybackSpeed.toSystemRate(_state.value.speed).toFloat())
-            // A seek into the middle of a chunk restarts that chunk: the engine
-            // speaks from its beginning, which is the granularity it offers.
-            tts.speak(chunk.text, TextToSpeech.QUEUE_FLUSH, null, utteranceId(currentChunk))
-        }.onFailure {
-            finish(TtsPlaybackStatus.ERROR, it.message)
-            return
-        }
-        publish(status = TtsPlaybackStatus.PLAYING, positionMs = currentPosition(), chunkIndex = currentChunk)
-        syncSpeaking()
-    }
-
-    private fun utteranceId(index: Int) = "memo_tts_chunk_$session$index"
-
-    private fun chunkIndexOf(utteranceId: String?): Int {
-        val suffix = utteranceId?.substringAfterLast("_") ?: return -1
-        if (utteranceId?.startsWith("memo_tts_chunk_") != true) return -1
-        return suffix.toIntOrNull() ?: -1
-    }
-
-    private val utteranceListener = object : UtteranceProgressListener() {
-        override fun onStart(utteranceId: String?) {
-            val index = chunkIndexOf(utteranceId)
-            if (index >= 0) currentChunk = index
-            publish(status = TtsPlaybackStatus.PLAYING, positionMs = currentPosition(), chunkIndex = currentChunk)
-            syncSpeaking()
-        }
-
-        /**
-         * Word-level offsets within the current utterance give a smooth ring:
-         * the estimated chunk duration is scaled by how far into the text the
-         * engine is.
-         */
-        override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-            val index = chunkIndexOf(utteranceId)
-            val chunk = chunks.getOrNull(index) ?: return
-            val duration = timeline?.durationForChunk(chunk) ?: return
-            val fraction = if (chunk.text.isEmpty()) 0.0 else (start.toDouble() / chunk.text.length).coerceIn(0.0, 1.0)
-            chunkOffsetMs = (duration * fraction).toLong()
-            publish(status = TtsPlaybackStatus.PLAYING, positionMs = currentPosition(), chunkIndex = index)
-        }
-
-        override fun onDone(utteranceId: String?) {
-            val index = chunkIndexOf(utteranceId)
-            if (index < 0 || index != currentChunk) return
-            chunkOffsetMs = 0L
-            if (currentChunk >= chunks.lastIndex) {
-                finish(TtsPlaybackStatus.ENDED, null)
-                return
-            }
-            currentChunk += 1
-            playCurrent(engine ?: return)
-        }
-
-        override fun onError(utteranceId: String?) {
-            finish(TtsPlaybackStatus.ERROR, "tts_playback_failed")
-        }
-
-        override fun onError(utteranceId: String?, errorCode: Int) {
-            finish(TtsPlaybackStatus.ERROR, "tts_playback_failed:$errorCode")
-        }
-    }
-
-    private fun currentPosition(): Long {
-        val timelineRef = timeline ?: return 0L
-        val chunk = chunks.getOrNull(currentChunk) ?: return 0L
-        return timelineRef.positionForChunkProgress(currentChunk, chunkOffsetMs, timelineRef.durationForChunk(chunk))
-    }
-
-    private fun publish(status: TtsPlaybackStatus, positionMs: Long, chunkIndex: Int) {
-        _state.value = _state.value.copy(
-            status = status,
-            positionMs = positionMs,
-            durationMs = timeline?.estimatedDurationMs ?: 0L,
-            currentChunkIndex = chunkIndex,
-            totalChunks = chunks.size,
-        )
-    }
-
-    private fun finish(status: TtsPlaybackStatus, error: String?) {
-        _state.value = _state.value.copy(
-            status = status,
-            positionMs = if (status == TtsPlaybackStatus.ENDED) _state.value.durationMs else _state.value.positionMs,
-            durationMs = timeline?.estimatedDurationMs ?: 0L,
-            totalChunks = chunks.size,
-            errorMessage = error,
-        )
-        syncSpeaking()
-    }
-
-    private fun syncSpeaking() {
-        speakingFlow.value = _state.value.isActive
+        controller(null)?.shutdown()
     }
 
     /** tts_provider.dart `_seekStep`. */
-    const val SEEK_STEP_MS: Long = 15_000L
+    const val SEEK_STEP_MS: Long = TtsPlaybackController.SEEK_STEP_MS
+
+    /** Only used before [init] has run (an app that never touches the player). */
+    private val EMPTY_STATE = MutableStateFlow(TtsPlaybackState())
+    private val EMPTY_SPEAKING = MutableStateFlow(false)
 }
 
 /**
