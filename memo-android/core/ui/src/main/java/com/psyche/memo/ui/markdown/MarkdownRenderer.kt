@@ -691,12 +691,6 @@ private fun MarkdownTableView(
             withFrameNanos { }
             if (!needsExpand && previous == model.body.size) visibleRows = previous
             val bitmap = runCatching { boundaryLayer.toImageBitmap() }.getOrNull()
-            android.util.Log.d(
-                "TableCapture",
-                "rows=${model.body.size} cols=${model.columnCount} scrollable=$scrollable" +
-                    " layer=${boundaryLayer.size.width}x${boundaryLayer.size.height}" +
-                    " bitmap=${bitmap?.width}x${bitmap?.height}",
-            )
             visibleRows = previous
             capturing = false
             bitmap
