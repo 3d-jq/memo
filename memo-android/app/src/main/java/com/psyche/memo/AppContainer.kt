@@ -161,6 +161,14 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
+     * 后台记忆整理（memory_pipeline.dart）：Gatekeeper → Extract → Smart Add →
+     * Profile Distiller，单并发队列。跟着进程活，聊天侧只负责 schedule。
+     */
+    val memoryPipeline: com.psyche.memo.provider.MemoryPipelineService by lazy {
+        com.psyche.memo.provider.MemoryPipelineService(this, appScope)
+    }
+
+    /**
      * assistant_provider.dart currentAssistantId — the globally selected
      * assistant that the drawer scopes conversations to. Exposed as a
      * StateFlow so the drawer card + conversation list recompose on switch.
@@ -181,6 +189,19 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
             savedId = savedId,
             existingIds = assistantStore.getAll().map { it.id },
         )
+    }
+
+    /**
+     * The conversation the chat screen is showing (`ChatService.currentConversationId`).
+     * The manual "organize memory" action needs it: it extracts from the chat
+     * the user is actually looking at.
+     */
+    private val _currentConversationId = MutableStateFlow<String?>(null)
+    val currentConversationId: StateFlow<String?> = _currentConversationId
+
+    fun setCurrentConversation(id: String?) {
+        if (_currentConversationId.value == id) return
+        _currentConversationId.value = id
     }
 
     /** assistant_provider.dart setCurrentAssistant 278-284 — no-op when unchanged. */

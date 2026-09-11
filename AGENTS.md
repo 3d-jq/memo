@@ -53,6 +53,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 对话增强与工具
 - 搜索体系 S1–S4（定义/8+15 provider 引擎/设置/用量，共 23 个可运行 provider）
 - 翻译页、世界书（页 + 注入引擎，5 注入位置/31 单测）、指令注入、快捷短语、记忆工具 M1/M2a/M2b/M2c + **Smart Add 去重合并 M2d-b**（tokenizer/提示词组装/四动作判定/批量，judge 走 `memory_model_v1`）、本地工具 L1 + 日历 L2、OCR F4、文档抽取 F3、附件 UI F2
+- **记忆抽取 pipeline M2d-c**（gatekeeper/extractor/distiller + 单并发队列 + 水位 + 版本链折叠 + 自动调度；助手记忆 tab 的「整理」按钮与状态行）——仅 trace 分步记录未移植（流程追踪页仍空）
 - 多模态输入引擎 F1、MCP 基础与连接管理 MCP-1/MCP-2、助手 MCP sheet（输入栏 Hammer）
 - **旧版（V1）记忆模式不移植（用户点名）**：原版留它是为兼容老数据，Memo 没有 → 设置页旧版开关/旧版只读页/旧版提示词行/legacy 工具定义全部删除；`assistant_memory_rows` + 备份写入保留（归档格式需要），但没有 UI 读它
 - **记忆可见性修复**：`MemoryProviderV2.ensureLoaded()`（此前系统提示词的记忆块与助手记忆 tab 拿到空 store ⇒ 记忆既不注入也不显示）+ 列表/tab 统一用容器级 provider 并跟随 `version` + 助手记忆 tab 补齐可见/归档列表
@@ -72,7 +73,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 待移植 / 剩余（仅以下）
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
-- M2d-c：记忆抽取 pipeline（gatekeeper / extractor / profile distiller / `MemoryPipelineService.runNow` + 自动调度 + 助手记忆 tab 的「整理」按钮与状态行 + trace）
+
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）

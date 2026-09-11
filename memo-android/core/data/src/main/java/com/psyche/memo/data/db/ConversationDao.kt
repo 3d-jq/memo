@@ -119,6 +119,15 @@ class ConversationDao(private val db: SQLiteDatabase) {
         db.update("conversation_rows", values, "id = ?", arrayOf(id))
     }
 
+    /** memory pipeline watermark — the highest message order already extracted. */
+    fun setLastMemoryExtractedOrder(id: String, order: Int, now: Long = System.currentTimeMillis()) {
+        val values = ContentValues().apply {
+            put("last_memory_extracted_order", order)
+            put("updated_at", now)
+        }
+        db.update("conversation_rows", values, "id = ?", arrayOf(id))
+    }
+
     fun touch(id: String, now: Long = System.currentTimeMillis()) {
         db.execSQL("UPDATE conversation_rows SET updated_at = ? WHERE id = ?", arrayOf<Any>(now, id))
     }

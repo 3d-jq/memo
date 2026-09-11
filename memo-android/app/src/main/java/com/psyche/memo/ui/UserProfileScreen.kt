@@ -91,13 +91,14 @@ object UserProfileRepository {
         container: AppContainerImpl,
         key: String,
         value: String,
+        source: String = "manual",
     ) {
         val dao = PayloadEntityDao(container.database.writableDatabase, "user_profile_field_rows")
         val existing = dao.get(key)
         val payload = buildJsonObject {
             put("id", key)
             put("value", value)
-            put("source", "manual")
+            put("source", source)
             put("updatedAt", System.currentTimeMillis() * 1000L)
         }
         dao.upsert(key, payload.toString(), sortOrder = existing?.sortOrder ?: dao.nextSortOrder())

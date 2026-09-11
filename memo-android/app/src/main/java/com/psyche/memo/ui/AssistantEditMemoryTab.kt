@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -29,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +51,7 @@ import com.composables.icons.lucide.Sparkles
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.ui.theme.LocalSemanticColors
+import kotlinx.coroutines.launch
 
 /**
  * Port of assistant_settings_edit_memory_tab.dart (v2 branch): the memory
@@ -73,6 +76,9 @@ fun AssistantEditMemoryTab(
     var customSummary by remember { mutableStateOf(false) }
     var editorOpen by remember { mutableStateOf(false) }
     var editorEntry by remember { mutableStateOf<MemoryEntry?>(null) }
+    var organizing by remember { mutableStateOf(false) }
+    val organizeScope = rememberCoroutineScope()
+    val pipeline = container.memoryPipeline
 
     Column(
         modifier = Modifier
@@ -190,6 +196,14 @@ fun AssistantEditMemoryTab(
             }
         }
 
+        // The manual run needs a memory model and a chat with this assistant
+        // open (§ L341-353).
+        val modelMissing = !com.psyche.memo.ui.MemorySettingsState(container).modelSet
+        val currentConversationId = container.currentConversationId.value
+        val canOrganize = !modelMissing && !organizing &&
+            currentConversationId != null &&
+            container.conversationDao.get(currentConversationId)?.assistantId == assistant.id
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -201,6 +215,44 @@ fun AssistantEditMemoryTab(
                 style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 modifier = Modifier.weight(1f),
             )
+            Row(
+                modifier = Modifier
+                    .clickable(enabled = canOrganize) {
+                        val conversationId = currentConversationId ?: return@clickable
+                        organizing = true
+                        organizeScope.launch {
+                            runCatching { pipeline.runNow(conversationId, assistant.id) }
+                            organizing = false
+                        }
+                    }
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (organizing) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        color = cs.primary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                } else {
+                    Icon(
+                        Lucide.Sparkles,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (canOrganize) cs.primary else cs.onSurface.copy(alpha = 0.35f),
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = stringResource(R.string.memory_organize_button),
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (canOrganize) cs.primary else cs.onSurface.copy(alpha = 0.35f),
+                    ),
+                )
+            }
+            Spacer(Modifier.width(10.dp))
             Row(
                 modifier = Modifier
                     .clickable {
@@ -218,6 +270,11 @@ fun AssistantEditMemoryTab(
                 )
             }
         }
+        Text(
+            text = memoryOrganizeStatusLine(pipeline.lastStatus),
+            style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.55f)),
+            modifier = Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 8.dp),
+        )
 
         if (!assistant.enableMemory) {
             EmptyHint(stringResource(R.string.memory_entry_empty_disabled))
@@ -617,4 +674,51 @@ private fun EmptyHint(text: String) {
         ),
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
+}
+
+/**
+ * `_statusLine` (assistant_settings_edit_memory_tab.dart L107-130): "Last
+ * organized: 5 min ago · extracted 2", with skip reasons and failures called out
+ * separately.
+ */
+@Composable
+private fun memoryOrganizeStatusLine(status: com.psyche.memo.provider.MemoryOrganizeStatus): String {
+    val lastAt = status.lastAt
+    val result = status.lastResult
+    if (lastAt == null || result == null) {
+        return stringResource(R.string.memory_organize_status_never)
+    }
+    val parts = mutableListOf(
+        stringResource(R.string.memory_organize_status_last, relativeTime(lastAt)),
+    )
+    val error = result.error
+    if (!error.isNullOrEmpty()) {
+        val label = memoryOutcomeLabel(error)
+        parts.add(
+            if (error in com.psyche.memo.provider.MemoryPipelineService.SKIP_REASON_CODES) {
+                stringResource(R.string.memory_organize_status_skipped_reason, label)
+            } else {
+                stringResource(R.string.memory_organize_status_failed, label)
+            },
+        )
+    } else if (result.gate == com.psyche.memo.provider.MemoryGateParseResult.SKIP ||
+        (result.extractedCount == 0 && result.advanced)
+    ) {
+        parts.add(stringResource(R.string.memory_organize_status_skipped))
+    } else {
+        parts.add(stringResource(R.string.memory_organize_status_extracted, result.extractedCount.toString()))
+    }
+    return parts.joinToString(" · ")
+}
+
+/** `_formatRelative` L132-142. */
+@Composable
+private fun relativeTime(atMillis: Long): String {
+    val minutes = ((System.currentTimeMillis() - atMillis) / 60_000L).coerceAtLeast(0)
+    return when {
+        minutes < 1 -> stringResource(R.string.memory_organize_just_now)
+        minutes < 60 -> stringResource(R.string.memory_organize_minutes_ago, minutes.toString())
+        minutes < 60 * 24 -> stringResource(R.string.memory_organize_hours_ago, (minutes / 60).toString())
+        else -> stringResource(R.string.memory_organize_days_ago, (minutes / (60 * 24)).toString())
+    }
 }

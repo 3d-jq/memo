@@ -1172,6 +1172,8 @@ class ChatViewModel(
                 // 消息阈值后生成摘要。二者均复用 TitleSummaryGenerator。
                 maybeGenerateTitle()
                 maybeGenerateSummary()
+                // §12.1 —— 回复完成后按助手的自动整理开关/轮数阈值排队后台整理。
+                maybeOrganizeMemory()
             }
         }
     }
@@ -1271,6 +1273,22 @@ class ChatViewModel(
                 container.conversationDao.get(conversationId)
             }
             title.value = stored?.title?.trim() ?: ""
+        }
+    }
+
+    /**
+     * §12.1 —— 一轮结束后交给记忆 pipeline 排队（autoOrganizeMemory 与
+     * smartAdd 的判定都在 pipeline 里，这里只负责触发；失败不影响聊天）。
+     */
+    private fun maybeOrganizeMemory() {
+        if (isTemporary) return
+        viewModelScope.launch {
+            // The turn's assistant is the conversation's owner; the globally
+            // selected assistant is only a fallback for an unbound conversation.
+            val assistantId = withContext(Dispatchers.IO) {
+                container.conversationDao.get(conversationId)?.assistantId
+            } ?: container.currentAssistantId.value ?: return@launch
+            runCatching { container.memoryPipeline.scheduleIfNeeded(conversationId, assistantId) }
         }
     }
 

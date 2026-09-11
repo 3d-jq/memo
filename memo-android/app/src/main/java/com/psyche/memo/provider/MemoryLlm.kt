@@ -33,6 +33,30 @@ object MemoryLlm {
         return container.clientFor(providerId).complete(request).parts.joinToString("")
     }
 
+    /**
+     * Same call with the provider / model / thinking budget already resolved —
+     * the pipeline needs the assistant's own budget override, which
+     * [generateText] cannot see.
+     */
+    suspend fun generateTextWith(
+        container: AppContainerImpl,
+        providerId: String,
+        modelId: String,
+        prompt: String,
+        thinkingBudget: Int,
+    ): String {
+        val request = LlmRequest(
+            providerId = providerId,
+            modelId = modelId,
+            messages = listOf(LlmMessage(role = "user", content = prompt)),
+            apiKey = container.apiKeyFor(providerId) ?: "",
+            baseUrl = container.baseUrlFor(providerId),
+            chatPath = container.providerConfig(providerId)?.chatPath,
+            thinkingBudget = thinkingBudget,
+        )
+        return container.clientFor(providerId).complete(request).parts.joinToString("")
+    }
+
     /** The call to hand to [MemorySmartAdd], or null when the slot is unset. */
     fun callerOrNull(container: AppContainerImpl): (suspend (String) -> String)? {
         val settings = MemorySettingsState(container)

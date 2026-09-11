@@ -188,6 +188,10 @@ fun HomeScreen(
     var presenting by remember { mutableStateOf(false) }
 
     var selectedConversationId by remember { mutableStateOf<String?>(null) }
+    // Publish the open conversation so the assistant memory tab can organize it.
+    LaunchedEffect(selectedConversationId) {
+        container.setCurrentConversation(selectedConversationId)
+    }
     var temporaryActive by remember { mutableStateOf(false) }
 
     // 顶栏标题刷新信号：抽屉改写了当前会话标题（重命名 / 重新生成标题）后自增，
