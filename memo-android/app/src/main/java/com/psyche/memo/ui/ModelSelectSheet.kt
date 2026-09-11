@@ -32,10 +32,12 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -53,7 +55,11 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -108,6 +114,13 @@ fun loadModelOptions(
 }
 
 /**
+ * DraggableScrollableSheet sizes for the picker (model_select_sheet.dart
+ * `_initialSize`/`_maxSize` L334-335 = 0.8, `minChildSize` L843 = 0.4).
+ */
+private const val MODEL_SELECT_INITIAL_FRACTION = 0.80f
+private const val MODEL_SELECT_MIN_FRACTION = 0.40f
+
+/**
  * Mirrors memo's model_select_sheet.dart: the mobile picker is a
  * showModalBottomSheet(isScrollControlled: true) whose body is a
  * DraggableScrollableSheet with initial/max size 0.8 and min 0.4 of the
@@ -152,13 +165,44 @@ fun ModelSelectSheet(
     }
     val cs = MaterialTheme.colorScheme
     val providers = remember(options) { options.map { it.providerName }.distinct() }
-    // DraggableScrollableSheet initial/maxChildSize = 0.8.
-    val sheetHeight = with(LocalDensity.current) {
-        LocalWindowInfo.current.containerSize.height.toDp() * 0.8f
+    // DraggableScrollableSheet (model_select_sheet.dart L838-843): initial and
+    // max child size 0.8 (`_initialSize`/`_maxSize` L334-335), min 0.4. Its
+    // linked scroll is ported the Compose-native way — a NestedScrollConnection
+    // lets the list drive the sheet height. Since initial == max there is
+    // nothing to grow into, so only the shrink half exists: pulling the list
+    // down at its top edge shrinks the sheet, and reaching 0.4 dismisses it
+    // (`shouldCloseOnMinExtent`, same as ModelDetailSheet).
+    val screenHpx = LocalWindowInfo.current.containerSize.height.toFloat()
+    var sheetFraction by remember { mutableFloatStateOf(MODEL_SELECT_INITIAL_FRACTION) }
+    var sheetClosing by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+    val sheetResizeConnection = object : NestedScrollConnection {
+        override fun onPostScroll(
+            consumed: Offset,
+            available: Offset,
+            source: NestedScrollSource,
+        ): Offset {
+            val dy = available.y
+            // Finger down with the list already at its top edge: shrink the
+            // sheet; hitting the min extent closes it at once (hide() slides
+            // the sheet out, onDismissRequest fires after).
+            if (dy > 0 && !listState.canScrollBackward && sheetFraction > MODEL_SELECT_MIN_FRACTION) {
+                val remaining = sheetFraction - MODEL_SELECT_MIN_FRACTION
+                val shrink = (dy / screenHpx).coerceAtMost(remaining)
+                sheetFraction -= shrink
+                if (shrink >= remaining && !sheetClosing) {
+                    sheetClosing = true
+                    scope.launch { sheetState.hide() }
+                }
+                return Offset(0f, shrink * screenHpx)
+            }
+            return Offset.Zero
+        }
     }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         // memo draws its own handle; Material3's built-in one is suppressed.
@@ -167,7 +211,8 @@ fun ModelSelectSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(sheetHeight),
+                .height(with(LocalDensity.current) { screenHpx.toDp() } * sheetFraction)
+                .nestedScroll(sheetResizeConnection),
         ) {
             // Header: centered drag handle 40x4 α0.2 r999, 8dp above and below.
             Column(

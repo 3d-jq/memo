@@ -44,7 +44,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 顶栏统一（MemoTopBar，40+ 页面已转）、页面转场（PredictiveBack→FadeForwards）、输入框几何对齐 BasicTextField
 
 模型与助手编辑
-- 模型选择 sheet（搜索/收藏/provider chips）+ ModelDetailSheet（编辑/创建双模 + Basic/Advanced/BuiltInTools 三 tab + 可拖拽高度 NestedScrollConnection）
+- 模型选择 sheet（搜索/收藏/provider chips + 可拖拽高度 0.4-0.8）+ ModelDetailSheet（编辑/创建双模 + Basic/Advanced/BuiltInTools 三 tab + 可拖拽高度 NestedScrollConnection）
 - 助手列表页 + AssistantStore + seed + assistant_rows PK 修复；拖拽 animateItem+zIndex / 左滑 pane
 - 编辑页骨架 + 分段条 + basic tab（聊天模型/背景/参数 sheet×4/头像 sheet/思考预算）+ 提示词 tab（系统提示词/消息模板/预设对话）+ 记忆/MCP/本地工具/快捷短语/自定义请求/正则/标签 tab
 - 编辑页 tab 布局管理页 C（重排/隐藏/重置 + 提纲模式 + 单 tab 分段页，`AssistantTabLayoutState` 容器级共享）
@@ -69,7 +69,6 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 待移植 / 剩余（仅以下）
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
-- ModelSelectSheet 可拖拽高度（现固定 0.8，原版 DraggableScrollableSheet min0.4/max0.8，待移植 NestedScrollConnection 等价物——ModelDetailSheet 已做同类）
 - M2d：记忆收尾（哈希冻结/自愈、Smart Add LLM 去重合并、tab 内记忆条目列表与整理、legacy 记忆模式工具）
 - 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
