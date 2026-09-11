@@ -32,6 +32,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -137,8 +138,7 @@ fun TtsFloatingPlayer(modifier: Modifier = Modifier) {
 
         // The status-bar inset is already applied by the modifier above, so the
         // safe top is zero here.
-        val clamped = clampPosition(
-            position ?: Offset(marginPx, topMarginPx + with(density) { INITIAL_TOP_OFFSET.toPx() }),
+        val bounds = PlayerBounds(
             maxWidth = constraints.maxWidth.toFloat(),
             maxHeight = heightPx,
             width = widthPx,
@@ -146,25 +146,25 @@ fun TtsFloatingPlayer(modifier: Modifier = Modifier) {
             horizontalMargin = marginPx,
             topMargin = topMarginPx,
             bottomClearance = bottomClearancePx,
+            initial = Offset(marginPx, topMarginPx + with(density) { INITIAL_TOP_OFFSET.toPx() }),
         )
+        val currentBounds by rememberUpdatedState(bounds)
+        val displayed = clampPosition(position ?: bounds.initial, bounds)
 
         Box(
             modifier = Modifier
-                .offset { IntOffset(clamped.x.roundToInt(), clamped.y.roundToInt()) }
+                .offset { IntOffset(displayed.x.roundToInt(), displayed.y.roundToInt()) }
                 .width(with(density) { widthPx.toDp() })
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
-                        position = clampPosition(
-                            clamped + dragAmount,
-                            maxWidth = constraints.maxWidth.toFloat(),
-                            maxHeight = heightPx,
-                            width = widthPx,
-                            safeTop = 0f,
-                            horizontalMargin = marginPx,
-                            topMargin = topMarginPx,
-                            bottomClearance = bottomClearancePx,
-                        )
+                        // `position` is the state object itself, so this reads the
+                        // latest value on every event; using the composition-time
+                        // position here would recompute from a stale origin and the
+                        // pill would refuse to move.
+                        val latest = currentBounds
+                        val from = position ?: latest.initial
+                        position = clampPosition(from + dragAmount, latest)
                     }
                 },
         ) {
@@ -177,22 +177,25 @@ fun TtsFloatingPlayer(modifier: Modifier = Modifier) {
     }
 }
 
+/** What the pill may move within, in pixels. */
+private data class PlayerBounds(
+    val maxWidth: Float,
+    val maxHeight: Float,
+    val width: Float,
+    val safeTop: Float,
+    val horizontalMargin: Float,
+    val topMargin: Float,
+    val bottomClearance: Float,
+    val initial: Offset,
+)
+
 /** `_clampPosition` — keeps the pill on screen, below the status bar. */
-private fun clampPosition(
-    value: Offset,
-    maxWidth: Float,
-    maxHeight: Float,
-    width: Float,
-    safeTop: Float,
-    horizontalMargin: Float,
-    topMargin: Float,
-    bottomClearance: Float,
-): Offset {
-    val minY = safeTop + topMargin
-    val maxX = max(horizontalMargin, maxWidth - width - horizontalMargin)
-    val maxY = max(minY, maxHeight - bottomClearance)
+private fun clampPosition(value: Offset, bounds: PlayerBounds): Offset {
+    val minY = bounds.safeTop + bounds.topMargin
+    val maxX = max(bounds.horizontalMargin, bounds.maxWidth - bounds.width - bounds.horizontalMargin)
+    val maxY = max(minY, bounds.maxHeight - bounds.bottomClearance)
     return Offset(
-        value.x.coerceIn(horizontalMargin, maxX),
+        value.x.coerceIn(bounds.horizontalMargin, maxX),
         value.y.coerceIn(minY, maxY),
     )
 }
