@@ -69,9 +69,9 @@ fun RenderingSettingsScreen(
     val cs = MaterialTheme.colorScheme
 
     fun readBool(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
+        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
     fun writeBool(key: String, value: Boolean) {
-        container.preferenceRepository.writeLocal(key, if (value) "1" else "0")
+        container.preferenceRepository.writeJson(key, if (value) "1" else "0")
     }
 
     var dollarLatex by remember { mutableStateOf(readBool("display_enable_dollar_latex_v1", true)) }
@@ -87,7 +87,7 @@ fun RenderingSettingsScreen(
     var collapseLines by remember { mutableIntStateOf(2) }
     var collapseLinesText by remember { mutableStateOf("2") }
     LaunchedEffect(Unit) {
-        val stored = container.preferenceRepository.readLocal("display_auto_collapse_code_block_lines_v1")
+        val stored = container.preferenceRepository.readJson("display_auto_collapse_code_block_lines_v1")
         collapseLines = (stored?.toIntOrNull() ?: 2).coerceIn(1, 999)
         collapseLinesText = collapseLines.toString()
     }
@@ -96,7 +96,7 @@ fun RenderingSettingsScreen(
         val parsed = text.toIntOrNull() ?: run { collapseLinesText = collapseLines.toString(); return }
         collapseLines = parsed.coerceIn(1, 999)
         collapseLinesText = collapseLines.toString()
-        container.preferenceRepository.writeLocal(
+        container.preferenceRepository.writeJson(
             "display_auto_collapse_code_block_lines_v1",
             collapseLines.toString(),
         )

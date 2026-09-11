@@ -181,7 +181,7 @@ fun SideDrawerContent(
         // _handleSelectAssistant 3034-3058：设置开启“切换助手后新建会话”时总是
         // 新建；否则有该助手的会话就跳到最近一条，没有才新建。
         val forceNewChat = container.preferenceRepository
-            .readLocal("display_new_chat_on_assistant_switch_v1") == "1"
+            .readJson("display_new_chat_on_assistant_switch_v1") == "1"
         if (forceNewChat) {
             onNew()
             return

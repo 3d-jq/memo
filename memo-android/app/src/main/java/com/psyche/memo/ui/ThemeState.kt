@@ -65,9 +65,9 @@ object ThemeState {
     /** Load once at app start (and after theme edits) from the stores. */
     fun load(container: AppContainerImpl) {
         val prefs = container.preferenceRepository
-        mode = prefs.readLocal(com.psyche.memo.ui.theme.MemoTheme.MODE_KEY)
+        mode = prefs.readJson(com.psyche.memo.ui.theme.MemoTheme.MODE_KEY)
             ?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "system"
-        paletteId = prefs.readLocal(com.psyche.memo.ui.theme.MemoTheme.PALETTE_KEY)
+        paletteId = prefs.readJson(com.psyche.memo.ui.theme.MemoTheme.PALETTE_KEY)
             ?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "default"
         usePureBackground = readBool(prefs, PURE_BACKGROUND_KEY)
         useLayeredSurfaces = readBool(prefs, LAYERED_SURFACES_KEY)
@@ -92,12 +92,12 @@ object ThemeState {
     }.getOrNull() ?: false
 
     fun setMode(container: AppContainerImpl, value: String) {
-        container.preferenceRepository.writeLocal(com.psyche.memo.ui.theme.MemoTheme.MODE_KEY, value)
+        container.preferenceRepository.writeJson(com.psyche.memo.ui.theme.MemoTheme.MODE_KEY, value)
         mode = value
     }
 
     fun setPalette(container: AppContainerImpl, id: String) {
-        container.preferenceRepository.writeLocal(com.psyche.memo.ui.theme.MemoTheme.PALETTE_KEY, id)
+        container.preferenceRepository.writeJson(com.psyche.memo.ui.theme.MemoTheme.PALETTE_KEY, id)
         paletteId = id
     }
 
@@ -123,7 +123,7 @@ object ThemeState {
 
     /** selectCustomTheme — empty/'' id selects the custom palette id itself. */
     fun selectCustomTheme(container: AppContainerImpl, id: String) {
-        container.preferenceRepository.writeLocal(
+        container.preferenceRepository.writeJson(
             com.psyche.memo.ui.theme.MemoTheme.PALETTE_KEY,
             CUSTOM_PALETTE_ID,
         )

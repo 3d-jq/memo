@@ -65,22 +65,22 @@ fun ImageSettingsScreen(
     val cs = MaterialTheme.colorScheme
 
     fun readBool(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
+        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
     fun writeBool(key: String, value: Boolean) {
-        container.preferenceRepository.writeLocal(key, if (value) "1" else "0")
+        container.preferenceRepository.writeJson(key, if (value) "1" else "0")
     }
 
     var cropperEnabled by remember { mutableStateOf(readBool("image_cropper_enabled_v1", false)) }
     // settings_provider.dart:5211-5217 — unknown/missing → balanced.
     var uploadQuality by remember {
         mutableStateOf(
-            container.preferenceRepository.readLocal("image_upload_quality_v1")?.takeIf { it in qualityIds }
+            container.preferenceRepository.readJson("image_upload_quality_v1")?.takeIf { it in qualityIds }
                 ?: "balanced",
         )
     }
     // settings_provider.dart:5218-5219 — default 85, clamp 10..100.
     var customQuality by remember {
-        mutableIntStateOf((container.preferenceRepository.readLocal("image_compress_custom_quality_v1")?.toIntOrNull() ?: 85).coerceIn(10, 100))
+        mutableIntStateOf((container.preferenceRepository.readJson("image_compress_custom_quality_v1")?.toIntOrNull() ?: 85).coerceIn(10, 100))
     }
     var compressTransparent by remember { mutableStateOf(readBool("image_compress_transparent_enabled_v1", false)) }
     var mdImageLinks by remember { mutableStateOf(readBool("send_markdown_image_links_as_images_v1", false)) }
@@ -155,7 +155,7 @@ fun ImageSettingsScreen(
                             selected = uploadQuality == id,
                             onTap = {
                                 uploadQuality = id
-                                container.preferenceRepository.writeLocal("image_upload_quality_v1", id)
+                                container.preferenceRepository.writeJson("image_upload_quality_v1", id)
                             },
                         )
                         if (id == "custom" && uploadQuality == "custom") {
@@ -181,7 +181,7 @@ fun ImageSettingsScreen(
                                     onValueChange = { customQuality = (it.toInt() / 5) * 5 },
                                     valueRange = 10f..100f,
                                     onValueChangeFinished = {
-                                        container.preferenceRepository.writeLocal(
+                                        container.preferenceRepository.writeJson(
                                             "image_compress_custom_quality_v1",
                                             customQuality.toString(),
                                         )

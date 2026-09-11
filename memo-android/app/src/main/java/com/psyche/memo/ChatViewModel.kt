@@ -1907,7 +1907,7 @@ class ChatViewModel(
         )
 
     private fun readBool(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
+        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
 
     /**
      * Expand/collapse one reasoning segment

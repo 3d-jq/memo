@@ -216,40 +216,40 @@ fun MessageStyleSettingsScreen(
     var colorPicker by remember { mutableStateOf<String?>(null) } // "bg" | "border" | "text"
 
     LaunchedEffect(Unit) {
-        style = container.preferenceRepository.readLocal("display_chat_message_background_style_v1")
+        style = container.preferenceRepository.readJson("display_chat_message_background_style_v1")
             ?.takeIf { it.isNotEmpty() } ?: "default"
-        fitContent = container.preferenceRepository.readLocal("display_assistant_bubble_fit_content_v1") == "1"
-        splitParagraphs = container.preferenceRepository.readLocal("display_assistant_bubble_split_paragraphs_v1") == "1"
+        fitContent = container.preferenceRepository.readJson("display_assistant_bubble_fit_content_v1") == "1"
+        splitParagraphs = container.preferenceRepository.readJson("display_assistant_bubble_split_paragraphs_v1") == "1"
         assistantOverrides = BubbleOverrides.fromJson(
-            container.preferenceRepository.readLocal("chat_bubble_style_overrides_v1"),
+            container.preferenceRepository.readJson("chat_bubble_style_overrides_v1"),
         )
         userOverrides = BubbleOverrides.fromJson(
-            container.preferenceRepository.readLocal("chat_bubble_style_overrides_user_v1"),
+            container.preferenceRepository.readJson("chat_bubble_style_overrides_user_v1"),
         )
     }
 
     fun saveStyle(v: String) {
         style = v
-        container.preferenceRepository.writeLocal("display_chat_message_background_style_v1", v)
+        container.preferenceRepository.writeJson("display_chat_message_background_style_v1", v)
     }
     fun saveBool(key: String, v: Boolean) {
-        container.preferenceRepository.writeLocal(key, if (v) "1" else "0")
+        container.preferenceRepository.writeJson(key, if (v) "1" else "0")
     }
     // settings_provider.dart:2862-2894 — per-role write.
     fun saveOverrides(v: BubbleOverrides) {
         if (editingUser) {
             userOverrides = v
-            container.preferenceRepository.writeLocal("chat_bubble_style_overrides_user_v1", v.toJson())
+            container.preferenceRepository.writeJson("chat_bubble_style_overrides_user_v1", v.toJson())
         } else {
             assistantOverrides = v
-            container.preferenceRepository.writeLocal("chat_bubble_style_overrides_v1", v.toJson())
+            container.preferenceRepository.writeJson("chat_bubble_style_overrides_v1", v.toJson())
         }
     }
     // settings_provider.dart:2844-2860 — reset clears both roles.
     fun resetOverrides() {
         assistantOverrides = BubbleOverrides()
         userOverrides = BubbleOverrides()
-        container.preferenceRepository.writeLocal("chat_bubble_style_overrides_v1", "{}")
+        container.preferenceRepository.writeJson("chat_bubble_style_overrides_v1", "{}")
         container.preferenceRepository.remove("chat_bubble_style_overrides_user_v1")
     }
 

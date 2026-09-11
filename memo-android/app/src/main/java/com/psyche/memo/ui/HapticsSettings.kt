@@ -44,7 +44,7 @@ val LocalHapticsSettings = staticCompositionLocalOf {
 @Composable
 fun ProvideHapticsSettings(container: AppContainerImpl, content: @Composable () -> Unit) {
     val settings = HapticsSettings { key, default ->
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
+        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
     }
     SideEffect { Haptics.enabledProvider = { settings.globalEnabled } }
     CompositionLocalProvider(LocalHapticsSettings provides settings) { content() }

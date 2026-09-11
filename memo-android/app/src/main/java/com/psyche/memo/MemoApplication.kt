@@ -36,7 +36,7 @@ class MemoApplication : Application(), ImageLoaderFactory {
         // Live Update 进度通知管理器（RikkaHub ChatNotificationManager）：
         // 注入 context + 偏好读取函数（RikkaHub 构造注入等价）。
         com.psyche.memo.service.ChatNotificationManager.init(this) { key ->
-            container.preferenceRepository.readLocal(key)
+            container.preferenceRepository.readJson(key)
         }
     }
 

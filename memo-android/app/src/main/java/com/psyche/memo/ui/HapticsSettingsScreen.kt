@@ -56,9 +56,9 @@ fun HapticsSettingsScreen(
     val cs = MaterialTheme.colorScheme
 
     fun readBool(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
+        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
     fun writeBool(key: String, value: Boolean) {
-        container.preferenceRepository.writeLocal(key, if (value) "1" else "0")
+        container.preferenceRepository.writeJson(key, if (value) "1" else "0")
     }
 
     var global by remember { mutableStateOf(readBool(HapticsSettings.KEY_GLOBAL, true)) }

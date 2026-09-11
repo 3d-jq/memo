@@ -128,26 +128,26 @@ fun DisplaySettingsScreen(
     val currentLanguage = LocalConfiguration.current.locales[0].language
 
     fun reloadPalette() {
-        val raw = container.preferenceRepository.readLocal(MemoTheme.PALETTE_KEY)
+        val raw = container.preferenceRepository.readJson(MemoTheme.PALETTE_KEY)
         val palette = paletteById(raw?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "default")
         paletteName = if (currentLanguage == "zh") palette.zhName else palette.enName
     }
     fun reloadAll() {
         reloadPalette()
-        themeMode = container.preferenceRepository.readLocal(MemoTheme.MODE_KEY)?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "system"
-        backgroundChatMode = container.preferenceRepository.readLocal("android_background_chat_mode_v1")?.takeIf { it.isNotEmpty() } ?: "off"
+        themeMode = container.preferenceRepository.readJson(MemoTheme.MODE_KEY)?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "system"
+        backgroundChatMode = container.preferenceRepository.readJson("android_background_chat_mode_v1")?.takeIf { it.isNotEmpty() } ?: "off"
         liveUpdateEnabled =
-            container.preferenceRepository.readLocal("enable_live_update_notification_v1") == "1"
-        appFontAlias = container.preferenceRepository.readLocal("display_app_font_local_alias_v1")?.takeIf { it.isNotEmpty() }
-        appFontFamily = container.preferenceRepository.readLocal("display_app_font_family_v1")?.takeIf { it.isNotEmpty() }
-        codeFontAlias = container.preferenceRepository.readLocal("display_code_font_local_alias_v1")?.takeIf { it.isNotEmpty() }
-        codeFontFamily = container.preferenceRepository.readLocal("display_code_font_family_v1")?.takeIf { it.isNotEmpty() }
-        chatFontScale = container.preferenceRepository.readLocal("display_chat_font_scale_v1")?.toDoubleOrNull() ?: 1.0
-        autoScrollEnabled = container.preferenceRepository.readLocal("display_auto_scroll_enabled_v1")?.let { it == "1" } ?: true
-        autoScrollIdleSeconds = container.preferenceRepository.readLocal("display_auto_scroll_idle_seconds_v1")?.toIntOrNull() ?: 8
-        maskStrength = container.preferenceRepository.readLocal("display_chat_background_mask_strength_v1")?.toDoubleOrNull() ?: 1.0
-        inputOpacityLight = container.preferenceRepository.readLocal("display_chat_input_background_opacity_light_v1")?.toDoubleOrNull() ?: 0.8236
-        inputOpacityDark = container.preferenceRepository.readLocal("display_chat_input_background_opacity_dark_v1")?.toDoubleOrNull() ?: 0.7396
+            container.preferenceRepository.readJson("enable_live_update_notification_v1") == "1"
+        appFontAlias = container.preferenceRepository.readJson("display_app_font_local_alias_v1")?.takeIf { it.isNotEmpty() }
+        appFontFamily = container.preferenceRepository.readJson("display_app_font_family_v1")?.takeIf { it.isNotEmpty() }
+        codeFontAlias = container.preferenceRepository.readJson("display_code_font_local_alias_v1")?.takeIf { it.isNotEmpty() }
+        codeFontFamily = container.preferenceRepository.readJson("display_code_font_family_v1")?.takeIf { it.isNotEmpty() }
+        chatFontScale = container.preferenceRepository.readJson("display_chat_font_scale_v1")?.toDoubleOrNull() ?: 1.0
+        autoScrollEnabled = container.preferenceRepository.readJson("display_auto_scroll_enabled_v1")?.let { it == "1" } ?: true
+        autoScrollIdleSeconds = container.preferenceRepository.readJson("display_auto_scroll_idle_seconds_v1")?.toIntOrNull() ?: 8
+        maskStrength = container.preferenceRepository.readJson("display_chat_background_mask_strength_v1")?.toDoubleOrNull() ?: 1.0
+        inputOpacityLight = container.preferenceRepository.readJson("display_chat_input_background_opacity_light_v1")?.toDoubleOrNull() ?: 0.8236
+        inputOpacityDark = container.preferenceRepository.readJson("display_chat_input_background_opacity_dark_v1")?.toDoubleOrNull() ?: 0.7396
     }
     LaunchedEffect(Unit) { reloadAll() }
 
@@ -166,9 +166,9 @@ fun DisplaySettingsScreen(
                 }
                 val alias = name.substringAfterLast('.')
                 val prefix = if (target == "app") "display_app_font" else "display_code_font"
-                container.preferenceRepository.writeLocal("${prefix}_local_path_v1", dest.absolutePath)
-                container.preferenceRepository.writeLocal("${prefix}_local_alias_v1", alias)
-                container.preferenceRepository.writeLocal("${prefix}_family_v1", alias)
+                container.preferenceRepository.writeJson("${prefix}_local_path_v1", dest.absolutePath)
+                container.preferenceRepository.writeJson("${prefix}_local_alias_v1", alias)
+                container.preferenceRepository.writeJson("${prefix}_family_v1", alias)
             }
             reloadAll()
         }
@@ -370,7 +370,7 @@ fun DisplaySettingsScreen(
                         value = liveUpdateEnabled,
                         onToggle = { v ->
                             liveUpdateEnabled = v
-                            container.preferenceRepository.writeLocal(
+                            container.preferenceRepository.writeJson(
                                 "enable_live_update_notification_v1",
                                 if (v) "1" else "0",
                             )
@@ -403,7 +403,7 @@ fun DisplaySettingsScreen(
             ),
             onSelect = { value ->
                 backgroundChatMode = value
-                container.preferenceRepository.writeLocal("android_background_chat_mode_v1", value)
+                container.preferenceRepository.writeJson("android_background_chat_mode_v1", value)
                 backgroundChatSheetVisible = false
             },
             onDismiss = { backgroundChatSheetVisible = false },
@@ -423,7 +423,7 @@ fun DisplaySettingsScreen(
                         onValueChange = { v ->
                             scale = (Math.round(v / 0.05f) * 0.05f)
                             chatFontScale = scale.toDouble()
-                            container.preferenceRepository.writeLocal("display_chat_font_scale_v1", scale.toString())
+                            container.preferenceRepository.writeJson("display_chat_font_scale_v1", scale.toString())
                         },
                         valueRange = 0.5f..1.5f,
                         modifier = Modifier.weight(1f),
@@ -464,7 +464,7 @@ fun DisplaySettingsScreen(
                         onValueChanged = { v ->
                             enabled = v
                             autoScrollEnabled = v
-                            container.preferenceRepository.writeLocal("display_auto_scroll_enabled_v1", if (v) "1" else "0")
+                            container.preferenceRepository.writeJson("display_auto_scroll_enabled_v1", if (v) "1" else "0")
                         },
                     )
                 }
@@ -478,7 +478,7 @@ fun DisplaySettingsScreen(
                             seconds = Math.round(v / 2f) * 2f
                             autoScrollIdleSeconds = seconds.toInt()
                             if (enabled) {
-                                container.preferenceRepository.writeLocal("display_auto_scroll_idle_seconds_v1", seconds.toInt().toString())
+                                container.preferenceRepository.writeJson("display_auto_scroll_idle_seconds_v1", seconds.toInt().toString())
                             }
                         },
                         valueRange = 2f..64f,
@@ -503,7 +503,7 @@ fun DisplaySettingsScreen(
                         onValueChange = { v ->
                             strength = Math.round(v / 5f) * 5f
                             maskStrength = strength / 100.0
-                            container.preferenceRepository.writeLocal(
+                            container.preferenceRepository.writeJson(
                                 "display_chat_background_mask_strength_v1",
                                 (strength / 100.0).toString(),
                             )
@@ -534,7 +534,7 @@ fun DisplaySettingsScreen(
                     onCommit = { v ->
                         light = v
                         inputOpacityLight = v / 100.0
-                        container.preferenceRepository.writeLocal(
+                        container.preferenceRepository.writeJson(
                             "display_chat_input_background_opacity_light_v1",
                             (v / 100.0).toString(),
                         )
@@ -551,7 +551,7 @@ fun DisplaySettingsScreen(
                     onCommit = { v ->
                         dark = v
                         inputOpacityDark = v / 100.0
-                        container.preferenceRepository.writeLocal(
+                        container.preferenceRepository.writeJson(
                             "display_chat_input_background_opacity_dark_v1",
                             (v / 100.0).toString(),
                         )

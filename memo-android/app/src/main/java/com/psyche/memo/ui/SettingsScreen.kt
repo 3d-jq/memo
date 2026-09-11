@@ -173,7 +173,7 @@ fun SettingsScreen(
     // (settings_provider.dart:324-327,1141-1146: request/context default on,
     // flutter default off).
     fun logEnabled(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
+        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
     val logsVisible = logEnabled("request_log_enabled_v1", true) ||
         logEnabled("context_log_enabled_v1", true) ||
         logEnabled("flutter_log_enabled_v1", false)

@@ -17,7 +17,8 @@ import org.robolectric.annotation.Config
  * three user-profile keys used to live in SharedPreferences while the backup
  * exporter only scans preference_rows, so a backup silently lost them. The
  * migration moves any leftovers into the DB and clears the local slot; a DB
- * value already present (written after the switch) must win.
+ * value already present (written after the switch) must win. LOCAL_ONLY keys
+ * must never be moved either way.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -108,5 +109,34 @@ class PreferenceMigrationTest {
         container.preferenceRepository.migrateLegacyLocalSettings()
 
         assertEquals("1", container.preferenceRepository.readJson("display_show_user_avatar_v1"))
+    }
+
+    @Test
+    fun `local-only display key is left untouched`() {
+        // display_chat_font_scale_v1 is classified LOCAL_ONLY; the migration
+        // must not move it into preference_rows (it belongs in prefs).
+        prefs.edit().putString("display_chat_font_scale_v1", "1.15").apply()
+
+        container.preferenceRepository.migrateLegacyLocalSettings()
+
+        // Still readable through the unified readJson (LOCAL_ONLY falls back to
+        // SharedPreferences) and never present in the DB.
+        assertEquals("1.15", prefs.getString("display_chat_font_scale_v1", null))
+        assertEquals("1.15", container.preferenceRepository.readJson("display_chat_font_scale_v1"))
+        assertEquals(false, container.preferenceRepository.readAllRows().containsKey("display_chat_font_scale_v1"))
+    }
+
+    @Test
+    fun `misplaced local-only key returns to prefs`() {
+        // An earlier migration version wrongly moved LOCAL_ONLY keys (font scale)
+        // into preference_rows; the migration must hand the value back to prefs
+        // and drop the DB row.
+        container.preferenceRepository.writeJson("display_chat_font_scale_v1", "1.15")
+
+        container.preferenceRepository.migrateLegacyLocalSettings()
+
+        assertEquals("1.15", prefs.getString("display_chat_font_scale_v1", null))
+        assertEquals("1.15", container.preferenceRepository.readJson("display_chat_font_scale_v1"))
+        assertEquals(false, container.preferenceRepository.readAllRows().containsKey("display_chat_font_scale_v1"))
     }
 }

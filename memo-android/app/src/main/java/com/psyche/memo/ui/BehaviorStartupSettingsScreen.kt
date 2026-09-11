@@ -90,12 +90,12 @@ fun BehaviorStartupSettingsScreen(
     val cs = MaterialTheme.colorScheme
 
     fun readBool(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readLocal(key)?.let { it == "1" } ?: default
+        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
     fun writeBool(key: String, value: Boolean) {
-        container.preferenceRepository.writeLocal(key, if (value) "1" else "0")
+        container.preferenceRepository.writeJson(key, if (value) "1" else "0")
     }
     fun readInt(key: String, default: Int): Int =
-        container.preferenceRepository.readLocal(key)?.toIntOrNull() ?: default
+        container.preferenceRepository.readJson(key)?.toIntOrNull() ?: default
 
     var autoCollapseThinking by remember { mutableStateOf(readBool("display_auto_collapse_thinking_v1", true)) }
     // settings_provider.dart:4721 —— _collapseThinkingSteps = false。
@@ -112,7 +112,7 @@ fun BehaviorStartupSettingsScreen(
     // —— 消息导航为三态（always/scroll/never）；旧 bool 键 display_show_message_nav_v1
     // 仅作迁移回退（true→scroll / false→never）。
     val initialNavMode = run {
-        when (container.preferenceRepository.readLocal("display_mobile_message_nav_buttons_mode_v1")) {
+        when (container.preferenceRepository.readJson("display_mobile_message_nav_buttons_mode_v1")) {
             "always" -> "always"
             "never" -> "never"
             "scroll" -> "scroll"
@@ -144,7 +144,7 @@ fun BehaviorStartupSettingsScreen(
         }
         longPasteThreshold = parsed.coerceIn(1, 999999)
         longPasteThresholdText = longPasteThreshold.toString()
-        container.preferenceRepository.writeLocal("display_long_paste_as_file_threshold_v1", longPasteThreshold.toString())
+        container.preferenceRepository.writeJson("display_long_paste_as_file_threshold_v1", longPasteThreshold.toString())
     }
 
     Column(
@@ -423,7 +423,7 @@ fun BehaviorStartupSettingsScreen(
                     showMessageNavMode,
                 ) { mode ->
                     showMessageNavMode = mode
-                    container.preferenceRepository.writeLocal("display_mobile_message_nav_buttons_mode_v1", mode)
+                    container.preferenceRepository.writeJson("display_mobile_message_nav_buttons_mode_v1", mode)
                     navModeSheetVisible = false
                 }
                 HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
@@ -433,7 +433,7 @@ fun BehaviorStartupSettingsScreen(
                     showMessageNavMode,
                 ) { mode ->
                     showMessageNavMode = mode
-                    container.preferenceRepository.writeLocal("display_mobile_message_nav_buttons_mode_v1", mode)
+                    container.preferenceRepository.writeJson("display_mobile_message_nav_buttons_mode_v1", mode)
                     navModeSheetVisible = false
                 }
                 HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
@@ -443,7 +443,7 @@ fun BehaviorStartupSettingsScreen(
                     showMessageNavMode,
                 ) { mode ->
                     showMessageNavMode = mode
-                    container.preferenceRepository.writeLocal("display_mobile_message_nav_buttons_mode_v1", mode)
+                    container.preferenceRepository.writeJson("display_mobile_message_nav_buttons_mode_v1", mode)
                     navModeSheetVisible = false
                 }
             }
