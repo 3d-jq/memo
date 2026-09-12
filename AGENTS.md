@@ -25,6 +25,9 @@ fills in native-side details and shared feature implementations.
 
 这些地方**故意**与原版不同（**完整清单见 `memo-android/docs/PORTING.md` §5.11**，含平台差异与踩坑）：
 - **旧版（V1）记忆模式不移植**（用户点名：Memo 无老数据）
+- **供应商分组整块删除**：UI（详情页分组行 / 列表分组头折叠 / 移动分组钮 / 分组管理页与路由）与数据层（`ProviderGroup`、`ProviderGroupLogic`、三个分组偏好键、备份里的 `provider_groups_v1` 实体）全删——用户 2026-09-12「把分组这个去掉吧 我感觉没有什么用」「去掉就彻底呀」。**勿按原版加回来**
+- **流式等待提示＝扫光文字**：`ThinkingShimmerText`（15sp 主题色轮换短语 + 扫光，列表末尾单独一行靠左），替代原版三点脉动（`LoadingIndicator`）。用户点名改；工具卡里的小三点保持原版。**勿按原版修回三点**
+- **⏸ `memo-android/docs/UI_AUDIT_2026-09-12.md` 是用户自己的 UI/UX 审计报告，用户说「先不做」**：不要当待办自行开工、也不要删
 - **语音播放图标按消息归属**：原版 `chat_message_widget.dart:3253-3291` 用全局 `isActive`，读一条消息会让**所有**消息显示停止、且暂停不可见；我们按 `ownerId` 只让被朗读的那条响应（暂停显示"继续"）——用户实测后要求
 - **搜索引用胶囊尺寸**：原版 20dp/12sp/20% 底，用户要求缩小一档（16dp/10sp/16%，全圆）
 - **输入栏样式**：保持 kelivo 原样，但最小高改为 64dp（用户要求）；其余参数勿动
@@ -74,7 +77,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 
 设置、系统与服务壳
 - provider 管理页、语音服务/备份/赞助 UI 壳（BackupScreen/LocalSnapshotsScreen/SponsorScreen）+ TTS/ASR 编辑器全屏化
-- **供应商域收官（2026-09-12 用户点名「把供应商这个部分全部移植」）**：详情页 AppBar（头像/测试/分享/删除）+ 配置 tab（无分隔线、整卡无前置图标〔原版 `_iosRow`〕、底部分段条 insets 修正）+ 头像五选一（`ProviderAvatar`/`BrandIconCatalog` 59 图标）+ **API 端点三选一 combobox**（`ApiPathField`：与同屏输入框同宽同高、字段里显示当前路径、点击出锚定下拉、选中变色不打勾；Anthropic Messages `/v1/messages` / Chat Completions `/chat/completions` / Responses `/responses`；详情页与添加供应商页共用，原版「Response API 开关 + 手填路径」已合并——**勿改回**）+ **Responses API 真接线**（`ResponsesApi`/`ResponsesDecoder` + `LlmRequest.useResponseApi`：input items/instructions/`max_output_tokens`/工具摊平/厂商 reasoning、`response.*` SSE 事件与 `call_id` 成对的上行 follow-up；8 处请求组装点填充）+ 获取模型选择面板（搜索/家族分组/整组增删）+ 测试连接对话框（选模型 + 使用流式 + 四态）+ 列表页多选导出面板；**供应商分组 UI 全部删除**（用户 2026-09-12：「把分组这个去掉吧 我感觉没有什么用」——详情页分组行/列表分组头/移动分组钮/分组管理页都删了，**数据层与备份键保留**，勿按原版加回来）
+- **供应商域收官（2026-09-12 用户点名「把供应商这个部分全部移植」）**：详情页 AppBar（头像/测试/分享/删除）+ 配置 tab（无分隔线、整卡无前置图标〔原版 `_iosRow`〕、底部分段条 insets 修正）+ 头像五选一（`ProviderAvatar`/`BrandIconCatalog` 59 图标）+ **API 端点三选一 combobox**（`ApiPathField`：与同屏输入框同宽同高、字段里显示当前路径、点击出锚定下拉、选中变色不打勾；Anthropic Messages `/v1/messages` / Chat Completions `/chat/completions` / Responses `/responses`；详情页与添加供应商页共用，原版「Response API 开关 + 手填路径」已合并——**勿改回**）+ **Responses API 真接线**（`ResponsesApi`/`ResponsesDecoder` + `LlmRequest.useResponseApi`：input items/instructions/`max_output_tokens`/工具摊平/厂商 reasoning、`response.*` SSE 事件与 `call_id` 成对的上行 follow-up；8 处请求组装点填充）+ 获取模型选择面板（搜索/家族分组/整组增删）+ 测试连接对话框（选模型 + 使用流式 + 四态）+ 列表页多选导出面板；**供应商分组整块删除**（用户 2026-09-12：「把分组这个去掉吧 我感觉没有什么用」「去掉就彻底呀」——UI 与数据层一起删，见上「有意偏离」）
 - **本机副本（备份子块 3）已落地**：保留策略/存储/调度/设置 + 本机副本页全接线（存一份/恢复/导出/置顶/删除，启动与回前台自动调度）
 - **merge 恢复 + 备份提醒（备份子块 2/4）已落地（2026-09-12）**：`DatabaseSnapshotMerger`（ATTACH 快照、指纹去重、冲突整段换确定性 merge- id）+ `SettingsSnapshotMerger`（助手 avatar/background 本地优先、记忆内容去重、偏好本地有就不动）+ `BackupReminder`（五键调度 + 分钟 ticker + 抽屉到期横幅 + 滚轮时间选择）；恢复顺序修正为数据库先行、settings 后写；备份页 §2/§3 全接线
 - **WebDAV 备份（备份子块 5）已落地（2026-09-12）**：`WebDavClient`（OkHttp + XmlPullParser：PROPFIND/MKCOL 逐段建目录/PUT/GET/DELETE + Basic auth + 多状态解析）+ 设置子页 `webdav_settings` + 备份页 §5 四行（设置/测试连接/恢复远端列表 sheet/立即备份）；配置键 `webdav_config_v1`，默认目录品牌化为 `memo_backups`
