@@ -2,6 +2,7 @@ package com.psyche.memo.provider
 
 import com.psyche.memo.data.model.ProviderConfig
 import com.psyche.memo.data.repo.ApiKeyManager
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -135,7 +136,7 @@ object BalanceValueParser {
     private fun readNumber(json: JsonElement, path: String): Double {
         val value = readPath(json, path)
         val parsed = (value as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toDoubleOrNull()
-            ?: (value as? JsonPrimitive)?.content?.toDoubleOrNull()
+            ?: (value as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
         if (parsed == null) {
             throw ProviderBalanceService.BalanceException(
                 "Balance value at \"${path.trim()}\" is not numeric",

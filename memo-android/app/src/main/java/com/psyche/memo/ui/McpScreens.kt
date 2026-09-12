@@ -74,6 +74,7 @@ import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.LocalSemanticColors
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -828,7 +829,7 @@ internal fun importMcpJson(
     val out = mutableListOf<McpServerConfig>()
     fun fromObject(name: String?, obj: JsonObject) {
         val json = Json { ignoreUnknownKeys = true }
-        val id = (obj["id"] as? JsonPrimitive)?.content
+        val id = (obj["id"] as? JsonPrimitive)?.contentOrNull
             ?: name?.takeIf { it.isNotBlank() }?.let { byId.values.firstOrNull { s -> s.name == it }?.id }
             ?: java.util.UUID.randomUUID().toString().take(8)
         val decoded = runCatching { json.decodeFromJsonElement(McpServerConfig.serializer(), obj) }

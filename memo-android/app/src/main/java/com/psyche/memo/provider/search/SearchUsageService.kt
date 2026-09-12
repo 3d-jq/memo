@@ -3,6 +3,7 @@ package com.psyche.memo.provider.search
 import com.psyche.memo.data.model.LinkUpOptions
 import com.psyche.memo.data.model.SearchServiceOptions
 import com.psyche.memo.data.model.TavilyOptions
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.OkHttpClient
@@ -133,5 +134,5 @@ object SearchUsageService {
         runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body) as? JsonObject }.getOrNull()
 
     private fun num(el: kotlinx.serialization.json.JsonElement?): Double? =
-        (el as? JsonPrimitive)?.content?.toDoubleOrNull()
+        (el as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
 }

@@ -9,6 +9,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.provider.CalendarContract
 import com.psyche.memo.ui.chat.TtsPlayer
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -566,8 +567,8 @@ object LocalToolExecutors {
         (this[key] as? JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content
 
     private fun JsonObject.int(key: String): Int? =
-        (this[key] as? JsonPrimitive)?.content?.toIntOrNull()
+        (this[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
 
     private fun JsonObject.bool(key: String): Boolean? =
-        (this[key] as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
+        (this[key] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()
 }

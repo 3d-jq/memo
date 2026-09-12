@@ -4,6 +4,7 @@ import com.psyche.memo.common.logging.FlutterLogger
 import com.psyche.memo.llm.stream.DecodeResult
 import com.psyche.memo.llm.stream.SseEvent
 import com.psyche.memo.llm.stream.StreamChunk
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -87,7 +88,7 @@ class ChatCompletionsDecoder(
         if (choices != null && choices.isNotEmpty()) {
             val c0 = choices.firstOrNull()?.jsonObject
             if (c0 != null) {
-                finishReason = (c0["finish_reason"] as? JsonPrimitive)?.content
+                finishReason = (c0["finish_reason"] as? JsonPrimitive)?.contentOrNull
                 val message = c0["message"]?.jsonObject
                 val delta = c0["delta"]?.jsonObject
                 if (delta != null) {
@@ -97,7 +98,7 @@ class ChatCompletionsDecoder(
                         assistantContent += deltaContent
                     }
                     (delta["reasoning_content"] ?: delta["reasoning"])?.let { rc ->
-                        val rcText = (rc as? JsonPrimitive)?.content
+                        val rcText = (rc as? JsonPrimitive)?.contentOrNull
                         if (!rcText.isNullOrEmpty()) {
                             reasoning = rcText
                             reasoningEcho?.append(rcText)
@@ -128,12 +129,12 @@ class ChatCompletionsDecoder(
         if (rootToolCalls != null && rootToolCalls.isNotEmpty()) {
             for (t in rootToolCalls) {
                 val tObj = t.jsonObject ?: continue
-                val id = (tObj["id"] as? JsonPrimitive)?.content ?: ""
-                val type = (tObj["type"] as? JsonPrimitive)?.content ?: "function"
+                val id = (tObj["id"] as? JsonPrimitive)?.contentOrNull ?: ""
+                val type = (tObj["type"] as? JsonPrimitive)?.contentOrNull ?: "function"
                 if (type != "function") continue
                 val func = tObj["function"]?.jsonObject ?: continue
-                val name = (func["name"] as? JsonPrimitive)?.content ?: ""
-                val argsStr = (func["arguments"] as? JsonPrimitive)?.content ?: ""
+                val name = (func["name"] as? JsonPrimitive)?.contentOrNull ?: ""
+                val argsStr = (func["arguments"] as? JsonPrimitive)?.contentOrNull ?: ""
                 if (name.isEmpty()) continue
                 val idx = toolCalls.size
                 toolCalls[idx] = JsonObject(
@@ -170,13 +171,13 @@ class ChatCompletionsDecoder(
         val items = delta as? JsonArray ?: return
         for (item in items) {
             val obj = item.jsonObject ?: continue
-            val index = (obj["index"] as? JsonPrimitive)?.content?.toIntOrNull() ?: continue
-            val id = (obj["id"] as? JsonPrimitive)?.content ?: ""
-            val type = (obj["type"] as? JsonPrimitive)?.content ?: "function"
+            val index = (obj["index"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: continue
+            val id = (obj["id"] as? JsonPrimitive)?.contentOrNull ?: ""
+            val type = (obj["type"] as? JsonPrimitive)?.contentOrNull ?: "function"
             if (type != "function") continue
             val func = obj["function"]?.jsonObject ?: continue
-            val nameDelta = (func["name"] as? JsonPrimitive)?.content ?: ""
-            val argsDelta = (func["arguments"] as? JsonPrimitive)?.content ?: ""
+            val nameDelta = (func["name"] as? JsonPrimitive)?.contentOrNull ?: ""
+            val argsDelta = (func["arguments"] as? JsonPrimitive)?.contentOrNull ?: ""
             val entry = toolCalls.getOrPut(index) {
                 JsonObject(mapOf("id" to JsonPrimitive(id), "name" to JsonPrimitive(""), "args" to JsonPrimitive("")))
             }
@@ -196,12 +197,12 @@ class ChatCompletionsDecoder(
         val items = value as? JsonArray ?: return
         for (t in items) {
             val obj = t.jsonObject ?: continue
-            val id = (obj["id"] as? JsonPrimitive)?.content ?: ""
-            val type = (obj["type"] as? JsonPrimitive)?.content ?: "function"
+            val id = (obj["id"] as? JsonPrimitive)?.contentOrNull ?: ""
+            val type = (obj["type"] as? JsonPrimitive)?.contentOrNull ?: "function"
             if (type != "function") continue
             val func = obj["function"]?.jsonObject ?: continue
-            val name = (func["name"] as? JsonPrimitive)?.content ?: ""
-            val argsStr = (func["arguments"] as? JsonPrimitive)?.content ?: ""
+            val name = (func["name"] as? JsonPrimitive)?.contentOrNull ?: ""
+            val argsStr = (func["arguments"] as? JsonPrimitive)?.contentOrNull ?: ""
             if (name.isEmpty()) continue
             val idx = toolCalls.size
             toolCalls[idx] = JsonObject(
@@ -215,9 +216,15 @@ class ChatCompletionsDecoder(
 
     private fun extractDeltaText(delta: JsonObject): String {
         val content = delta["content"] ?: return ""
-        if (content is JsonPrimitive) return content.content
+        // **JSON null 陷阱**：kotlinx 的 `JsonNull` 也是 `JsonPrimitive`，`.content`
+        // 会给出字面量 "null" —— DeepSeek 思考时每个 chunk 都是
+        // `{"content":null,"reasoning_content":"…"}`，用 `.content` 会把 "null"
+        // 当正文追加进消息（用户实测「换 DeepSeek 输出全是乱的、会输出 null」）。
+        // `contentOrNull` 对 JsonNull 返回 null。
+        if (content is JsonPrimitive) return content.contentOrNull ?: ""
         // Array-form content with type = text / image_url — P1 keeps index 0 text.
         val array = (content as? JsonArray) ?: return ""
-        return array.firstOrNull()?.jsonObject?.get("text")?.let { (it as JsonPrimitive).content } ?: ""
+        return array.firstOrNull()?.jsonObject?.get("text")
+            ?.let { (it as? JsonPrimitive)?.contentOrNull } ?: ""
     }
 }

@@ -92,6 +92,43 @@ class OpenAiClientIntegrationTest {
         assertEquals("Answer", text)
     }
 
+    /**
+     * 用户实测：「换成 DeepSeek 输出全是乱的、会输出 null」。
+     *
+     * DeepSeek 思考时每个 chunk 都是 `{"content":null,"reasoning_content":"…"}`，
+     * 正文块则是 `{"content":"…","reasoning_content":null}`；kotlinx 的 `JsonNull`
+     * 也是 `JsonPrimitive`，用 `.content` 会把字面量 "null" 当正文/思考追加进去。
+     * 这里锁住两边都不许出现 "null"。
+     */
+    @Test
+    fun nullContentAndReasoningNeverBecomeTheLiteralNull() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "text/event-stream")
+                .setBody(
+                    "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":null},\"finish_reason\":null}]}\n\n" +
+                        "data: {\"choices\":[{\"delta\":{\"content\":null,\"reasoning_content\":\"思考\"},\"finish_reason\":null}]}\n\n" +
+                        "data: {\"choices\":[{\"delta\":{\"content\":\"你好\",\"reasoning_content\":null},\"finish_reason\":null}]}\n\n" +
+                        "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+                        "data: [DONE]\n\n",
+                ),
+        )
+        val chunks = client().streamChat(request(server.url("/").toString())).toList()
+
+        assertEquals(
+            "你好",
+            chunks.filterIsInstance<StreamChunk.TextDelta>().joinToString("") { it.text },
+        )
+        assertEquals(
+            "思考",
+            chunks.filterIsInstance<StreamChunk.ReasoningDelta>().joinToString("") { it.text },
+        )
+        // 中途的 `finish_reason: null` 不能变成字符串 "null"。
+        val finishes = chunks.filterIsInstance<StreamChunk.Finish>()
+        assertEquals("stop", finishes.last().finishReason)
+        assertTrue(finishes.all { it.finishReason != "null" })
+    }
+
     @Test
     fun requestBodyHasModelAndMessagesAndStream() = runBlocking {
         server.enqueue(

@@ -7,6 +7,7 @@ import com.psyche.memo.ui.MemoryProviderV2
 import com.psyche.memo.ui.MemoryScope
 import com.psyche.memo.ui.MemorySource
 import com.psyche.memo.ui.MemoryType
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -569,7 +570,7 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
             return SmartAddDecision(
                 action = action,
                 targetId = targetIdOf(decoded),
-                mergedContent = (decoded["mergedContent"] as? JsonPrimitive)?.content,
+                mergedContent = (decoded["mergedContent"] as? JsonPrimitive)?.contentOrNull,
                 relatedIds = relatedIdsOf(decoded),
             )
         }
@@ -590,7 +591,7 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
                 byIndex[index] = SmartAddDecision(
                     action = action,
                     targetId = targetIdOf(item),
-                    mergedContent = (item["mergedContent"] as? JsonPrimitive)?.content,
+                    mergedContent = (item["mergedContent"] as? JsonPrimitive)?.contentOrNull,
                     relatedIds = relatedIdsOf(item),
                 )
             }
@@ -633,7 +634,7 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
         }
 
         private fun parseAction(obj: JsonObject): SmartAddAction? =
-            when ((obj["action"] as? JsonPrimitive)?.content?.trim()?.uppercase()) {
+            when ((obj["action"] as? JsonPrimitive)?.contentOrNull?.trim()?.uppercase()) {
                 "NEW" -> SmartAddAction.NEW
                 "MERGE" -> SmartAddAction.MERGE
                 "CONFLICT" -> SmartAddAction.CONFLICT
@@ -642,13 +643,13 @@ class MemorySmartAdd(private val repository: SmartAddRepository) {
             }
 
         private fun targetIdOf(obj: JsonObject): String? {
-            val raw = (obj["targetId"] as? JsonPrimitive)?.content
+            val raw = (obj["targetId"] as? JsonPrimitive)?.contentOrNull
             return if (raw.isNullOrEmpty() || raw == "null") null else raw
         }
 
         private fun relatedIdsOf(obj: JsonObject): List<String> =
             (obj["relatedIds"] as? JsonArray)
-                ?.mapNotNull { (it as? JsonPrimitive)?.content?.takeIf { id -> id.isNotEmpty() } }
+                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.takeIf { id -> id.isNotEmpty() } }
                 ?: emptyList()
 
         private val FENCE = Regex("```(?:json)?\\s*([\\s\\S]*?)```", RegexOption.IGNORE_CASE)

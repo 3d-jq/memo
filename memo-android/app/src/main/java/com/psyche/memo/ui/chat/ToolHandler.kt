@@ -3,6 +3,7 @@ package com.psyche.memo.ui.chat
 import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.ui.BuiltInToolCatalog
 import com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -36,7 +37,7 @@ class ToolHandler(
             if (name == com.psyche.memo.provider.search.SearchToolService.TOOL_NAME &&
                 assistant?.searchEnabled == true
             ) {
-                val query = (args["query"] as? JsonPrimitive)?.content ?: ""
+                val query = (args["query"] as? JsonPrimitive)?.contentOrNull ?: ""
                 val engine = searchEngine
                     ?: return toolError(
                         error = "search_unavailable",

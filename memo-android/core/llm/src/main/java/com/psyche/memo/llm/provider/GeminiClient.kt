@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -104,7 +105,7 @@ class GeminiClient(
             if (!response.isSuccessful) return emptyList()
             val obj = json.parseToJsonElement(withContext(Dispatchers.IO) { response.body?.string() } ?: "{}").jsonObject
             (obj["models"] as? JsonArray)?.mapNotNull { el ->
-                val id = (el.jsonObject["name"] as? JsonPrimitive)?.content?.substringAfterLast("/")
+                val id = (el.jsonObject["name"] as? JsonPrimitive)?.contentOrNull?.substringAfterLast("/")
                     ?: return@mapNotNull null
                 com.psyche.memo.llm.client.LlmModelInfo(id = id, displayName = id)
             } ?: emptyList()
@@ -161,7 +162,7 @@ class GeminiClient(
      */
     private fun buildGeminiUsageJson(um: JsonObject): JsonObject {
         fun intOf(key: String): Int? =
-            (um[key] as? JsonPrimitive)?.content?.toIntOrNull()
+            (um[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
         return buildJsonObject {
             intOf("promptTokenCount")?.let { put("prompt_tokens", it) }
             intOf("candidatesTokenCount")?.let { put("completion_tokens", it) }
@@ -188,7 +189,7 @@ class GeminiClient(
             state.usageJson = buildGeminiUsageJson(um)
         }
         obj["candidates"]?.let { it as? JsonArray }?.firstOrNull()?.jsonObject?.let { cand ->
-            val finish = (cand["finishReason"] as? JsonPrimitive)?.content
+            val finish = (cand["finishReason"] as? JsonPrimitive)?.contentOrNull
             if (!finish.isNullOrEmpty()) {
                 state.finishReason = finish
                 if (!state.finishEmitted) {
@@ -198,8 +199,8 @@ class GeminiClient(
             }
             cand["content"]?.jsonObject?.get("parts")?.let { it as? JsonArray }?.forEach { p ->
                 val part = p.jsonObject ?: return@forEach
-                val isThought = (part["thought"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() == true
-                val text = (part["text"] as? JsonPrimitive)?.content ?: ""
+                val isThought = (part["thought"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull() == true
+                val text = (part["text"] as? JsonPrimitive)?.contentOrNull ?: ""
                 if (text.isNotEmpty()) {
                     out.add(if (isThought) StreamChunk.ReasoningDelta(text) else StreamChunk.TextDelta(text))
                 }
@@ -217,8 +218,8 @@ class GeminiClient(
             }
             cand["content"]?.jsonObject?.get("parts")?.let { it as? JsonArray }?.forEach { p ->
                 val part = p.jsonObject ?: return@forEach
-                val isThought = (part["thought"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() == true
-                val text = (part["text"] as? JsonPrimitive)?.content ?: ""
+                val isThought = (part["thought"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull() == true
+                val text = (part["text"] as? JsonPrimitive)?.contentOrNull ?: ""
                 if (text.isNotEmpty()) {
                     if (isThought) thought += text else textParts.add(text)
                 }
@@ -226,13 +227,13 @@ class GeminiClient(
         }
         val usage = obj["usageMetadata"]?.let { it.jsonObject }?.let { u ->
             LlmUsage(
-                promptTokens = (u["promptTokenCount"] as? JsonPrimitive)?.content?.toIntOrNull(),
-                completionTokens = (u["candidatesTokenCount"] as? JsonPrimitive)?.content?.toIntOrNull(),
-                totalTokens = (u["totalTokenCount"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                promptTokens = (u["promptTokenCount"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                completionTokens = (u["candidatesTokenCount"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                totalTokens = (u["totalTokenCount"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
             )
         }
         val finish = obj["candidates"]?.let { it as? JsonArray }?.firstOrNull()?.jsonObject
-            ?.let { (it["finishReason"] as? JsonPrimitive)?.content }
+            ?.let { (it["finishReason"] as? JsonPrimitive)?.contentOrNull }
         val parts = ArrayList<String>()
         if (thought.isNotEmpty()) parts.add(thought)
         parts.addAll(textParts)

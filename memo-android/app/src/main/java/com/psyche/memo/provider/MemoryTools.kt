@@ -11,6 +11,7 @@ import com.psyche.memo.ui.MemorySource
 import com.psyche.memo.ui.MemoryStatus
 import com.psyche.memo.ui.MemoryType
 import com.psyche.memo.ui.UserProfileRepository
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -849,8 +850,8 @@ object MemoryTools {
         (this[key] as? JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content
 
     private fun JsonObject.bool(key: String): Boolean? =
-        (this[key] as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
+        (this[key] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()
 
     private fun JsonObject.int(key: String): Int? =
-        (this[key] as? JsonPrimitive)?.content?.toIntOrNull()
+        (this[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
 }

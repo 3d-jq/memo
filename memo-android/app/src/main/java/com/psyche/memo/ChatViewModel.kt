@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -1586,8 +1587,8 @@ class ChatViewModel(
                     fun modelHeaderRows(ov: JsonObject?): List<Map<String, String>> =
                         (ov?.get("headers") as? JsonArray)?.mapNotNull { entry ->
                             (entry as? JsonObject)?.let { row ->
-                                val name = (row["name"] as? JsonPrimitive)?.content
-                                val value = (row["value"] as? JsonPrimitive)?.content
+                                val name = (row["name"] as? JsonPrimitive)?.contentOrNull
+                                val value = (row["value"] as? JsonPrimitive)?.contentOrNull
                                 if (name == null) null else buildMap<String, String> {
                                     put("name", name)
                                     put("value", value.orEmpty())
@@ -1611,8 +1612,8 @@ class ChatViewModel(
                     fun modelBodyRows(ov: JsonObject?): List<Map<String, String>> =
                         (ov?.get("body") as? JsonArray)?.mapNotNull { entry ->
                             (entry as? JsonObject)?.let { row ->
-                                val key = (row["key"] as? JsonPrimitive)?.content
-                                val value = (row["value"] as? JsonPrimitive)?.content
+                                val key = (row["key"] as? JsonPrimitive)?.contentOrNull
+                                val value = (row["value"] as? JsonPrimitive)?.contentOrNull
                                 if (key == null) null else buildMap<String, String> {
                                     put("key", key)
                                     put("value", value.orEmpty())
@@ -1966,8 +1967,8 @@ class ChatViewModel(
             if (!com.psyche.memo.ui.BuiltInToolCatalog.isAvailableOnThisPlatform(name)) continue
             val definition = com.psyche.memo.ui.BuiltInToolCatalog.localDefinition(name)
             val fn = definition["function"] as? JsonObject ?: continue
-            val specName = (fn["name"] as? JsonPrimitive)?.content ?: name
-            val description = (fn["description"] as? JsonPrimitive)?.content ?: ""
+            val specName = (fn["name"] as? JsonPrimitive)?.contentOrNull ?: name
+            val description = (fn["description"] as? JsonPrimitive)?.contentOrNull ?: ""
             val parameters = fn["parameters"] as? JsonObject
             out.add(LlmToolSpec(specName, description, parameters?.toString() ?: "{}"))
         }

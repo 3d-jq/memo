@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -192,8 +193,8 @@ class MemoryProfileDistiller(
 
         val fields = rawFields.mapNotNull { element ->
             val item = element as? JsonObject ?: return@mapNotNull null
-            val key = (item["key"] as? JsonPrimitive)?.content?.trim().orEmpty()
-            val value = (item["value"] as? JsonPrimitive)?.content?.trim().orEmpty()
+            val key = (item["key"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+            val value = (item["value"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
             if (key.isEmpty() || value.isEmpty()) return@mapNotNull null
             if (!UserProfileRepository.isValidKey(key)) return@mapNotNull null
             MemoryDistilledField(key, value)

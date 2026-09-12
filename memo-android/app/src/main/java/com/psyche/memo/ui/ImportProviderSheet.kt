@@ -59,6 +59,7 @@ import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import io.github.g00fy2.quickie.ScanQRCode
 import io.github.g00fy2.quickie.content.QRContent
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -85,7 +86,7 @@ internal fun decodeAiProvider(existing: Set<String>, s: String): ImportResult {
         Charsets.UTF_8,
     )
     val obj = importJson.parseToJsonElement(jsonStr).jsonObject
-    fun str(k: String) = (obj[k] as? JsonPrimitive)?.content ?: ""
+    fun str(k: String) = (obj[k] as? JsonPrimitive)?.contentOrNull ?: ""
     val type = str("type")
     val name = str("name")
     val apiKey = str("apiKey")
@@ -146,7 +147,7 @@ internal fun decodeChatBoxJson(existing: Set<String>, s: String): List<ImportRes
     val obj = importJson.parseToJsonElement(s).jsonObject
     val providers = (obj["providers"] as? JsonObject) ?: return emptyList()
     val out = ArrayList<ImportResult>()
-    fun str(o: JsonObject, k: String) = (o[k] as? JsonPrimitive)?.content ?: ""
+    fun str(o: JsonObject, k: String) = (o[k] as? JsonPrimitive)?.contentOrNull ?: ""
 
     (providers["openai"] as? JsonObject)?.let { o ->
         val apiKey = str(o, "apiKey")

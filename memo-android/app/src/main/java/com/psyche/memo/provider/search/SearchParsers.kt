@@ -2,6 +2,7 @@ package com.psyche.memo.provider.search
 
 import com.psyche.memo.data.model.SearchResult
 import com.psyche.memo.data.model.SearchResultItem
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -25,10 +26,10 @@ object SearchParsers {
         (this[key] as? JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content
 
     private fun JsonObject.bool(key: String): Boolean? =
-        (this[key] as? JsonPrimitive)?.content?.toBooleanStrictOrNull()
+        (this[key] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()
 
     private fun JsonObject.int(key: String): Int? =
-        (this[key] as? JsonPrimitive)?.content?.toIntOrNull()
+        (this[key] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
 
     fun parseJson(body: String): JsonObject? =
         runCatching { json.parseToJsonElement(body).obj() }.getOrNull()
@@ -85,7 +86,7 @@ object SearchParsers {
         val items = generic.take(limit).mapNotNull { el ->
             val o = el.obj() ?: return@mapNotNull null
             val snippets = o["snippets"]?.arr()
-                ?.mapNotNull { (it as? JsonPrimitive)?.content?.trim() }
+                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
                 ?.filter { it.isNotEmpty() }
                 ?.joinToString("\n\n")
                 ?: ""

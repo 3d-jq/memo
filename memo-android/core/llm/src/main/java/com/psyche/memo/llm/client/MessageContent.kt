@@ -1,5 +1,6 @@
 package com.psyche.memo.llm.client
 
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -37,15 +38,15 @@ object MessageContent {
         val seen = HashSet<String>()
         for (payload in message.parts) {
             val obj = runCatching { json.parseToJsonElement(payload) as? JsonObject }.getOrNull() ?: continue
-            val uri = (obj["uri"] as? JsonPrimitive)?.content ?: continue
+            val uri = (obj["uri"] as? JsonPrimitive)?.contentOrNull ?: continue
             if (uri.isEmpty()) continue
             // File parts carry a name; their text extraction
             // (document_text_extractor.dart) is not ported yet, so they are
             // omitted from the request instead of being sent as images.
-            val name = (obj["name"] as? JsonPrimitive)?.content
+            val name = (obj["name"] as? JsonPrimitive)?.contentOrNull
             if (!name.isNullOrEmpty()) continue
             if (!seen.add(uri)) continue
-            out.add(ImageRef(uri, (obj["mime"] as? JsonPrimitive)?.content))
+            out.add(ImageRef(uri, (obj["mime"] as? JsonPrimitive)?.contentOrNull))
         }
         return out
     }

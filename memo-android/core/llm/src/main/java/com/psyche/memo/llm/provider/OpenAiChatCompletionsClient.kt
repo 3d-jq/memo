@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -99,13 +100,13 @@ class OpenAiChatCompletionsClient(
         )
         val firstChoice = (obj["choices"] as? JsonArray)?.firstOrNull()?.jsonObject
         val message = firstChoice?.get("message")?.jsonObject
-        val content = (message?.get("content") as? JsonPrimitive)?.content ?: ""
-        val finish = (firstChoice?.get("finish_reason") as? JsonPrimitive)?.content
+        val content = (message?.get("content") as? JsonPrimitive)?.contentOrNull ?: ""
+        val finish = (firstChoice?.get("finish_reason") as? JsonPrimitive)?.contentOrNull
         val usage = obj["usage"]?.jsonObject?.let { usageJson ->
             LlmUsage(
-                promptTokens = (usageJson["prompt_tokens"] as? JsonPrimitive)?.content?.toIntOrNull(),
-                completionTokens = (usageJson["completion_tokens"] as? JsonPrimitive)?.content?.toIntOrNull(),
-                totalTokens = (usageJson["total_tokens"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                promptTokens = (usageJson["prompt_tokens"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                completionTokens = (usageJson["completion_tokens"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                totalTokens = (usageJson["total_tokens"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
             )
         }
         return LlmTextResult(
@@ -133,7 +134,7 @@ class OpenAiChatCompletionsClient(
             val obj = json.parseToJsonElement(text).jsonObject
             val data = obj["data"] as? JsonArray ?: return emptyList()
             data.mapNotNull { el ->
-                val id = (el.jsonObject["id"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+                val id = (el.jsonObject["id"] as? JsonPrimitive)?.contentOrNull ?: return@mapNotNull null
                 com.psyche.memo.llm.client.LlmModelInfo(id = id, displayName = id)
             }
         } finally {

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -142,7 +143,7 @@ class ClaudeClient(
     private fun buildClaudeUsageJson(start: JsonObject?, delta: JsonObject?): JsonObject? {
         if (start == null && delta == null) return null
         fun intOf(o: JsonObject?, key: String): Int? =
-            (o?.get(key) as? JsonPrimitive)?.content?.toIntOrNull()
+            (o?.get(key) as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
         val input = intOf(delta, "input_tokens") ?: intOf(start, "input_tokens")
         val output = intOf(delta, "output_tokens") ?: intOf(start, "output_tokens")
         if (input == null && output == null) return null
@@ -171,25 +172,25 @@ class ClaudeClient(
             return emptyList()
         }
         val out = ArrayList<StreamChunk>()
-        when (obj["type"]?.let { (it as? JsonPrimitive)?.content } ?: "") {
+        when (obj["type"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: "") {
             "message_start" -> {
                 state.startUsage = (obj["message"] as? JsonObject)
                     ?.get("usage") as? JsonObject
             }
             "content_block_delta" -> {
                 val delta = obj["delta"]?.jsonObject ?: return out
-                when (delta["type"]?.let { (it as? JsonPrimitive)?.content } ?: "") {
+                when (delta["type"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: "") {
                     "text_delta" -> {
-                        val text = (delta["text"] as? JsonPrimitive)?.content ?: ""
+                        val text = (delta["text"] as? JsonPrimitive)?.contentOrNull ?: ""
                         if (text.isNotEmpty()) out.add(StreamChunk.TextDelta(text))
                     }
                     "thinking_delta" -> {
-                        val text = (delta["thinking"] as? JsonPrimitive)?.content ?: ""
+                        val text = (delta["thinking"] as? JsonPrimitive)?.contentOrNull ?: ""
                         if (text.isNotEmpty()) out.add(StreamChunk.ReasoningDelta(text))
                     }
                     "input_json_delta" -> {
-                        val args = (delta["partial_json"] as? JsonPrimitive)?.content ?: ""
-                        val blockIndex = (obj["index"] as? JsonPrimitive)?.content?.toIntOrNull()
+                        val args = (delta["partial_json"] as? JsonPrimitive)?.contentOrNull ?: ""
+                        val blockIndex = (obj["index"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
                         val toolId = blockIndex?.let { state.openToolIds[it] }
                         if (args.isNotEmpty() && toolId != null) {
                             out.add(StreamChunk.ToolCallDelta(toolId, "", args))
@@ -198,11 +199,11 @@ class ClaudeClient(
                 }
             }
             "content_block_start" -> {
-                val blockIndex = (obj["index"] as? JsonPrimitive)?.content?.toIntOrNull()
+                val blockIndex = (obj["index"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
                 val cb = obj["content_block"]?.jsonObject
-                if (cb?.get("type")?.let { (it as? JsonPrimitive)?.content } == "tool_use") {
-                    val id = (cb["id"] as? JsonPrimitive)?.content ?: ""
-                    val name = (cb["name"] as? JsonPrimitive)?.content ?: ""
+                if (cb?.get("type")?.let { (it as? JsonPrimitive)?.contentOrNull } == "tool_use") {
+                    val id = (cb["id"] as? JsonPrimitive)?.contentOrNull ?: ""
+                    val name = (cb["name"] as? JsonPrimitive)?.contentOrNull ?: ""
                     if (blockIndex != null && id.isNotEmpty()) state.openToolIds[blockIndex] = id
                     if (name.isNotEmpty()) out.add(StreamChunk.ToolCallDelta(id, name, ""))
                 }
@@ -216,7 +217,7 @@ class ClaudeClient(
                 val delta = obj["delta"] as? JsonObject
                 val stopReason = delta
                     ?.let { (it["stop_reason"] ?: it["stopReason"]) }
-                    ?.let { (it as? JsonPrimitive)?.content }
+                    ?.let { (it as? JsonPrimitive)?.contentOrNull }
                 if (!state.finishEmitted && (usageJson != null || !stopReason.isNullOrEmpty())) {
                     state.finishEmitted = true
                     out.add(StreamChunk.Finish(stopReason, usageJson))
@@ -231,20 +232,20 @@ class ClaudeClient(
         var usage: LlmUsage? = null
         obj["content"]?.let { it as? kotlinx.serialization.json.JsonArray }?.forEach { p ->
             p.jsonObject?.let { part ->
-                when (part["type"]?.let { (it as? JsonPrimitive)?.content } ?: "") {
-                    "text" -> (part["text"] as? JsonPrimitive)?.content?.let { parts.add(it) }
-                    "thinking" -> (part["thinking"] as? JsonPrimitive)?.content?.let { parts.add(it) }
+                when (part["type"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: "") {
+                    "text" -> (part["text"] as? JsonPrimitive)?.contentOrNull?.let { parts.add(it) }
+                    "thinking" -> (part["thinking"] as? JsonPrimitive)?.contentOrNull?.let { parts.add(it) }
                 }
             }
         }
         obj["usage"]?.jsonObject?.let { u ->
             usage = LlmUsage(
-                promptTokens = (u["input_tokens"] as? JsonPrimitive)?.content?.toIntOrNull(),
-                completionTokens = (u["output_tokens"] as? JsonPrimitive)?.content?.toIntOrNull(),
+                promptTokens = (u["input_tokens"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                completionTokens = (u["output_tokens"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
                 totalTokens = null,
             )
         }
-        val finish = (obj["stop_reason"] as? JsonPrimitive)?.content
+        val finish = (obj["stop_reason"] as? JsonPrimitive)?.contentOrNull
         return LlmTextResult(parts = parts, usage = usage, finishReason = finish)
     }
 

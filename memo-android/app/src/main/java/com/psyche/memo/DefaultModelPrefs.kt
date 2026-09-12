@@ -166,7 +166,10 @@ Do not interpret or translate—only transcribe and describe what is visually pr
      */
     fun decodeStoredString(raw: String?): String? =
         raw?.let { text ->
-            runCatching { Json.parseToJsonElement(text).jsonPrimitive.content }.getOrDefault(text)
+            // contentOrNull：JSON null（字面量 `null`）要当空值，不能让 `.content`
+            // 把它变成字符串 "null"。
+            runCatching { Json.parseToJsonElement(text).jsonPrimitive.contentOrNull }.getOrNull()
+                ?: text
         }?.takeIf { it.isNotBlank() }
 
     /** [parseModelSelection] over a value as stored (JSON-encoded) in prefs. */

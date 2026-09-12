@@ -2,6 +2,7 @@ package com.psyche.memo.provider.search
 
 import com.psyche.memo.data.model.SearchResult
 import com.psyche.memo.data.model.SearchResultItem
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -113,7 +114,7 @@ object SearchProviderParsers {
             val o = el.obj() ?: JsonObject(emptyMap())
             val snippet = (o.str("snippet") ?: "").trim()
             val extras = (o["snippets"]?.arr() ?: o["sentence"]?.arr())
-                ?.mapNotNull { (it as? JsonPrimitive)?.content?.trim() }
+                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
                 ?.filter { it.isNotEmpty() && it != snippet }
                 ?: emptyList()
             val text = (listOf(snippet).filter { it.isNotEmpty() } + extras).joinToString("\n\n")
@@ -264,7 +265,7 @@ object SearchProviderParsers {
         val items = root["results"]?.arr()?.take(limit)?.mapNotNull { el ->
             val o = el.obj() ?: return@mapNotNull null
             val excerpts = o["excerpts"]?.arr()
-                ?.mapNotNull { (it as? JsonPrimitive)?.content }
+                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
                 ?.filter { it.trim().isNotEmpty() }
                 ?.joinToString("\n\n")
                 ?: ""
@@ -289,7 +290,7 @@ object SearchProviderParsers {
 
     private fun youText(result: JsonObject): String {
         fun joinTexts(value: JsonElement?): String = when (value) {
-            is JsonArray -> value.mapNotNull { (it as? JsonPrimitive)?.content?.trim() }
+            is JsonArray -> value.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
                 .filter { it.isNotEmpty() }
                 .joinToString("\n\n")
             is JsonPrimitive -> value.content.trim()
