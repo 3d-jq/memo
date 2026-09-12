@@ -14,6 +14,9 @@ import org.junit.Test
  * Capsule labels are always numeric indices (original-project behaviour);
  * domain metadata carried by drifted `[citation,domain](id)` spellings is
  * accepted but never displayed.
+ *
+ * Deviation from the original (2026-09-12, user decision): an unresolvable
+ * citation is dropped rather than rendered as "?" — see the capsule section.
  */
 class MarkdownCitationTest {
 
@@ -83,15 +86,27 @@ class MarkdownCitationTest {
     // resolveCitationCapsule — [citation,domain](id) / [cite,domain](id).
     // The label metadata is parsed but never displayed: the capsule shows the
     // numeric index resolved from the message's search results (original
-    // project behaviour), falling back to "?" when no index is available.
+    // project behaviour). When no index is available the marker is dropped —
+    // an empty text — rather than drawn as "?" (2026-09-12, user decision).
 
     @Test
     fun citeCommaPrefixRendersNumericCapsule() {
         // Device-observed drift: glm writes [cite,domain](id) instead of the
         // prompted [citation,domain](id) — both must become capsules.
-        val c = resolveCitationCapsule("cite,news.cn", "a1b2c3", null)!!
+        val c = resolveCitationCapsule("cite,news.cn", "a1b2c3") {
+            CitationInfo(index = 4)
+        }!!
         assertEquals("a1b2c3", c.key)
-        assertEquals("?", c.text)
+        assertEquals("4", c.text)
+    }
+
+    @Test
+    fun unresolvedCapsuleIsMarkedForDropping() {
+        // Empty text = "citation-shaped but unresolvable": the renderer emits
+        // nothing instead of a "?" capsule.
+        val c = resolveCitationCapsule("cite,e2dce5", "e2dce5", null)!!
+        assertEquals("e2dce5", c.key)
+        assertEquals("", c.text)
     }
 
     @Test
@@ -132,14 +147,15 @@ class MarkdownCitationTest {
     }
 
     @Test
-    fun unresolvedIdFallsBackToQuestionMark() {
-        val c = resolveCitationCapsule("cite,e2dce5", "e2dce5", null)!!
-        assertEquals("?", c.text)
+    fun unresolvedIndexIsDroppedRatherThanQuestionMarked() {
+        val c = resolveCitationCapsule("citation,e2dce5", "e2dce5", null)!!
+        assertEquals("", c.text)
     }
 
     @Test
     fun numericMetadataSurvivesWhenUnresolved() {
-        // Legacy [citation,3](...) style metadata is still a usable number.
+        // Legacy [citation,3](...) style metadata is still a usable number, so
+        // the marker stays — only a truly unknown index is dropped.
         val c = resolveCitationCapsule("citation,3", "abc123", null)!!
         assertEquals("3", c.text)
     }

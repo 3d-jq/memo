@@ -1206,6 +1206,14 @@ private fun AnnotatedString.Builder.appendInlineStyled(
                 val capsule =
                     resolveCitationCapsule(label, node.destination ?: "", citation.resolver)
                 if (capsule != null) {
+                    // An empty display text marks a citation-shaped marker whose
+                    // index could not be resolved: drop the marker entirely
+                    // instead of drawing a "?" capsule (2026-09-12, user
+                    // decision — a dangling "?" beside the prose reads as a
+                    // defect). Leaving the marker unrendered keeps the sentence
+                    // clean; the source was never in this message's list, so
+                    // there is nothing to open either.
+                    if (capsule.text.isEmpty()) return
                     inlineContent.putIfAbsent(
                         "citation:${capsule.key}",
                         citationInlineContent(capsule.text) { onTap(capsule.key) },
@@ -1220,11 +1228,9 @@ private fun AnnotatedString.Builder.appendInlineStyled(
                     val ref = parseCitationRef(node.destination ?: "")
                     if (ref != null) {
                         val info = citation.resolver?.invoke(ref.id)
-                        val text = when {
-                            info?.index != null -> info.index.toString()
-                            ref.indexText != ref.id -> ref.indexText
-                            else -> "?"
-                        }
+                        val text = info?.index?.toString()
+                            ?: ref.indexText.takeIf { it != ref.id }
+                            ?: return // unresolvable: render nothing
                         inlineContent.putIfAbsent(
                             "citation:${ref.id}",
                             citationInlineContent(text) { onTap(ref.id) },
@@ -1441,7 +1447,14 @@ internal data class CitationCapsule(val key: String, val text: String)
  * taken from the destination first, then the label; a URL destination renders
  * a capsule that opens the link directly. The label metadata is ignored for
  * display — the capsule always shows the numeric index, like the original
- * project; it falls back to "?" when no index can be resolved.
+ * project.
+ *
+ * Returns `null` when the label is not a citation at all (the caller then
+ * renders an ordinary link), and a capsule with an **empty [CitationCapsule.text]**
+ * when the marker *is* a citation but its index cannot be resolved — the caller
+ * drops those rather than drawing a "?" (2026-09-12, user decision; the
+ * original falls back to "?" here). A numeric label metadata still wins over
+ * dropping, since it is a usable index on its own.
  */
 internal fun resolveCitationCapsule(
     label: String,
@@ -1460,13 +1473,9 @@ internal fun resolveCitationCapsule(
         ?: dest.takeIf { it.contains('.') || it.contains('/') }
         ?: return null
     val info = resolver?.invoke(key)
-    val text = when {
-        info?.index != null -> info.index.toString()
-        // Unresolvable id: fall back to a bare numeric label when the metadata
-        // already is one, otherwise "?" (same terminal case as the original).
-        meta.toIntOrNull() != null -> meta
-        else -> "?"
-    }
+    val text = info?.index?.toString()
+        ?: meta.toIntOrNull()?.toString()
+        ?: ""
     return CitationCapsule(key, text)
 }
 

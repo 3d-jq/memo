@@ -85,11 +85,11 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 23. **别在子组件里自己读 `isSystemInDarkTheme()`**：`TableRowView` 曾内部自读系统深色做边框 α，与外层传入的 `isDark` 不一致（忽略主题覆盖时二者会打架）。深色判定应由调用方传入、全程透传。
 24. **平台能力放不进 `core:ui`**：`core:ui` 无 `activity.compose`、无 app 依赖，不能用 `rememberLauncherForActivityResult`、也拿不到 `IosIconButton`（在 app 模块）。剪贴板 / SAF / MediaStore 这类平台动作一律由 app 注入（本次为 `MarkdownTableActions`，null 即不画对应按钮）。
 25. **吞异常会让 UI 不可诊断**：存图失败原样只显示 `保存失败: png`，无法定位。改为返回真实错误消息后一眼看到 `Software rendering doesn't support hardware bitmaps`。平台 IO 的 `catch` 应把 `e.message` 透出到提示里。
-26. **引用胶囊显示 `?` ≠ 解析失败**（2026-09-12 定位）：markdown 侧一切正常——`[cite:x]` 被 `preprocessCitations` 归一成 `[citation](x)`，`parseCitationRef` 也解析成功、胶囊照常渲染，**只是序号解不出来**。判定链：`MarkdownRenderer.resolveCitationCapsule` / 内联分支 → `resolver(id)`（`HomeScreen` 里查 `searchItems`）返回 null → `info.index == null` 且 `ref.indexText == ref.id` → 回落 `"?"`。
-   - **根因是来源白名单**：`extractCitationItems`（`CitationSourcesSheet.kt` L143）只收 `toolName == "search_web" || "builtin_search"` 的结果。任何**别的**工具（含 MCP）即使回的是同一套 `items[]` 结构，也不会进 `searchItems` → 该消息全部引用变 `?`。
-   - **原项目同样如此**（`chat_message_widget.dart` `_allSearchItems` L3543 同一个白名单），所以这是**上游设计**、不是移植偏差。
-   - 实测复现（设备 DB 取证）：会话「旅游出行准备」order 7 的工具是 **`aihot_get_latest`**（MCP），返回的是**纯文本**（不是 `items[]` JSON），正文里只有 `AIHOT：https://aihot.news/items/cmtx…` 这类 URL；模型只好把 URL 末段（cuid）当 id 写进 `[cite:cmtx…]` → 8 个标记全变 `?`。
-   - **要修的话有两条路**（用户尚未定夺）：① 放宽白名单/按"结果里有 items[] 就当来源"识别；② 让这类工具按 `items[{id,index,url}]` 结构化返回。注意别把"任意工具结果都当引用源"做过头——索引会串味。
+26. **引用胶囊显示 `?` = 来源白名单问题，不是解析失败**（2026-09-12 定位 + **已按用户决定修掉**）：markdown 侧一切正常——`[cite:x]` 被 `preprocessCitations` 归一成 `[citation](x)`，`parseCitationRef` 也解析成功、胶囊照常渲染，**只是序号解不出来**。判定链：`MarkdownRenderer.resolveCitationCapsule` / 内联分支 → `resolver(id)`（`HomeScreen` 里查 `searchItems`）返回 null → 序号为 null → 原版回落 `"?"`。
+   - **两道门，不止一道**：① 工具名白名单（只有 `search_web`/`builtin_search`）；② 结果必须是 **JSON 且带 `items[]`**（`parseToJsonElement(content)` 抛异常就跳过）。所以「只去掉白名单」救不了纯文本结果——实测设备上 `aihot_get_latest`（MCP）返回的是 **纯文本 len=4021**，正文里只有 `AIHOT：https://aihot.news/items/cmtx…` 这类 URL，**没有 `id` 字段**，模型只好拿 URL 末段当 id 写 `[cite:cmtx…]`。
+   - **现行做法（用户 2026-09-12 拍板）**：① 白名单改成**按结构判定**（有 `items[]` 就收，`get_time_info`/`memory_*` 这类无关 JSON 仍被排除）；② 解不出的标记**不再渲染成 `?`，而是整段不画**。两条都记在 §5.11「用户明确要求的偏离」——**别再按原版"修回"**。
+   - 实测复现：会话「旅游出行准备」order 7。**取证坑**：`message_part_rows` 的关联列是 `revision_id → message_rows.id`，`part_id` 是 INTEGER 自增主键不是消息 id（按 `part_id` 分组会全表查不到引用，得出"没问题"的错误结论）。
+   - 仍未覆盖（有意为之）：返回**纯文本**的工具其引用现在会被静默丢弃（既不显示 `?` 也不可点）。要让它可点，得让工具侧按 `items[{id,index,url}]` 结构化返回，或再加一层 URL 抽取启发式——用户选择了不引入猜测。
 27. **Toast 队列的计时必须在管理器里，不能放在 item 里**（2026-09-12 修）：原项目 `AppSnackBarManager.show()` 里就起 `Timer`（`snackbar.dart` L78），**与是否渲染无关**。移植版把它写成 `ToastItem` 内的 `LaunchedEffect(entry.id) { delay(...) }` → 只有 `MAX_VISIBLE`(=3) 条被渲染的 toast 才会到期；排队在后面的条目**永远留在队列里**，等它终于升到可见窗口时又重新播一遍入场动画 + 重新数 3 秒 → 表现就是「toast 一多就卡住/堆积不走」。修法：`SnackbarManager.show()` 起 `delay(durationMs)` → `expire(entry)`（置 `expiring` 触发淡出）→ `delay(EXIT_MS)` → `removeNow`，**只跑 `delay`**。
    - **附带坑（差点踩）**：`Animatable.animateTo` / 任何 `animateTo` 都要求协程上下文里有 `MonotonicFrameClock`——管理器的普通 `CoroutineScope(Dispatchers.Main)` **没有**，直接调会抛。所以**动画留在 item（组合内，有 frame clock），管理器只管时间**：item 用 `animateFloatAsState` 跟随 `entry.expiring` 做淡出，入场用「先 compose 成 0、首帧翻到 1」。
    - 顺带补了渲染循环的 `key(entry.id)`：此前按**位置**匹配，一条消失会让所有槽位错位、Compose 用别的 entry 复用同一个 composable（状态被重置，整叠看起来在乱跳）。
@@ -239,7 +239,7 @@ S5 搜索 kelivo + 启动自测（不移植）、MCP-3（OAuth + 会话内 sheet
   - **顺带修掉的功能缺口**：**指令注入此前从未进入请求**（`InstructionInjectionScreen` 只写库，`ChatViewModel` 从不读）——现在按 `injectInstructionPrompts` L1748-1772 接上（`activeIds(assistantId)` → 非空提示词用空行连接 → 追加到系统消息，来源标签 `instructionInjection`）。
 - **`applyContextLimit` 未实现**：`assistant.limitContextMessages`/`contextMessageSize` 的按条数裁剪在请求链路上缺失——`clearContextLabel` 会显示配置值但从不生效（用户 2026-09-11 指示"先留着"，暂不做）。会改变发给模型的消息数，属行为变更，要做时单开一批（上游 `message_builder_service.dart:2139-2172`：保留系统消息 + 最近 N 条，再丢掉开头悬空 tool 消息）。
 - **上下文压缩机制要换掉**（用户 2026-09-11 决定，非本表原内容）：不用原项目那套（LLM 折叠成摘要 + 新建会话），等用户给新方案；详见批次表「待改」行。
-- **引用胶囊出现 `?`**（2026-09-12 用户问"为什么会出现问号？是解析失败了吗"，已定位，**待用户定夺是否改**）：不是解析失败，是**来源白名单**导致序号解不出。只有 `search_web`/`builtin_search` 的结果才进 `searchItems`；其它工具（实测是 MCP `aihot_get_latest`，且它回的是**纯文本**而非 `items[]`）即便被模型引用了也查不到 → 回落 `?`。原项目同一白名单（`_allSearchItems` L3543），属上游设计。完整链路与两条候选修法见 **§4-26**。
+- **引用胶囊出现 `?`**（2026-09-12 定位 → **同日已按用户决定修掉**）：不是解析失败，是来源筛选导致的序号解不出。白名单改为按 `items[]` 结构判定 + 解不出的标记不再渲染（详见 §4-26、§5.11）。**遗留**：返回纯文本的工具，其引用现在被静默丢弃（不显示 `?` 也不可点），要可点需工具侧结构化返回。
 
 
 ---
@@ -446,6 +446,8 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | 备份建议文件名 | `kelivo_backup_<stamp>.zip` | `memo_backup_<stamp>.zip` | 品牌规则——SAF 保存对话框里这是用户可见字符串；文件名不属于归档格式，内容仍逐字节兼容 |
 | 本机副本文件名 | `kelivo-snapshot-<micros padded 16>.zip` | `memo-snapshot-<nanos>.zip` + `.json` 边车 | 品牌规则（同上）；时间戳改用 nanos，列表忽略外来文件故无兼容问题 |
 | 搜索服务 `kelivo` 类型 | 内置搜索（上游端点 + 内置令牌） | 不移植（S5），编辑器里该 type 显示 Memo 名称 | 品牌规则 |
+| **引用来源的筛选条件** | `chat_message_widget.dart _allSearchItems` **只认工具名** `search_web` / `builtin_search` | **按结构判定**：任何工具只要 content 是 JSON 且带 `items` 数组就计入（`extractCitationItems`） | 用户 2026-09-12「可以去掉白名单可以吧？不然出现这个 `?` 太影响体验了」。原版写法让 MCP 搜索类工具的结果永远进不了引用列表，模型写下的 `[cite:id]` 一律解不出 |
+| **解不出的引用标记** | 回落显示一颗 `?` 胶囊 | **整段标记不渲染**（`resolveCitationCapsule` 返回空 display text ⇒ 调用方直接 `return`；`[citation](id)` 内联分支同理） | 用户 2026-09-12 同一次决定：正文旁边挂一个 `?` 读起来像故障。注意：**数字型 label 元数据仍照旧优先显示**（它本身就是可用序号），只有真正解不出的才丢 |
 
 ### 平台差异（Android/Compose 没有等价物或结构不同）
 

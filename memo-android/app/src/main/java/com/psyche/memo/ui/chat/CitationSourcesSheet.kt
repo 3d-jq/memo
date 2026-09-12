@@ -130,9 +130,15 @@ fun normalizeExternalUri(raw: String): Uri? {
 private val citationJson = Json { ignoreUnknownKeys = true }
 
 /**
- * chat_message_widget.dart _allSearchItems — 从消息的 search_web /
- * builtin_search 工具结果提取引用来源（从后往前扫，key=id??url 去重，
- * "latest wins"）。
+ * chat_message_widget.dart `_allSearchItems` — 从消息的工具结果里提取引用来源
+ * （从后往前扫，key = `id ?? url` 去重，"latest wins"）。
+ *
+ * **有意偏离原版（2026-09-12 用户决定）**：原版只认 `search_web` /
+ * `builtin_search` 两个工具名，导致任何别的工具（尤其 MCP 搜索类）即使回了
+ * 同一套 `items[]` 也永远进不了引用列表、模型写下的 `[cite:id]` 一律解不出
+ * 而显示 `?`。这里改成**按结构判定**：任何工具只要 content 是 JSON 且带
+ * `items` 数组，就当作引用来源。判定条件收紧到"必须真的是 items[]"，所以
+ * `get_time_info` / `memory_*` 这类无关 JSON 依然被排除。
  */
 fun extractCitationItems(parts: List<com.psyche.memo.data.model.MessagePart>): List<CitationSourceItem> {
     val out = ArrayList<CitationSourceItem>()
@@ -140,7 +146,6 @@ fun extractCitationItems(parts: List<com.psyche.memo.data.model.MessagePart>): L
     for (part in parts.asReversed()) {
         if (part !is com.psyche.memo.data.model.ToolCallPart) continue
         val tool = ToolUiPart.fromPayload(part.payloadJson) ?: continue
-        if (tool.toolName != "search_web" && tool.toolName != "builtin_search") continue
         val content = tool.content ?: continue
         val obj = try { citationJson.parseToJsonElement(content).jsonObject } catch (e: Exception) { continue }
         val arr = obj["items"] as? JsonArray ?: continue
