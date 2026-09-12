@@ -628,10 +628,18 @@ private fun ProviderCard(
  * known brand -> its SVG at 0.7x on a primary-a circle (dark mono logos tinted
  * onSurface); unknown -> initial letter on primary a0.1 circle. */
 @Composable
-internal fun ProviderAvatarSmall(providerKey: String, displayName: String, size: Dp) {
+internal fun ProviderAvatarSmall(
+    providerKey: String,
+    displayName: String,
+    size: Dp,
+    /** `avatarType == "icon"` 时用户选定的内置图标（file:///android_asset/icons/…）。 */
+    assetOverride: String? = null,
+) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
-    val asset = remember(displayName) { BrandAssets.assetForName(displayName) }
+    val asset = remember(displayName, assetOverride) {
+        assetOverride ?: BrandAssets.assetForName(displayName)
+    }
     if (asset == null) {
         Box(
             modifier = Modifier

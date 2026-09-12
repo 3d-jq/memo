@@ -131,6 +131,21 @@ fun ProviderDetailScreen(
     // Model selection mode, hoisted so the AppBar can drive it (L208-233).
     var modelSelectMode by remember { mutableStateOf(false) }
     var showShare by remember { mutableStateOf(false) }
+    // 供应商头像编辑（provider_detail_page L346-452 的五选一 sheet + 三个子弹窗）。
+    var showAvatarSheet by remember { mutableStateOf(false) }
+    var showIconPicker by remember { mutableStateOf(false) }
+    var showLobehubDialog by remember { mutableStateOf(false) }
+    var showAvatarUrlDialog by remember { mutableStateOf(false) }
+    val avatarContext = androidx.compose.ui.platform.LocalContext.current
+    val galleryLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            copyProviderAvatarFile(avatarContext, providerId, uri)?.let { path ->
+                cfg = cfg.copy(avatarType = "file", avatarValue = path)
+            }
+        }
+    }
     val selectedModels = remember { mutableStateListOf<String>() }
     val deletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_deleted_snackbar)
     val testOkTemplate = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_test_success_message)
@@ -171,13 +186,12 @@ fun ProviderDetailScreen(
             onBack = onBack,
             title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(24.dp)) {
-                    ProviderAvatarSmall(
-                        providerKey = providerId,
-                        displayName = cfg.name.ifEmpty { providerId },
-                        size = 24.dp,
-                    )
-                }
+                ProviderAvatar(
+                    providerKey = providerId,
+                    displayName = cfg.name.ifEmpty { providerId },
+                    size = 24.dp,
+                    onTap = { showAvatarSheet = true },
+                )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = cfg.name.ifEmpty { providerId },
@@ -251,6 +265,59 @@ fun ProviderDetailScreen(
 
         if (showShare) {
             ShareProviderSheet(providerKey = providerId, config = cfg, onDismiss = { showShare = false })
+        }
+
+        // ---- 供应商头像编辑（五选一 + 内置图标网格 + LobeHub 名 + 链接）----
+        if (showAvatarSheet) {
+            ProviderAvatarSheet(
+                onPickBuiltInIcon = { showIconPicker = true },
+                onPickLobehubIcon = { showLobehubDialog = true },
+                onPickGallery = {
+                    galleryLauncher.launch(
+                        androidx.activity.result.PickVisualMediaRequest(
+                            androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly,
+                        ),
+                    )
+                },
+                onEnterLink = { showAvatarUrlDialog = true },
+                onReset = { cfg = cfg.copy(avatarType = null, avatarValue = null) },
+                onDismiss = { showAvatarSheet = false },
+            )
+        }
+        if (showIconPicker) {
+            ProviderIconPickerDialog(
+                onPick = { assetFile ->
+                    cfg = cfg.copy(avatarType = "icon", avatarValue = assetFile)
+                    showIconPicker = false
+                },
+                onDismiss = { showIconPicker = false },
+            )
+        }
+        if (showLobehubDialog) {
+            ProviderAvatarTextDialog(
+                title = stringResource(com.psyche.memo.ui.R.string.provider_avatar_lobehub_dialog_title),
+                hint = stringResource(com.psyche.memo.ui.R.string.provider_avatar_lobehub_dialog_hint),
+                initial = cfg.avatarValue?.takeIf { cfg.avatarType == "lobehub" } ?: "",
+                valid = { it.isNotBlank() },
+                onConfirm = {
+                    cfg = cfg.copy(avatarType = "lobehub", avatarValue = it)
+                    showLobehubDialog = false
+                },
+                onDismiss = { showLobehubDialog = false },
+            )
+        }
+        if (showAvatarUrlDialog) {
+            ProviderAvatarTextDialog(
+                title = stringResource(com.psyche.memo.ui.R.string.side_drawer_image_url_dialog_title),
+                hint = stringResource(com.psyche.memo.ui.R.string.side_drawer_image_url_dialog_hint),
+                initial = cfg.avatarValue?.takeIf { cfg.avatarType == "url" } ?: "",
+                valid = { it.startsWith("http://") || it.startsWith("https://") },
+                onConfirm = {
+                    cfg = cfg.copy(avatarType = "url", avatarValue = it)
+                    showAvatarUrlDialog = false
+                },
+                onDismiss = { showAvatarUrlDialog = false },
+            )
         }
 
         // ---- Both tabs kept alive in the pager ----
