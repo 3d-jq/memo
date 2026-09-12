@@ -236,6 +236,8 @@ internal fun MemoSheetOptionRow(
     selected: Boolean,
     onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    /** 右对齐的次要说明（如端点路径）——对齐设置行的 detailText 样式。 */
+    detail: String? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val view = LocalView.current
@@ -271,7 +273,17 @@ internal fun MemoSheetOptionRow(
                 color = if (selected) cs.primary else cs.onSurface,
             ),
         )
+        if (!detail.isNullOrEmpty()) {
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = detail,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+            )
+        }
         if (selected) {
+            Spacer(Modifier.width(8.dp))
             Icon(
                 Lucide.Check,
                 contentDescription = null,

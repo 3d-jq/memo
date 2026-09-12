@@ -132,6 +132,7 @@ fun ProviderDetailScreen(
     var modelSelectMode by remember { mutableStateOf(false) }
     var showShare by remember { mutableStateOf(false) }
     // 供应商头像编辑（provider_detail_page L346-452 的五选一 sheet + 三个子弹窗）。
+    var showApiPathSheet by remember { mutableStateOf(false) }
     var showAvatarSheet by remember { mutableStateOf(false) }
     var showIconPicker by remember { mutableStateOf(false) }
     var showLobehubDialog by remember { mutableStateOf(false) }
@@ -268,6 +269,20 @@ fun ProviderDetailScreen(
         }
 
         // ---- 供应商头像编辑（五选一 + 内置图标网格 + LobeHub 名 + 链接）----
+        if (showApiPathSheet) {
+            ApiPathSheet(
+                chatPath = cfg.chatPath,
+                useResponseApi = cfg.useResponseApi,
+                onSelect = { option ->
+                    cfg = cfg.copy(
+                        chatPath = option.path,
+                        useResponseApi = useResponseApiFor(option.path),
+                    )
+                    showApiPathSheet = false
+                },
+                onDismiss = { showApiPathSheet = false },
+            )
+        }
         if (showAvatarSheet) {
             ProviderAvatarSheet(
                 onPickBuiltInIcon = { showIconPicker = true },
@@ -337,6 +352,7 @@ fun ProviderDetailScreen(
                     onOpenMultiKey = { showMultiKey = true },
                     onOpenBalance = { showBalance = true },
                     onOpenGroups = onOpenGroups,
+                    onOpenApiPath = { showApiPathSheet = true },
                 )
             } else {
                 ModelsTab(
@@ -477,6 +493,7 @@ private fun ConfigTab(
     onOpenMultiKey: () -> Unit,
     onOpenBalance: () -> Unit,
     onOpenGroups: () -> Unit,
+    onOpenApiPath: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -566,13 +583,34 @@ private fun ConfigTab(
                 }
             }
             if (cfg.classifiedKind() == "openai") {
-                    SettingsSwitchRow(
-                    icon = Lucide.Zap,
-                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_response_api_title),
-                    value = cfg.useResponseApi == true,
-                    onToggle = { onCfgChange(cfg.copy(useResponseApi = it)) },
-                )
-                    // Balance row: label + live badge (max 108dp) when enabled +
+                // API 路径三选一（用户 2026-09-12：把「Response API 开关 + 手填路径」
+                // 合成一个选择面板；选 Responses 即原开关打开）。
+                val pathOption = apiPathOptionFor(cfg.chatPath, cfg.useResponseApi)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenApiPath() }
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_api_path_label),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = pathOption.label,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 15.sp,
+                            color = cs.onSurface.copy(alpha = 0.6f),
+                        ),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
+                }
+                // Balance row: label + live badge (max 108dp) when enabled +
                 // chevron — provider_detail_page.dart L1850-1899.
                 Row(
                     modifier = Modifier
@@ -730,17 +768,7 @@ private fun ConfigTab(
                 onCfgChange(cfg.copy(baseUrl = it))
             }
         }
-        if (kind == "openai" && cfg.useResponseApi != true) {
-            Spacer(Modifier.height(12.dp))
-            LabeledInput(
-                label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_api_path_label),
-                value = cfg.chatPath ?: "/chat/completions",
-                obscure = false,
-                hint = "/chat/completions",
-            ) {
-                onCfgChange(cfg.copy(chatPath = it))
-            }
-        }
+        // 服务器路径改成上面的选择面板（用户 2026-09-12），这里不再手填。
         if (vertexGoogle) {
             Spacer(Modifier.height(12.dp))
             LabeledInput(

@@ -702,6 +702,69 @@ private fun GroupPickerTile(title: String, selected: Boolean, onClick: () -> Uni
     }
 }
 
+// -------------------------------------------------------------- API 路径 sheet
+
+/**
+ * 端点三选一（**用户 2026-09-12 点名**：把原来的「Response API 开关 + 手填
+ * 服务器路径」合成一个选择面板 —— 选了 Responses 就等于原来的开关打开）。
+ * 标签沿用用户给的英文写法（与 MCP 传输选择的 "Streamable HTTP"/"SSE" 同例）。
+ */
+internal data class ApiPathOption(val label: String, val path: String)
+
+internal val API_PATH_OPTIONS: List<ApiPathOption> = listOf(
+    ApiPathOption("Anthropic Messages", "/v1/messages"),
+    ApiPathOption("Chat Completions", "/chat/completions"),
+    ApiPathOption("Responses", "/responses"),
+)
+
+/** 当前配置对应的选项；自定义路径（老数据/手填）回落成原样显示。 */
+internal fun apiPathOptionFor(chatPath: String?, useResponseApi: Boolean?): ApiPathOption {
+    val path = chatPath?.trim().orEmpty().ifEmpty {
+        if (useResponseApi == true) "/responses" else "/chat/completions"
+    }
+    return API_PATH_OPTIONS.firstOrNull { it.path == path } ?: ApiPathOption(path, path)
+}
+
+/** `useResponseApi` 与路径保持同步（模型检测/导入都读这个标记）。 */
+internal fun useResponseApiFor(path: String): Boolean? =
+    if (path == "/responses") true else null
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ApiPathSheet(
+    chatPath: String?,
+    useResponseApi: Boolean?,
+    onSelect: (ApiPathOption) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val current = apiPathOptionFor(chatPath, useResponseApi)
+    ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
+        onDismissRequest = onDismiss,
+        containerColor = cs.surface,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        dragHandle = null,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MemoSheetHandle(trailingGap = 0.dp)
+            API_PATH_OPTIONS.forEach { option ->
+                MemoSheetOptionRow(
+                    label = option.label,
+                    detail = option.path,
+                    selected = option.path == current.path,
+                    onClick = { onSelect(option) },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun CreateGroupDialog(onCreate: (String) -> Unit, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }
