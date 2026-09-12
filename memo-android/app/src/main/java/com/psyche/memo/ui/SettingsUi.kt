@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -274,12 +275,74 @@ fun SettingsIosDivider() {
 }
 
 /**
- * 源码 display_settings_page.dart L1363-1432 —— _iosSwitchRow + memory_ui.dart
- * L82-123 MemoryTipIcon：36dp 图标位 + 15sp 标签 + IosSwitch；说明文字一律走
- * 行尾 BadgeInfo 图标的 Tooltip 浮动气泡（tap 触发、maxWidth 280、点别处收起），
- * 不在行内裸排——用户规范：项目内不统一的原生 subtitle 提示全部收敛为 Tooltip。
+ * 行内 tip 图标（BadgeInfo 16dp@45%，28dp 触控区）——点击弹浮动 Tooltip 气泡
+ * （tap 触发、isPersistent、maxWidth 280、点别处收起）。全站唯一的 tip 触发件。
  */
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SettingsTipIcon(tip: String) {
+    val cs = MaterialTheme.colorScheme
+    val tipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    TooltipBox(
+        modifier = Modifier
+            .size(28.dp)
+            .clickable { scope.launch { tipState.show() } },
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip { Text(tip, modifier = Modifier.widthIn(max = 280.dp)) }
+        },
+        state = tipState,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                Lucide.BadgeInfo,
+                contentDescription = tip,
+                tint = cs.onSurface.copy(alpha = 0.45f),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/**
+ * 「标签 + 紧随其后的 tip ⓘ」一组。
+ *
+ * **用户点名（2026-09-12）：「tip 图标应该在文字旁边」** —— 原版 `_iosSwitchRow`
+ * （display_settings_page.dart L1508）是 `Expanded(标签) → MemoryTipIcon → 12 →
+ * IosSwitch`，ⓘ 会浮到开关那侧、离文字很远。这里外层 `weight(1f)` 吃掉整行剩余
+ * 宽度（所以行尾的开关/chevron 照旧贴边），内层文字 `weight(1f, fill=false)` 只占
+ * 自己需要的宽度 ⇒ ⓘ 紧贴文字，余量留在组内右侧。属**有意偏离**，见 PORTING §5.11。
+ */
+@Composable
+internal fun RowScope.TipHuggingLabel(
+    label: String,
+    tip: String?,
+    labelStyle: TextStyle,
+    maxLines: Int = Int.MAX_VALUE,
+) {
+    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = labelStyle,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (!tip.isNullOrEmpty()) {
+            Spacer(Modifier.width(2.dp))
+            SettingsTipIcon(tip)
+        }
+    }
+}
+
+/**
+ * 源码 display_settings_page.dart L1363-1432 —— _iosSwitchRow + memory_ui.dart
+ * L82-123 MemoryTipIcon：36dp 图标位 + 15sp 标签 + IosSwitch；说明文字一律走
+ * BadgeInfo 图标的 Tooltip 浮动气泡（tap 触发、maxWidth 280、点别处收起），
+ * 不在行内裸排——用户规范：项目内不统一的原生 subtitle 提示全部收敛为 Tooltip。
+ * ⓘ 的位置见 [TipHuggingLabel]（紧跟标签文字，用户 2026-09-12 点名）。
+ */
 @Composable
 fun SettingsSwitchRow(
     icon: ImageVector,
@@ -291,10 +354,6 @@ fun SettingsSwitchRow(
     val cs = MaterialTheme.colorScheme
     val view = LocalView.current
     val haptics = LocalHapticsSettings.current
-    // Flutter Tooltip：tap 触发、preferBelow、maxWidth 280、点别处收起。
-    // isPersistent=true 由外点收起（M3 非持久气泡 ~2s 自动消失，太短读不完）。
-    val tipState = rememberTooltipState(isPersistent = true)
-    val scope = rememberCoroutineScope()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -305,42 +364,20 @@ fun SettingsSwitchRow(
             .padding(horizontal = 12.dp, vertical = if (tip == null) 2.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.width(36.dp)) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = cs.onSurface.copy(alpha = 0.9f),
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
+        Box(modifier = Modifier.width(36.dp)) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = cs.onSurface.copy(alpha = 0.9f),
+                modifier = Modifier.size(20.dp),
+            )
         }
-        // MemoryTipIcon（memory_ui.dart L82-123）：28dp 触控区 + BadgeInfo
-        // 16sp@45%，点击弹浮动 Tooltip 气泡（CacheWarningIcon 同款交互），
-        // 不裸排、不顶开下方内容。
-        if (!tip.isNullOrEmpty()) {
-            TooltipBox(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clickable { scope.launch { tipState.show() } },
-                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                tooltip = {
-                    PlainTooltip { Text(tip, modifier = Modifier.widthIn(max = 280.dp)) }
-                },
-                state = tipState,
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        Lucide.BadgeInfo,
-                        contentDescription = tip,
-                        tint = cs.onSurface.copy(alpha = 0.45f),
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-        }
+        Spacer(Modifier.width(12.dp))
+        TipHuggingLabel(
+            label = label,
+            tip = tip,
+            labelStyle = TextStyle(fontSize = 15.sp, color = cs.onSurface),
+        )
         Spacer(Modifier.width(12.dp))
         IosSwitch(value = value, onValueChanged = onToggle)
     }

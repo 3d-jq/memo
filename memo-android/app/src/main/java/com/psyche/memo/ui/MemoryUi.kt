@@ -137,39 +137,6 @@ internal fun loadAssistantsSync(container: AppContainerImpl): List<Assistant> =
 
 // ── MemoryTipIcon ────────────────────────────────────────────────────────────
 
-/** memory_ui.dart L82-123 — tap shows the tip as a floating Tooltip bubble
- *  (persistent: stays until tapping elsewhere; 280dp max width), matching
- *  SettingsSwitchRow's tip affordance. No inline expansion. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun MemoryTipIcon(message: String) {
-    val cs = MaterialTheme.colorScheme
-    // Flutter Tooltip: tap-triggered, preferBelow, maxWidth 280, dismissed by
-    // tapping outside. isPersistent keeps it readable (M3 non-persistent auto
-    // -dismisses in ~2s).
-    val tipState = rememberTooltipState(isPersistent = true)
-    val scope = rememberCoroutineScope()
-    TooltipBox(
-        modifier = Modifier
-            .size(28.dp)
-            .clickable { scope.launch { tipState.show() } },
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = {
-            PlainTooltip { Text(message, modifier = Modifier.widthIn(max = 280.dp)) }
-        },
-        state = tipState,
-    ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Icon(
-                Lucide.BadgeInfo,
-                contentDescription = message,
-                modifier = Modifier.size(16.dp),
-                tint = withAlpha(cs.onSurface, 0.45),
-            )
-        }
-    }
-}
-
 // ── memoryOutcomeLabel ───────────────────────────────────────────────────────
 
 /** memory_ui.dart L129-164 — pipeline/tool outcome code → l10n label. */
@@ -336,7 +303,6 @@ internal fun MemorySectionLabel(text: String) {
 }
 
 /** memory_ui.dart L482-541 — title + info Tooltip + chevron row. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MemoryNavRow(title: String, tip: String, onTap: () -> Unit) {
     val cs = MaterialTheme.colorScheme
@@ -349,12 +315,12 @@ internal fun MemoryNavRow(title: String, tip: String, onTap: () -> Unit) {
                 .padding(start = 14.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                title,
-                modifier = Modifier.weight(1f),
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.9)),
+            // ⓘ 紧跟标题文字（用户 2026-09-12 点名，见 SettingsUi.TipHuggingLabel）。
+            TipHuggingLabel(
+                label = title,
+                tip = tip,
+                labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.9)),
             )
-            MemoryTipIcon(tip)
             Spacer(Modifier.width(8.dp))
             Icon(
                 Lucide.ChevronRight,

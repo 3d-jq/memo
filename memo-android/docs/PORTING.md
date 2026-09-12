@@ -34,7 +34,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | `SectionCard {}` | SettingsUi.kt | iOS 分组卡 r12（Flutter r16 版另有 `Surface16Card`@AssistantSettingsEditScreen） |
 | `SectionHeader(text, first)` | SettingsUi.kt | iOS 分类组标题（全站分类化后 20+ 页面在用；`first=true` 顶距更小） |
 | `SettingsRow(icon,label,onTap,detailText)` | SettingsUi.kt | iOS 行（label/detail 均已单行省略 maxLines=1，对齐 _iosNavRow——修复存储行两行事故） |
-| 设置行 tip 机制：`SettingsSwitchRow(icon,label,tip,value,onToggle)` + `MemoryTipIcon(message)`（MemoryUi.kt）+ 各页私有 `TipIcon`（MessageStyleSettingsScreen.kt） | SettingsUi.kt / MemoryUi.kt 等 | **规范 2026-09-09：设置行禁止裸排提示词**。tip 一律行尾 ⓘ（BadgeInfo 16sp@45%、28dp 触控区）+ TooltipBox/PlainTooltip 浮动气泡（tap isPersistent、280dp、点别处收起） |
+| 设置行 tip 机制：`SettingsTipIcon(tip)` + `RowScope.TipHuggingLabel(label, tip, labelStyle)`（SettingsUi.kt；旧版各页私有 `TipIcon`/`MemoryTipIcon` 已收敛） | SettingsUi.kt | **规范 2026-09-09 + 2026-09-12**：设置行禁止裸排提示词，tip 一律 BadgeInfo ⓘ（16dp@45%、28dp 触控区）+ TooltipBox/PlainTooltip 浮动气泡（tap isPersistent、280dp、点别处收起）；**ⓘ 位置＝紧跟标签文字**（用户 2026-09-12 改口：不要行尾/开关那侧）→ 需要 tip 的行一律用 `TipHuggingLabel`，别再手搓「标签 weight(1f) + ⓘ」的排布 |
 | `DividerRow()` | SettingsUi.kt | 0.6dp 居中线 |
 | `IosSwitch(value,onValueChanged)` | IosWidgets.kt | 44×26 iOS 开关 |
 | `IosButton(label,onTap,icon,filled,neutral,dense)` | IosWidgets.kt | Flutter `_IosButton`：r12 描边/填充 + 0.97 按压 + Haptics.soft |
@@ -208,6 +208,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | 修复 | **新建对话后助手名字/头像不刷新 + MCP 工具页多出"MCP服务器"行**（2026-09-12 用户实测两条）：① 消息头的助手行是 `LaunchedEffect(conversationId)` 一次性读 `conversation_rows.assistant_id`，而新建会话是 draft（行要等首条消息才写）⇒ 读到 null 后再也不重读，头部一直显示兜底名"助手"+ 模型图标，切出去再回来才对。修：改成派生值（key = conversationId + 消息是否已落库 + 当前助手），走新的 `ui/HomeScreen.kt` 纯函数 `headerAssistantId(会话行.assistantId, 当前助手)` —— 会话行优先、draft 回落到当前助手（＝原版 draft 内存里带着 assistantId）。② MCP 服务编辑 sheet 的工具审批开关错绑 `mcp_conversation_sheet_title`（"MCP服务器"）⇒ 每个启用的工具都多一行"MCP服务器"，看着像 MCP 服务被重复列出。修：改用 `mcp_tool_needs_approval`（"需要审批"）+ Shield 13dp + 12sp 的卡内紧凑行，且只在 `tool.enabled` 时出现（1:1 `mcp_server_edit_sheet.dart` L639-683）。测试：`ui/ChatHeaderAssistantTest` 4 例（纯规则 3 + Robolectric 渲染 1：会话行绑定的助手名必须出现在消息头、当前助手名不得出现） | ✅ 本轮 |
 
 | 修复 | **MCP 工具 tab 卡片化对齐**（2026-09-12 用户「MCP 工具 tab 的卡片化对齐（工具名 + 描述 + 参数 chips + 卡内审批行，跟原版一致）」）：原版工具 tab 是「每工具一张卡」（`mcp_server_edit_sheet.dart` L511-690：`margin bottom 10 / padding 12 / surfaceFill / r12 / outlineVariant@0.2 边框`），卡内 = 名称（bodyMedium+emphasis）+ 描述 12sp@0.7 + 参数 chips（`Wrap` spacing/runSpacing 6：11sp w600、h8/v2、r999、边框各色 50%；必填 primary 字 + primary 12% 底，选填 onSurface 50% 字 + 6% 底）+ 启用 IosSwitch（与名称同排、顶端对齐），**启用时**才追加卡内审批行。我们此前是「设置行 + 分隔线」形态且没有 params。本轮：① 新增 `core:data/model/McpToolParams.kt` `deriveToolParams(schema)`（1:1 L2337-2360：properties → name/required/type（数组用 `|` 连接）/default），编辑 sheet 合并 live 工具时一并写入 `params` —— **此前 Android 从不下发 params，payload 比原版少一段、备份里的 MCP 工具缺参数规格**；② 工具 tab 改卡片布局（去掉我们自加的"工具: x/y + 同步"行）；③ 同步按钮按原版**移到 sheet 顶栏右侧**（primary 22dp，仅编辑已有服务器时显示）—— 唯一差异：原版 `refreshTools` 用库里配置抓工具，我们点同步会先落盘当前表单再重连（改了 URL 点同步才生效，更直观，有意保留）。测试：`core:data` `McpToolParamsTest` 7 例（required/type 数组拼接/default 原样/无 schema/非对象属性容忍/payload 往返带 params） | ✅ 本轮 |
+
+| 修复 | **tip 图标改为紧跟标签文字**（2026-09-12 用户：「这个 tip 图标位置也不对，应该在文字的旁边 现在是在最左边 我感觉不合理」→ 选「全站改成紧跟标签文字后面」）：原版（`_iosSwitchRow` L1508 / `memory_settings_page.dart` L1083 等）都是 `Expanded(标签) → MemoryTipIcon → 间距 → 开关`，ⓘ 被推到行尾、离文字很远。改法：`SettingsUi.kt` 抽出共享 `SettingsTipIcon(tip)`（原本 SettingsSwitchRow 内联 + MessageStyle/MemoryUi/TtsSettings 三份私有副本，一并收敛）与 `RowScope.TipHuggingLabel(label, tip, labelStyle)` —— 外层 `weight(1f)` 吃掉整行余量（行尾开关/chevron 因此照旧贴边），内层文字 `weight(1f, fill=false)` 只占所需宽度，ⓘ 紧贴文字、余量留在组内右侧。落地点：`SettingsSwitchRow`（覆盖全站多数设置页）、MessageStyle 的 StyleRow/TextSwitchRow、TtsSettingsRow、MemoryNavRow、助手编辑页「追加当前时间」行（文本块 + ⓘ 打包）、记忆设置页 `SettingsSectionHeader`（标题 fill=false）。测试：`SettingsSwitchRowTipTest` 新增 `tipIconHugsTheLabelText`（边界断言：ⓘ 在文字右侧、间隙 < 14dp、位于行宽左半侧）——旧排布下这条会失败。**属用户点名的有意偏离，见 §5.11；勿按原版"修回"行尾**。 | ✅ 本轮 |
 
 ## 5.9 全量缺口审计（2026-09-09 系统普查，Flutter vs Android 逐域比对）
 
@@ -451,6 +453,7 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 
 | 项 | 原版 | 我们 | 原因 |
 |---|---|---|---|
+| 设置行 tip 图标位置 | `_iosSwitchRow`（`display_settings_page.dart` L1508）等：`Expanded(标签) → MemoryTipIcon → 12 → IosSwitch`，ⓘ 浮在开关那侧、离文字很远 | **ⓘ 紧跟标签文字**（外层 `TipHuggingLabel`：组 `weight(1f)` 吃满余量、文字 `weight(1f, fill=false)` 只占所需宽度 ⇒ ⓘ 贴文字、余量留组内右侧，行尾开关/chevron 照旧贴边） | 用户 2026-09-12：「这个 tip 图标位置也不对，应该在文字的旁边……我感觉不合理」。`SettingsSwitchRowTipTest.tipIconHugsTheLabelText` 用**边界断言**锁住（ⓘ 在文字右侧、间隙 < 14dp、且在行宽左半侧） |
 | 旧版（V1）记忆模式 | `legacy` 记忆一整套（兼容老用户旧数据） | **不移植**，只保留 V2 | 用户 2026-09-11 拍板：「我们这个是新的，没有这个问题」 |
 | 语音播放图标作用域 | `chat_message_widget.dart:3253-3291` 用**全局** `isActive` ⇒ 读一条消息时**所有**消息都显示停止、暂停态不可见 | `TtsPlaybackState.ownerId` + `messageTtsAction(state,msgId)`：只有被朗读的那条显示停止/继续，其余恒为播放；无 owner 的播放（工具卡重播）不影响任何消息 | 上游行为本身就是 bug（用户实测「点一条播放，所有界面都显示播放」），用户要求按消息归属 |
 | 联网搜索引用胶囊 | 20dp 高 / 12sp / primary 20% 底 | 16dp / 10sp / primary 16% 底（常量 `CITATION_BADGE_*`） | 用户 2026-09-10「小一点，有点影响阅读、太显眼」 |

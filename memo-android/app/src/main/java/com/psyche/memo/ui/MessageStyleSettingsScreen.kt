@@ -621,8 +621,11 @@ private fun StyleRow(styleId: String, label: String, tip: String, selected: Bool
     ) {
         StyleSwatch(styleId)
         Spacer(Modifier.size(12.dp))
-        Text(label, modifier = Modifier.weight(1f), style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)))
-        TipIcon(tip)
+        TipHuggingLabel(
+            label = label,
+            tip = tip,
+            labelStyle = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)),
+        )
         if (selected) {
             Spacer(Modifier.size(10.dp))
             Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
@@ -646,38 +649,13 @@ private fun TextSwitchRow(
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, modifier = Modifier.weight(1f), style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)))
-        TipIcon(tip)
+        TipHuggingLabel(
+            label = label,
+            tip = tip,
+            labelStyle = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)),
+        )
         Spacer(Modifier.width(12.dp))
         IosSwitch(value = value, onValueChanged = onToggle)
-    }
-}
-
-/** Shared info-icon + persistent Tooltip bubble (SettingsSwitchRow's tip affordance). */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TipIcon(tip: String) {
-    val cs = MaterialTheme.colorScheme
-    val tipState = rememberTooltipState(isPersistent = true)
-    val scope = rememberCoroutineScope()
-    TooltipBox(
-        modifier = Modifier
-            .size(28.dp)
-            .clickable { scope.launch { tipState.show() } },
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = {
-            PlainTooltip { Text(tip, modifier = Modifier.widthIn(max = 280.dp)) }
-        },
-        state = tipState,
-    ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Icon(
-                Lucide.BadgeInfo,
-                contentDescription = tip,
-                tint = cs.onSurface.copy(alpha = 0.45f),
-                modifier = Modifier.size(16.dp),
-            )
-        }
     }
 }
 

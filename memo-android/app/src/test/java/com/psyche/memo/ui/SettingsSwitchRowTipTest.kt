@@ -2,10 +2,13 @@ package com.psyche.memo.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Sun
 import org.junit.Assert.assertTrue
@@ -81,5 +84,34 @@ class SettingsSwitchRowTipTest {
         }
         compose.onNodeWithText("Row").performClick()
         assertTrue(toggled)
+    }
+
+    /**
+     * 用户 2026-09-12：「tip 图标应该在文字旁边」——ⓘ 必须紧贴标签文字右侧，
+     * 不能像原版 `_iosSwitchRow` 那样浮到开关那侧（旧排布下这条会失败）。
+     */
+    @Test
+    fun tipIconHugsTheLabelText() {
+        compose.setContent {
+            MaterialTheme {
+                SettingsSwitchRow(
+                    icon = Lucide.Sun,
+                    label = "短标签",
+                    tip = "tip text",
+                    value = false,
+                    onToggle = {},
+                )
+            }
+        }
+        val root = compose.onRoot().getUnclippedBoundsInRoot()
+        // 行是 clickable（合并语义），取未合并树的节点边界：合并节点的边界是整行。
+        val label = compose.onNodeWithText("短标签", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val icon = compose.onNodeWithContentDescription("tip text", useUnmergedTree = true).getUnclippedBoundsInRoot()
+
+        // 在文字右侧、且间隙不超过 ⓘ 触控区（28dp）的一半。
+        assertTrue("ⓘ 应在文字右侧", icon.left >= label.right)
+        assertTrue("ⓘ 应紧贴文字，实际间隙 ${icon.left - label.right}", icon.left - label.right < 14.dp)
+        // 并且整体靠左：旧排布（标签 Expanded → ⓘ → 开关）会把它推到半屏之外。
+        assertTrue("ⓘ 不该被推到行尾", icon.left < (root.right - root.left) * 0.5f)
     }
 }

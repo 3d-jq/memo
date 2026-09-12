@@ -1057,50 +1057,54 @@ private fun AppendCurrentTimeRow(
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TactileRow(
-            modifier = Modifier.weight(1f),
-            onTap = { onChanged(!value) },
-        ) { pressed ->
-            AnimatedPressColor(pressed = pressed, base = withAlpha(cs.onSurface, 0.9)) { color ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.width(36.dp)) {
-                        Icon(
-                            Lucide.Clock,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = if (value) cs.primary else color,
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(UiR.string.assistant_edit_prompt_append_time_title),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = color),
-                        )
-                        Spacer(Modifier.height(3.dp))
-                        Text(
-                            text = stringResource(UiR.string.assistant_edit_prompt_append_time_subtitle),
-                            style = TextStyle(
-                                fontSize = 12.sp,
-                                lineHeight = 15.sp,
-                                color = withAlpha(cs.onSurface, 0.62),
-                            ),
-                        )
+        // 文本块 + ⓘ 打包成一组（weight(1f) 吃满余量、内层只占所需宽度）⇒ ⓘ 紧贴
+        // 文字块（用户 2026-09-12 点名：不要在开关那侧），开关照旧贴右。
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            TactileRow(
+                modifier = Modifier.weight(1f, fill = false),
+                onTap = { onChanged(!value) },
+            ) { pressed ->
+                AnimatedPressColor(pressed = pressed, base = withAlpha(cs.onSurface, 0.9)) { color ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.width(36.dp)) {
+                            Icon(
+                                Lucide.Clock,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = if (value) cs.primary else color,
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(UiR.string.assistant_edit_prompt_append_time_title),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = color),
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = stringResource(UiR.string.assistant_edit_prompt_append_time_subtitle),
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    lineHeight = 15.sp,
+                                    color = withAlpha(cs.onSurface, 0.62),
+                                ),
+                            )
+                        }
                     }
                 }
             }
+            IosIconButton(
+                icon = Lucide.BadgeInfo,
+                onTap = onInfoTap,
+                color = withAlpha(cs.onSurface, 0.55),
+                size = 16.dp,
+                contentPadding = 6.dp,
+                minSize = 32.dp,
+                semanticLabel = stringResource(UiR.string.assistant_edit_prompt_append_time_info_title),
+            )
         }
-        IosIconButton(
-            icon = Lucide.BadgeInfo,
-            onTap = onInfoTap,
-            color = withAlpha(cs.onSurface, 0.55),
-            size = 16.dp,
-            contentPadding = 6.dp,
-            minSize = 32.dp,
-            semanticLabel = stringResource(UiR.string.assistant_edit_prompt_append_time_info_title),
-        )
         Spacer(Modifier.width(4.dp))
         IosSwitch(value = value, onValueChanged = onChanged)
     }

@@ -82,7 +82,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - **网络代理真正生效（2026-09-12）**：`GlobalProxy`（ProxySelector 每连接读配置、http/https=HTTP 隧道 + Basic、socks5=SOCKS（无账户，已知偏差）、bypass 精确/后缀/CIDR）挂进容器 OkHttp；TTS「自动播放助手回复」接到回复完成后；记忆设置页「用户画像」行接到既有 `user_profile` 路由；WebDAV 子页补 statusBars insets
 - **请求主链接线补完（2026-09-12，接线审计）**：采样参数 temperature/topP/maxTokens（LlmRequest.topP + 三客户端，Claude thinking 只在 0.95-1.0 下发 top_p）、自定义请求三层合并 `CustomRequestMerger`（assistant/provider/model 的 headers+body，x-conversation-id 保护）、auto_retry_options 按请求实时读、消息模板+时间后缀+正则 send/visual（AssistantRegexApplier）+预设对话注入新会话、selected_model_v1 进 fallback 链、回车发送/重生确认开关、两个读写格式 bug（background mode 读端、readBoolPref "1"/"0"）——**完整审计清单（已修/待接按批）在 PORTING.md §5.12，剩余项目按渲染/输入/聊天行为/语音/模型五批推进，行不删
 - **设置全站分类化（2026-09-09 用户点名）**：偏好主页 17 行拆 5 组、五个偏好子页/触感页行内分组、关于页（应用信息/社区与链接）、统计页（数据概览/排行榜）、网络代理页（代理设置/连接测试）、存储主页（空间总览/存储分类）——统一 SectionHeader + SectionCard
-- **设置行 tip 规范（2026-09-09 用户点名）**：不裸排提示词，一律行尾 ⓘ + 浮动气泡（收尾-7）
+- **设置行 tip 规范（2026-09-09 用户点名；2026-09-12 位置改口）**：不裸排提示词，一律 ⓘ + 浮动气泡；**ⓘ 紧跟标签文字**（不是行尾/开关那侧）——用 `SettingsUi.kt` 的 `TipHuggingLabel`（收尾-7）
 - **存储功能补全（用户点名）**：上传管理器=原项目形态（来源筛选/排序/3 列缩略图网格/点击预览/长按选择/批量删除）、用量条 10 分类 10 色（撞色修复）、LOGS「查看日志」+ LOCAL_SNAPSHOTS「管理副本」入口
 - **图片查看器补全（用户点名）**：底部毛玻璃功能栏（保存/分享/镜像×2/旋转×2）+ 每图独立变换状态（收尾-9）
 

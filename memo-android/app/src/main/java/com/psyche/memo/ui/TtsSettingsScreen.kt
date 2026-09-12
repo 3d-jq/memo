@@ -188,7 +188,6 @@ private fun TtsSettingsSection(
 }
 
 /** L163-189 — _SettingsRow: title + trailing widget；说明走 Tooltip 气泡（用户规范：不裸排）。 */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TtsSettingsRow(
     title: String,
@@ -196,40 +195,18 @@ private fun TtsSettingsRow(
     trailing: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val tipState = rememberTooltipState(isPersistent = true)
-    val scope = rememberCoroutineScope()
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 14.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
+        // ⓘ 紧跟标题文字（用户 2026-09-12 点名，见 SettingsUi.TipHuggingLabel）。
+        TipHuggingLabel(
+            label = title,
+            tip = subtitle.ifEmpty { null },
+            labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.9f)),
         )
-        if (subtitle.isNotEmpty()) {
-            TooltipBox(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clickable { scope.launch { tipState.show() } },
-                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-                tooltip = {
-                    PlainTooltip { Text(subtitle, modifier = Modifier.widthIn(max = 280.dp)) }
-                },
-                state = tipState,
-            ) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        Lucide.BadgeInfo,
-                        contentDescription = subtitle,
-                        tint = cs.onSurface.copy(alpha = 0.45f),
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-        }
         Spacer(Modifier.width(12.dp))
         trailing()
     }
