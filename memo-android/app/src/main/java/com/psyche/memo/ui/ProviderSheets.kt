@@ -538,6 +538,108 @@ fun ShareProviderSheet(
     }
 }
 
+/**
+ * 多选导出面板 —— 1:1 移植 `_showMultiExportSheet`（providers_page.dart
+ * L1528-1691）：标题带数量、选中 ≤4 个时给二维码（白卡保证可扫）、代码预览
+ * 限高 128dp（7 行省略）、底部 复制 / 分享 两钮。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun MultiProviderExportSheet(
+    entries: List<Pair<String, String>>, // name to code
+    onDismiss: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    val text = remember(entries) { entries.joinToString("\n") { it.second } }
+    val copiedMessage = stringResource(com.psyche.memo.ui.R.string.providers_page_export_copied_snackbar)
+
+    ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
+        onDismissRequest = onDismiss,
+        containerColor = semanticOverlaySurface(),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        dragHandle = null,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 16.dp),
+        ) {
+            MemoSheetHandle(trailingGap = 0.dp)
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = stringResource(
+                        com.psyche.memo.ui.R.string.providers_page_export_selected_title,
+                        entries.size,
+                    ),
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            if (entries.size <= 4) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Column(
+                        modifier = Modifier
+                            .background(Color.White, RoundedCornerShape(12.dp))
+                            .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                            .padding(10.dp),
+                    ) {
+                        QrCodeView(
+                            data = text,
+                            size = 180.dp,
+                            darkColor = android.graphics.Color.BLACK,
+                            lightColor = android.graphics.Color.WHITE,
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+            Box(modifier = Modifier.fillMaxWidth().height(128.dp)) {
+                Text(
+                    text = text,
+                    maxLines = 7,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.5.sp, lineHeight = 18.sp),
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                IosTileButtonCompact(
+                    icon = Lucide.Copy,
+                    label = stringResource(com.psyche.memo.ui.R.string.providers_page_export_copy_button),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("providers", text))
+                        SnackbarManager.show(
+                            AppNotification(message = copiedMessage, type = NotificationType.SUCCESS),
+                        )
+                    },
+                )
+                IosTileButtonCompact(
+                    icon = Lucide.Share2,
+                    label = stringResource(com.psyche.memo.ui.R.string.providers_page_export_share_button),
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, text)
+                        }
+                        context.startActivity(Intent.createChooser(intent, null))
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** sheet 底色统一取 overlaySurface（本文件内多处复用）。 */
+@Composable
+private fun semanticOverlaySurface(): Color = LocalSemanticColors.current.overlaySurface(MaterialTheme.colorScheme)
+
 /** ZXing BitMatrix drawn on a Canvas (kelivo uses pretty_qr; same output). */
 @Composable
 fun QrCodeView(data: String, size: Dp, darkColor: Int, lightColor: Int) {
@@ -596,13 +698,22 @@ typealias ImageVectorAlias = androidx.compose.ui.graphics.vector.ImageVector
 
 // -------------------------------------------------------- Group picker sheet
 
+/**
+ * 分组选择面板的两个用途（同一份 UI）：
+ * - [ProviderGroupPickerSheet]：选中即写入该供应商的分组（详情页/单个供应商）；
+ * - [ProviderGroupSelectSheet]：只**返回**选中的分组 id（`null` = 未分组），
+ *   由调用方对整批选中的供应商统一处理（providers_page.dart L624-641 +
+ *   `provider_group_select_sheet.dart`）。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProviderGroupPickerSheet(
+private fun ProviderGroupSheet(
     container: AppContainerImpl,
-    providerKey: String,
+    providerKey: String?,
     onDismiss: () -> Unit,
     onOpenManager: () -> Unit,
+    /** 选中回调：groupId 为空表示「未分组」。 */
+    onPick: (String?) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -610,7 +721,7 @@ fun ProviderGroupPickerSheet(
         ProviderRepository(container.database.writableDatabase, container.preferenceRepository)
     }
     var groups by remember { mutableStateOf(repo.groups()) }
-    var current by remember { mutableStateOf(repo.groupFor(providerKey)) }
+    var current by remember { mutableStateOf(providerKey?.let { repo.groupFor(it) }) }
     var showCreate by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
@@ -665,7 +776,8 @@ fun ProviderGroupPickerSheet(
                     title = stringResource(com.psyche.memo.ui.R.string.provider_groups_other_ungrouped_option),
                     selected = current == null,
                     onClick = {
-                        repo.setGroupFor(providerKey, null)
+                        providerKey?.let { repo.setGroupFor(it, null) }
+                        onPick(null)
                         onDismiss()
                     },
                 )
@@ -674,7 +786,8 @@ fun ProviderGroupPickerSheet(
                         title = g.name,
                         selected = current == g.id,
                         onClick = {
-                            repo.setGroupFor(providerKey, g.id)
+                            providerKey?.let { repo.setGroupFor(it, g.id) }
+                            onPick(g.id)
                             onDismiss()
                         },
                     )
@@ -692,8 +805,9 @@ fun ProviderGroupPickerSheet(
                 // L42-76）；创建后**直接分配并关闭面板**，此前会留在面板上。
                 val id = repo.createGroup(name)
                 if (id.isNotEmpty()) {
-                    repo.setGroupFor(providerKey, id)
+                    providerKey?.let { repo.setGroupFor(it, id) }
                     current = id
+                    onPick(id)
                 }
                 showCreate = false
                 onDismiss()
@@ -701,6 +815,40 @@ fun ProviderGroupPickerSheet(
             onDismiss = { showCreate = false },
         )
     }
+}
+
+/** 单个供应商：选中即写入它的分组（详情页 / 单选的列表页）。 */
+@Composable
+fun ProviderGroupPickerSheet(
+    container: AppContainerImpl,
+    providerKey: String,
+    onDismiss: () -> Unit,
+    onOpenManager: () -> Unit,
+) {
+    ProviderGroupSheet(
+        container = container,
+        providerKey = providerKey,
+        onDismiss = onDismiss,
+        onOpenManager = onOpenManager,
+        onPick = {},
+    )
+}
+
+/** 多选：只返回选中的分组 id，由调用方对整批供应商生效。 */
+@Composable
+fun ProviderGroupSelectSheet(
+    container: AppContainerImpl,
+    onPick: (String?) -> Unit,
+    onDismiss: () -> Unit,
+    onOpenManager: () -> Unit,
+) {
+    ProviderGroupSheet(
+        container = container,
+        providerKey = null,
+        onDismiss = onDismiss,
+        onOpenManager = onOpenManager,
+        onPick = onPick,
+    )
 }
 
 @Composable

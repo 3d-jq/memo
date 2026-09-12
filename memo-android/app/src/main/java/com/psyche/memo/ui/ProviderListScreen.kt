@@ -191,7 +191,9 @@ fun ProvidersScreen(
     var showAddSheet by remember { mutableStateOf(false) }
     var showImportSheet by remember { mutableStateOf(false) }
     var showGroupPickerFor by remember { mutableStateOf<String?>(null) }
+    var showGroupSelect by remember { mutableStateOf(false) }
     var showExportFor by remember { mutableStateOf<String?>(null) }
+    var showMultiExport by remember { mutableStateOf(false) }
     // Live display order during a drag. `null` means "derive from the store".
     // While a drag is in flight `onMove` fires repeatedly (the library expects
     // the caller to apply every move immediately), so we keep the in-progress
@@ -375,11 +377,14 @@ fun ProvidersScreen(
                         items.forEach { if (it.key !in ProviderRepository.BUILTIN_KEYS) selected.add(it.key) }
                     },
                     onMoveToGroup = {
-                        // 原版对**整个选中集**生效（L624-641），不只单选。
-                        if (selected.isNotEmpty()) showGroupPickerFor = selected.first()
+                        // 原版对**整个选中集**生效（L624-641）：面板只返回分组 id。
+                        if (selected.isNotEmpty()) showGroupSelect = true
                     },
                     onExport = {
-                        if (selected.isNotEmpty()) showExportFor = selected.first()
+                        when {
+                            selected.size == 1 -> showExportFor = selected.first()
+                            selected.size > 1 -> showMultiExport = true
+                        }
                     },
                 )
             }
@@ -404,16 +409,40 @@ fun ProvidersScreen(
         )
     }
 
-    // ---- Group picker for the selected provider ----
-    showGroupPickerFor?.let { key ->
-        val cfg = providers.toMap()[key] ?: ProviderConfig(id = key, name = key)
-        ProviderGroupPickerSheet(
+    // ---- 多选：移动到分组（原版 showProviderGroupSelectSheet）----
+    if (showGroupSelect) {
+        ProviderGroupSelectSheet(
             container = container,
-            providerKey = key,
-            onDismiss = { showGroupPickerFor = null },
+            onPick = { groupId ->
+                // 只写分组关系；列表本身（未渲染分组头）不重排，避免"选完分组列表
+                // 顺序突然变了"这种与界面不符的表现。分组顺序等列表页渲染分组时
+                // 再按 `moveProviderInGroupedOrder` 语义补齐。
+                selected.forEach { key -> repo.setGroupFor(key, groupId) }
+            },
+            onDismiss = {
+                showGroupSelect = false
+                exitSelectMode()
+            },
             onOpenManager = {
-                showGroupPickerFor = null
+                showGroupSelect = false
+                exitSelectMode()
                 onOpenGroups()
+            },
+        )
+    }
+
+    // ---- 多选导出面板 ----
+    if (showMultiExport) {
+        val cfgMap = providers.toMap()
+        MultiProviderExportSheet(
+            entries = selected.map { key ->
+                val cfg = cfgMap[key] ?: ProviderConfig(id = key, name = key)
+                val name = cfg.name.ifEmpty { key }
+                name to encodeProviderConfig(cfg)
+            },
+            onDismiss = {
+                showMultiExport = false
+                exitSelectMode()
             },
         )
     }
