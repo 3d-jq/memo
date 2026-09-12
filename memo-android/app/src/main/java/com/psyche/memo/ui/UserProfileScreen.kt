@@ -311,10 +311,11 @@ private fun ProfileFieldSheet(
     var value by remember { mutableStateOf(target.current ?: "") }
     val canClear = !target.current.isNullOrEmpty()
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
         ) {
+            MemoSheetHandle()
             Text(
                 text = title,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),

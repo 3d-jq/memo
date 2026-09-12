@@ -1,6 +1,7 @@
 package com.psyche.memo.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -415,62 +416,30 @@ fun BehaviorStartupSettingsScreen(
 
     // L1574-1616 —— always / scroll / never 三选弹层。
     if (navModeSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { navModeSheetVisible = false }) {
-            Column(modifier = Modifier.padding(bottom = 20.dp)) {
-                NavModeOption(
-                    UiR.string.display_settings_page_message_nav_buttons_mode_always,
-                    "always",
-                    showMessageNavMode,
-                ) { mode ->
-                    showMessageNavMode = mode
-                    container.preferenceRepository.writeJson("display_mobile_message_nav_buttons_mode_v1", mode)
-                    navModeSheetVisible = false
-                }
-                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
-                NavModeOption(
-                    UiR.string.display_settings_page_message_nav_buttons_mode_scroll,
-                    "scroll",
-                    showMessageNavMode,
-                ) { mode ->
-                    showMessageNavMode = mode
-                    container.preferenceRepository.writeJson("display_mobile_message_nav_buttons_mode_v1", mode)
-                    navModeSheetVisible = false
-                }
-                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
-                NavModeOption(
-                    UiR.string.display_settings_page_message_nav_buttons_mode_never,
-                    "never",
-                    showMessageNavMode,
-                ) { mode ->
-                    showMessageNavMode = mode
-                    container.preferenceRepository.writeJson("display_mobile_message_nav_buttons_mode_v1", mode)
-                    navModeSheetVisible = false
+        ModalBottomSheet(onDismissRequest = { navModeSheetVisible = false }, dragHandle = null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MemoSheetHandle(trailingGap = 0.dp)
+                listOf(
+                    UiR.string.display_settings_page_message_nav_buttons_mode_always to "always",
+                    UiR.string.display_settings_page_message_nav_buttons_mode_scroll to "scroll",
+                    UiR.string.display_settings_page_message_nav_buttons_mode_never to "never",
+                ).forEach { (labelRes, mode) ->
+                    MemoSheetOptionRow(
+                        label = stringResource(labelRes),
+                        selected = mode == showMessageNavMode,
+                        onClick = {
+                            showMessageNavMode = mode
+                            container.preferenceRepository.writeJson("display_mobile_message_nav_buttons_mode_v1", mode)
+                            navModeSheetVisible = false
+                        },
+                    )
                 }
             }
-        }
-    }
-}
-
-/** L1574-1616 三选弹层选项行：选中项着 primary 并带勾。 */
-@Composable
-private fun NavModeOption(labelRes: Int, mode: String, current: String, onSelect: (String) -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val selected = mode == current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(mode) }
-            .padding(horizontal = 20.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(labelRes),
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-            color = if (selected) cs.primary else cs.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        if (selected) {
-            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
         }
     }
 }

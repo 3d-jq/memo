@@ -469,11 +469,12 @@ private fun CustomThemeEditorSheet(
     var secondary by remember { mutableStateOf(ColorPickerState(initial?.secondaryArgb)) }
     var tertiary by remember { mutableStateOf(ColorPickerState(initial?.tertiaryArgb)) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            MemoSheetHandle(trailingGap = 0.dp)
             Text(
                 text = title,
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
@@ -663,11 +664,12 @@ private fun ImportThemeSheet(
 ) {
     var text by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            MemoSheetHandle(trailingGap = 0.dp)
             Text(
                 text = stringResource(UiR.string.custom_theme_import_theme),
                 style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),

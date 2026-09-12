@@ -308,8 +308,9 @@ fun TtsServicesScreen(
 
     // _showMobileErrorDetails L681-741.
     errorDetails?.let { message ->
-        ModalBottomSheet(onDismissRequest = { errorDetails = null }) {
+        ModalBottomSheet(onDismissRequest = { errorDetails = null }, dragHandle = null) {
             Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp)) {
+                MemoSheetHandle()
                 Text(
                     stringResource(UiR.string.tts_services_dialog_error_title),
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
@@ -575,8 +576,9 @@ private fun SystemTtsConfigSheet(container: AppContainerImpl, onDismiss: () -> U
         } ?: emptyList()
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
         Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp)) {
+            MemoSheetHandle()
             Text(
                 stringResource(UiR.string.tts_services_page_system_tts_settings_title),
                 style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),

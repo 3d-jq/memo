@@ -210,8 +210,9 @@ fun MemoryTraceScreen(
 
     // _confirmClear (L141-204) — mobile bottom sheet.
     if (clearSheet) {
-        ModalBottomSheet(onDismissRequest = { clearSheet = false }) {
+        ModalBottomSheet(onDismissRequest = { clearSheet = false }, dragHandle = null) {
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+                MemoSheetHandle()
                 Text(
                     stringResource(UiR.string.memory_trace_clear_sheet_title),
                     style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),

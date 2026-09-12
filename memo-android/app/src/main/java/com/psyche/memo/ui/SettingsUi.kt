@@ -8,6 +8,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -52,6 +53,7 @@ import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Lucide
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.R as UiR
@@ -180,6 +182,92 @@ internal fun languageLabelRes(locale: AppLocale): Int = when (locale) {
     AppLocale.EN_US -> UiR.string.display_settings_page_language_english_label
 }
 
+/**
+ * 自绘 sheet 拖柄（用户 2026-09-12：全站统一手绘，Material 原生胶囊把手一律不用）。
+ * 40×4、onSurface@20%、全圆，含上方 8dp 与下方 [trailingGap] 间距 —— 直接放在
+ * `ModalBottomSheet(dragHandle = null)` 内容的第一个子项即可。
+ * 列表用 `verticalArrangement = spacedBy(...)` 的 sheet 传 `trailingGap = 0.dp`，
+ * 免得间距叠成双份。
+ */
+@Composable
+internal fun MemoSheetHandle(trailingGap: androidx.compose.ui.unit.Dp = 10.dp) {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag(SHEET_HANDLE_TAG),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(40.dp)
+                .height(4.dp)
+                .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+        )
+    }
+    Spacer(Modifier.height(trailingGap))
+}
+
+/** Test tags for the unified sheet chrome (see SheetStyleTest). */
+internal const val SHEET_HANDLE_TAG = "memo-sheet-handle"
+internal const val SHEET_OPTION_TAG = "memo-sheet-option"
+internal const val SHEET_OPTION_CHECK_TAG = "memo-sheet-option-check"
+
+/**
+ * 下拉选项行 —— 「更多」sheet（`BottomToolsSheet`）的卡片样式，用户 2026-09-12
+ * 指定为全站选项面板统一样式：`surfaceCard` 底 + r14 + 48dp 高 + 左右 12，
+ * 选中 = primary 文字 + 右侧 ✓。列表用 `Arrangement.spacedBy(8.dp)`，**不再用分隔线**。
+ */
+@Composable
+internal fun MemoSheetOptionRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+) {
+    val cs = MaterialTheme.colorScheme
+    val view = LocalView.current
+    val haptics = LocalHapticsSettings.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .testTag(SHEET_OPTION_TAG)
+            .background(LocalSemanticColors.current.surfaceCard, RoundedCornerShape(14.dp))
+            .clickable {
+                if (haptics.onListItemTap) Haptics.soft(view)
+                onClick()
+            }
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (selected) cs.primary else cs.onSurface,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = TextStyle(
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (selected) cs.primary else cs.onSurface,
+            ),
+        )
+        if (selected) {
+            Icon(
+                Lucide.Check,
+                contentDescription = null,
+                tint = cs.primary,
+                modifier = Modifier.size(18.dp).testTag(SHEET_OPTION_CHECK_TAG),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun LanguageSheet(
@@ -187,63 +275,26 @@ internal fun LanguageSheet(
     onSelect: (AppLocale) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(bottom = 20.dp)) {
-            LanguageOption(UiR.string.settings_page_system_mode, AppLocale.SYSTEM, current, onSelect)
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))
-            LanguageOption(
-                UiR.string.display_settings_page_language_chinese_label,
-                AppLocale.ZH_CN,
-                current,
-                onSelect,
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))
-            LanguageOption(
-                UiR.string.language_display_traditional_chinese,
-                AppLocale.ZH_HANT,
-                current,
-                onSelect,
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))
-            LanguageOption(
-                UiR.string.display_settings_page_language_english_label,
-                AppLocale.EN_US,
-                current,
-                onSelect,
-            )
-        }
-    }
-}
-
-@Composable
-private fun LanguageOption(
-    labelRes: Int,
-    locale: AppLocale,
-    current: AppLocale,
-    onSelect: (AppLocale) -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    val selected = locale == current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(locale) }
-            .padding(horizontal = 20.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(labelRes),
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-            color = if (selected) cs.primary else cs.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        if (selected) {
-            Icon(
-                Lucide.Check,
-                contentDescription = null,
-                tint = cs.primary,
-                modifier = Modifier.size(18.dp),
-            )
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MemoSheetHandle(trailingGap = 0.dp)
+            listOf(
+                UiR.string.settings_page_system_mode to AppLocale.SYSTEM,
+                UiR.string.display_settings_page_language_chinese_label to AppLocale.ZH_CN,
+                UiR.string.language_display_traditional_chinese to AppLocale.ZH_HANT,
+                UiR.string.display_settings_page_language_english_label to AppLocale.EN_US,
+            ).forEach { (labelRes, locale) ->
+                MemoSheetOptionRow(
+                    label = stringResource(labelRes),
+                    selected = locale == current,
+                    onClick = { onSelect(locale) },
+                )
+            }
         }
     }
 }

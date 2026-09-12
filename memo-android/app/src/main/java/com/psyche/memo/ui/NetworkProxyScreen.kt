@@ -298,30 +298,29 @@ fun NetworkProxyScreen(
 
     // L377-418 — proxy type bottom sheet: http / https / socks5.
     if (typeSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { typeSheetVisible = false }) {
-            Column(modifier = Modifier.padding(bottom = 10.dp)) {
-                ProxyTypeOption(
-                    text = stringResource(UiR.string.network_proxy_type_http),
-                    value = "http", current = type,
-                ) { v -> type = v; persist("global_proxy_type_v1", v); typeSheetVisible = false }
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    thickness = 0.6.dp,
-                    color = cs.outlineVariant.copy(alpha = 0.10f),
-                )
-                ProxyTypeOption(
-                    text = stringResource(UiR.string.network_proxy_type_https),
-                    value = "https", current = type,
-                ) { v -> type = v; persist("global_proxy_type_v1", v); typeSheetVisible = false }
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    thickness = 0.6.dp,
-                    color = cs.outlineVariant.copy(alpha = 0.10f),
-                )
-                ProxyTypeOption(
-                    text = stringResource(UiR.string.network_proxy_type_socks5),
-                    value = "socks5", current = type,
-                ) { v -> type = v; persist("global_proxy_type_v1", v); typeSheetVisible = false }
+        ModalBottomSheet(onDismissRequest = { typeSheetVisible = false }, dragHandle = null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            ) {
+                MemoSheetHandle(trailingGap = 0.dp)
+                listOf(
+                    "http" to UiR.string.network_proxy_type_http,
+                    "https" to UiR.string.network_proxy_type_https,
+                    "socks5" to UiR.string.network_proxy_type_socks5,
+                ).forEach { (value, labelRes) ->
+                    MemoSheetOptionRow(
+                        label = stringResource(labelRes),
+                        selected = value == type,
+                        onClick = {
+                            type = value
+                            persist("global_proxy_type_v1", value)
+                            typeSheetVisible = false
+                        },
+                    )
+                }
             }
         }
     }
@@ -426,33 +425,6 @@ private fun ProxyTypeSheetField(
             tint = cs.onSurface.copy(alpha = 0.55f),
             modifier = Modifier.size(18.dp),
         )
-    }
-}
-
-/** L457-491 — _sheetOption. */
-@Composable
-private fun ProxyTypeOption(
-    text: String,
-    value: String,
-    current: String,
-    onSelect: (String) -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(value) }
-            .padding(horizontal = 12.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = text,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = cs.onSurface),
-            modifier = Modifier.weight(1f),
-        )
-        if (value == current) {
-            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
-        }
     }
 }
 

@@ -31,6 +31,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 
 | 组件 | 文件 | 说明 |
 |---|---|---|
+| `MemoSheetHandle(trailingGap)` / `MemoSheetOptionRow(label,selected,onClick,icon)` / `MemoTopBar` | SettingsUi.kt | **sheet 统一规范（用户 2026-09-12）**：所有 `ModalBottomSheet` 一律 `dragHandle = null` + 内容首项 `MemoSheetHandle()`（列表用 `spacedBy` 的传 `trailingGap = 0.dp`）；选项面板一律 `MemoSheetOptionRow` + `Arrangement.spacedBy(8.dp)`，不再用分隔线。新增 sheet/选项面板前先看这两个 |
 | `SectionCard {}` | SettingsUi.kt | iOS 分组卡 r12（Flutter r16 版另有 `Surface16Card`@AssistantSettingsEditScreen） |
 | `SectionHeader(text, first)` | SettingsUi.kt | iOS 分类组标题（全站分类化后 20+ 页面在用；`first=true` 顶距更小） |
 | `SettingsRow(icon,label,onTap,detailText)` | SettingsUi.kt | iOS 行（label/detail 均已单行省略 maxLines=1，对齐 _iosNavRow——修复存储行两行事故） |
@@ -212,6 +213,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | 修复 | **tip 图标改为紧跟标签文字**（2026-09-12 用户：「这个 tip 图标位置也不对，应该在文字的旁边 现在是在最左边 我感觉不合理」→ 选「全站改成紧跟标签文字后面」）：原版（`_iosSwitchRow` L1508 / `memory_settings_page.dart` L1083 等）都是 `Expanded(标签) → MemoryTipIcon → 间距 → 开关`，ⓘ 被推到行尾、离文字很远。改法：`SettingsUi.kt` 抽出共享 `SettingsTipIcon(tip)`（原本 SettingsSwitchRow 内联 + MessageStyle/MemoryUi/TtsSettings 三份私有副本，一并收敛）与 `RowScope.TipHuggingLabel(label, tip, labelStyle)` —— 外层 `weight(1f)` 吃掉整行余量（行尾开关/chevron 因此照旧贴边），内层文字 `weight(1f, fill=false)` 只占所需宽度，ⓘ 紧贴文字、余量留在组内右侧。落地点：`SettingsSwitchRow`（覆盖全站多数设置页）、MessageStyle 的 StyleRow/TextSwitchRow、TtsSettingsRow、MemoryNavRow、助手编辑页「追加当前时间」行（文本块 + ⓘ 打包）、记忆设置页 `SettingsSectionHeader`（标题 fill=false）。测试：`SettingsSwitchRowTipTest` 新增 `tipIconHugsTheLabelText`（边界断言：ⓘ 在文字右侧、间隙 < 14dp、位于行宽左半侧）——旧排布下这条会失败。**属用户点名的有意偏离，见 §5.11；勿按原版"修回"行尾**。 | ✅ 本轮 |
 
 | 修复 | **两处裸排提示改成 ⓘ tooltip**（2026-09-12 用户点名）：① 记忆设置页「每类注入条数」原来把说明当**副标题**裸排，而原版是 `title + tip + detailText`（`memory_settings_page.dart` L176-179）→ `MemorySettingsScreen.SettingsNavRowFull` 补 `tip` 参数（title 行内 ⓘ，副标题保持可选），该行改传 `tip`。其余记忆行（思考/条目/画像/关于/提示词）原版本来就是 `subtitle:`，**不动**。② MCP 服务器编辑 sheet 工具卡里的**工具说明**原来卡内裸排 12sp（原版 `mcp_server_edit_sheet.dart` L547-560 也是裸排）→ 按用户要求改走工具名旁的 ⓘ tooltip（卡片其余部分照原版）。两处都用 `SettingsUi.TipHuggingLabel`（ⓘ 紧跟文字）。 | ✅ 本轮 |
+
+| 修复 | **sheet 样式统一**（2026-09-12 用户：「有的把手是原生的有的是自己绘制 统一成手绘那种」+「颜色模式/应用语言/应用字体/代码字体/消息导航按钮/后台聊天生成……统一成更多那个 sheet 样式」）：① **拖柄**：新增 `SettingsUi.MemoSheetHandle(trailingGap)`（40×4、onSurface@20%、全圆、上 8/下 10，与既有自绘件像素一致）；原先用 Material 原生胶囊的 19 处（关于页、日志、记忆追踪、记忆选项、主题×2、TTS×2、用户资料、引用来源、显示页 4 个滑块、颜色/语言/代理类型等）全部改 `dragHandle = null` + 内容首项调用它 —— 现在 **73 处 `ModalBottomSheet` 全部手绘把手**（含原本就自绘的 54 处）。② **选项面板**：新增 `SettingsUi.MemoSheetOptionRow`（取值照「更多」sheet：surfaceCard + r14 + 48dp + 左右 12；选中 = primary 文字 + ✓），列表 `Arrangement.spacedBy(8.dp)`、去掉 `HorizontalDivider`；落地 8 处：颜色模式（`SettingsScreen`，删 `ColorModeOption`）、应用语言（`SettingsUi.LanguageSheet`，删 `LanguageOption`）、应用字体/代码字体/后台聊天生成（`DisplaySettingsScreen.SelectSheet`，三处共用）、消息导航按钮（`BehaviorStartupSettingsScreen`，删 `NavModeOption`）、代理类型 ×2（`NetworkProxyScreen` 删 `ProxyTypeOption`、`ProviderSubPages`）。测试：`SheetStyleTest` 2 例（拖柄 tag 存在；选项行 48dp 卡 + 8dp 间距 + 选中才带 ✓；语言 sheet = 1 拖柄 + 4 卡） | ✅ 本轮 |
 
 ## 5.9 全量缺口审计（2026-09-09 系统普查，Flutter vs Android 逐域比对）
 
@@ -456,6 +459,8 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | 项 | 原版 | 我们 | 原因 |
 |---|---|---|---|
 | 设置行 tip 图标位置 | `_iosSwitchRow`（`display_settings_page.dart` L1508）等：`Expanded(标签) → MemoryTipIcon → 12 → IosSwitch`，ⓘ 浮在开关那侧、离文字很远 | **ⓘ 紧跟标签文字**（外层 `TipHuggingLabel`：组 `weight(1f)` 吃满余量、文字 `weight(1f, fill=false)` 只占所需宽度 ⇒ ⓘ 贴文字、余量留组内右侧，行尾开关/chevron 照旧贴边） | 用户 2026-09-12：「这个 tip 图标位置也不对，应该在文字的旁边……我感觉不合理」。`SettingsSwitchRowTipTest.tipIconHugsTheLabelText` 用**边界断言**锁住（ⓘ 在文字右侧、间隙 < 14dp、且在行宽左半侧） |
+| sheet 拖柄 | Material `BottomSheetDefaults.DragHandle`（原生胶囊）或各页自绘，混用 | **一律自绘**：`MemoSheetHandle()`（40×4、onSurface@20%、全圆、上 8 / 下 10，SettingsUi.kt）；全部 73 处 `ModalBottomSheet` 统一 `dragHandle = null` + 内容首项调用它 | 用户 2026-09-12：「有的把手是原生的有的是自己绘制 统一成手绘那种」 |
+| 下拉选项面板样式 | 分隔线列表（`HorizontalDivider` + 行内 h20/v15 padding） | **「更多」sheet 的卡片样式**：`MemoSheetOptionRow()`（surfaceCard + r14 + 48dp + 左右 12，选中 = primary 文字 + ✓），列表用 `Arrangement.spacedBy(8.dp)`、无分隔线 | 用户 2026-09-12：「统一成更多那个sheet样式吧」（颜色模式 / 应用语言 / 应用字体 / 代码字体 / 消息导航按钮 / 后台聊天生成 + 代理类型 ×2，共 8 处） |
 | 旧版（V1）记忆模式 | `legacy` 记忆一整套（兼容老用户旧数据） | **不移植**，只保留 V2 | 用户 2026-09-11 拍板：「我们这个是新的，没有这个问题」 |
 | 语音播放图标作用域 | `chat_message_widget.dart:3253-3291` 用**全局** `isActive` ⇒ 读一条消息时**所有**消息都显示停止、暂停态不可见 | `TtsPlaybackState.ownerId` + `messageTtsAction(state,msgId)`：只有被朗读的那条显示停止/继续，其余恒为播放；无 owner 的播放（工具卡重播）不影响任何消息 | 上游行为本身就是 bug（用户实测「点一条播放，所有界面都显示播放」），用户要求按消息归属 |
 | 联网搜索引用胶囊 | 20dp 高 / 12sp / primary 20% 底 | 16dp / 10sp / primary 16% 底（常量 `CITATION_BADGE_*`） | 用户 2026-09-10「小一点，有点影响阅读、太显眼」 |

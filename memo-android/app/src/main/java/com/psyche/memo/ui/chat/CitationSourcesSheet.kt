@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Lucide
+import com.psyche.memo.ui.MemoSheetHandle
 import com.psyche.memo.ui.R as UiR
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -439,8 +440,10 @@ fun CitationSourcesSheet(items: List<CitationSourceItem>, onDismiss: () -> Unit)
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = cs.surface,
+        dragHandle = null,
     ) {
         Column(Modifier.padding(horizontal = 12.dp)) {
+            MemoSheetHandle()
             // 标题行（citation_sources_sheet.dart _CitationSourcesDialogHeader）。
             Row(
                 verticalAlignment = Alignment.CenterVertically,

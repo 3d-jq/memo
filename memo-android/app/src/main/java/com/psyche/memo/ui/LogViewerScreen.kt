@@ -1856,12 +1856,13 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
     val autoDeleteOptions = listOf(0, 3, 7, 14, 30)
     val maxSizeOptions = listOf(0, 50, 100, 200, 500)
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 16.dp),
         ) {
+            MemoSheetHandle()
             Text(
                 text = stringResource(UiR.string.log_settings_title),
                 style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = cs.onSurface),

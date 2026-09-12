@@ -271,50 +271,28 @@ fun ProviderNetworkPage(
     // provider_network_page.dart:235-282 — proxy type is a http/socks5
     // two-option bottom sheet (C12), not a free-text field.
     if (proxyTypeSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { proxyTypeSheetVisible = false }) {
-            Column(modifier = Modifier.padding(bottom = 20.dp)) {
-                ProxyTypeOption(
-                    labelRes = com.psyche.memo.ui.R.string.network_proxy_type_http,
-                    value = "http",
-                    current = proxyType,
-                ) { v ->
-                    proxyType = v
-                    proxyTypeSheetVisible = false
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f))
-                ProxyTypeOption(
-                    labelRes = com.psyche.memo.ui.R.string.network_proxy_type_socks5,
-                    value = "socks5",
-                    current = proxyType,
-                ) { v ->
-                    proxyType = v
-                    proxyTypeSheetVisible = false
+        ModalBottomSheet(onDismissRequest = { proxyTypeSheetVisible = false }, dragHandle = null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+            ) {
+                MemoSheetHandle(trailingGap = 0.dp)
+                listOf(
+                    "http" to com.psyche.memo.ui.R.string.network_proxy_type_http,
+                    "socks5" to com.psyche.memo.ui.R.string.network_proxy_type_socks5,
+                ).forEach { (value, labelRes) ->
+                    MemoSheetOptionRow(
+                        label = stringResource(labelRes),
+                        selected = value == proxyType,
+                        onClick = {
+                            proxyType = value
+                            proxyTypeSheetVisible = false
+                        },
+                    )
                 }
             }
-        }
-    }
-}
-
-/** provider_network_page.dart:235-282 — http / socks5 sheet option row. */
-@Composable
-private fun ProxyTypeOption(labelRes: Int, value: String, current: String, onSelect: (String) -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val selected = value == current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(value) }
-            .padding(horizontal = 20.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(labelRes),
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-            color = if (selected) cs.primary else cs.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        if (selected) {
-            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
         }
     }
 }

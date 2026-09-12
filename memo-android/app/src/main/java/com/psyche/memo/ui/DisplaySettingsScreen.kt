@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -412,7 +413,8 @@ fun DisplaySettingsScreen(
 
     // L612-727 — chat font size slider sheet (0.5-1.5, step 0.05) + sample.
     if (fontSizeSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { fontSizeSheetVisible = false }) {
+        ModalBottomSheet(onDismissRequest = { fontSizeSheetVisible = false }, dragHandle = null) {
+            MemoSheetHandle()
             var scale by remember { mutableFloatStateOf(chatFontScale.toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -449,7 +451,8 @@ fun DisplaySettingsScreen(
 
     // L729-858 — auto scroll idle sheet: enable switch + 2-64s slider.
     if (autoScrollSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { autoScrollSheetVisible = false }) {
+        ModalBottomSheet(onDismissRequest = { autoScrollSheetVisible = false }, dragHandle = null) {
+            MemoSheetHandle()
             var enabled by remember { mutableStateOf(autoScrollEnabled) }
             var seconds by remember { mutableFloatStateOf(autoScrollIdleSeconds.toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
@@ -494,7 +497,8 @@ fun DisplaySettingsScreen(
 
     // L902-1001 — background mask sheet: 0-200%, step 5%.
     if (maskSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { maskSheetVisible = false }) {
+        ModalBottomSheet(onDismissRequest = { maskSheetVisible = false }, dragHandle = null) {
+            MemoSheetHandle()
             var strength by remember { mutableFloatStateOf((maskStrength * 100).toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -520,7 +524,8 @@ fun DisplaySettingsScreen(
 
     // L1003-1156 — input opacity sheet: separate light/dark sliders, 0-100 step 5.
     if (inputOpacitySheetVisible) {
-        ModalBottomSheet(onDismissRequest = { inputOpacitySheetVisible = false }) {
+        ModalBottomSheet(onDismissRequest = { inputOpacitySheetVisible = false }, dragHandle = null) {
+            MemoSheetHandle()
             var light by remember { mutableFloatStateOf((inputOpacityLight * 100).toFloat()) }
             var dark by remember { mutableFloatStateOf((inputOpacityDark * 100).toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
@@ -626,30 +631,20 @@ private fun SelectSheet(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val cs = MaterialTheme.colorScheme
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(bottom = 20.dp)) {
-            options.forEachIndexed { index, (label, value, selected) ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(value) }
-                        .padding(horizontal = 20.dp, vertical = 15.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                        color = if (selected) cs.primary else cs.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (selected) {
-                        Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
-                    }
-                }
-                if (index != options.lastIndex) {
-                    HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
-                }
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MemoSheetHandle(trailingGap = 0.dp)
+            options.forEach { (label, value, selected) ->
+                MemoSheetOptionRow(
+                    label = label,
+                    selected = selected,
+                    onClick = { onSelect(value) },
+                )
             }
         }
     }

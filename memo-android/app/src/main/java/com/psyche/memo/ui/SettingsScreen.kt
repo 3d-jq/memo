@@ -2,6 +2,7 @@ package com.psyche.memo.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -328,74 +329,31 @@ fun SettingsScreen(
 
     // L52-96,159-165 — color mode sheet: system / light / dark.
     if (colorModeSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { colorModeSheetVisible = false }) {
-            Column(modifier = Modifier.padding(bottom = 20.dp)) {
-                ColorModeOption(
-                    labelRes = UiR.string.settings_page_system_mode,
-                    icon = Lucide.Monitor,
-                    value = "system",
-                    current = themeMode,
-                ) { mode ->
-                    ThemeState.setMode(container, mode)
-                    colorModeSheetVisible = false
-                }
-                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
-                ColorModeOption(
-                    labelRes = UiR.string.settings_page_light_mode,
-                    icon = Lucide.Sun,
-                    value = "light",
-                    current = themeMode,
-                ) { mode ->
-                    ThemeState.setMode(container, mode)
-                    colorModeSheetVisible = false
-                }
-                HorizontalDivider(color = cs.outlineVariant.copy(alpha = 0.18f))
-                ColorModeOption(
-                    labelRes = UiR.string.settings_page_dark_mode,
-                    icon = Lucide.Moon,
-                    value = "dark",
-                    current = themeMode,
-                ) { mode ->
-                    ThemeState.setMode(container, mode)
-                    colorModeSheetVisible = false
+        ModalBottomSheet(onDismissRequest = { colorModeSheetVisible = false }, dragHandle = null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MemoSheetHandle(trailingGap = 0.dp)
+                listOf(
+                    Triple(UiR.string.settings_page_system_mode, Lucide.Monitor, "system"),
+                    Triple(UiR.string.settings_page_light_mode, Lucide.Sun, "light"),
+                    Triple(UiR.string.settings_page_dark_mode, Lucide.Moon, "dark"),
+                ).forEach { (labelRes, icon, mode) ->
+                    MemoSheetOptionRow(
+                        label = stringResource(labelRes),
+                        icon = icon,
+                        selected = mode == themeMode,
+                        onClick = {
+                            ThemeState.setMode(container, mode)
+                            colorModeSheetVisible = false
+                        },
+                    )
                 }
             }
         }
     }
 }
 
-@Composable
-private fun ColorModeOption(
-    labelRes: Int,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    value: String,
-    current: String,
-    onSelect: (String) -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    val selected = value == current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(value) }
-            .padding(horizontal = 20.dp, vertical = 15.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = if (selected) cs.primary else cs.onSurface.copy(alpha = 0.7f),
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(Modifier.size(12.dp))
-        Text(
-            text = stringResource(labelRes),
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-            color = if (selected) cs.primary else cs.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        if (selected) {
-            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
-        }
-    }
-}
