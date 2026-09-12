@@ -1,6 +1,7 @@
 package com.psyche.memo.ui.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -30,14 +31,23 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -442,6 +452,76 @@ fun LoadingDotsIndicator(
                 center = Offset(cx, size.height / 2f),
             )
         }
+    }
+}
+
+/**
+ * 流式等待的扫光文字（**用户 2026-09-12 点名改造**，替代原版三点）：一句轮换的
+ * 中文短语（思考中／嘻嘻中／深挖中…，可随时加词）+ 从左到右扫过的高光。
+ *
+ * 原版 `LoadingIndicator`（chat_message_widget.dart L4104-4196）是三点波浪脉动，
+ * 我们已 1:1 照抄；用户看过 RikkaHub（兔子图标动画 / M3 ContainedLoadingIndicator）
+ * 后决定换成这个 —— 属**有意偏离**，见 PORTING §5.11，勿按原版「修回」三点。
+ */
+internal object ThinkingPhrases {
+    /** 轮换短语（用户给的三个 + 我按同一语气扩的）。改词直接改这里。 */
+    val ALL: List<String> = listOf(
+        "思考中", "嘻嘻中", "深挖中", "搓手中", "酝酿中", "翻书中",
+        "算盘中", "推敲中", "脑暴中", "琢磨中", "灵感中", "搬砖中",
+    )
+}
+
+@Composable
+fun ThinkingShimmerText(
+    modifier: Modifier = Modifier,
+    phrases: List<String> = ThinkingPhrases.ALL,
+    intervalMs: Long = 2200,
+    sweepMs: Int = 1500,
+    fontSize: TextUnit = 13.sp,
+) {
+    val cs = MaterialTheme.colorScheme
+    val base = cs.onSurface.copy(alpha = 0.55f)
+    val highlight = cs.primary
+
+    // 轮换短语：定时切片，切换用 Crossfade（不打断正在扫的高光）。
+    var index by remember(phrases) { mutableIntStateOf(0) }
+    LaunchedEffect(phrases, intervalMs) {
+        if (phrases.size <= 1) return@LaunchedEffect
+        while (true) {
+            delay(intervalMs)
+            index = (index + 1) % phrases.size
+        }
+    }
+
+    val transition = rememberInfiniteTransition(label = "thinkingShimmer")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = sweepMs, easing = LinearEasing),
+        ),
+        label = "thinkingShimmerProgress",
+    )
+    var textWidth by remember { mutableIntStateOf(0) }
+    val minBand = with(LocalDensity.current) { 48.dp.toPx() }
+    // 高光带宽度跟文字走；两端各留一个带宽，保证「跳回开头」发生在文字之外。
+    val band = (textWidth * 0.75f).coerceAtLeast(minBand)
+    val sweepStart = -band + progress * (textWidth + band * 2f)
+
+    Crossfade(targetState = index, animationSpec = tween(durationMillis = 220), label = "thinkingPhrase") { i ->
+        Text(
+            text = phrases.getOrElse(i) { phrases.firstOrNull().orEmpty() },
+            maxLines = 1,
+            style = TextStyle(
+                fontSize = fontSize,
+                brush = Brush.linearGradient(
+                    colors = listOf(base, highlight, base),
+                    start = Offset(sweepStart, 0f),
+                    end = Offset(sweepStart + band, 0f),
+                ),
+            ),
+            modifier = Modifier.onSizeChanged { textWidth = it.width },
+        )
     }
 }
 

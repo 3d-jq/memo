@@ -33,10 +33,8 @@ internal object SettingsSnapshotMerger {
     const val PROVIDER_CONFIGS_KEY = "provider_configs_v1"
     const val ACTIVE_IDS_BY_ASSISTANT_KEY = "instruction_injections_active_ids_by_assistant_v1"
 
-    /** Existing-keeps-value JSON maps (grouping/collapse state). */
+    /** Existing-keeps-value JSON maps (tag relationship/collapse state). */
     val RELATIONSHIP_MAP_KEYS = setOf(
-        "provider_group_map_v1",
-        "provider_group_collapsed_v1",
         "assistant_tag_map_v1",
         "assistant_tag_collapsed_v1",
     )

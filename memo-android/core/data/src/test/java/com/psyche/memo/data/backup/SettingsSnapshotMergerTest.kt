@@ -224,17 +224,17 @@ class SettingsSnapshotMergerTest {
     }
 
     @Test
-    fun `relationship maps keep the existing value on conflicts`() {
+    fun `tag relationship maps keep the existing value on conflicts`() {
         val written = SettingsSnapshotMerger.mergePreferences(
-            existing = mapOf("provider_group_map_v1" to "{\"p1\":\"g1\"}"),
+            existing = mapOf("assistant_tag_map_v1" to "{\"a1\":\"t1\"}"),
             incoming = mapOf(
-                "provider_group_map_v1" to element("{\"p1\":\"g9\",\"p2\":\"g2\"}"),
+                "assistant_tag_map_v1" to element("{\"a1\":\"t9\",\"a2\":\"t2\"}"),
             ),
-            incomingKeys = setOf("provider_group_map_v1"),
+            incomingKeys = setOf("assistant_tag_map_v1"),
         )
-        val merged = BackupJson.parse(written["provider_group_map_v1"]!!).jsonObject
-        assertEquals("g1", (merged["p1"] as JsonPrimitive).content)
-        assertEquals("g2", (merged["p2"] as JsonPrimitive).content)
+        val merged = BackupJson.parse(written["assistant_tag_map_v1"]!!).jsonObject
+        assertEquals("t1", (merged["a1"] as JsonPrimitive).content)
+        assertEquals("t2", (merged["a2"] as JsonPrimitive).content)
     }
 
     @Test

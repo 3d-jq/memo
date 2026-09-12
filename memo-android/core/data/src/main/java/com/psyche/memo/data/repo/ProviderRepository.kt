@@ -4,7 +4,6 @@ import android.database.sqlite.SQLiteDatabase
 import com.psyche.memo.data.db.PayloadEntityDao
 import com.psyche.memo.data.model.KeyManagementConfig
 import com.psyche.memo.data.model.ProviderConfig
-import com.psyche.memo.data.model.ProviderGroup
 import com.psyche.memo.data.settings.PreferenceRepository
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -22,10 +21,6 @@ import kotlinx.serialization.json.put
  * - provider rows live in provider_rows (payload = ProviderConfig JSON),
  * - display order comes from preference key `providers_order_v1`
  *   (JSON array of keys); keys not recorded are appended after,
- * - grouping: `provider_group_map_v1` (providerKey -> groupId),
- *   `provider_group_collapsed_v1` (groupId|__ungrouped__ -> bool),
- *   `provider_ungrouped_position_v1` (display index of the ungrouped
- *   section), and provider_group_rows for the group entities.
  *
  * New rows take sort_order = max+1 (PayloadEntityDao.nextSortOrder) — never
  * a truncated timestamp, which could violate the schema CHECK(sort_order>=0).
@@ -36,7 +31,6 @@ class ProviderRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val providerDao = PayloadEntityDao(db, "provider_rows", primaryKey = "provider_key")
-    private val groupDao = PayloadEntityDao(db, "provider_group_rows", primaryKey = "id")
 
     init {
         // One-time sweep of empty builtin rows left by earlier test builds
@@ -247,205 +241,6 @@ class ProviderRepository(
     /** Merge semantics of providers_page.build: ordered first, leftovers appended. */
     fun applyOrder(keys: List<String>): List<String> = mergeOrder(keys, order())
 
-    // ---- groups (provider_group_rows + provider_group_map_v1) ----
-
-    fun groups(): List<ProviderGroup> =
-        groupDao.getAll().mapNotNull { row -> ProviderGroup.fromJsonString(json, row.payload) }
-
-    fun groupById(groupId: String): ProviderGroup? = groups().firstOrNull { it.id == groupId }
-
-    fun saveGroup(group: ProviderGroup) {
-        val isNew = groupDao.get(group.id) == null
-        val sortOrder = if (isNew) groupDao.nextSortOrder() else groupDao.get(group.id)!!.sortOrder
-        groupDao.upsert(group.id, group.toJsonString(json), sortOrder)
-    }
-
-    /** Rewrites every group row so sort_order follows the given list order. */
-    private fun replaceGroups(groups: List<ProviderGroup>) {
-        val existing = groupDao.getAll().associateBy { it.id }
-        groups.forEachIndexed { index, group ->
-            groupDao.upsert(group.id, group.toJsonString(json), index)
-        }
-        // Rows for groups no longer in the list (rename/create callers always
-        // pass the full list) are removed to keep the table authoritative.
-        val keep = groups.map { it.id }.toSet()
-        for (row in existing.values) {
-            if (row.id !in keep) groupDao.delete(row.id)
-        }
-    }
-
-    /**
-     * Port of SettingsProvider.createGroup: case-insensitive duplicate names
-     * return the existing id; otherwise the group is inserted at the end and
-     * the ungrouped display index shifts right if it was after the insertion.
-     */
-    fun createGroup(name: String): String {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) return ""
-        val key = trimmed.lowercase()
-        for (g in groups()) {
-            if (g.name.trim().lowercase() == key) return g.id
-        }
-        val id = java.util.UUID.randomUUID().toString()
-        val now = System.currentTimeMillis()
-        val res = ProviderGroupLogic.insertProviderGroup(
-            groups = groups(),
-            ungroupedIndex = ungroupedPosition(),
-            group = ProviderGroup(id = id, name = trimmed, createdAt = now),
-        )
-        replaceGroups(res.groups)
-        setUngroupedPosition(res.ungroupedIndex)
-        cleanupProviderGrouping()
-        return id
-    }
-
-    /** Port of SettingsProvider.renameGroup (duplicate-name no-op included). */
-    fun renameGroup(groupId: String, name: String) {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) return
-        val all = groups()
-        val idx = all.indexOfFirst { it.id == groupId }
-        if (idx < 0) return
-        val key = trimmed.lowercase()
-        for (g in all) {
-            if (g.id != groupId && g.name.trim().lowercase() == key) return
-        }
-        if (all[idx].name == trimmed) return
-        val mut = all.toMutableList()
-        mut[idx] = mut[idx].copy(name = trimmed)
-        replaceGroups(mut)
-        cleanupProviderGrouping()
-    }
-
-    /** Port of SettingsProvider.reorderProviderGroupsWithUngrouped. */
-    fun reorderGroupsWithUngrouped(oldIndex: Int, newIndex: Int) {
-        val displayCount = groups().size + 1
-        if (displayCount <= 1) return
-        if (oldIndex < 0 || oldIndex >= displayCount) return
-        if (newIndex < 0 || newIndex > displayCount) return
-        if (oldIndex == newIndex) return
-        val res = ProviderGroupLogic.reorderProviderGroupDisplayWithUngrouped(
-            groups = groups(),
-            ungroupedIndex = ungroupedPosition(),
-            oldIndex = oldIndex,
-            newIndex = newIndex,
-        )
-        replaceGroups(res.groups)
-        setUngroupedPosition(res.ungroupedIndex)
-        cleanupProviderGrouping()
-    }
-
-    /** Port of SettingsProvider.deleteGroup: members fall back to ungrouped. */
-    fun deleteGroupFully(groupId: String) {
-        if (groupById(groupId) == null) return
-        val res = ProviderGroupLogic.deleteProviderGroup(
-            groups = groups(),
-            ungroupedIndex = ungroupedPosition(),
-            providerGroupMap = groupMap(),
-            collapsed = collapsedAll(),
-            groupId = groupId,
-        )
-        replaceGroups(res.groups)
-        setUngroupedPosition(res.ungroupedIndex)
-        setGroupMap(res.providerGroupMap)
-        setCollapsedAll(res.collapsed)
-        cleanupProviderGrouping()
-    }
-
-    /**
-     * Light port of SettingsProvider._cleanupProviderOrderAndGrouping: drop
-     * group-map entries whose provider key or group id no longer resolves.
-     */
-    fun cleanupProviderGrouping() {
-        val knownKeys = providerDao.getAll().map { it.id }.toSet()
-        val validGroupIds = groups().map { it.id }.toSet()
-        val map = groupMap().filter { (k, v) -> k in knownKeys && v in validGroupIds }
-        if (map != groupMap()) setGroupMap(map)
-    }
-
-    /** Full collapsed map (provider_group_collapsed_v1). */
-    fun collapsedAll(): Map<String, Boolean> {
-        val raw = prefs.readJson(COLLAPSED_KEY) ?: return emptyMap()
-        return runCatching {
-            (json.parseToJsonElement(raw) as? kotlinx.serialization.json.JsonObject)
-                ?.entries
-                ?.associate { it.key to ((it.value as? JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false) }
-                .orEmpty()
-        }.getOrDefault(emptyMap())
-    }
-
-    fun setCollapsedAll(map: Map<String, Boolean>) {
-        prefs.writeJson(
-            COLLAPSED_KEY,
-            JsonObject(map.mapValues { JsonPrimitive(it.value) }).toString(),
-        )
-    }
-
-    fun deleteGroup(groupId: String) {
-        groupDao.delete(groupId)
-        // Members fall back to ungrouped.
-        val map = groupMap().toMutableMap()
-        map.entries.removeIf { it.value == groupId }
-        setGroupMap(map)
-    }
-
-    fun groupMap(): Map<String, String> {
-        val raw = prefs.readJson(GROUP_MAP_KEY) ?: return emptyMap()
-        return runCatching {
-            val obj = json.parseToJsonElement(raw)
-            (obj as? kotlinx.serialization.json.JsonObject)?.entries?.associate {
-                it.key to (it.value as? JsonPrimitive)?.content.orEmpty()
-            }.orEmpty()
-        }.getOrDefault(emptyMap())
-    }
-
-    fun setGroupMap(map: Map<String, String>) {
-        prefs.writeJson(
-            GROUP_MAP_KEY,
-            kotlinx.serialization.json.JsonObject(map.mapValues { JsonPrimitive(it.value) }).toString(),
-        )
-    }
-
-    fun groupFor(providerKey: String): String? = groupMap()[providerKey]
-
-    fun setGroupFor(providerKey: String, groupId: String?) {
-        val map = groupMap().toMutableMap()
-        if (groupId == null) map.remove(providerKey) else map[providerKey] = groupId
-        setGroupMap(map)
-    }
-
-    // ---- collapsed state (provider_group_collapsed_v1) ----
-
-    fun isCollapsed(groupKey: String): Boolean {
-        val raw = prefs.readJson(COLLAPSED_KEY) ?: return false
-        return runCatching {
-            (json.parseToJsonElement(raw) as? kotlinx.serialization.json.JsonObject)
-                ?.get(groupKey)?.let { (it as? JsonPrimitive)?.content?.toBooleanStrictOrNull() } ?: false
-        }.getOrDefault(false)
-    }
-
-    fun setCollapsed(groupKey: String, collapsed: Boolean) {
-        val obj = runCatching {
-            json.parseToJsonElement(prefs.readJson(COLLAPSED_KEY) ?: "{}")
-        }.getOrDefault(json.parseToJsonElement("{}")) as? kotlinx.serialization.json.JsonObject
-        val next = (obj ?: kotlinx.serialization.json.JsonObject(emptyMap())).toMutableMap()
-        next[groupKey] = JsonPrimitive(collapsed)
-        prefs.writeJson(
-            COLLAPSED_KEY,
-            kotlinx.serialization.json.JsonObject(next).toString(),
-        )
-    }
-
-    // ---- ungrouped display position ----
-
-    fun ungroupedPosition(): Int {
-        val raw = prefs.readJson(UNGROUPED_POS_KEY)?.replace("\"", "") ?: return Int.MAX_VALUE
-        return raw.toIntOrNull() ?: Int.MAX_VALUE
-    }
-
-    fun setUngroupedPosition(index: Int) {
-        prefs.writeJson(UNGROUPED_POS_KEY, JsonPrimitive(index).toString())
-    }
 
     companion object {
         /**
@@ -802,9 +597,5 @@ class ProviderRepository(
         }
 
         const val ORDER_KEY = "providers_order_v1"
-        const val GROUP_MAP_KEY = "provider_group_map_v1"
-        const val COLLAPSED_KEY = "provider_group_collapsed_v1"
-        const val UNGROUPED_POS_KEY = "provider_ungrouped_position_v1"
-        const val UNGROUPED_KEY = "__ungrouped__"
     }
 }

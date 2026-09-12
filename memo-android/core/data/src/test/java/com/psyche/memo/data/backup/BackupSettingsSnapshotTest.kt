@@ -93,7 +93,7 @@ class BackupSettingsSnapshotTest {
     fun `every declared entity kind appears in the snapshot even when empty`() {
         val snapshot = build(entities = emptyMap())
         val expected = listOf(
-            "assistants_v1", "provider_configs_v1", "provider_groups_v1",
+            "assistants_v1", "provider_configs_v1",
             "mcp_servers_v1", "world_books_v1", "assistant_memories_v1",
             "quick_phrases_v1", "search_services_v1", "tts_services_v1",
             "instruction_injections_v1", "assistant_tags_v1",
@@ -140,12 +140,14 @@ class BackupSettingsSnapshotTest {
     }
 
     @Test
-    fun `entity source keys match the router's registry`() {
+    fun `entity source keys are the router registry minus the dropped provider groups`() {
         val snapshot = BackupSettingsSnapshot { emptyMap() }
         // Must line up with SettingsKeyRegistry.ENTITY_SOURCE_KEYS — a mismatch
         // means an import would classify a real entity as an unknown passthrough.
+        // **例外**：Memo 是独立项目，供应商分组功能整体删除后 provider_groups_v1
+        // 不再写入归档（生成的 registry 来自 Flutter 源的分类表，仍列着这个键）。
         val registry = com.psyche.memo.data.settings.SettingsKeyRegistry.ENTITY_SOURCE_KEYS
-        assertEquals(registry, snapshot.entitySourceKeys().toSet())
+        assertEquals(registry - "provider_groups_v1", snapshot.entitySourceKeys().toSet())
     }
 
     private fun build(

@@ -446,7 +446,6 @@ internal class BackupRestorer(
         private val ENTITY_ROUTING = listOf(
             EntityRouting("assistants_v1", "assistant_rows"),
             EntityRouting("provider_configs_v1", "provider_rows", payloadKey = "provider_key", isProvider = true),
-            EntityRouting("provider_groups_v1", "provider_group_rows"),
             EntityRouting("mcp_servers_v1", "mcp_server_rows"),
             EntityRouting("world_books_v1", "world_book_rows"),
             EntityRouting("assistant_memories_v1", "assistant_memory_rows"),

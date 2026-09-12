@@ -1,6 +1,5 @@
 package com.psyche.memo.data.repo
 
-import com.psyche.memo.data.model.ProviderGroup
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,26 +43,6 @@ class ProviderRepoLogicTest {
     @Test
     fun emptyOrderKeepsKeysOrder() {
         assertEquals(listOf("x", "y"), ProviderRepository.mergeOrder(listOf("x", "y"), emptyList()))
-    }
-
-    // ---- ProviderGroup JSON roundtrip ----
-
-    @Test
-    fun providerGroupRoundTrips() {
-        val group = ProviderGroup(id = "g1", name = "Work", createdAt = 1700000000000L)
-        val back = ProviderGroup.fromJsonString(json, group.toJsonString(json))
-        assertEquals(group, back)
-    }
-
-    @Test
-    fun providerGroupToleratesUnknownKeys() {
-        val group = ProviderGroup.fromJsonString(json, """{"id":"g","name":"n","createdAt":1,"future":true}""")
-        assertEquals("g", group?.id)
-    }
-
-    @Test
-    fun providerGroupToleratesGarbage() {
-        assertNull(ProviderGroup.fromJsonString(json, "not-json"))
     }
 
     // ---- branding guards (agents.md: no kelivo name, no sponsor seeds) ----

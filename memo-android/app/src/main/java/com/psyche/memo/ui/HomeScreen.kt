@@ -2122,20 +2122,12 @@ private fun MessageRow(
                     }
                 }
                 if (!isUser && msg.isStreaming) {
-                    if (assistantBlocks.isEmpty() && msg.content.isEmpty()) {
-                        // CMW:2885-2925 —— 还没有任何可见内容时的等待气泡：三点
-                        // LoadingIndicator（4105-4196），非 Material 圆环。
-                        com.psyche.memo.ui.chat.LoadingDotsIndicator(
-                            color = cs.primary,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    } else if (msg.content.isNotEmpty()) {
-                        // CMW:3011-3020 —— 已有正文时把指示器挂在最后一个块之后。
-                        com.psyche.memo.ui.chat.LoadingDotsIndicator(
-                            color = cs.primary,
-                            modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-                        )
-                    }
+                    // **用户 2026-09-12 点名**：原版三点脉动（CMW:2885-2925 /
+                    // 3011-3020）换成「扫光文字」，并且挪成列表末尾**单独一行靠左**。
+                    Spacer(Modifier.height(6.dp))
+                    com.psyche.memo.ui.chat.ThinkingShimmerText(
+                        modifier = Modifier.padding(start = 2.dp),
+                    )
                 }
                 if (msg.failed) {
                     Text(

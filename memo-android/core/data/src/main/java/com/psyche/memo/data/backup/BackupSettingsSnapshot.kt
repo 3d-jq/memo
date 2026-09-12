@@ -50,7 +50,6 @@ internal class BackupSettingsSnapshot(
     private val specs: List<EntitySpec> = listOf(
         EntitySpec("assistants_v1", "assistant_rows"),
         EntitySpec("provider_configs_v1", "provider_rows", payloadKey = "provider_key", isProvider = true),
-        EntitySpec("provider_groups_v1", "provider_group_rows"),
         EntitySpec("mcp_servers_v1", "mcp_server_rows"),
         EntitySpec("world_books_v1", "world_book_rows"),
         EntitySpec("assistant_memories_v1", "assistant_memory_rows"),
