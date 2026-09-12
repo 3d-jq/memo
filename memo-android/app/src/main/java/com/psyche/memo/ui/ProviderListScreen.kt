@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CircleDot
 import com.composables.icons.lucide.CloudDownload
 import com.composables.icons.lucide.Folder
@@ -209,14 +211,49 @@ fun ProvidersScreen(
     }
 
     // Merge builtin + dynamic keys, then apply saved order (providers_page.build).
-    val items: List<ProviderItem> = remember(providers, searchQuery, dragOrder) {
+    // 这里**不过滤搜索**：过滤发生在分组计算里（组名命中要显示整组）。
+    val orderedItems: List<ProviderItem> = remember(providers, dragOrder) {
         buildProviderItems(
             providers = providers,
-            searchQuery = searchQuery,
+            searchQuery = "",
             dragOrder = dragOrder,
             applyOrder = { repo.applyOrder(it) },
         )
     }
+
+    // 分组关系/折叠态都写在 preference 里，改完 bump 一下 tick 重新读。
+    var groupingTick by remember { mutableStateOf(0) }
+    val groupPairs = remember(providers, groupingTick) { repo.groups().map { it.id to it.name } }
+    val groupMap = remember(providers, groupingTick) { repo.groupMap() }
+    val collapsedKeys = remember(groupingTick) {
+        repo.collapsedAll().filterValues { it }.keys
+    }
+    val ungroupedTitle = stringResource(com.psyche.memo.ui.R.string.provider_groups_other)
+
+    val sections = remember(orderedItems, searchQuery, groupingTick, ungroupedTitle) {
+        val query = searchQuery.trim()
+        buildProviderSections(
+            orderedKeys = orderedItems.map { it.key },
+            groupMap = groupMap,
+            groups = groupPairs,
+            ungroupedPosition = repo.ungroupedPosition(),
+            ungroupedKey = ProviderRepository.UNGROUPED_KEY,
+            ungroupedTitle = ungroupedTitle,
+            collapsedKeys = collapsedKeys,
+            query = query,
+            matchesProvider = { key ->
+                val name = orderedItems.firstOrNull { it.key == key }?.name.orEmpty()
+                query.isEmpty() || name.contains(query, ignoreCase = true)
+            },
+        )
+    }
+    val flatRows = remember(sections) { flattenProviderSections(sections) }
+    val items: List<ProviderItem> = remember(flatRows, orderedItems) {
+        val byKey = orderedItems.associateBy { it.key }
+        flatRows.mapNotNull { (key, _) -> byKey[key] }
+    }
+    // 折叠（或有搜索）时不做拖拽重排：展平后的索引与底层 order 不再一一对应。
+    val groupingBlocksReorder = searchQuery.isNotBlank() || sections.any { it.collapsed }
 
     fun toggleSelect(key: String) {
         Haptics.light(view)
@@ -286,15 +323,13 @@ fun ProvidersScreen(
         // ---- List (RikkaHub SettingProviderPage pattern: standalone cards,
         // spacedBy gaps, drag via the trailing handle) ----
         Box(modifier = Modifier.weight(1f)) {
-            val reorderEnabled = !selectMode && searchQuery.isBlank()
+            val reorderEnabled = !selectMode && !groupingBlocksReorder
             val lazyListState = rememberLazyListState()
             val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-                // from.index/to.index are LazyColumn indices. The list has no
-                // header/footer items (RikkaHub's layout), so they equal the
-                // data indices — a header item would shift them by 1 and make
-                // every crossing reorder the wrong pair, which is what piled
-                // sibling cards on top of the dragged one.
-                val guarded = !(searchQuery.isNotEmpty() || selectMode)
+                // from.index/to.index are LazyColumn indices. 组头是**跟着卡片**画的
+                // （不是单独的 item），所以索引仍然一一对应；折叠/搜索时干脆禁掉
+                // 拖拽（那时展平结果与底层顺序不再对应）。
+                val guarded = !selectMode && !groupingBlocksReorder
                 val moved = if (guarded) applyProviderMove(items.map { it.key }, from.index, to.index) else null
                 // Hold the live order locally; the LaunchedEffect below
                 // persists it once on release. Writing the store on every
@@ -320,41 +355,58 @@ fun ProvidersScreen(
                 contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(items, key = { it.key }) { item ->
-                    ReorderableItem(state = reorderableState, key = item.key) { isDragging ->
-                        ProviderCard(
-                            item = item,
-                            config = providers.toMap()[item.key],
-                            selectMode = selectMode,
-                            selected = selected.contains(item.key),
-                            isDragging = isDragging,
-                            onToggleSelect = { toggleSelect(item.key) },
-                            onOpen = {
-                                if (selectMode) toggleSelect(item.key)
-                                else onOpenProvider(item.key)
-                            },
-                            dragHandle = {
-                                if (!selectMode) {
-                                    IconButton(
-                                        onClick = {},
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .longPressDraggableHandle(
-                                                enabled = reorderEnabled,
-                                                onDragStarted = { Haptics.medium(view) },
-                                                onDragStopped = { Haptics.light(view) },
-                                            ),
-                                    ) {
-                                        Icon(
-                                            Lucide.GripVertical,
-                                            contentDescription = null,
-                                            tint = cs.onSurface.copy(alpha = 0.5f),
-                                            modifier = Modifier.size(18.dp),
-                                        )
+                items(flatRows, key = { it.first }) { (key, header) ->
+                    ReorderableItem(state = reorderableState, key = key) { isDragging ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            header?.let { section ->
+                                ProviderGroupHeaderRow(
+                                    title = section.title,
+                                    count = section.keys.size,
+                                    collapsed = section.collapsed,
+                                    // 搜索期间不给折叠（原版 canToggleCollapse: !searchActive）。
+                                    canToggle = searchQuery.isBlank(),
+                                    onToggle = {
+                                        repo.setCollapsed(section.groupKey, !section.collapsed)
+                                        groupingTick++
+                                    },
+                                )
+                            }
+                            if (header?.collapsed == true) return@Column
+                            val item = items.firstOrNull { it.key == key } ?: return@Column
+                            ProviderCard(
+                                item = item,
+                                config = providers.toMap()[item.key],
+                                selectMode = selectMode,
+                                selected = selected.contains(item.key),
+                                isDragging = isDragging,
+                                onToggleSelect = { toggleSelect(item.key) },
+                                onOpen = {
+                                    if (selectMode) toggleSelect(item.key)
+                                    else onOpenProvider(item.key)
+                                },
+                                dragHandle = {
+                                    if (!selectMode) {
+                                        IconButton(
+                                            onClick = {},
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .longPressDraggableHandle(
+                                                    enabled = reorderEnabled,
+                                                    onDragStarted = { Haptics.medium(view) },
+                                                    onDragStopped = { Haptics.light(view) },
+                                                ),
+                                        ) {
+                                            Icon(
+                                                Lucide.GripVertical,
+                                                contentDescription = null,
+                                                tint = cs.onSurface.copy(alpha = 0.5f),
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
                                     }
-                                }
-                            },
-                        )
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -414,10 +466,11 @@ fun ProvidersScreen(
         ProviderGroupSelectSheet(
             container = container,
             onPick = { groupId ->
-                // 只写分组关系；列表本身（未渲染分组头）不重排，避免"选完分组列表
-                // 顺序突然变了"这种与界面不符的表现。分组顺序等列表页渲染分组时
-                // 再按 `moveProviderInGroupedOrder` 语义补齐。
+                // 写分组关系 + 刷新分组视图；列表顺序不动（避免"选完分组列表顺序
+                // 自己变了"这种与界面不符的表现），分组内的顺序等渲染分组头时再按
+                // `moveProviderInGroupedOrder` 的语义补齐。
                 selected.forEach { key -> repo.setGroupFor(key, groupId) }
+                groupingTick++
             },
             onDismiss = {
                 showGroupSelect = false
@@ -566,6 +619,66 @@ private fun ProvidersSearchField(
                     .size(34.dp)
                     .padding(8.dp)
                     .clickable { onChanged("") },
+            )
+        }
+    }
+}
+
+/**
+ * 分组标题行 —— 移植 `_ProviderGroupHeaderRow`（providers_page.dart L1125+）：
+ * 13.5sp 加粗标题 + 数量胶囊（primary 12% 底），左侧 chevron 折叠时朝右、
+ * 展开时转 0.25 圈（260ms）。点整行折叠/展开；搜索期间不可折叠。
+ */
+@Composable
+private fun ProviderGroupHeaderRow(
+    title: String,
+    count: Int,
+    collapsed: Boolean,
+    canToggle: Boolean,
+    onToggle: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val turns by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (collapsed) 0f else 0.25f,
+        animationSpec = tween(durationMillis = 260),
+        label = "groupHeaderChevron",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = canToggle) { onToggle() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Lucide.ChevronRight,
+            contentDescription = null,
+            tint = cs.onSurface.copy(alpha = 0.75f),
+            modifier = Modifier
+                .size(16.dp)
+                .graphicsLayer { rotationZ = turns * 360f },
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = title,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = TextStyle(
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = cs.onSurface.copy(alpha = 0.8f),
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .background(cs.primary.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        ) {
+            Text(
+                text = count.toString(),
+                style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = cs.primary),
             )
         }
     }
