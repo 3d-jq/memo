@@ -579,19 +579,17 @@ private fun McpServerEditSheet(
                                 verticalAlignment = Alignment.Top,
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = tool.name,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = cs.onSurface,
-                                        ),
-                                    )
-                                    val description = tool.description.orEmpty()
-                                    if (description.isNotEmpty()) {
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = description,
-                                            style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)),
+                                    // 工具说明改走 ⓘ tooltip（用户 2026-09-12：「MCP 工具里面
+                                    // 那个也改成 tooltip」）——原版是卡内裸排一行 12sp@0.7
+                                    // （L547-560），按「不裸排提示」规则收敛成工具名旁的提示。
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        TipHuggingLabel(
+                                            label = tool.name,
+                                            tip = tool.description,
+                                            labelStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = cs.onSurface,
+                                            ),
                                         )
                                     }
                                     if (tool.params.isNotEmpty()) {

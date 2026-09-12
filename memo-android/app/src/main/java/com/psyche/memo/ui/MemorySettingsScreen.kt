@@ -286,7 +286,8 @@ fun MemorySettingsScreen(
                     SectionCard {
                         SettingsNavRowFull(
                             title = stringResource(UiR.string.memory_settings_injection_max_items_title),
-                            subtitle = stringResource(UiR.string.memory_settings_injection_max_items_subtitle),
+                            // 原版：`tip:`（tooltip）而不是 `subtitle:`（memory_settings_page.dart L177）。
+                            tip = stringResource(UiR.string.memory_settings_injection_max_items_subtitle),
                             detailText = state.injectionMaxItems.toString(),
                             onTap = { injectionPicker = true },
                         )
@@ -545,11 +546,12 @@ private fun MemorySettingsSwitchRow(
     }
 }
 
-/** _NavRow full-width variant (title + subtitle + chevron) with divider spacing handled by SectionCard rows. */
+/** _NavRow full-width variant (title + subtitle/tip + chevron) with divider spacing handled by SectionCard rows. */
 @Composable
 private fun SettingsNavRowFull(
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
+    tip: String? = null,
     detailText: String? = null,
     onTap: () -> Unit,
 ) {
@@ -564,9 +566,20 @@ private fun SettingsNavRowFull(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(title, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.9)))
-                Spacer(Modifier.height(3.dp))
-                Text(subtitle, style = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = withAlpha(cs.onSurface, 0.62)))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // ⓘ 紧跟标题文字（用户 2026-09-12 规则，见 SettingsUi.TipHuggingLabel）。
+                    // 原版「每类注入条数」就是 `title + tip + detailText`
+                    // （memory_settings_page.dart L176-179），说明走 tooltip 而不是副标题。
+                    TipHuggingLabel(
+                        label = title,
+                        tip = tip,
+                        labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.9)),
+                    )
+                }
+                if (!subtitle.isNullOrEmpty()) {
+                    Spacer(Modifier.height(3.dp))
+                    Text(subtitle, style = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = withAlpha(cs.onSurface, 0.62)))
+                }
             }
             if (detailText != null) {
                 Spacer(Modifier.width(8.dp))

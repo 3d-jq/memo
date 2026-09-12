@@ -211,6 +211,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 
 | 修复 | **tip 图标改为紧跟标签文字**（2026-09-12 用户：「这个 tip 图标位置也不对，应该在文字的旁边 现在是在最左边 我感觉不合理」→ 选「全站改成紧跟标签文字后面」）：原版（`_iosSwitchRow` L1508 / `memory_settings_page.dart` L1083 等）都是 `Expanded(标签) → MemoryTipIcon → 间距 → 开关`，ⓘ 被推到行尾、离文字很远。改法：`SettingsUi.kt` 抽出共享 `SettingsTipIcon(tip)`（原本 SettingsSwitchRow 内联 + MessageStyle/MemoryUi/TtsSettings 三份私有副本，一并收敛）与 `RowScope.TipHuggingLabel(label, tip, labelStyle)` —— 外层 `weight(1f)` 吃掉整行余量（行尾开关/chevron 因此照旧贴边），内层文字 `weight(1f, fill=false)` 只占所需宽度，ⓘ 紧贴文字、余量留在组内右侧。落地点：`SettingsSwitchRow`（覆盖全站多数设置页）、MessageStyle 的 StyleRow/TextSwitchRow、TtsSettingsRow、MemoryNavRow、助手编辑页「追加当前时间」行（文本块 + ⓘ 打包）、记忆设置页 `SettingsSectionHeader`（标题 fill=false）。测试：`SettingsSwitchRowTipTest` 新增 `tipIconHugsTheLabelText`（边界断言：ⓘ 在文字右侧、间隙 < 14dp、位于行宽左半侧）——旧排布下这条会失败。**属用户点名的有意偏离，见 §5.11；勿按原版"修回"行尾**。 | ✅ 本轮 |
 
+| 修复 | **两处裸排提示改成 ⓘ tooltip**（2026-09-12 用户点名）：① 记忆设置页「每类注入条数」原来把说明当**副标题**裸排，而原版是 `title + tip + detailText`（`memory_settings_page.dart` L176-179）→ `MemorySettingsScreen.SettingsNavRowFull` 补 `tip` 参数（title 行内 ⓘ，副标题保持可选），该行改传 `tip`。其余记忆行（思考/条目/画像/关于/提示词）原版本来就是 `subtitle:`，**不动**。② MCP 服务器编辑 sheet 工具卡里的**工具说明**原来卡内裸排 12sp（原版 `mcp_server_edit_sheet.dart` L547-560 也是裸排）→ 按用户要求改走工具名旁的 ⓘ tooltip（卡片其余部分照原版）。两处都用 `SettingsUi.TipHuggingLabel`（ⓘ 紧跟文字）。 | ✅ 本轮 |
+
 ## 5.9 全量缺口审计（2026-09-09 系统普查，Flutter vs Android 逐域比对）
 
 方法：`lib/features` 16 域 + `lib/desktop` 全页面类名 → 对比 Android `*Screen/*Sheet`，逐项 `grep` 验证实现真实性（非壳子）。**结论：页面级覆盖率约 95%，剩余缺口集中在 3 块。**
