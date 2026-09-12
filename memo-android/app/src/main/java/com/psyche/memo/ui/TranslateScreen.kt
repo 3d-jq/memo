@@ -197,6 +197,7 @@ fun TranslateScreen(
                     apiKey = container.apiKeyFor(pk) ?: "",
                     baseUrl = container.baseUrlFor(pk),
                     chatPath = container.providerConfig(pk)?.chatPath,
+                    useResponseApi = container.usesResponseApi(pk),
                 )
                 container.clientFor(pk).streamChat(request).collect { chunk ->
                     if (chunk is StreamChunk.TextDelta && chunk.text.isNotEmpty()) {

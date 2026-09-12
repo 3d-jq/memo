@@ -60,6 +60,7 @@ object TitleSummaryGenerator {
             apiKey = container.apiKeyFor(providerId) ?: "",
             baseUrl = container.baseUrlFor(providerId),
             chatPath = container.providerConfig(providerId)?.chatPath,
+            useResponseApi = container.usesResponseApi(providerId),
             thinkingBudget = if (thinking) -1 else 0,
         )
         val raw = container.clientFor(providerId).complete(request).parts.joinToString("").trim()
@@ -126,6 +127,7 @@ object TitleSummaryGenerator {
             apiKey = container.apiKeyFor(providerId) ?: "",
             baseUrl = container.baseUrlFor(providerId),
             chatPath = container.providerConfig(providerId)?.chatPath,
+            useResponseApi = container.usesResponseApi(providerId),
             thinkingBudget = if (thinking) -1 else 0,
         )
         val raw = container.clientFor(providerId).complete(request).parts.joinToString("").trim()

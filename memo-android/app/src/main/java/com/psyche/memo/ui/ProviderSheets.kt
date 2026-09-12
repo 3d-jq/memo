@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
@@ -137,7 +138,6 @@ fun AddProviderSheet(
     var openaiName by remember { mutableStateOf("OpenAI") }
     var openaiKey by remember { mutableStateOf("") }
     var openaiBase by remember { mutableStateOf("https://api.openai.com/v1") }
-    var openaiUseResponse by remember { mutableStateOf(false) }
     var openaiPath by remember { mutableStateOf("/chat/completions") }
     // Google form state
     var googleEnabled by remember { mutableStateOf(true) }
@@ -177,9 +177,8 @@ fun AddProviderSheet(
                     apiKey = openaiKey.trim(),
                     baseUrl = base,
                     providerType = "openai",
-                    chatPath = if (openaiUseResponse) null
-                    else openaiPath.trim().ifEmpty { "/chat/completions" },
-                    useResponseApi = if (openaiUseResponse) true else null,
+                    chatPath = openaiPath,
+                    useResponseApi = useResponseApiFor(openaiPath),
                 )
             }
             1 -> {
@@ -273,14 +272,18 @@ fun AddProviderSheet(
                 when (tab.intValue) {
                     0 -> {
                         SwitchRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_enabled_label), openaiEnabled) { openaiEnabled = it }
-                        SwitchRow("Response API", openaiUseResponse) { openaiUseResponse = it }
                         Spacer(Modifier.height(10.dp))
                         InputRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_name_label), openaiName) { openaiName = it }
                         InputRow("API Key", openaiKey) { openaiKey = it }
                         InputRow("API Base Url", openaiBase) { openaiBase = it }
-                        if (!openaiUseResponse) {
-                            InputRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_api_path_label), openaiPath) { openaiPath = it }
-                        }
+                        // 「Response API」开关 + 手填路径合并成 combobox（与详情页一致）。
+                        Spacer(Modifier.height(10.dp))
+                        ApiPathField(
+                            label = stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_api_path_label),
+                            chatPath = openaiPath,
+                            useResponseApi = useResponseApiFor(openaiPath),
+                            onSelect = { openaiPath = it.path },
+                        )
                     }
                     1 -> {
                         SwitchRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_enabled_label), googleEnabled) { googleEnabled = it }
@@ -702,11 +705,11 @@ private fun GroupPickerTile(title: String, selected: Boolean, onClick: () -> Uni
     }
 }
 
-// -------------------------------------------------------------- API 路径 sheet
+// -------------------------------------------------------------- API 路径 combobox
 
 /**
  * 端点三选一（**用户 2026-09-12 点名**：把原来的「Response API 开关 + 手填
- * 服务器路径」合成一个选择面板 —— 选了 Responses 就等于原来的开关打开）。
+ * 服务器路径」合成一个选择项 —— 选了 Responses 就等于原来的开关打开）。
  * 标签沿用用户给的英文写法（与 MCP 传输选择的 "Streamable HTTP"/"SSE" 同例）。
  */
 internal data class ApiPathOption(val label: String, val path: String)
@@ -729,37 +732,108 @@ internal fun apiPathOptionFor(chatPath: String?, useResponseApi: Boolean?): ApiP
 internal fun useResponseApiFor(path: String): Boolean? =
     if (path == "/responses") true else null
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * API 路径选择器（**用户 2026-09-12 二次点名**：「把这个 api 路径还原样式吧，
+ * 把这个 sheet 改成点击出来那个 combobox 来选择」）：
+ *
+ * - 外观还原 `provider_detail_page._inputRow` —— 13sp 标签 + r12 圆角字段，
+ *   字段里显示当前路径（不是选项名），与原版手填框视觉一致；
+ * - 交互改成**锚定下拉**（点击字段正下方弹出菜单，即「combobox」），不再用
+ *   底部 sheet；菜单项是「选项名 + 路径」。
+ */
 @Composable
-internal fun ApiPathSheet(
+internal fun ApiPathField(
+    label: String,
     chatPath: String?,
     useResponseApi: Boolean?,
     onSelect: (ApiPathOption) -> Unit,
-    onDismiss: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
     val current = apiPathOptionFor(chatPath, useResponseApi)
-    ModalBottomSheet(
-        sheetState = rememberMemoSheetState(),
-        onDismissRequest = onDismiss,
-        containerColor = cs.surface,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        dragHandle = null,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            MemoSheetHandle(trailingGap = 0.dp)
-            API_PATH_OPTIONS.forEach { option ->
-                MemoSheetOptionRow(
-                    label = option.label,
-                    detail = option.path,
-                    selected = option.path == current.path,
-                    onClick = { onSelect(option) },
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 13.sp,
+                color = cs.onSurface.copy(alpha = 0.8f),
+            ),
+        )
+        Spacer(Modifier.height(6.dp))
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
+                    .border(0.8.dp, cs.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    .clickable { expanded = true }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = current.path,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                    modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    Lucide.ChevronDown,
+                    contentDescription = null,
+                    tint = cs.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            androidx.compose.material3.DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                shape = RoundedCornerShape(12.dp),
+                containerColor = semantic.surfaceCard,
+                tonalElevation = 0.dp,
+                shadowElevation = 6.dp,
+            ) {
+                API_PATH_OPTIONS.forEach { option ->
+                    val selected = option.path == current.path
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = option.label,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 14.sp,
+                                        color = if (selected) cs.primary else cs.onSurface,
+                                    ),
+                                )
+                                Spacer(Modifier.width(16.dp))
+                                Text(
+                                    text = option.path,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 13.sp,
+                                        color = cs.onSurface.copy(alpha = 0.55f),
+                                    ),
+                                )
+                            }
+                        },
+                        trailingIcon = if (selected) {
+                            {
+                                Icon(
+                                    Lucide.Check,
+                                    contentDescription = null,
+                                    tint = cs.primary,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        onClick = {
+                            onSelect(option)
+                            expanded = false
+                        },
+                    )
+                }
             }
         }
     }

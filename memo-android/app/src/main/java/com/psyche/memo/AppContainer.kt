@@ -359,6 +359,14 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
                         )
                 }
 
+    /**
+     * OpenAI **Responses API** 开关（provider_rows 的 `useResponseApi`）。
+     * 与 chatPath 保持同步（`ProviderSheets.useResponseApiFor`），请求侧读它决定
+     * 端点、请求体与解码器（`ResponsesApi` / `ResponsesDecoder`）。
+     */
+    fun usesResponseApi(providerId: String): Boolean =
+        providerConfig(providerId)?.useResponseApi == true
+
     fun baseUrlFor(providerId: String): String {
         providerConfig(providerId)?.baseUrl?.takeIf { it.isNotEmpty() }?.let { return it }
         val canonical = com.psyche.memo.data.repo.ProviderRepository.canonicalizeKey(providerId)

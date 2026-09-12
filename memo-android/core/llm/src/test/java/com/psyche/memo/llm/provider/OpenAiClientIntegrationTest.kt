@@ -175,6 +175,56 @@ class OpenAiClientIntegrationTest {
         }
     }
 
+    // ---- Responses API（用户 2026-09-12「补上」）：端点、请求体、SSE 解码 ----
+
+    @Test
+    fun responsesApiPostsToResponsesWithInputItems() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "text/event-stream")
+                .setBody(
+                    "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hi\"}\n\n" +
+                        "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":3,\"output_tokens\":1,\"total_tokens\":4}}}\n\n",
+                ),
+        )
+        val chunks = client()
+            .streamChat(
+                request(server.url("/v1").toString()).copy(
+                    chatPath = "/responses",
+                    useResponseApi = true,
+                ),
+            )
+            .toList()
+
+        val recorded = server.takeRequest()
+        assertEquals("/v1/responses", recorded.path)
+        val body = recorded.body.readUtf8()
+        // Responses 形态：input items + instructions，绝不再发 messages。
+        assertTrue(body.contains("\"input\""))
+        assertTrue(body.contains("\"instructions\":\"You are helpful.\""))
+        assertTrue(!body.contains("\"messages\""))
+        assertEquals("Hi", chunks.filterIsInstance<StreamChunk.TextDelta>().joinToString("") { it.text })
+        val finish = chunks.filterIsInstance<StreamChunk.Finish>().single()
+        assertEquals("4", finish.usage!!["total_tokens"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun responsesApiNonStreamingReadsOutputText() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """{"id":"resp_1","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Done"}]}],"usage":{"input_tokens":9,"output_tokens":4,"total_tokens":13}}""",
+                ),
+        )
+        val result = client().complete(
+            request(server.url("/v1").toString()).copy(chatPath = "/responses", useResponseApi = true),
+        )
+
+        assertEquals("Done", result.parts.single())
+        assertEquals(13, result.usage?.totalTokens)
+    }
+
     // ---- Tool-followup transcript serialization (chat_completions_api.dart
     // buildOpenAIChatCompletionMessages 25-66 + openai_tool_transcript.dart) ----
 

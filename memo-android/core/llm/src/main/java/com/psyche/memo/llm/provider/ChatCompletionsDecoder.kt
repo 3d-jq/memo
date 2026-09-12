@@ -21,7 +21,7 @@ class ChatCompletionsDecoder(
     private val needsReasoningEcho: Boolean = false,
     /** Provider key, only used to label decoder failures in the app log. */
     private val providerLabel: String = "",
-) {
+) : com.psyche.memo.llm.stream.StreamDecoder {
     private val json = Json { ignoreUnknownKeys = true }
 
     var finishReason: String? = null
@@ -39,7 +39,7 @@ class ChatCompletionsDecoder(
 
     fun usage(): JsonObject? = usageJson
 
-    fun accept(event: SseEvent): DecodeResult {
+    override fun accept(event: SseEvent): DecodeResult {
         if (closed || completed) return DecodeResult(chunks = emptyList(), completed = true)
         val data = event.data
         if (data.isEmpty()) return DecodeResult(chunks = emptyList())
@@ -73,13 +73,12 @@ class ChatCompletionsDecoder(
         )
     }
 
-    fun onClosed(): List<StreamChunk> {
+    override fun onClosed(): List<StreamChunk> {
         if (closed) return emptyList()
         closed = true
         if (completed) return emptyList()
         return endOpenTools()
     }
-
     private fun parseEvent(obj: JsonObject, chunks: MutableList<StreamChunk>) {
         var content = ""
         var reasoning: String? = null

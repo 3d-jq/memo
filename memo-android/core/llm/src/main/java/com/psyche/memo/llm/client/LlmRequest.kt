@@ -65,6 +65,12 @@ data class LlmRequest(
      * The final URL is always `baseUrl` + path with no injected /v1.
      */
     val chatPath: String? = null,
+    /**
+     * OpenAI **Responses API** 开关（mirrors Flutter `ProviderConfig.useResponseApi`）：
+     * 置 true 时端点固定 `/responses`，请求体与流式解码都换成 Responses 形态
+     * （见 `ResponsesApi` / `ResponsesDecoder`）。
+     */
+    val useResponseApi: Boolean = false,
 )
 
 data class LlmUsage(

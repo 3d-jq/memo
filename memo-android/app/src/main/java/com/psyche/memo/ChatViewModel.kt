@@ -588,6 +588,7 @@ class ChatViewModel(
                         apiKey = container.apiKeyFor(model.first) ?: "",
                         baseUrl = container.baseUrlFor(model.first),
                         chatPath = container.providerConfig(model.first)?.chatPath,
+                        useResponseApi = container.usesResponseApi(model.first),
                         thinkingBudget = if (thinking) -1 else 0,
                     )
                     return container.clientFor(model.first).complete(request)
@@ -1401,6 +1402,7 @@ class ChatViewModel(
                     apiKey = container.apiKeyFor(providerId) ?: "",
                     baseUrl = container.baseUrlFor(providerId),
                     chatPath = container.providerConfig(providerId)?.chatPath,
+                    useResponseApi = container.usesResponseApi(providerId),
                     thinkingBudget = if (thinking) -1 else 0,
                 )
                 val raw = withContext(Dispatchers.IO) {

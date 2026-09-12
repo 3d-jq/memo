@@ -98,6 +98,23 @@ class OpenAiChatCompletionsClient(
             usage = null,
             finishReason = null,
         )
+        // Responses API 的非流式回答在 output[].content[].text，用量字段是
+        // input_tokens/output_tokens（ResponsesDecoder.responsesOutputText）。
+        if (ResponsesApi.isResponses(request)) {
+            val usage = (obj["usage"] as? JsonObject)?.let { usageJson ->
+                LlmUsage(
+                    promptTokens = (usageJson["input_tokens"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                    completionTokens = (usageJson["output_tokens"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                    totalTokens = (usageJson["total_tokens"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                )
+            }
+            val content = responsesOutputText(obj)
+            return LlmTextResult(
+                parts = if (content.isNotEmpty()) listOf(content) else emptyList(),
+                usage = usage,
+                finishReason = (obj["status"] as? JsonPrimitive)?.contentOrNull,
+            )
+        }
         val firstChoice = (obj["choices"] as? JsonArray)?.firstOrNull()?.jsonObject
         val message = firstChoice?.get("message")?.jsonObject
         val content = (message?.get("content") as? JsonPrimitive)?.contentOrNull ?: ""
@@ -155,7 +172,14 @@ class OpenAiChatCompletionsClient(
             }
             val source: BufferedSource = response.body?.source() ?: throw IOException("no body")
             val parser = SseEventParser(recoverAdjacentJsonDataRecords = true)
-            val decoder = ChatCompletionsDecoder(providerLabel = request.providerId)
+            // Responses 的 SSE 事件名/字段与 chat-completions 完全不同 —— 走
+            // 各自的解码器（Flutter openai_provider.dart L856-882）。
+            val isResponses = ResponsesApi.isResponses(request)
+            val decoder = if (isResponses) {
+                ResponsesDecoder(providerLabel = request.providerId)
+            } else {
+                ChatCompletionsDecoder(providerLabel = request.providerId)
+            }
             var completed = false
             while (!completed && !source.exhausted()) {
                 val line = source.readUtf8Line() ?: break
@@ -179,6 +203,11 @@ class OpenAiChatCompletionsClient(
     }
 
     private fun buildBody(request: LlmRequest, stream: Boolean): String {
+        // Responses API 的请求体完全不同（input items + instructions +
+        // max_output_tokens），见 ResponsesApi（openai_provider.dart L207-539）。
+        if (ResponsesApi.isResponses(request)) {
+            return ResponsesApi.buildBody(request, stream).toString()
+        }
         val messages = buildJsonArray {
             for (m in request.messages) {
                 add(messageToJson(m))
@@ -276,9 +305,14 @@ class OpenAiChatCompletionsClient(
         // /v1 — hosts like https://text.pollinations.ai/openai or
         // https://open.bigmodel.cn/api/paas/v4 404 with a forced /v1.
         val rawBase = request.baseUrl.trimEnd('/')
+        // Responses 模式下端点固定 `/responses`（chatPath 被忽略）；否则
         // Flutter 语义（openai_provider.dart:41-42）：null 用默认路径；空字符
         // 串 = 直接 POST base（如 pollinations /openai），不做 takeIf 折叠。
-        val url = rawBase + (request.chatPath ?: "/chat/completions")
+        val url = if (ResponsesApi.isResponses(request)) {
+            rawBase + ResponsesApi.RESPONSES_PATH
+        } else {
+            rawBase + (request.chatPath ?: "/chat/completions")
+        }
         val builder = Request.Builder()
             .url(url.toHttpUrl())
             .post(body.toRequestBody("application/json".toMediaType()))

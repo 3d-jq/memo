@@ -51,6 +51,16 @@ object MessageContent {
         return out
     }
 
+    /**
+     * 可直接内嵌的图片地址：远端 http(s)/data URI 原样返回，本地文件读成
+     * base64 data URI（读不到返回 null）。OpenAI 系（含 Responses）共用。
+     */
+    fun dataUrlFor(image: ImageRef): String? = when {
+        image.uri.startsWith("http://") || image.uri.startsWith("https://") -> image.uri
+        image.uri.startsWith("data:") -> image.uri
+        else -> readBase64(image.uri)?.let { "data:${mimeFor(image.uri, image.mime)};base64,$it" }
+    }
+
     /** OpenAI chat-completions content: plain string when text-only. */
     fun openAiContent(message: LlmMessage): JsonElement {
         val images = imagesOf(message)
@@ -64,14 +74,7 @@ object MessageContent {
                 })
             }
             for (image in images) {
-                val url = when {
-                    image.uri.startsWith("http://") || image.uri.startsWith("https://") -> image.uri
-                    image.uri.startsWith("data:") -> image.uri
-                    else -> {
-                        val b64 = readBase64(image.uri) ?: continue
-                        "data:${mimeFor(image.uri, image.mime)};base64,$b64"
-                    }
-                }
+                val url = dataUrlFor(image) ?: continue
                 add(buildJsonObject {
                     put("type", "image_url")
                     putJsonObject("image_url") { put("url", url) }

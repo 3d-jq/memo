@@ -138,6 +138,7 @@ fun MultiKeyManagerScreen(
                 apiKey = key.key,
                 baseUrl = container.baseUrlFor(cfg.id),
                 chatPath = cfg.chatPath,
+                useResponseApi = cfg.useResponseApi == true,
             ),
         )
     }.isSuccess

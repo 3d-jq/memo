@@ -28,6 +28,7 @@ object MemoryLlm {
             apiKey = container.apiKeyFor(providerId) ?: "",
             baseUrl = container.baseUrlFor(providerId),
             chatPath = container.providerConfig(providerId)?.chatPath,
+            useResponseApi = container.usesResponseApi(providerId),
             thinkingBudget = if (settings.thinkingEnabled) -1 else 0,
         )
         return container.clientFor(providerId).complete(request).parts.joinToString("")
@@ -52,6 +53,7 @@ object MemoryLlm {
             apiKey = container.apiKeyFor(providerId) ?: "",
             baseUrl = container.baseUrlFor(providerId),
             chatPath = container.providerConfig(providerId)?.chatPath,
+            useResponseApi = container.usesResponseApi(providerId),
             thinkingBudget = thinkingBudget,
         )
         return container.clientFor(providerId).complete(request).parts.joinToString("")
