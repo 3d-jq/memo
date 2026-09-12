@@ -47,17 +47,20 @@ import kotlin.coroutines.resumeWithException
  */
 class OpenAiChatCompletionsClient(
     private val httpClient: OkHttpClient,
-    private val retryOptions: AutoRetryOptions = AutoRetryOptions(),
+    private val retryOptionsProvider: () -> AutoRetryOptions = { AutoRetryOptions() },
+
     private val cancellations: CancellationRegistry = CancellationRegistry(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) : LlmClient {
+    /** Per-request read: the container supplies live settings (auto_retry_options). */
+    private fun retryOptions(): AutoRetryOptions = retryOptionsProvider()
 
     override fun supports(providerId: String): Boolean = true // default backend
 
     override fun streamChat(request: LlmRequest): Flow<StreamChunk> = flow {
         // Flutter retryingStream semantics: retry while the attempt yielded
         // nothing and the error is retryable; cancel aborts immediately.
-        val maxRetries = if (retryOptions.enabled) retryOptions.maxRetries else 0
+        val maxRetries = if (retryOptions().enabled) retryOptions().maxRetries else 0
         var attemptCount = 0
         while (true) {
             if (isCancelled(request)) throw kotlinx.coroutines.CancellationException("cancelled")
@@ -71,8 +74,8 @@ class OpenAiChatCompletionsClient(
                 return@flow
             } catch (e: Throwable) {
                 if (isCancelled(request)) throw kotlinx.coroutines.CancellationException("cancelled")
-                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions)) throw e
-                val delayMs = backoffDelay(attemptCount - 1, retryOptions)
+                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions())) throw e
+                val delayMs = backoffDelay(attemptCount - 1, retryOptions())
                 emit(StreamChunk.Error("retrying in ${delayMs}ms: ${e.message}"))
                 delay(delayMs)
             }
@@ -185,6 +188,7 @@ class OpenAiChatCompletionsClient(
             put("messages", messages)
             put("stream", stream)
             request.temperature?.let { put("temperature", it) }
+            request.topP?.let { put("top_p", it) }
             request.maxTokens?.let { put("max_tokens", it) }
             // applyVendorReasoningKnobs —— 各厂商的推理字段不同：智谱/小米/火山
             // 用 thinking:{type}，DashScope 用 enable_thinking，OpenRouter 用

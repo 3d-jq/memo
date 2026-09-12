@@ -39,7 +39,7 @@ class OpenAiClientIntegrationTest {
 
     private fun client(): OpenAiChatCompletionsClient = OpenAiChatCompletionsClient(
         httpClient = OkHttpClient(),
-        retryOptions = AutoRetryOptions(maxRetries = 0),
+        retryOptionsProvider = { AutoRetryOptions(maxRetries = 0) },
         cancellations = CancellationRegistry(),
     )
 

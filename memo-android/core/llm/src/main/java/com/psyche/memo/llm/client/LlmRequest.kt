@@ -44,6 +44,8 @@ data class LlmRequest(
     val messages: List<LlmMessage>,
     val tools: List<LlmToolSpec> = emptyList(),
     val temperature: Double? = null,
+    /** `top_p` 采样参数（chat_actions.dart:2114 assistant.topP）。 */
+    val topP: Double? = null,
     val maxTokens: Int? = null,
     val thinking: Boolean = false,
     /**

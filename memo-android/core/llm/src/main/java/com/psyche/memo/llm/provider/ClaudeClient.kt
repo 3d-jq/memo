@@ -50,16 +50,19 @@ import kotlin.coroutines.resumeWithException
  */
 class ClaudeClient(
     private val httpClient: OkHttpClient,
-    private val retryOptions: AutoRetryOptions = AutoRetryOptions(),
+    private val retryOptionsProvider: () -> AutoRetryOptions = { AutoRetryOptions() },
+
     private val cancellations: CancellationRegistry = CancellationRegistry(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) : LlmClient {
+    /** Per-request read: the container supplies live settings (auto_retry_options). */
+    private fun retryOptions(): AutoRetryOptions = retryOptionsProvider()
 
     override fun supports(providerId: String): Boolean =
         providerId == "anthropic" || providerId.contains("claude")
 
     override fun streamChat(request: LlmRequest): Flow<StreamChunk> = flow {
-        val maxRetries = if (retryOptions.enabled) retryOptions.maxRetries else 0
+        val maxRetries = if (retryOptions().enabled) retryOptions().maxRetries else 0
         var attemptCount = 0
         while (true) {
             if (cancellations.isCancelled(request.providerId)) throw kotlinx.coroutines.CancellationException("cancelled")
@@ -73,8 +76,8 @@ class ClaudeClient(
                 return@flow
             } catch (e: Throwable) {
                 if (cancellations.isCancelled(request.providerId)) throw kotlinx.coroutines.CancellationException("cancelled")
-                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions)) throw e
-                val delayMs = backoffDelay(attemptCount - 1, retryOptions)
+                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions())) throw e
+                val delayMs = backoffDelay(attemptCount - 1, retryOptions())
                 emit(StreamChunk.Error("retrying in ${delayMs}ms: ${e.message}"))
                 delay(delayMs)
             }
@@ -276,6 +279,10 @@ class ClaudeClient(
             }
             if (!com.psyche.memo.llm.client.ReasoningBudget.isReasoningEnabled(request.thinkingBudget)) {
                 request.temperature?.let { put("temperature", it) }
+                request.topP?.let { put("top_p", it) }
+            } else if (request.topP?.let { it in 0.95..1.0 } == true) {
+                // chat_api_helpers.dart L638-644 —— thinking 只接受 0.95-1.0 的 top_p。
+                put("top_p", request.topP)
             }
             if (system.isNotEmpty()) put("system", system)
             if (request.tools.isNotEmpty()) {

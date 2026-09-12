@@ -284,12 +284,45 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
 
     val cancellations: CancellationRegistry = CancellationRegistry()
 
-    val retryOptions: AutoRetryOptions = AutoRetryOptions()
+    /**
+     * auto_retry_options（自动重试设置页）——按请求实时读取，设置页改动
+     * 立即作用于下一次生成（此前是硬编码默认值，整页设置无效）。
+     */
+    private fun currentRetryOptions(): AutoRetryOptions {
+        val raw = preferenceRepository.readJson("auto_retry_options") ?: return AutoRetryOptions()
+        val obj = runCatching {
+            kotlinx.serialization.json.Json.parseToJsonElement(raw) as? kotlinx.serialization.json.JsonObject
+        }.getOrNull() ?: return AutoRetryOptions()
+        fun boolOf(k: String, d: Boolean) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)
+            ?.content?.toBooleanStrictOrNull() ?: d
+        fun intOf(k: String, d: Int) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: d
+        fun longOf(k: String, d: Long) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: d
+        fun dblOf(k: String, d: Double) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: d
+        fun strList(k: String) = (obj[k] as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+            ?: emptyList()
+        fun intSet(k: String) = (obj[k] as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
+            ?.toSet()
+            ?: AutoRetryOptions().retryStatusCodes
+        return AutoRetryOptions(
+            enabled = boolOf("enabled", true),
+            maxRetries = intOf("maxRetries", AutoRetryOptions.DEFAULT_MAX_RETRIES),
+            initialDelayMs = longOf("initialDelayMs", AutoRetryOptions.DEFAULT_INITIAL_DELAY_MS),
+            maxDelayMs = longOf("maxDelayMs", AutoRetryOptions.DEFAULT_MAX_DELAY_MS),
+            multiplier = AutoRetryOptions.clampMultiplier(dblOf("multiplier", AutoRetryOptions.DEFAULT_MULTIPLIER)),
+            jitter = boolOf("jitter", true),
+            retryOnNetworkError = boolOf("retryOnNetworkError", true),
+            retryStatusCodes = intSet("retryStatusCodes"),
+            retryKeywords = strList("retryKeywords"),
+            stopKeywords = strList("stopKeywords"),
+        )
+    }
 
     val llmClients: List<LlmClient> = listOf(
-        OpenAiChatCompletionsClient(httpClient, retryOptions, cancellations),
-        ClaudeClient(httpClient, retryOptions, cancellations),
-        GeminiClient(httpClient, retryOptions, cancellations),
+        OpenAiChatCompletionsClient(httpClient, { currentRetryOptions() }, cancellations),
+        ClaudeClient(httpClient, { currentRetryOptions() }, cancellations),
+        GeminiClient(httpClient, { currentRetryOptions() }, cancellations),
     )
 
     fun clientFor(providerId: String): LlmClient =

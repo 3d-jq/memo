@@ -209,8 +209,13 @@ fun HomeScreen(
             (selectedConversationId?.let { container.messageDao.count(it) == 0 } ?: false)
 
     // Conversation creation jumps straight into a fresh (persisted) chat.
+    // 新会话标记：ChatViewModel 创建时注入助手的预设对话（一次性的，选旧
+    // 会话/临时会话为 false）。home_view_model.dart L993-1023。
+    var pendingPresetInject by remember { mutableStateOf(false) }
+
     fun newConversation() {
         temporaryActive = false
+        pendingPresetInject = true
         // Mirror chat_service.createDraftConversation: creating a new chat
         // while the current conversation is still empty replaces the empty
         // row instead of stacking "New Chat" conversations in the drawer.
@@ -365,6 +370,7 @@ fun HomeScreen(
                 onOpenSearchServices = onOpenSearchServices,
                 onOpenWorldBookPage = onOpenWorldBookPage,
                 titleRefreshTick = titleRefreshTick,
+                injectPresets = pendingPresetInject,
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
             // 常驻组合：之前用 `if (presenting)` 插拔节点，开合瞬间要新建布局
@@ -464,10 +470,11 @@ fun ChatContent(
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
     titleRefreshTick: Int = 0,
+    injectPresets: Boolean = false,
 ) {
     val vm: ChatViewModel = viewModel(
         key = conversationId,
-        factory = ChatViewModel.factory(container, conversationId),
+        factory = ChatViewModel.factory(container, conversationId, injectPresets = injectPresets),
     )
     // 抽屉改写了本会话标题 → 让 vm 重读库里的标题刷新顶栏（首次 tick=0 不触发）。
     androidx.compose.runtime.LaunchedEffect(titleRefreshTick) {
@@ -1082,6 +1089,11 @@ fun ChatContent(
                             ) {
                         MessageRow(
                             msg = msg,
+                            skipRegenerateConfirm = remember {
+                                container.preferenceRepository.readJson(
+                                    "display_show_regenerate_confirm_dialog_v1",
+                                )?.let { it == "1" } ?: true
+                            },
                             selecting = selecting,
                             suggestions = if (isLastAssistant && suggestionsEnabled) {
                                 suggestions
@@ -1240,6 +1252,10 @@ fun ChatContent(
         val searchIconAsset = searchSvcName?.let { BrandAssets.assetForName(it) }
         ChatInputBar(
             input = input,
+            enterToSend = remember {
+                container.preferenceRepository.readJson("display_enter_to_send_on_mobile_v1")
+                    ?.let { it == "1" } ?: false
+            },
             streaming = streaming,
             onInputChange = vm::updateInput,
             onSend = {
@@ -1770,10 +1786,18 @@ private fun MessageRow(
     askUserService: AskUserInteractionService?,
     /** 恢复已持久化 ask-user 回答（home_page_controller.submitRecoveredAskUserAnswer）。 */
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)?,
+    /** display_show_regenerate_confirm_dialog_v1 = false 时跳过确认弹窗。 */
+    skipRegenerateConfirm: Boolean = false,
 ) {
     val cs = MaterialTheme.colorScheme
     val rowView = LocalView.current
     val isUser = msg.role == "user"
+    // 该消息所属助手的正则规则（visual 目标只影响这里显示的文本）。
+    val assistantRegexRulesCache = remember(msg.id) {
+        com.psyche.memo.data.model.AssistantRegexApplier.decodeRules(
+            assistant?.regexRules.orEmpty(),
+        )
+    }
     // 时间戳文本：滚动时每行都会重组，格式化一次就够（头部 user/assistant
     // 两个分支共用）。
     val timeLabel = remember(msg.timestamp) { timeStr(msg.timestamp) }
@@ -2025,8 +2049,16 @@ private fun MessageRow(
                         when (part) {
                             is TextPart ->
                                 // CMW:2046-2054 —— 用户正文 15.5 / 行高 1.45×15.5。
+                                // visual 规则在显示层改写（chat_message_widget.dart L1291）。
                                 com.psyche.memo.ui.markdown.MarkdownText(
-                                    markdown = part.text,
+                                    markdown = remember(part.text) {
+                                        com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
+                                            part.text,
+                                            assistantRegexRulesCache,
+                                            com.psyche.memo.data.model.AssistantRegexScope.USER,
+                                            com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
+                                        )
+                                    },
                                     baseFontSize = ChatStyleSpec.USER_TEXT_SP,
                                     baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
                                     onCitationTap = handleCitationTap,
@@ -2043,8 +2075,16 @@ private fun MessageRow(
                         if (index > 0) Spacer(Modifier.height(8.dp))
                         when (block) {
                             is com.psyche.memo.ui.chat.AssistantBlock.Text ->
+                                // visual 规则（chat_message_widget.dart L1276）。
                                 com.psyche.memo.ui.markdown.MarkdownText(
-                                    markdown = block.text,
+                                    markdown = remember(block.text) {
+                                        com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
+                                            block.text,
+                                            assistantRegexRulesCache,
+                                            com.psyche.memo.data.model.AssistantRegexScope.ASSISTANT,
+                                            com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
+                                        )
+                                    },
                                     baseFontSize = 15.7f,
                                     baseLineHeight = 23.55f,
                                     onCitationTap = handleCitationTap,
@@ -2228,7 +2268,12 @@ private fun MessageRow(
                             MessageActionIcon(
                                 Lucide.RefreshCw,
                                 "Regenerate",
-                                onClick = { showRegenerateConfirm = true },
+                                // display_show_regenerate_confirm_dialog_v1（默认开）：
+                                // 关闭时跳过确认直接重生成（CMW:1330）。
+                                onClick = {
+                                    if (skipRegenerateConfirm) onRegenerateAssistant?.invoke()
+                                    else showRegenerateConfirm = true
+                                },
                                 enabled = onRegenerateAssistant != null,
                             )
                             Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
@@ -2473,6 +2518,7 @@ private fun inputFillColor(
 private fun ChatInputBar(
     input: String,
     streaming: Boolean,
+    enterToSend: Boolean = false,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -2674,10 +2720,14 @@ private fun ChatInputBar(
                             readOnly = voiceActive,
                             // 源码 chat_input_bar.dart:2741 —— maxLines: 5（未展开状态）
                             maxLines = 5,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                            // display_enter_to_send_on_mobile_v1（chat_input_bar.dart
+                            // L2727）：关闭时回车换行，不再触发发送。
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = if (enterToSend) ImeAction.Send else ImeAction.Default,
+                            ),
                             // CIB:934-938 _handleSend —— 语音会话中不触发发送。
                             keyboardActions = KeyboardActions(
-                                onSend = { if (!streaming && !voiceActive) onSend() },
+                                onSend = { if (enterToSend && !streaming && !voiceActive) onSend() },
                             ),
                             decorationBox = { inner ->
                                 Box {

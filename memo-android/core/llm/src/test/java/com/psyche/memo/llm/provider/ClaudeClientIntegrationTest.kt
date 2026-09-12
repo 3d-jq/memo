@@ -35,7 +35,7 @@ class ClaudeClientIntegrationTest {
 
     private fun client() = ClaudeClient(
         httpClient = OkHttpClient(),
-        retryOptions = AutoRetryOptions(maxRetries = 0),
+        retryOptionsProvider = { AutoRetryOptions(maxRetries = 0) },
         cancellations = CancellationRegistry(),
     )
 

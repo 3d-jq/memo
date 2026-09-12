@@ -428,6 +428,45 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 - `AboutScreen.kt` 的「社区与链接」三行仍指向上游：`https://kelivo.psycheas.top/`、`https://github.com/Chevey339/kelivo`、`.../blob/master/LICENSE`。与 AGENTS.md「不得携带 kelivo 链接/端点」冲突；**用户明确「这个我后面会改成自己的，现在先不着急」** ⇒ 不要代改、也不要再当作待办追问，等他给新 URL（或明确说删行）再动。
 - 内部标识符 `KelivoOptions`（搜索服务编辑器里的上游 type key，非用户可见）——低优先清理，改动会牵到多文件与测试。
 
+## 5.12 接线审计清单（2026-09-12，用户："偏好设置里很多没接入功能吧"）
+
+**方法**：两轮并行审计（偏好子页逐行键追踪 + 助手 payload/默认模型/其余页），加 81 个偏好键的"写入无读取"脚本扫描。**教训：审计不能只看"键有没有人读"，要追"读了之后是否真的影响行为"**（applyContextLimit / auto_retry_options 都是"读了但没生效"型）。本节是完整清单——**已修**的勿再动，**待接线**的按批做。
+
+### 已修（✅）
+
+| 设置 | 缺口 | 修法 |
+|---|---|---|
+| 助手 temperature / topP / maxTokens | 三个采样参数从不进 LlmRequest（topP 连字段都没有） | `LlmRequest.topP` + 三客户端消费（Claude：thinking 时仅 0.95–1.0 下发，对齐 chat_api_helpers L638-644）；chat 请求从 assistant 填充 |
+| 助手/供应商/模型 customHeaders + customBody | 写完即沉没（extraHeaders/extraBodyJson 无赋值点） | 新增 `core/llm/client/CustomRequestMerger.kt`（头三层序 base→assistant→provider→model、大小写不敏感去重、`x-conversation-id` 保护；body 经 parseOverrideValue 转型）；chat 请求合并三层 |
+| 自动重试 `auto_retry_options` | `AppContainer.retryOptions` 硬编码默认值，整页设置无效 | 客户端改为 `retryOptionsProvider: () -> AutoRetryOptions`，容器按请求实时读键 |
+| 后台聊天模式 | 设置页写 preference_rows（readJson），读取端 `readLocal`（SharedPreferences）⇒ 恒 OFF | 读端改 readJson |
+| 仅点按插入建议 | 设置页写 "1"/"0"，readBoolPref 按 JSON boolean 解析 ⇒ 恒 false | readBoolPref 同时接受 "1"/"0"/true/false |
+| 默认模型页「聊天模型」`selected_model_v1` | 只喂后台任务，聊天 fallback 从不读它 | init fallback 链：storedSelection → 第一个启用 provider |
+| 消息模板 `messageTemplate` + `appendCurrentTimeToUserMessage` | 用户消息不做模板/时间处理 | 组装期用户消息过 `PromptTransformer.applyMessageTemplate`（core/llm 已有现成移植）+ `<current_time>` 后缀（MemoryPrompts.formatCurrentTimeTag） |
+| 助手正则 `regexRules` | 发送/显示均无应用点 | 新增 `core/data/model/AssistantRegexApplier.kt`（三 target：send=user scope 改写请求、visual=渲染层改写、persist=落库改写；$N 组展开 + 编译缓存）；send 在组装期、visual 在 HomeScreen 两个渲染点；**persist 目标待接**（Android 流式多次落库，中途应用会截断正则边界） |
+| 预设对话 `presetMessages` | 只在编辑页存在 | 新会话创建时作为**真实消息**落库注入（`ChatViewModel.injectPresetsIfNeeded`，HomeScreen 经 factory 参数 `injectPresets` 标记新会话） |
+| TTS「自动播放助手回复」 | 开关写了没人读 | 回复正常跑完 → `TtsPlayer.speak(text, ownerId)`（取消/报错不播） |
+| 回车发送 `display_enter_to_send_on_mobile_v1` | ImeAction 硬编码 Send | ChatInputBar 按 setting 切 Send/Default |
+| 重新生成确认 `display_show_regenerate_confirm_dialog_v1` | 弹窗无条件显示 | 关闭时跳过确认直接重生成 |
+| WebDAV 设置子页 | 顶栏顶进状态栏 | 补 statusBars insets |
+| 网络代理 7 键 | OkHttp 完全没接代理 | `app/GlobalProxy.kt`：ProxySelector 每连接读配置 + Basic 认证 + 绕过规则（精确/后缀/CIDR；上游 dio 没消费 bypass，属有意增强）；socks5 无账号密码（Java 层限制，已知偏差） |
+| 用户画像入口 | 行从未接导航（页面/路由早已存在） | 接 `user_profile` 路由 |
+
+### 待接线（⬜，按批做；**行不删**）
+
+| 批次 | 项 |
+|---|---|
+| **渲染批** | 气泡风格整页（`display_chat_message_background_style_v1` + 助手/用户 override JSON + 自适应宽度 + 按段拆分）——需把 ChatStyleSpec 硬编码气泡改成可配置绘制；$LaTeX/数学渲染（Android 无数学渲染引擎，需先选库）；用户/助手 Markdown 开关（门控 MarkdownText）；代码块自动折叠/行数/移动端换行（MarkdownRenderer） |
+| **输入批** | 聊天字体大小滑杆；App/代码字体加载（filesDir/fonts → Typeface）；自动滚动开关+空闲秒数；输入框不透明度浅/深；长粘贴转文件+阈值；图片上传画质管线（裁剪器/画质/透明压缩） |
+| **聊天行为批** | 重新生成删除后续消息；Fork 保留消息版本；编辑助手消息保留思考/工具卡；显示应用更新（依赖上游更新端点，S5 类不移植则**删行需用户点头**）；消息导航按钮三态（需先做导航按钮 UI）；会话列表显示日期；点助手/话题不关侧栏 ×2；关侧栏保持助手列表展开；删除后新建会话；启动时新建会话 |
+| **语音批** | ASR 服务分派（asr_services_v1 / asr_selected_service_id_v1 → 网络识别）；TTS 语速/音调（网络 TTS 参数）；悬浮播放器「保存音频」 |
+| **模型批** | modelOverrides.apiModelId（wire 层模型 id 映射）、modelOverrides.headers/body（CustomRequestMerger 已支持模型层——**待核对** rows 形状）、builtInTools 门控、contextWindow 进聊天上下文管理 |
+| **明确不做/暂缓** | applyContextLimit（用户暂缓）；上下文压缩机制（用户将换方案）；S5 kelivo 内置搜索；MCP stdio（桌面专属）；赞助页（品牌空壳）；providerAutomatic 头层 |
+
+### 审计确认已接线（抽样无恙）
+
+记忆域（enableMemory / allowPastConversationRecall / autoOrganizeMemory / smartAddMode / searchEnabled / mcpServerIds / 注入管线）、默认模型六组槽位（标题/总结/建议/压缩/翻译/OCR）、搜索服务 23 引擎、世界书全字段、快捷短语、指令注入、触感 6/6、思考/工具卡 6 开关、Live Update 通知、背景遮罩强度、切换助手新建会话。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)

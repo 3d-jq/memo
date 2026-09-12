@@ -50,16 +50,19 @@ import kotlin.coroutines.resumeWithException
  */
 class GeminiClient(
     private val httpClient: OkHttpClient,
-    private val retryOptions: AutoRetryOptions = AutoRetryOptions(),
+    private val retryOptionsProvider: () -> AutoRetryOptions = { AutoRetryOptions() },
+
     private val cancellations: CancellationRegistry = CancellationRegistry(),
     private val json: Json = Json { ignoreUnknownKeys = true },
 ) : LlmClient {
+    /** Per-request read: the container supplies live settings (auto_retry_options). */
+    private fun retryOptions(): AutoRetryOptions = retryOptionsProvider()
 
     override fun supports(providerId: String): Boolean =
         providerId == "gemini" || providerId.contains("google")
 
     override fun streamChat(request: LlmRequest): Flow<StreamChunk> = flow {
-        val maxRetries = if (retryOptions.enabled) retryOptions.maxRetries else 0
+        val maxRetries = if (retryOptions().enabled) retryOptions().maxRetries else 0
         var attemptCount = 0
         while (true) {
             if (cancellations.isCancelled(request.providerId)) throw kotlinx.coroutines.CancellationException("cancelled")
@@ -73,8 +76,8 @@ class GeminiClient(
                 return@flow
             } catch (e: Throwable) {
                 if (cancellations.isCancelled(request.providerId)) throw kotlinx.coroutines.CancellationException("cancelled")
-                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions)) throw e
-                val delayMs = backoffDelay(attemptCount - 1, retryOptions)
+                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions())) throw e
+                val delayMs = backoffDelay(attemptCount - 1, retryOptions())
                 emit(StreamChunk.Error("retrying in ${delayMs}ms: ${e.message}"))
                 delay(delayMs)
             }
@@ -255,6 +258,7 @@ class GeminiClient(
         }
         val generationConfig = buildJsonObject {
             request.temperature?.let { put("temperature", it) }
+            request.topP?.let { put("topP", it) }
             request.maxTokens?.let { put("maxOutputTokens", it) }
             // google_common.dart L710-715 —— reasoning 时写入 thinkingConfig。
             if (request.reasoning) {

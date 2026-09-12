@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -44,6 +45,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class ChatViewModel(
     private val container: AppContainerImpl,
     private val conversationId: String,
+    injectPresets: Boolean = false,
 ) : ViewModel() {
 
     private val isTemporary: Boolean = conversationId == com.psyche.memo.data.model.Conversation.TEMPORARY_ID
@@ -136,6 +138,8 @@ class ChatViewModel(
     /** 在途翻译请求（messageId → Job），新请求顶掉旧的（TS _runs 语义）。 */
     private val translationJobs = mutableMapOf<String, Job>()
 
+    private val injectPresets: Boolean = false
+
     init {
         // Start with the first configured provider and its default model;
         // leave both empty when nothing is configured (the top bar then shows
@@ -143,8 +147,17 @@ class ChatViewModel(
         // First enabled provider wins (providers_page order = DB order);
         // the previous hardcoded openai/anthropic lookup missed user-added
         // providers like LongCat.
+        // settings.currentModel（model_display_helper.dart:44-58）——默认模型页
+        // 选的「聊天模型」是新会话的 fallback，优先于"第一个启用的 provider"。
+        val storedSelection = com.psyche.memo.DefaultModelPrefs.parseModelSelection(
+            container.preferenceRepository.readJson("selected_model_v1"),
+        )
+        if (storedSelection != null) {
+            selectedProviderId.value = storedSelection.first
+            selectedModelId.value = storedSelection.second
+        }
         val firstProvider = container.firstEnabledProviderConfig()
-        if (firstProvider != null) {
+        if (firstProvider != null && selectedModelId.value.isEmpty()) {
             selectedProviderId.value = firstProvider.id
             selectedModelId.value = firstProvider.models.firstOrNull()
                 ?: firstProvider.modelOverrides.keys.firstOrNull()
@@ -154,6 +167,9 @@ class ChatViewModel(
             // Home page shows the conversation's stored title; matches the
             // "New Chat" default of home_page_controller._createNewConversation.
             viewModelScope.launch {
+                // 预设对话注入（home_view_model.dart L993-1023）：新会话把助手的
+                // presetMessages 作为真实消息落库（先于 refreshTail 读库，时序确定）。
+                if (injectPresets) withContext(Dispatchers.IO) { injectPresetsIfNeeded() }
                 // Room/SQLite access must stay off the main thread.
                 val stored = withContext(Dispatchers.IO) {
                     container.conversationDao.get(conversationId)
@@ -364,6 +380,36 @@ class ChatViewModel(
      * 前把它补上，否则这个会话永远不会出现在抽屉的历史列表里。标题留空，等标题生成
      * 或手动重命名再填。
      */
+    /**
+     * 预设对话注入（home_view_model.dart L993-1023）：新会话创建时把助手的
+     * presetMessages 作为**真实消息**落库（user/assistant 交替、空内容跳过），
+     * 与原版 addMessage 一样会持久化会话本体。仅对空会话生效。
+     */
+    private suspend fun injectPresetsIfNeeded() {
+        if (container.messageDao.count(conversationId) > 0) return
+        val rawPresets = container.currentAssistant()?.presetMessages.orEmpty()
+        val presets = com.psyche.memo.data.model.PresetMessage.decodeList(rawPresets)
+        if (presets.isEmpty()) return
+        ensureConversationRow()
+        var order = 0
+        for (preset in presets) {
+            val role = if (preset.role == "assistant") "assistant" else "user"
+            val content = preset.content.trim()
+            if (content.isEmpty()) continue
+            container.messageDao.insert(
+                com.psyche.memo.data.model.ChatMessage(
+                    id = com.psyche.memo.data.model.ChatMessage.newId(),
+                    role = role,
+                    parts = listOf(com.psyche.memo.data.model.TextPart(content)),
+                    timestamp = System.currentTimeMillis(),
+                    conversationId = conversationId,
+                    groupId = com.psyche.memo.data.model.ChatMessage.newId(),
+                    messageOrder = order++,
+                ),
+            )
+        }
+    }
+
     private suspend fun ensureConversationRow() {
         if (container.conversationDao.get(conversationId) != null) return
         container.conversationDao.insert(
@@ -603,6 +649,12 @@ class ChatViewModel(
 
     private fun readBoolPref(key: String): Boolean {
         val raw = container.preferenceRepository.readJson(key) ?: return false
+        // 两种存储形态并存：裸 boolean JSON（旧键）与 "1"/"0"（行为启动页写入，
+        // 与 LogBootstrap 约定一致）——只认一种就会读成恒 false。
+        when (raw.trim()) {
+            "1", "true" -> return true
+            "0", "false" -> return false
+        }
         return runCatching {
             kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.booleanOrNull
         }.getOrNull() ?: false
@@ -935,7 +987,10 @@ class ChatViewModel(
     }
 
     private fun backgroundMode(): com.psyche.memo.service.ChatBackgroundController.AndroidBackgroundChatMode =
-        com.psyche.memo.service.ChatBackgroundController.modeOf(container.preferenceRepository::readLocal)
+        // android_background_chat_mode_v1 是 PREFERENCE 键（写进
+        // preference_rows），必须走 readJson——readLocal 读 SharedPreferences
+        // 永远拿不到，后台模式因此恒为 OFF（读写路由镜像 bug）。
+        com.psyche.memo.service.ChatBackgroundController.modeOf(container.preferenceRepository::readJson)
 
     private fun beginBackgroundGeneration() {
         val id = java.util.UUID.randomUUID().toString()
@@ -1067,6 +1122,12 @@ class ChatViewModel(
                     }
                 }.orEmpty()
                 val lastUserIndex = rawMessages.indexOfLast { it.role == "user" }
+                val assistant = container.currentAssistant()
+                // 助手正则（user scope, send 目标）与消息模板/时间后缀的来源。
+                val sendRegexRules = com.psyche.memo.data.model.AssistantRegexApplier.decodeRules(
+                    container.currentAssistant()?.regexRules.orEmpty(),
+                )
+                val messageTemplate = assistant?.messageTemplate?.takeIf { it.isNotBlank() } ?: "{{ message }}"
                 // 上下文日志：组装期给承载注入内容的轮次打来源标签
                 // （context_log_models.dart 的 `_kelivo_ctx_segments`），请求前由
                 // ContextLogAssembler 切片写盘。历史轮次不带标签，读取时按 role 推断。
@@ -1074,9 +1135,35 @@ class ChatViewModel(
                 val history = rawMessages
                     .mapIndexedNotNull { index, msg ->
                         val carriesMemory = index == lastUserIndex && memoryPrefix.isNotEmpty()
-                        val content = (if (index == lastUserIndex) memoryPrefix else "") +
-                            (ocrBlocks[msg.id] ?: "") + (fileBlocks[msg.id] ?: "") +
+                        // message_builder_service.dart L1106-1116 —— 用户消息过
+                        // 消息模板 + 可选的时间后缀（模板变量 {{message}}/{{role}}/
+                        // {{time}}/{{date}}，默认 {{ message }} 恒等）。
+                        val rawText = (ocrBlocks[msg.id] ?: "") + (fileBlocks[msg.id] ?: "") +
                             msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+                        val body = if (msg.role == "user") {
+                            val templated = com.psyche.memo.llm.prompt.PromptTransformer
+                                .applyMessageTemplate(messageTemplate, "user", rawText)
+                            if (assistant?.appendCurrentTimeToUserMessage == true) {
+                                templated + "\n\n" +
+                                    com.psyche.memo.ui.MemoryPrompts.formatCurrentTimeTag(msg.timestamp)
+                            } else {
+                                templated
+                            }
+                        } else {
+                            rawText
+                        }
+                        // regex user scope + send 目标（message_generation_service L148-154）。
+                        val content = if (msg.role == "user") {
+                            com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
+                                body,
+                                sendRegexRules,
+                                com.psyche.memo.data.model.AssistantRegexScope.USER,
+                                com.psyche.memo.data.model.AssistantRegexApplier.Target.SEND,
+                            )
+                        } else {
+                            body
+                        }
+                        val finalBody = (if (index == lastUserIndex) memoryPrefix else "") + content
                         // Images ride along as part payloads; only user turns may
                         // carry them (assistant media is stashed by the original
                         // OpenAI builder instead of replayed).
@@ -1086,10 +1173,10 @@ class ChatViewModel(
                         } else {
                             emptyList()
                         }
-                        if (content.isEmpty() && attachments.isEmpty()) null
+                        if (finalBody.isEmpty() && attachments.isEmpty()) null
                         else LlmMessage(
                             role = msg.role,
-                            content = content.ifEmpty { null },
+                            content = finalBody.ifEmpty { null },
                             parts = attachments,
                             // 冻结轮次语义（_tagFrozenUserPrompt L479-510）：记忆快照
                             // 前缀算 memorySnapshot，其余归 chatHistory。
@@ -1102,7 +1189,7 @@ class ChatViewModel(
                                     ),
                                     ContextTag(
                                         ContextSource.chatHistory,
-                                        content.length - memoryPrefix.length,
+                                        finalBody.length - memoryPrefix.length,
                                     ),
                                 )
                             } else {
@@ -1114,7 +1201,6 @@ class ChatViewModel(
                 // System prompt injection (message_builder_service.dart L167-189):
                 // 助手提示词 + 记忆规则 + 搜索引用块 + 指令注入，按序拼进系统消息；
                 // 世界书随后 wrap 在它外面。每段带来源标签供上下文日志使用。
-                val assistant = container.currentAssistant()
                 val systemParts = buildSystemPromptParts(assistant)
                 if (systemParts.isNotEmpty()) {
                     val assembler = com.psyche.memo.logging.ContextLogAssembler
@@ -1425,6 +1511,8 @@ class ChatViewModel(
         onPersist: (List<MessagePart>, UsageStats?, String?) -> Unit,
     ) {
         var finishUsage: UsageStats? = null
+        // 采样参数/自定义请求层的助手侧来源（chat_actions.dart 用 ctx.assistant）。
+        val assistant = container.currentAssistant()
         val toolHandler = ToolHandler(
             approvalService = container.toolApprovalService,
             askUserService = container.askUserInteractionService,
@@ -1452,6 +1540,62 @@ class ChatViewModel(
                 chatPath = container.providerConfig(providerId)?.chatPath,
                 thinkingBudget = thinkingBudget,
                 reasoning = com.psyche.memo.ModelRegistry.infer(modelId).reasoning,
+                // 采样参数（chat_actions.dart:2113-2115 assistant.temperature/topP/maxTokens）。
+                temperature = assistant?.temperature,
+                topP = assistant?.topP,
+                maxTokens = assistant?.maxTokens,
+                // 自定义请求三层（custom_request_merger.dart）：助手 + provider +
+                // 模型 override 的 headers/body。
+                extraHeaders = run {
+                    fun headerRows(rows: List<Map<String, String>>): Map<String, String> =
+                        rows.mapNotNull { row ->
+                            row["name"]?.trim()?.takeIf { it.isNotEmpty() }?.let { it to row["value"].orEmpty() }
+                        }.toMap()
+                    fun modelHeaderRows(ov: JsonObject?): List<Map<String, String>> =
+                        (ov?.get("headers") as? JsonArray)?.mapNotNull { entry ->
+                            (entry as? JsonObject)?.let { row ->
+                                val name = (row["name"] as? JsonPrimitive)?.content
+                                val value = (row["value"] as? JsonPrimitive)?.content
+                                if (name == null) null else buildMap<String, String> {
+                                    put("name", name)
+                                    put("value", value.orEmpty())
+                                }
+                            }
+                        }.orEmpty()
+                    com.psyche.memo.llm.client.CustomRequestMerger.mergeHeaders(
+                        assistant = assistant?.customHeaders?.let(::headerRows),
+                        provider = container.providerConfig(providerId)?.customHeaders?.let(::headerRows)
+                            ?: emptyMap(),
+                        model = modelHeaderRows(
+                            container.providerConfig(providerId)?.modelOverrides?.get(modelId) as? JsonObject,
+                        ).fold(emptyMap()) { acc, row -> acc + row },
+                    )
+                },
+                extraBodyJson = run {
+                    fun bodyRows(rows: List<Map<String, String>>): Map<String, String> =
+                        rows.mapNotNull { row ->
+                            row["key"]?.trim()?.takeIf { it.isNotEmpty() }?.let { it to row["value"].orEmpty() }
+                        }.toMap()
+                    fun modelBodyRows(ov: JsonObject?): List<Map<String, String>> =
+                        (ov?.get("body") as? JsonArray)?.mapNotNull { entry ->
+                            (entry as? JsonObject)?.let { row ->
+                                val key = (row["key"] as? JsonPrimitive)?.content
+                                val value = (row["value"] as? JsonPrimitive)?.content
+                                if (key == null) null else buildMap<String, String> {
+                                    put("key", key)
+                                    put("value", value.orEmpty())
+                                }
+                            }
+                        }.orEmpty()
+                    com.psyche.memo.llm.client.CustomRequestMerger.mergeBody(
+                        assistant = assistant?.customBody?.let(::bodyRows),
+                        providerRows = container.providerConfig(providerId)?.customBody
+                            ?: emptyList(),
+                        model = modelBodyRows(
+                            container.providerConfig(providerId)?.modelOverrides?.get(modelId) as? JsonObject,
+                        ).fold(emptyMap()) { acc, row -> acc + row },
+                    ).toString()
+                },
             )
             val client = container.clientFor(providerId)
             var failed = false
@@ -2177,12 +2321,15 @@ class ChatViewModel(
          */
         private const val HISTORY_PAGE_SIZE = 20
 
-        fun factory(container: AppContainerImpl, conversationId: String) =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    ChatViewModel(container, conversationId) as T
-            }
+        fun factory(
+            container: AppContainerImpl,
+            conversationId: String,
+            injectPresets: Boolean = false,
+        ) = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                ChatViewModel(container, conversationId, injectPresets) as T
+        }
 
         /**
          * Fork ("create branch") copy: the message row duplicated into a new

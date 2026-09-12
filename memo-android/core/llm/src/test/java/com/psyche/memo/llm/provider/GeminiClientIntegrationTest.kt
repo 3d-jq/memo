@@ -35,7 +35,7 @@ class GeminiClientIntegrationTest {
 
     private fun client() = GeminiClient(
         httpClient = OkHttpClient(),
-        retryOptions = AutoRetryOptions(maxRetries = 0),
+        retryOptionsProvider = { AutoRetryOptions(maxRetries = 0) },
         cancellations = CancellationRegistry(),
     )
 
