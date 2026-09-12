@@ -53,7 +53,6 @@ import com.psyche.memo.ui.DisplaySettingsScreen
 import com.psyche.memo.ui.HomeScreen
 import com.psyche.memo.ui.ProviderDetailScreen
 import com.psyche.memo.ui.ProvidersScreen
-import com.psyche.memo.ui.ProviderGroupsScreen
 import com.psyche.memo.ui.SearchServicesScreen
 import com.psyche.memo.ui.McpServersScreen
 import com.psyche.memo.ui.MemoryAboutScreen
@@ -530,7 +529,6 @@ private fun AppThemeAndContent(
                             onOpenProvider = { pid ->
                                 navController.navigate(if (pid == null) "provider_edit" else "provider_edit?pid=$pid")
                             },
-                            onOpenGroups = { navController.navigate("provider_groups") },
                         )
                     }
                     composable("provider_edit?pid={pid}") { entry ->
@@ -542,7 +540,6 @@ private fun AppThemeAndContent(
                             ProviderDetailScreen(
                                 container = container,
                                 providerId = pid,
-                                onOpenGroups = { navController.navigate("provider_groups") },
                                 onBack = { navController.popBackStack() },
                             )
                         }
@@ -589,12 +586,6 @@ private fun AppThemeAndContent(
                     }
                     composable("search_services") {
                         SearchServicesScreen(
-                            container = container,
-                            onBack = { navController.popBackStack() },
-                        )
-                    }
-                    composable("provider_groups") {
-                        ProviderGroupsScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
                         )

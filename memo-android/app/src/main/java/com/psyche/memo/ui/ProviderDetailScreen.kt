@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -104,7 +102,6 @@ private val detailJson = Json { ignoreUnknownKeys = true; encodeDefaults = true 
 fun ProviderDetailScreen(
     container: AppContainerImpl,
     providerId: String,
-    onOpenGroups: () -> Unit,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -313,7 +310,6 @@ fun ProviderDetailScreen(
                     onOpenNetwork = { showNetwork = true },
                     onOpenMultiKey = { showMultiKey = true },
                     onOpenBalance = { showBalance = true },
-                    onOpenGroups = onOpenGroups,
                 )
             } else {
                 ModelsTab(
@@ -454,7 +450,6 @@ private fun ConfigTab(
     onOpenNetwork: () -> Unit,
     onOpenMultiKey: () -> Unit,
     onOpenBalance: () -> Unit,
-    onOpenGroups: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -483,15 +478,6 @@ private fun ConfigTab(
         val isOpenRouter = keyLower.contains("openrouter") || baseLower.contains("openrouter")
         val supportsClaudePromptCaching = kind == "anthropic" || (kind == "openai" && isOpenRouter)
         var showKindSheet by remember { mutableStateOf(false) }
-        var showGroupSheet by remember { mutableStateOf(false) }
-        // 分组名要跟着分组选择面板的保存刷新（面板直接写库）。
-        var groupTick by remember { mutableStateOf(0) }
-        val currentGroup = remember(providerId, groupTick) {
-            runCatching {
-                val repo = ProviderRepository(container.database.readableDatabase, container.preferenceRepository)
-                repo.groupById(repo.groupFor(providerId).orEmpty())?.name.orEmpty()
-            }.getOrDefault("")
-        }
         // provider_detail_page L2053-2056：内置 MemoIN（原 KelivoIN）不显示类型行。
         if (keyLower != "memoin") {
             SettingsSectionCard {
@@ -521,41 +507,6 @@ private fun ConfigTab(
                     ),
                 )
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
-            }
-            // Group row (provider_detail_page L2073-2130): 标签是「分组」，右侧显示
-            // 当前分组名（最宽 55% 行宽、右对齐、超长省略；未分组显示「其他」），
-            // 再是 chevron。
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showGroupSheet = true }
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(com.psyche.memo.ui.R.string.provider_groups_group_label),
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, color = cs.onSurface),
-                        modifier = Modifier.weight(1f),
-                    )
-                    BoxWithConstraints(modifier = Modifier.weight(1f, fill = false)) {
-                        Text(
-                            text = currentGroup.ifEmpty {
-                                stringResource(com.psyche.memo.ui.R.string.provider_groups_other)
-                            },
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontSize = 15.sp,
-                                color = cs.onSurface,
-                            ),
-                            modifier = Modifier.widthIn(max = maxWidth * 0.55f),
-                        )
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
-                }
             }
             SettingsSwitchRow(
                 label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_enabled_title),
@@ -671,21 +622,6 @@ private fun ConfigTab(
                     showKindSheet = false
                 },
                 onDismiss = { showKindSheet = false },
-            )
-        }
-        if (showGroupSheet) {
-            ProviderGroupPickerSheet(
-                container = container,
-                providerKey = providerId,
-                onDismiss = {
-                    showGroupSheet = false
-                    // 面板直接写库，关闭后重新读一次分组名。
-                    groupTick++
-                },
-                onOpenManager = {
-                    showGroupSheet = false
-                    onOpenGroups()
-                },
             )
         }
         Spacer(Modifier.height(12.dp))
