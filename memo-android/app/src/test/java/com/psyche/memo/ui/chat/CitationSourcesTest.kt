@@ -137,5 +137,70 @@ class CitationSourcesTest {
     fun `no tool parts yields no sources`() {
         assertTrue(extractCitationItems(emptyList()).isEmpty())
         assertTrue(extractCitationItems(listOf(TextPart("hi"))).isEmpty())
+        // 没用过工具的普通聊天：正文里的链接就是普通链接，不当来源。
+        assertTrue(
+            extractCitationItems(listOf(TextPart("看 [这里](https://example.com/x)"))).isEmpty(),
+        )
+    }
+
+    // ---- 正文里的 Markdown 链接也算来源（2026-09-12 用户实测 DeepSeek） ----
+
+    @Test
+    fun `markdown links in the assistant text become sources`() {
+        // DeepSeek 实测写法：来源是普通链接、标签是"链接"两个字；工具本身回散文
+        // （aihot_get_latest 形状），没有任何 items[]。
+        val parts = listOf(
+            textPart("aihot_get_latest", "AIHOT 最新资讯\nAIHOT：https://aihot.news/items/cmtxabc123"),
+            TextPart(
+                "预算面板 64.7%。[链接](https://aihot.news/items/cmtx301no054wroedi0krzdye) - 下一条。" +
+                    "[链接](https://www.rubyhack.ai/)",
+            ),
+        )
+        val items = extractCitationItems(parts)
+        assertEquals(
+            listOf("https://aihot.news/items/cmtx301no054wroedi0krzdye", "https://www.rubyhack.ai/"),
+            items.map { it.url },
+        )
+        assertEquals(listOf(1, 2), items.map { it.index })
+        // 占位标签不当标题（留空 → 来源卡回落到域名）。
+        assertEquals(listOf("", ""), items.map { it.title })
+    }
+
+    @Test
+    fun `a meaningful link label is kept as the title`() {
+        val items = extractCitationItems(
+            listOf(
+                textPart("search_web", "prose without items"),
+                TextPart("见 [OpenAI 存储平台](https://openai.com/index/scaling-storage)"),
+            ),
+        )
+        assertEquals("OpenAI 存储平台", items.single().title)
+    }
+
+    @Test
+    fun `text links are numbered after tool sources and deduped by url`() {
+        val parts = listOf(
+            // `/1` 已经是工具来源（items(2) → /0、/1），正文重复引用不再新增。
+            TextPart("引用 [链接](https://example.com/9) 与 [链接](https://example.com/1)"),
+            toolPart("search_web", items(2)),
+        )
+        val items = extractCitationItems(parts)
+        assertEquals(
+            listOf("https://example.com/0", "https://example.com/1", "https://example.com/9"),
+            items.map { it.url },
+        )
+        assertEquals(listOf(1, 2, 3), items.map { it.index })
+    }
+
+    @Test
+    fun `non-http links and repeated urls are ignored`() {
+        val parts = listOf(
+            toolPart("search_web", items(1)),
+            TextPart("[文件](file:///tmp/a.md) [两次](https://a.example/x) [再来](https://a.example/x)"),
+        )
+        assertEquals(
+            listOf("https://example.com/0", "https://a.example/x"),
+            extractCitationItems(parts).map { it.url },
+        )
     }
 }

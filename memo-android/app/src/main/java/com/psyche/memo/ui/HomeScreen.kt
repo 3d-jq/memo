@@ -1852,6 +1852,13 @@ private fun MessageRow(
         } else {
             val item = searchItems.firstOrNull { it.id == key }
                 ?: key.toIntOrNull()?.let { n -> searchItems.firstOrNull { it.index == n } }
+                // 正文里的普通 Markdown 链接按 **URL** 命中来源（模型实测会写
+                // `[链接](https://…)`，没有 id 可查）。
+                ?: searchItems.firstOrNull { it.url.isNotEmpty() && it.url.equals(key, ignoreCase = true) }
+                ?: searchItems.firstOrNull {
+                    val normalized = com.psyche.memo.ui.chat.normalizeExternalUri(it.url)?.toString()
+                    normalized != null && normalized.equals(key, ignoreCase = true)
+                }
             if (item == null) {
                 null
             } else {

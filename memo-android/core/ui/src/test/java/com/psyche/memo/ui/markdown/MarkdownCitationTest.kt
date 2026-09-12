@@ -51,6 +51,27 @@ class MarkdownCitationTest {
         )
     }
 
+    // ---- 来源链接 → 序号胶囊（2026-09-12 用户实测 DeepSeek） ----
+
+    @Test
+    fun sourceUrlBecomesCapsuleWithTheResolvedIndex() {
+        val capsule = resolveSourceUrlCapsule("https://aihot.news/items/cmtx301no") { key ->
+            if (key == "https://aihot.news/items/cmtx301no") CitationInfo(domain = "aihot.news", index = 7) else null
+        }
+        assertEquals("https://aihot.news/items/cmtx301no", capsule?.key)
+        assertEquals("7", capsule?.text)
+    }
+
+    @Test
+    fun unknownUrlAndUnresolvedIndexKeepThePlainLink() {
+        // 不是来源的链接照旧按普通链接渲染（resolver 返回 null）。
+        assertNull(resolveSourceUrlCapsule("https://example.com/x") { null })
+        assertNull(resolveSourceUrlCapsule("https://example.com/x") { CitationInfo(index = null) })
+        // 非 http(s) 目标不转换。
+        assertNull(resolveSourceUrlCapsule("mailto:a@b.c") { CitationInfo(index = 1) })
+        assertNull(resolveSourceUrlCapsule("") { CitationInfo(index = 1) })
+    }
+
     @Test
     fun citeInsideSentenceWithAdjacentText() {
         assertEquals(

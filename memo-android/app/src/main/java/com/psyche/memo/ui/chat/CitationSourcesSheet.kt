@@ -131,6 +131,17 @@ fun normalizeExternalUri(raw: String): Uri? {
 
 private val citationJson = Json { ignoreUnknownKeys = true }
 
+/** 正文里的 Markdown 链接 `[label](https://…)`。 */
+private val markdownLinkRegex = Regex("""\[([^\]\n]*)\]\((https?://[^\s)]+)\)""")
+
+/**
+ * 标签只是"链接/link/here"这类占位词的，进来源列表时不要当标题（留空 → 卡片回落到
+ * 域名/URL），否则来源卡会显示十行"链接"。
+ */
+private val genericLinkLabels = setOf(
+    "链接", "鏈接", "连接", "link", "links", "url", "here", "点击", "点击这里", "来源", "source", "详情",
+)
+
 /**
  * chat_message_widget.dart `_allSearchItems` — 从消息的工具结果里提取引用来源
  * （从后往前扫，key = `id ?? url` 去重，"latest wins"）。
@@ -141,6 +152,13 @@ private val citationJson = Json { ignoreUnknownKeys = true }
  * 而显示 `?`。这里改成**按结构判定**：任何工具只要 content 是 JSON 且带
  * `items` 数组，就当作引用来源。判定条件收紧到"必须真的是 items[]"，所以
  * `get_time_info` / `memory_*` 这类无关 JSON 依然被排除。
+ *
+ * **第二批（2026-09-12 用户实测 DeepSeek）**：模型不一定照提示词写 `[cite:id]`，
+ * 实测它把来源写成普通 Markdown 链接 `[链接](https://aihot.news/items/…)`。这种
+ * 情况下既没有 items[] 也没有 id ⇒ 既没有胶囊、也没有来源列表，正文里就只剩
+ * "链接"两个字（用户原话：「不是显示我弄到的胶囊加数字呀，是直接显示链接这两个
+ * 字」）。所以**正文里的 http(s) Markdown 链接也收作来源**（按 URL 去重、排在
+ * 工具来源之后），渲染层再把命中来源的链接画成序号胶囊。
  */
 fun extractCitationItems(parts: List<com.psyche.memo.data.model.MessagePart>): List<CitationSourceItem> {
     val out = ArrayList<CitationSourceItem>()
@@ -156,6 +174,32 @@ fun extractCitationItems(parts: List<com.psyche.memo.data.model.MessagePart>): L
             val key = map.str("id") ?: map.str("url") ?: continue
             if (key.isNotEmpty() && !seen.add(key)) continue
             out.add(CitationSourceItem.fromMap(map, fallbackIndex = out.size + 1))
+        }
+    }
+    // 正文里的链接（只扫助手正文，不扫工具返回的散文 —— 工具说了什么不等于
+    // 模型引用了什么）。**只有本条消息真的用过工具（搜索/MCP）才收**：普通聊天
+    // 里模型随手给的链接不该变成"来源胶囊"。
+    val usedTools = parts.any { it is com.psyche.memo.data.model.ToolCallPart }
+    if (!usedTools) return out
+    val seenUrls = out.mapNotNull { it.url.takeIf { u -> u.isNotEmpty() } }
+        .map { normalizeExternalUri(it)?.toString() ?: it }
+        .toHashSet()
+    for (part in parts) {
+        if (part !is com.psyche.memo.data.model.TextPart) continue
+        for (match in markdownLinkRegex.findAll(part.text)) {
+            val label = match.groupValues[1].trim()
+            val url = match.groupValues[2].trim()
+            val normalized = normalizeExternalUri(url)?.toString() ?: url
+            if (!seenUrls.add(normalized)) continue
+            out.add(
+                CitationSourceItem(
+                    index = out.size + 1,
+                    title = label.takeIf {
+                        it.isNotEmpty() && it.lowercase() !in genericLinkLabels && it != url
+                    }.orEmpty(),
+                    url = url,
+                ),
+            )
         }
     }
     return out

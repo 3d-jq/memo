@@ -1239,6 +1239,18 @@ private fun AnnotatedString.Builder.appendInlineStyled(
                         return
                     }
                 }
+                // 指向本条消息来源的普通 Markdown 链接（实测 DeepSeek 写
+                // `[链接](https://aihot.news/items/…)`）同样画成序号胶囊 —— 用户
+                // 要求来源一律「胶囊 + 数字」，不要"链接"这种链接文字。
+                val sourceCapsule = resolveSourceUrlCapsule(node.destination ?: "", citation.resolver)
+                if (sourceCapsule != null) {
+                    inlineContent.putIfAbsent(
+                        "citation:${sourceCapsule.key}",
+                        citationInlineContent(sourceCapsule.text) { onTap(sourceCapsule.key) },
+                    )
+                    appendInlineContent("citation:${sourceCapsule.key}", " ")
+                    return
+                }
             }
             val link = LinkAnnotation.Url(
                 node.destination ?: "",
@@ -1437,6 +1449,28 @@ internal fun parseCitationRef(raw: String): CitationRef? {
 
 /** A resolved inline citation capsule: lookup key + display text. */
 internal data class CitationCapsule(val key: String, val text: String)
+
+/**
+ * 普通 Markdown 链接 `[标签](https://…)` → 序号胶囊，前提是这个 URL 能解析成
+ * 本条消息的来源（[resolver] 返回了序号）。
+ *
+ * 模型实测（DeepSeek + MCP 搜索工具）不写 `[cite:id]`，而是把来源写成
+ * `[链接](https://aihot.news/items/…)`；那时正文里只剩"链接"两个字，用户要的是
+ * 「胶囊 + 数字」。命中来源才转换，未命中的链接照旧按普通链接渲染。
+ */
+internal fun resolveSourceUrlCapsule(
+    url: String,
+    resolver: ((String) -> CitationInfo?)?,
+): CitationCapsule? {
+    val dest = url.trim()
+    if (!dest.startsWith("http://", ignoreCase = true) &&
+        !dest.startsWith("https://", ignoreCase = true)
+    ) {
+        return null
+    }
+    val index = resolver?.invoke(dest)?.index ?: return null
+    return CitationCapsule(dest, index.toString())
+}
 
 /**
  * Resolve a `[citation,X](Y)` / `[cite,X](Y)` link into a capsule.
