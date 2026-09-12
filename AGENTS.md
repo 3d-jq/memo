@@ -76,6 +76,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - provider 管理页、语音服务/备份/赞助 UI 壳（BackupScreen/LocalSnapshotsScreen/SponsorScreen）+ TTS/ASR 编辑器全屏化
 - **本机副本（备份子块 3）已落地**：保留策略/存储/调度/设置 + 本机副本页全接线（存一份/恢复/导出/置顶/删除，启动与回前台自动调度）
 - **merge 恢复 + 备份提醒（备份子块 2/4）已落地（2026-09-12）**：`DatabaseSnapshotMerger`（ATTACH 快照、指纹去重、冲突整段换确定性 merge- id）+ `SettingsSnapshotMerger`（助手 avatar/background 本地优先、记忆内容去重、偏好本地有就不动）+ `BackupReminder`（五键调度 + 分钟 ticker + 抽屉到期横幅 + 滚轮时间选择）；恢复顺序修正为数据库先行、settings 后写；备份页 §2/§3 全接线
+- **WebDAV 备份（备份子块 5）已落地（2026-09-12）**：`WebDavClient`（OkHttp + XmlPullParser：PROPFIND/MKCOL 逐段建目录/PUT/GET/DELETE + Basic auth + 多状态解析）+ 设置子页 `webdav_settings` + 备份页 §5 四行（设置/测试连接/恢复远端列表 sheet/立即备份）；配置键 `webdav_config_v1`，默认目录品牌化为 `memo_backups`
 - 日志三件套（收尾-6：LogPayloadElider/LogRedactor/RequestLogger/FlutterLogger/ContextLogger/LogBootstrap，64 单测；**2026-09-11 三个 tab 全部通电**：上下文日志补齐组装侧打标签 + `ContextLogAssembler`，应用日志接上 SSE 恢复/provider 解码/后台任务/抽屉/压缩/供应商/模型等失败路径，顺手修掉「指令注入从未进入请求」）
 - 关于页闪退修复、智谱 400 修复（applyVendorReasoningKnobs）
 - **设置全站分类化（2026-09-09 用户点名）**：偏好主页 17 行拆 5 组、五个偏好子页/触感页行内分组、关于页（应用信息/社区与链接）、统计页（数据概览/排行榜）、网络代理页（代理设置/连接测试）、存储主页（空间总览/存储分类）——统一 SectionHeader + SectionCard
@@ -86,7 +87,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 待移植 / 剩余（仅以下）
 - 真机 API-key 聊天冒烟验证（设备已连，待跑）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
-- 备份剩余（§5.10 子块 5~8）：WebDAV / S3 / 前向兼容闸门（完整版）/ Cherry·Chatbox 导入（子块 1/2/3/4 已通）
+- 备份剩余（§5.10 子块 6~8）：S3 / 前向兼容闸门（完整版）/ Cherry·Chatbox 导入（子块 1/2/3/4/5 已通）
 - **`applyContextLimit` 未实现**（用户 2026-09-11「先留着」）：`assistant.limitContextMessages`/`contextMessageSize` 的按条数裁剪在请求链路上缺失（`clearContextLabel` 会显示配置值但从不生效）——会改变发给模型的消息数，要做时单开一批 + 用户确认
 - **上下文压缩机制要换掉**（用户 2026-09-11「这个上下文压缩这个机制这个部分 我们要改 不用原项目这个」）：现有实现=原项目那套（LLM 折叠成摘要 + 新建会话），**等用户给新方案**；在此之前不要按原版修、也不要自行设计新机制（PORTING 批次表「待改」行）
 - 语音剩余：网络 TTS 语音（多 provider 合成 + 缓存）与播放器的「保存音频」按钮

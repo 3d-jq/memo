@@ -74,6 +74,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.psyche.memo.ui.theme.AppFontWeights
@@ -903,6 +905,8 @@ internal fun IosFormField(
     hint: String? = null,
     textAlign: TextAlign = TextAlign.Start,
     modifier: Modifier = Modifier,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -912,36 +916,43 @@ internal fun IosFormField(
     }
 
     val field: @Composable () -> Unit = {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = maxLines == 1,
-                minLines = minLines,
-                maxLines = maxLines,
-                textStyle = TextStyle(
-                    fontSize = 15.sp,
-                    fontWeight = AppFontWeights.medium,
-                    color = withAlpha(cs.onSurface, 0.92),
-                    lineHeight = if (maxLines > 1) 18.75.sp else 17.25.sp,
-                    textAlign = textAlign,
-                ),
-                cursorBrush = SolidColor(cs.primary),
-                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (autofocus) Modifier.focusRequester(focusRequester) else Modifier),
-            )
-            if (hint != null && value.isEmpty()) {
-                Text(
-                    text = hint,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.weight(1f)) {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = maxLines == 1,
+                    minLines = minLines,
                     maxLines = maxLines,
-                    style = TextStyle(
+                    textStyle = TextStyle(
                         fontSize = 15.sp,
                         fontWeight = AppFontWeights.medium,
-                        color = withAlpha(cs.onSurface, if (semantic.isDark) 0.42 else 0.46),
+                        color = withAlpha(cs.onSurface, 0.92),
+                        lineHeight = if (maxLines > 1) 18.75.sp else 17.25.sp,
+                        textAlign = textAlign,
                     ),
+                    cursorBrush = SolidColor(cs.primary),
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                    visualTransformation = visualTransformation,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (autofocus) Modifier.focusRequester(focusRequester) else Modifier),
                 )
+                if (hint != null && value.isEmpty()) {
+                    Text(
+                        text = hint,
+                        maxLines = maxLines,
+                        style = TextStyle(
+                            fontSize = 15.sp,
+                            fontWeight = AppFontWeights.medium,
+                            color = withAlpha(cs.onSurface, if (semantic.isDark) 0.42 else 0.46),
+                        ),
+                    )
+                }
+            }
+            trailing?.let {
+                Spacer(Modifier.width(6.dp))
+                it()
             }
         }
     }

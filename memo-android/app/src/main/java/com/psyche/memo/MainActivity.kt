@@ -84,6 +84,7 @@ import com.psyche.memo.ui.UserProfileScreen
 import com.psyche.memo.ui.SettingsScreen
 import com.psyche.memo.ui.DebugScreen
 import com.psyche.memo.ui.BackupScreen
+import com.psyche.memo.ui.WebDavSettingsScreen
 import com.psyche.memo.ui.LocalSnapshotsScreen
 import com.psyche.memo.ui.SponsorScreen
 import com.psyche.memo.ui.LogViewerScreen
@@ -398,6 +399,13 @@ private fun AppThemeAndContent(
                             container = container,
                             onBack = { navController.popBackStack() },
                             onOpenLocalSnapshots = { navController.navigate("local_snapshots") },
+                            onOpenWebDavSettings = { navController.navigate("webdav_settings") },
+                        )
+                    }
+                    composable("webdav_settings") {
+                        WebDavSettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
                         )
                     }
                     composable("local_snapshots") {

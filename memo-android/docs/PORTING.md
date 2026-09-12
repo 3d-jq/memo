@@ -302,7 +302,7 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | 2 | **恢复模式（overwrite / merge）** | merge 语义：实体按 id upsert + preference 逐键覆盖 + 会话按 id 去重；`RestoreMode` 已在 Flutter 定义 | 1 | ✅ 2026-09-12（明细见下） |
 | 3 | **本地快照** | `LocalSnapshotStore`(快照文件管理/保留数/空间上限) + `LocalSnapshotScheduler`(频率) + `LocalSnapshotsScreen` 接线 + 7 个 settings | 1 | ✅ 2026-09-11（批次表「备份-3」，5 文件 + 5 测试类） |
 | 4 | **备份提醒** | `BackupReminder`(启用/频率/上次备份时间) + 完成时 `recordBackupCompleted()` + 3 行接线 | 1 | ✅ 2026-09-12（明细见下） |
-| 5 | **WebDAV** | `WebDavClient`(PROPFIND/PUT/GET/DELETE + Basic auth) + `WebDavConfig` model + 服务器设置子页 + 测试连接 + 远端列表 + 恢复 | 1 | ⬜ |
+| 5 | **WebDAV** | `WebDavClient`(PROPFIND/PUT/GET/DELETE + Basic auth) + `WebDavConfig` model + 服务器设置子页 + 测试连接 + 远端列表 + 恢复 | 1 | ✅ 2026-09-12（明细见下） |
 | 6 | **S3** | `S3Client`(SigV4 + list/put/get/delete) + `S3Config` model + 服务器设置子页 + 测试连接 + 恢复 | 1 | ⬜ |
 | 7 | **前向兼容闸门** | `minimumReadableFormatVersion` / `minimumReadableSchemaVersion` 判定 + 同意对话框（`forward_compat_consent_dialog`） | 2 | 🚧 最小版已落地（`BackupManifestCodec.declaresNewerBuild`），完整版 ⬜ |
 | 8 | **Cherry Studio / Chatbox 导入** | 两个 importer（可选，纯数据转换） | 2 | ⬜ |
@@ -363,7 +363,14 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 
 **测试**：`SettingsSnapshotMergerTest` 16、`DatabaseSnapshotMergerTest` 6（Robolectric 双库：完好/坏序快照）、`BackupReminderTest` 6；全模块 1265 例 0 失败。
 
-**子块 2+4 待办**：WebDAV/S3 的上传成功路径接 `recordBackupCompleted()`（子块 5/6）；导入抽屉的合并报告明细（imported/deduplicated 计数展示，目前只展示 skipped）可在真机反馈后加。
+**子块 2+4 待办**：~~WebDAV 的上传成功路径接 `recordBackupCompleted()`~~（已随子块 5 完成，见下）；S3 的同款钩子随子块 6；导入抽屉的合并报告明细（imported/deduplicated 计数展示，目前只展示 skipped）可在真机反馈后加。
+
+#### 子块 5 进展明细（2026-09-12，WebDAV）
+
+- **`core/data/backup/WebDavClient.kt`**：`WebDavConfig`（url/username/password/path/userAgent，`webdav_config_v1` 单键存 preference_rows；默认路径品牌化为 `memo_backups`——上游是 `kelivo_backups`，目录名属用户可见默认值）+ `WebDavClient`（OkHttp + XmlPullParser，协议语义逐条对照 `data_sync.dart`：`_collectionUri` 尾斜杠 / `_fileUri` / Basic auth / `User-Agent` / `testWebdav`（PROPFIND depth 1，2xx/207）/ `_ensureCollection`（逐段 PROPFIND depth 0 → 404 则 MKCOL，200/201/405 通过、401 报未授权）/ `listBackupFiles`（depth 1 多状态解析：跳过集合自身与目录、displayname 缺省回落 href 尾、mtime 缺省回落文件名时间戳——memo/kelivo 两种前缀都认、按时间倒序）/ 上传半段（流式 PUT + uploading 进度）/ 下载半段（流式 GET + downloading 进度）/ DELETE + `_deleteRemoteQuietly`）。PROPFIND 的 XML 走 XmlPullParser（RikkaHub `WebDavClient` 的解析方式，命名空间后缀匹配）。
+- **`MemoBackupService` 扩展**：`webDavConfig()/saveWebDavConfig()/testWebDav()/listWebDav()/backupToWebDav()/restoreFromWebDav()/deleteWebDavItem()`；构造注入容器共享的 OkHttp。`backupToWebDav = exportToCache → ensureCollection → PUT → 删本地临时件`，取消时静默删远端残件；`restoreFromWebDav = 流式下载到 cache → 复用 BackupRestorer`。
+- **UI**：`WebDavSettingsScreen`（子页，route `webdav_settings`：URL/用户名/密码（眼睛切换）/路径/UserAgent + 顶栏 Check 与底部整宽 Save；`IosFormField` 扩了 `visualTransformation`/`trailing` 两个可选参数，既有调用点不受影响）；备份页 §5 四行全接线：服务器设置（跳子页）/ 测试连接（成功 `backup_page_test_done` 绿 toast）/ 恢复（列表 sheet → 模式对话框 → 恢复 → 复用重启提示）/ **立即备份**（原版第 4 行，此前 Android 少了这行）→ `recordBackupCompleted()`；远端列表 sheet `WebDavRemoteListSheet`（拖柄 + 居中标题 + surfaceFill r12 行 + 0.18 outlineVariant 边框 + Import/Trash2 小钮 + 删除确认对话框，删除后刷新列表）。
+- **测试**：`WebDavClientTest`（core:data，URL 拼装 + 配置 JSON 往返）、`WebDavMultistatusParseTest`（app，Robolectric——XmlPullParser 在纯 JUnit 是 not-mocked）。
 
 #### 子块 3 进展明细（2026-09-11，本机副本）
 

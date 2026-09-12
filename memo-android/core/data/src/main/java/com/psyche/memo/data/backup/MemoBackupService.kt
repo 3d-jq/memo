@@ -3,6 +3,8 @@ package com.psyche.memo.data.backup
 import android.content.Context
 import com.psyche.memo.data.db.MemoDatabase
 import com.psyche.memo.data.settings.PreferenceRepository
+import kotlinx.serialization.json.jsonObject
+import okhttp3.OkHttpClient
 import java.io.File
 
 /**
@@ -21,6 +23,7 @@ class MemoBackupService(
     private val database: MemoDatabase,
     private val preferenceRepository: PreferenceRepository,
     private val appVersion: String,
+    private val httpClient: okhttp3.OkHttpClient? = null,
 ) {
 
     /**
@@ -148,8 +151,131 @@ class MemoBackupService(
         return "memo_backup_$stamp.zip"
     }
 
+    // ── WebDAV（backup 子块 5）───────────────────────────────────────────────
+
+    private fun client(config: WebDavConfig): WebDavClient =
+        WebDavClient(httpClient ?: OkHttpClient(), config)
+
+    private fun translate(throwable: Throwable): Throwable =
+        if (throwable is IllegalStateException && throwable.message == CANCELLED_MESSAGE) {
+            BackupCancelledException()
+        } else {
+            throwable
+        }
+
+    /** `webdav_config_v1` — the whole config as one preference row. */
+    fun webDavConfig(): WebDavConfig =
+        preferenceRepository.readJson(KEY_WEBDAV_CONFIG)?.let { raw ->
+            runCatching {
+                WebDavConfig.fromJson(BackupJson.parse(raw).jsonObject)
+            }.getOrNull()
+        } ?: WebDavConfig()
+
+    fun saveWebDavConfig(config: WebDavConfig) {
+        preferenceRepository.writeJson(KEY_WEBDAV_CONFIG, config.toJson().toString())
+    }
+
+    /** `testWebdav`. */
+    fun testWebDav(config: WebDavConfig) = client(config).test()
+
+    /** `listBackupFiles` with the listing phase reported. */
+    fun listWebDav(
+        config: WebDavConfig,
+        onProgress: BackupProgressSink? = null,
+    ): List<WebDavFileItem> {
+        val bridge = ProgressBridge(onProgress)
+        bridge.report(BackupPhase.wireOf(BackupPhase.LISTING_REMOTE), 0, -1)
+        return client(config).list()
+    }
+
+    /**
+     * `backupToWebDav` — export → ensure collection → streamed PUT → remove
+     * the local archive.
+     */
+    fun backupToWebDav(
+        config: WebDavConfig,
+        onProgress: BackupProgressSink? = null,
+        isCancelled: () -> Boolean = { false },
+    ) {
+        val archive = exportToCache(
+            includeChats = true,
+            includeFiles = true,
+            onProgress = onProgress,
+            isCancelled = isCancelled,
+        )
+        try {
+            val bridge = ProgressBridge(onProgress)
+            val client = client(config)
+            client.ensureCollection()
+            check(!isCancelled()) { CANCELLED_MESSAGE }
+            client.upload(archive) { processed, total ->
+                bridge.report(BackupPhase.wireOf(BackupPhase.UPLOADING), processed, total)
+            }
+            check(!isCancelled()) { CANCELLED_MESSAGE }
+        } catch (cancelled: IllegalStateException) {
+            if (cancelled.message == CANCELLED_MESSAGE) {
+                // A cancelled upload must not leave a partial remote file
+                // (`_deleteRemoteQuietly`, data_sync.dart L1912-1925).
+                runCatching { client(config).deleteQuietly(client(config).fileUrl(archive.name)) }
+                throw BackupCancelledException()
+            }
+            throw cancelled
+        } finally {
+            runCatching { archive.delete() }
+        }
+    }
+
+    /**
+     * `restoreFromWebDav` — stream the archive down to cache, then run the
+     * normal restore over it.
+     */
+    fun restoreFromWebDav(
+        config: WebDavConfig,
+        item: WebDavFileItem,
+        mode: RestoreMode,
+        onProgress: BackupProgressSink? = null,
+        isCancelled: () -> Boolean = { false },
+    ): RestoreReportView {
+        val bridge = ProgressBridge(onProgress)
+        val restorer = BackupRestorer(context, database, preferenceRepository)
+        val staged = File(context.cacheDir, "webdav_restore_${System.nanoTime()}.zip")
+        try {
+            client(config).download(item, staged) { processed, total ->
+                bridge.report(BackupPhase.wireOf(BackupPhase.DOWNLOADING), processed, total)
+            }
+            val report = try {
+                restorer.restore(
+                    archive = staged,
+                    mode = mode,
+                    onProgress = { phase, processed, total -> bridge.report(phase, processed, total) },
+                    isCancelled = isCancelled,
+                )
+            } catch (cancelled: IllegalStateException) {
+                if (cancelled.message == CANCELLED_MESSAGE) throw BackupCancelledException()
+                throw cancelled
+            }
+            return RestoreReportView(
+                mode = report.mode,
+                entityRowsWritten = report.entityRowsWritten,
+                preferenceKeysWritten = report.preferenceKeysWritten,
+                databaseRestored = report.databaseRestored,
+                assetFilesRestored = report.assetFilesRestored,
+                skippedEntries = report.skippedEntries,
+                extractedEntries = report.extractedEntries,
+                mergedConversations = report.mergeReport?.importedConversations ?: 0,
+                deduplicatedConversations = report.mergeReport?.deduplicatedConversations ?: 0,
+            )
+        } finally {
+            runCatching { staged.delete() }
+        }
+    }
+
+    /** `deleteWebDavBackupFile`. */
+    fun deleteWebDavItem(config: WebDavConfig, item: WebDavFileItem) = client(config).delete(item)
+
     companion object {
         private const val COPY_BUFFER = 256 * 1024
+        private const val KEY_WEBDAV_CONFIG = "webdav_config_v1"
 
         /** The builder's cancellation `check` message; see [exportToCache]. */
         internal const val CANCELLED_MESSAGE = "备份已取消"

@@ -94,6 +94,7 @@ fun BackupScreen(
     container: AppContainerImpl,
     onBack: () -> Unit,
     onOpenLocalSnapshots: () -> Unit,
+    onOpenWebDavSettings: () -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -119,6 +120,15 @@ fun BackupScreen(
     var restoringFile by remember { mutableStateOf<File?>(null) }
     var showImportModeDialog by remember { mutableStateOf(false) }
     var restartReport by remember { mutableStateOf<RestoreReportUi?>(null) }
+
+    // ── WebDAV (sub-block 5) ──────────────────────────────────────────────
+    val webDavTitle = backupTaskLabels(UiR.string.backup_page_backup_now)
+    val restoreTitle = backupTaskLabels(UiR.string.backup_page_restore)
+    var webDavItems by remember { mutableStateOf<List<com.psyche.memo.data.backup.WebDavFileItem>>(emptyList()) }
+    var showWebDavSheet by remember { mutableStateOf(false) }
+    var webDavRestoreTarget by remember { mutableStateOf<com.psyche.memo.data.backup.WebDavFileItem?>(null) }
+    var showWebDavModeDialog by remember { mutableStateOf(false) }
+    var showWebDavDeleteConfirm by remember { mutableStateOf<com.psyche.memo.data.backup.WebDavFileItem?>(null) }
 
     fun toast(message: String, type: NotificationType) {
         SnackbarManager.show(AppNotification(message, type))
@@ -242,6 +252,91 @@ fun BackupScreen(
             }
         }
     }
+// ── 5. WebDAV 备份 (WebDAV Backup) — 4 nav rows, sub-block 5 ──
+// 服务器设置 / 测试连接 / 恢复（远端列表 sheet → 模式 → 恢复）/
+// 立即备份（导出 → ensureCollection → PUT），对齐 backup_page L347-800。
+val webDavConfig = remember { container.backupService.webDavConfig() }
+val testDone = stringResource(UiR.string.backup_page_test_done)
+val backupUploaded = stringResource(UiR.string.backup_page_backup_uploaded)
+fun runWebDavTest() {
+    scope.launch {
+        runCatching {
+            withContext(Dispatchers.IO) { container.backupService.testWebDav(webDavConfig) }
+        }.onSuccess {
+            toast(testDone, NotificationType.SUCCESS)
+        }.onFailure {
+            toast(it.message ?: it.toString(), NotificationType.ERROR)
+        }
+    }
+}
+fun runWebDavRestore(item: com.psyche.memo.data.backup.WebDavFileItem, mode: RestoreMode) {
+    scope.launch {
+        var report: com.psyche.memo.data.backup.RestoreReportView? = null
+        val ok = runner.run(
+            labels = restoreTitle,
+            errorMessage = { restoreFailedPrefix.format(it.message ?: it.toString()) },
+        ) { progress, isCancelled ->
+            report = container.backupService.restoreFromWebDav(
+                config = webDavConfig,
+                item = item,
+                mode = mode,
+                onProgress = { progress(it) },
+                isCancelled = isCancelled,
+            )
+        }
+        val done = report
+        if (ok && done != null) {
+            restartReport = RestoreReportUi(
+                skippedConversations = done.skippedConversations,
+                details = reportDetails(done),
+            )
+        }
+    }
+}
+fun runWebDavBackupNow() {
+    scope.launch {
+        val ok = runner.run(
+            labels = webDavTitle,
+            errorMessage = { it.message ?: it.toString() },
+        ) { progress, isCancelled ->
+            container.backupService.backupToWebDav(
+                config = webDavConfig,
+                onProgress = { progress(it) },
+                isCancelled = isCancelled,
+            )
+        }
+        if (!ok) return@launch
+        container.backupReminder.recordBackupCompleted()
+        toast(backupUploaded, NotificationType.INFO)
+    }
+}
+fun runWebDavList() {
+    scope.launch {
+        val ok = runner.run(
+            labels = restoreTitle,
+            errorMessage = { it.message ?: it.toString() },
+        ) { progress, _ ->
+            webDavItems = container.backupService.listWebDav(
+                webDavConfig,
+                onProgress = { progress(it) },
+            )
+        }
+        if (ok) showWebDavSheet = true
+    }
+}
+fun deleteWebDavItem(item: com.psyche.memo.data.backup.WebDavFileItem) {
+    scope.launch {
+        runCatching {
+            withContext(Dispatchers.IO) { container.backupService.deleteWebDavItem(webDavConfig, item) }
+        }
+        // `_deleteAndReload`（backup_page.dart L560 附近）：删完刷新列表。
+        runCatching {
+            withContext(Dispatchers.IO) {
+                webDavItems = container.backupService.listWebDav(webDavConfig)
+            }
+        }
+    }
+}
 
     Column(
         modifier = Modifier
@@ -442,24 +537,33 @@ fun BackupScreen(
             }
 
             Spacer(Modifier.height(18.dp))
-            // ── 5. WebDAV 备份 (WebDAV Backup) — 3 nav rows (sub-block 5) ─
             BackupSection(title = stringResource(UiR.string.backup_page_web_dav_backup)) {
                 BackupPlaceholderRow(
                     Lucide.Settings,
                     stringResource(UiR.string.backup_page_web_dav_server_settings),
                     "",
+                    onTap = onOpenWebDavSettings,
                 )
                 BackupDivider()
                 BackupPlaceholderRow(
                     Lucide.Cable,
                     stringResource(UiR.string.backup_page_test_connection),
                     "",
+                    onTap = { runWebDavTest() },
                 )
                 BackupDivider()
                 BackupPlaceholderRow(
                     Lucide.Import,
                     stringResource(UiR.string.backup_page_restore),
                     "",
+                    onTap = { runWebDavList() },
+                )
+                BackupDivider()
+                BackupPlaceholderRow(
+                    Lucide.Upload,
+                    stringResource(UiR.string.backup_page_backup_now),
+                    "",
+                    onTap = { runWebDavBackupNow() },
                 )
             }
 
@@ -513,6 +617,71 @@ fun BackupScreen(
                 com.psyche.memo.ui.backup.restartApp(context)
             },
             onDismiss = { restartReport = null },
+        )
+    }
+
+    // ── WebDAV sheets/dialogs（远端列表 → 模式 → 恢复 / 删除确认）─────────
+    if (showWebDavSheet) {
+        com.psyche.memo.ui.backup.WebDavRemoteListSheet(
+            items = webDavItems,
+            onRestore = { item ->
+                showWebDavSheet = false
+                webDavRestoreTarget = item
+                showWebDavModeDialog = true
+            },
+            onDelete = { item ->
+                showWebDavSheet = false
+                showWebDavDeleteConfirm = item
+            },
+            onDismiss = { showWebDavSheet = false },
+        )
+    }
+    if (showWebDavModeDialog) {
+        val target = webDavRestoreTarget
+        BackupImportModeDialog(
+            onSelect = { mode ->
+                showWebDavModeDialog = false
+                val item = webDavRestoreTarget
+                webDavRestoreTarget = null
+                if (item != null) runWebDavRestore(item, mode)
+            },
+            onDismiss = {
+                showWebDavModeDialog = false
+                webDavRestoreTarget = null
+            },
+        )
+    }
+    showWebDavDeleteConfirm?.let { item ->
+        val deleteLabel = stringResource(UiR.string.backup_page_delete_tooltip)
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showWebDavDeleteConfirm = null },
+            title = { Text(stringResource(UiR.string.backup_page_delete_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        UiR.string.backup_page_delete_confirm_content,
+                        item.displayName,
+                    ),
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showWebDavDeleteConfirm = null
+                        deleteWebDavItem(item)
+                    },
+                ) {
+                    Text(deleteLabel, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showWebDavDeleteConfirm = null }) {
+                    Text(
+                        stringResource(UiR.string.backup_page_cancel),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f),
+                    )
+                }
+            },
         )
     }
 }

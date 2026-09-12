@@ -133,6 +133,7 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
             database = database,
             preferenceRepository = preferenceRepository,
             appVersion = appVersionString(),
+            httpClient = httpClient,
         )
     }
 
