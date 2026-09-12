@@ -616,6 +616,7 @@ private fun AppThemeAndContent(
                             onOpenMemoryTrace = { navController.navigate("memory_trace") },
                             onOpenMemoryAbout = { navController.navigate("memory_about") },
                             onOpenMemoryEntries = { navController.navigate("memory_entries") },
+                            onOpenMemoryProfile = { navController.navigate("user_profile") },
                         )
                     }
                     composable("memory_entries") {

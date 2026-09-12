@@ -79,6 +79,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - **WebDAV 备份（备份子块 5）已落地（2026-09-12）**：`WebDavClient`（OkHttp + XmlPullParser：PROPFIND/MKCOL 逐段建目录/PUT/GET/DELETE + Basic auth + 多状态解析）+ 设置子页 `webdav_settings` + 备份页 §5 四行（设置/测试连接/恢复远端列表 sheet/立即备份）；配置键 `webdav_config_v1`，默认目录品牌化为 `memo_backups`
 - 日志三件套（收尾-6：LogPayloadElider/LogRedactor/RequestLogger/FlutterLogger/ContextLogger/LogBootstrap，64 单测；**2026-09-11 三个 tab 全部通电**：上下文日志补齐组装侧打标签 + `ContextLogAssembler`，应用日志接上 SSE 恢复/provider 解码/后台任务/抽屉/压缩/供应商/模型等失败路径，顺手修掉「指令注入从未进入请求」）
 - 关于页闪退修复、智谱 400 修复（applyVendorReasoningKnobs）
+- **网络代理真正生效（2026-09-12）**：`GlobalProxy`（ProxySelector 每连接读配置、http/https=HTTP 隧道 + Basic、socks5=SOCKS（无账户，已知偏差）、bypass 精确/后缀/CIDR）挂进容器 OkHttp；TTS「自动播放助手回复」接到回复完成后；记忆设置页「用户画像」行接到既有 `user_profile` 路由；WebDAV 子页补 statusBars insets
 - **设置全站分类化（2026-09-09 用户点名）**：偏好主页 17 行拆 5 组、五个偏好子页/触感页行内分组、关于页（应用信息/社区与链接）、统计页（数据概览/排行榜）、网络代理页（代理设置/连接测试）、存储主页（空间总览/存储分类）——统一 SectionHeader + SectionCard
 - **设置行 tip 规范（2026-09-09 用户点名）**：不裸排提示词，一律行尾 ⓘ + 浮动气泡（收尾-7）
 - **存储功能补全（用户点名）**：上传管理器=原项目形态（来源筛选/排序/3 列缩略图网格/点击预览/长按选择/批量删除）、用量条 10 分类 10 色（撞色修复）、LOGS「查看日志」+ LOCAL_SNAPSHOTS「管理副本」入口

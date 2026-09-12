@@ -204,10 +204,9 @@ fun MemorySettingsScreen(
     onBack: () -> Unit,
     onOpenMemoryTrace: () -> Unit,
     onOpenMemoryAbout: () -> Unit,
-    // L369-387: desktop dialogs only; on Android these push pages. Entries page
-    // is pushed via onOpenMemoryEntries, profile page is not yet ported (dead
-    // navigation, matching the "not yet ported" state).
+    // L369-387: desktop dialogs only; on Android these push pages.
     onOpenMemoryEntries: () -> Unit,
+    onOpenMemoryProfile: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val app = LocalSemanticColors.current
@@ -316,8 +315,7 @@ fun MemorySettingsScreen(
                         SettingsNavRowFull(
                             title = stringResource(UiR.string.memory_settings_profile_title),
                             subtitle = stringResource(UiR.string.memory_settings_profile_subtitle),
-                            // user_profile_page.dart is not part of this batch — dead row.
-                            onTap = {},
+                            onTap = onOpenMemoryProfile,
                         )
                         SettingsNavRowFull(
                             title = stringResource(UiR.string.memory_trace_settings_title),

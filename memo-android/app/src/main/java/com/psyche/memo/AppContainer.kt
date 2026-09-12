@@ -36,15 +36,6 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     override val appName: String = "Memo"
     override val platform: com.psyche.memo.common.Platform = com.psyche.memo.common.Platform.ANDROID
 
-    val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(300, TimeUnit.SECONDS) // long SSE reads
-        .writeTimeout(30, TimeUnit.SECONDS)
-        // RequestLogInterceptor is a no-op when com.psyche.memo.common.logging.RequestLogger
-        // is disabled; safe to keep installed regardless of the toggle.
-        .addInterceptor(com.psyche.memo.llm.logging.RequestLogInterceptor())
-        .build()
-
     val database: MemoDatabase by lazy { MemoDatabase(appContext) }
     val preferenceRepository: PreferenceRepository by lazy {
         PreferenceRepository(
@@ -52,6 +43,31 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
             appContext.getSharedPreferences("memo_preferences", Context.MODE_PRIVATE),
         )
     }
+
+    val httpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(300, TimeUnit.SECONDS) // long SSE reads
+        .writeTimeout(30, TimeUnit.SECONDS)
+        // 全局网络代理（network_proxy_page 的 global_proxy_*_v1 键）：selector
+        // 每次连接都读当前配置 ⇒ 设置改动立即生效，无需重建客户端。绕过规则
+        // （localhost/127.0.0.1/网段）在这里生效——上游 dio 没消费 bypass，但
+        // 本地模型服务器挂代理时必须直连。
+        .proxySelector(GlobalProxy.selector(preferenceRepository))
+        .proxyAuthenticator { _, response ->
+            val credentials = GlobalProxy.credentialsFor(preferenceRepository)
+            if (credentials == null) {
+                null
+            } else {
+                response.request.newBuilder()
+                    .header("Proxy-Authorization", credentials)
+                    .build()
+            }
+        }
+        // RequestLogInterceptor is a no-op when com.psyche.memo.common.logging.RequestLogger
+        // is disabled; safe to keep installed regardless of the toggle.
+        .addInterceptor(com.psyche.memo.llm.logging.RequestLogInterceptor())
+        .build()
+
     val appLocaleStore: AppLocaleStore by lazy { AppLocaleStore(preferenceRepository) }
 
     /** Conversations with an active LLM stream — drives the drawer loading dot. */

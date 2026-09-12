@@ -1204,6 +1204,14 @@ class ChatViewModel(
                         persistOnce(parts, usage, segmentsJson)
                     },
                 )
+                // home_page_controller.dart L1763-1765 —— 「自动播放助手回复」：
+                // 正常跑完一轮就朗读整条回复（取消/报错不播）。
+                if (readBoolPref("tts_auto_play_assistant_replies_v1")) {
+                    val text = allParts.filterIsInstance<TextPart>().joinToString("") { it.text }
+                    if (text.isNotBlank()) {
+                        com.psyche.memo.ui.chat.TtsPlayer.speak(text, ownerId = assistantId)
+                    }
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // user stop: the partial reply is kept and persisted, exactly
                 // like the original stop path.

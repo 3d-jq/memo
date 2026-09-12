@@ -77,6 +77,11 @@ object TtsPlayer {
         controller(context)?.speak(text, ownerId)
     }
 
+    /** 已初始化后的免 Context 重载（ViewModel 等无 UI 的调用方，如自动播放）。 */
+    fun speak(text: String, ownerId: String? = null) {
+        controllerRef?.speak(text, ownerId)
+    }
+
     fun togglePause() {
         controller(null)?.togglePause()
     }
