@@ -210,7 +210,7 @@ fun MemoryTraceScreen(
 
     // _confirmClear (L141-204) — mobile bottom sheet.
     if (clearSheet) {
-        ModalBottomSheet(onDismissRequest = { clearSheet = false }, dragHandle = null) {
+        ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = { clearSheet = false }, dragHandle = null) {
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
                 MemoSheetHandle()
                 Text(

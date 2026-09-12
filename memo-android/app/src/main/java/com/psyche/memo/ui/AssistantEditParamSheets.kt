@@ -87,6 +87,7 @@ internal fun ParamSliderSheet(
     var local by remember { mutableDoubleStateOf(value.coerceIn(minValue, maxValue)) }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘 40x4 拖柄
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -241,6 +242,7 @@ internal fun MaxTokensSheet(
     }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

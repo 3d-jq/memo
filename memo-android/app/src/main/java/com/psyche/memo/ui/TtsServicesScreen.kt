@@ -308,7 +308,7 @@ fun TtsServicesScreen(
 
     // _showMobileErrorDetails L681-741.
     errorDetails?.let { message ->
-        ModalBottomSheet(onDismissRequest = { errorDetails = null }, dragHandle = null) {
+        ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = { errorDetails = null }, dragHandle = null) {
             Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp)) {
                 MemoSheetHandle()
                 Text(
@@ -576,7 +576,7 @@ private fun SystemTtsConfigSheet(container: AppContainerImpl, onDismiss: () -> U
         } ?: emptyList()
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp)) {
             MemoSheetHandle()
             Text(

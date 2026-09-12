@@ -1041,7 +1041,7 @@ fun ToolDetailSheet(part: ToolUiPart, onDismiss: () -> Unit) {
     }
     val useScreenTimeDetail = screenTime != null && screenTime.hasApps
     val listState = rememberLazyListState()
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

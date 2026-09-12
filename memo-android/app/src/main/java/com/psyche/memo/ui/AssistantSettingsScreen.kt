@@ -533,6 +533,7 @@ private fun AddAssistantSheet(
     var text by remember { mutableStateOf("") }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘 40x4 拖柄
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

@@ -736,6 +736,7 @@ private fun NavRow(label: String, onClick: () -> Unit) {
 private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

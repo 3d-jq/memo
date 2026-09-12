@@ -835,6 +835,7 @@ fun SideDrawerContent(
     // bottom sheet with a grab handle and 48dp rows.
     menuFor?.let { target ->
         ModalBottomSheet(
+            sheetState = rememberMemoSheetState(),
             onDismissRequest = { menuFor = null },
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             containerColor = cs.surface,
@@ -1037,6 +1038,7 @@ fun SideDrawerContent(
     // assistant except the conversation's current one.
     moveTarget?.let { target ->
         ModalBottomSheet(
+            sheetState = rememberMemoSheetState(),
             onDismissRequest = { moveTarget = null },
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             containerColor = cs.surface,
@@ -1138,6 +1140,7 @@ fun SideDrawerContent(
             com.psyche.memo.data.repo.TagRepository(container.database.writableDatabase, container.preferenceRepository)
         }
         ModalBottomSheet(
+            sheetState = rememberMemoSheetState(),
             onDismissRequest = { assistantMenuFor = null },
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             containerColor = cs.surface,

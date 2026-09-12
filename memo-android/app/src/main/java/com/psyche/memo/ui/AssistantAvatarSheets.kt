@@ -139,87 +139,37 @@ internal fun AvatarPickerSheet(
     val semantic = LocalSemanticColors.current
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
-        dragHandle = null, // 原版自绘 40x4 拖柄
+        dragHandle = null, // 全站自绘 40x4 拖柄
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .size(width = 40.dp, height = 4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
-            )
-            Spacer(Modifier.height(10.dp))
-            AvatarPickerRow(stringResource(strings.chooseImage)) {
-                onDismiss()
-                onChooseImage()
-            }
-            AvatarPickerRow(stringResource(strings.chooseEmoji)) {
-                onDismiss()
-                onChooseEmoji()
-            }
-            AvatarPickerRow(stringResource(strings.enterLink)) {
-                onDismiss()
-                onEnterLink()
-            }
-            AvatarPickerRow(stringResource(strings.importQq)) {
-                onDismiss()
-                onImportQq()
-            }
-            AvatarPickerRow(stringResource(strings.reset)) {
-                onDismiss()
-                onReset()
-            }
-            Spacer(Modifier.height(4.dp))
-        }
-    }
-}
-
-/**
- * `row()` L529-558 — `IosCardPress` r14 over `sheetTileColor`, 260ms colour
- * tween ([AnimatedPressColor]) and 15sp medium text.
- */
-@Composable
-private fun AvatarPickerRow(text: String, onTap: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
-    val view = LocalView.current
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    // section_card.dart L8-14: the tile fill is transparent unless layered
-    // sheet tiles are on.
-    val base = if (semantic.layered) semantic.surfaceCardFill else Color.Transparent
-    AnimatedPressColor(pressed = pressed, base = base) { color ->
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-                .height(48.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(color)
-                .clickable(
-                    interactionSource = interaction,
-                    indication = null,
+            MemoSheetHandle(trailingGap = 0.dp)
+            // 选项行统一成「更多」sheet 的卡片样式（用户 2026-09-12）：原来这里是
+            // 透明底的行（`sheetTileColor`，只有开了分层磁贴才显底色），看着不像卡片。
+            listOf(
+                stringResource(strings.chooseImage) to onChooseImage,
+                stringResource(strings.chooseEmoji) to onChooseEmoji,
+                stringResource(strings.enterLink) to onEnterLink,
+                stringResource(strings.importQq) to onImportQq,
+                stringResource(strings.reset) to onReset,
+            ).forEach { (label, action) ->
+                MemoSheetOptionRow(
+                    label = label,
+                    selected = false,
                     onClick = {
-                        Haptics.light(view)
-                        onTap()
+                        onDismiss()
+                        action()
                     },
-                ),
-        ) {
-            Text(
-                text = text,
-                maxLines = 1,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = cs.onSurface),
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(horizontal = 12.dp),
-            )
+                )
+            }
         }
     }
 }

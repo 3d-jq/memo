@@ -1856,7 +1856,7 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
     val autoDeleteOptions = listOf(0, 3, 7, 14, 30)
     val maxSizeOptions = listOf(0, 50, 100, 200, 500)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

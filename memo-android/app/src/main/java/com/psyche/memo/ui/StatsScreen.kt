@@ -1131,6 +1131,7 @@ private fun CustomRangeSheet(
     var pickingEnd by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘容器，禁用 Material 默认 handle
         shape = RoundedCornerShape(22.dp),
@@ -1282,6 +1283,7 @@ private fun StatsDatePickerSheet(
     }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
         shape = RoundedCornerShape(22.dp),

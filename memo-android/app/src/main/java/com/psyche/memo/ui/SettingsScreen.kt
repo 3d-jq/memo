@@ -329,7 +329,7 @@ fun SettingsScreen(
 
     // L52-96,159-165 — color mode sheet: system / light / dark.
     if (colorModeSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { colorModeSheetVisible = false }, dragHandle = null) {
+        ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = { colorModeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

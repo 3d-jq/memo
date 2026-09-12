@@ -327,6 +327,7 @@ internal fun QuickPhraseEditSheet(
     var content by remember { mutableStateOf(phrase?.content ?: "") }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

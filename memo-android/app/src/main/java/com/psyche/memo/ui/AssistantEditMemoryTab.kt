@@ -542,6 +542,7 @@ private fun <T> MemoryChoiceSheet(
 ) {
     val cs = MaterialTheme.colorScheme
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

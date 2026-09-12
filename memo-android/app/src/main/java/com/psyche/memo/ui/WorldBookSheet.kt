@@ -69,6 +69,7 @@ fun WorldBookSheet(
     val activeIds = remember(reload, assistantId) { repo.activeIds(assistantId).toSet() }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),

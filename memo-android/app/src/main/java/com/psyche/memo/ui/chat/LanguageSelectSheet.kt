@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -83,6 +84,7 @@ fun LanguageSelectSheet(
 ) {
     val cs = MaterialTheme.colorScheme
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),

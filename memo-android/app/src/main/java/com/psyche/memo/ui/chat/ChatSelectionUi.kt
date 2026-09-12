@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -243,6 +244,7 @@ fun MessageExportSheet(
     val semantic = LocalSemanticColors.current
     val view = LocalView.current
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

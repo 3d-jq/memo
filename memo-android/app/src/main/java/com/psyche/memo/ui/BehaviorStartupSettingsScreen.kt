@@ -416,7 +416,7 @@ fun BehaviorStartupSettingsScreen(
 
     // L1574-1616 —— always / scroll / never 三选弹层。
     if (navModeSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { navModeSheetVisible = false }, dragHandle = null) {
+        ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = { navModeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

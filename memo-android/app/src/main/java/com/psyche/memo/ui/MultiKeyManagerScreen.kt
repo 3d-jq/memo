@@ -369,6 +369,7 @@ fun MultiKeyManagerScreen(
     if (showStrategySheet) {
         val current = cfg.keyManagement?.strategy ?: LoadBalanceStrategy.roundRobin
         ModalBottomSheet(
+            sheetState = rememberMemoSheetState(),
             onDismissRequest = { showStrategySheet = false },
             containerColor = cs.surface,
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -640,6 +641,7 @@ private fun AddKeysSheet(
     val semantic = LocalSemanticColors.current
     var text by remember { mutableStateOf("") }
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -691,6 +693,7 @@ private fun EditKeySheet(
     var keyValue by remember { mutableStateOf(k.key) }
     var priority by remember { mutableStateOf(k.priority.toString()) }
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),

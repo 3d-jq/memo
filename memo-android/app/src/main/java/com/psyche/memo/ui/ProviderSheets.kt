@@ -225,6 +225,7 @@ fun AddProviderSheet(
     }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -433,6 +434,7 @@ fun ShareProviderSheet(
     val copiedMessage = stringResource(com.psyche.memo.ui.R.string.share_provider_sheet_copied_message)
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -588,6 +590,7 @@ fun ProviderGroupPickerSheet(
     var showCreate by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

@@ -71,6 +71,7 @@ fun BottomToolsSheet(
     }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),

@@ -271,7 +271,7 @@ fun ProviderNetworkPage(
     // provider_network_page.dart:235-282 — proxy type is a http/socks5
     // two-option bottom sheet (C12), not a free-text field.
     if (proxyTypeSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { proxyTypeSheetVisible = false }, dragHandle = null) {
+        ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = { proxyTypeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

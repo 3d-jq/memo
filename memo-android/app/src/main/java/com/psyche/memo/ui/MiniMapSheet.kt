@@ -118,7 +118,7 @@ fun MiniMapSheet(
     onJumpToMessage: (String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var needJumpToBottom by remember { mutableStateOf(false) }

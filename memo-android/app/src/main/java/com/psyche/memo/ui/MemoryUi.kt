@@ -465,7 +465,7 @@ internal fun <T> MemoryOptionPickerSheet(
     onSelected: (T) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 12.dp)) {
             MemoSheetHandle()
             Column(Modifier.fillMaxWidth()) {

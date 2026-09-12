@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.rememberMemoSheetState
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -437,6 +438,7 @@ fun CitationSourcesSheet(items: List<CitationSourceItem>, onDismiss: () -> Unit)
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = cs.surface,

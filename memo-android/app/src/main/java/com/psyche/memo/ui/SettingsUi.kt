@@ -29,10 +29,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -212,6 +214,18 @@ internal const val SHEET_OPTION_TAG = "memo-sheet-option"
 internal const val SHEET_OPTION_CHECK_TAG = "memo-sheet-option-check"
 
 /**
+ * 统一的 sheet 状态：**一次展开到内容高度**（`skipPartiallyExpanded = true`）。
+ *
+ * 用户 2026-09-12：「很多 sheet 高度有问题，最后一个选项会被挡一下、拉一下才能看到」
+ * —— M3 的默认状态在内容超过半屏时会先停在半屏（PartiallyExpanded），底部选项被裁掉，
+ * 必须手动上拉。全站 sheet 一律用这个状态。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun rememberMemoSheetState(): SheetState =
+    rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+/**
  * 下拉选项行 —— 「更多」sheet（`BottomToolsSheet`）的卡片样式，用户 2026-09-12
  * 指定为全站选项面板统一样式：`surfaceCard` 底 + r14 + 48dp 高 + 左右 12，
  * 选中 = primary 文字 + 右侧 ✓。列表用 `Arrangement.spacedBy(8.dp)`，**不再用分隔线**。
@@ -275,7 +289,7 @@ internal fun LanguageSheet(
     onSelect: (AppLocale) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

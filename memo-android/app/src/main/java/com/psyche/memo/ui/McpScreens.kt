@@ -353,6 +353,7 @@ private fun McpServerEditSheet(
     )
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -746,6 +747,7 @@ private fun McpJsonEditSheet(
     val savedMessage = stringResource(R.string.mcp_json_edit_saved_applied)
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
@@ -872,6 +874,7 @@ private fun McpTimeoutSheet(container: AppContainerImpl, onDismiss: () -> Unit) 
     val invalid = stringResource(R.string.mcp_timeout_invalid)
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

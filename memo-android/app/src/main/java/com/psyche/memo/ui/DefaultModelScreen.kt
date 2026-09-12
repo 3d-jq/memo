@@ -809,6 +809,7 @@ private fun TaskPromptSheet(
     val saveText = stringResource(UiR.string.default_model_page_save)
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

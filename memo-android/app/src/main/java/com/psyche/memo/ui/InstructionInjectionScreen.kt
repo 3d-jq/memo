@@ -263,6 +263,7 @@ internal fun InstructionEditSheet(
     var prompt by remember { mutableStateOf(item?.prompt ?: "") }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -386,6 +387,7 @@ fun InstructionInjectionSheet(
     }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

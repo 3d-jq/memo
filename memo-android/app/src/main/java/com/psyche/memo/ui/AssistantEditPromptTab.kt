@@ -890,6 +890,7 @@ private fun PresetEditSheet(
         },
     )
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
@@ -1181,6 +1182,7 @@ private fun SystemPromptEditorSheet(
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
         shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),

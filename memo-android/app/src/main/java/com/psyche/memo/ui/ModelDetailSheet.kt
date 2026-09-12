@@ -651,7 +651,7 @@ fun ModelDetailSheet(
         }
     }
 
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = { onDismiss(false) },
         sheetState = sheetState,

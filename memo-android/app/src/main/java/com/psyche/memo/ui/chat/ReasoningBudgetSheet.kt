@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -107,6 +108,7 @@ fun ReasoningBudgetSheet(
     }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),

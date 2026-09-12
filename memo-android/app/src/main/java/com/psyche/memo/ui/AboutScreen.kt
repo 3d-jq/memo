@@ -302,7 +302,7 @@ private fun EasterEggSheet(container: AppContainerImpl, onDismiss: () -> Unit) {
         com.psyche.memo.logging.LogBootstrap.isFlutterLogEnabled(prefs, default = false)
     ) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
             MemoSheetHandle()
             Icon(

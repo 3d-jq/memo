@@ -408,6 +408,7 @@ private fun ModalActionSheet(
 ) {
     val cs = MaterialTheme.colorScheme
     androidx.compose.material3.ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.surface,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),

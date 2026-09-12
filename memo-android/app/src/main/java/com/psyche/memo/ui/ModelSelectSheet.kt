@@ -175,7 +175,7 @@ fun ModelSelectSheet(
     val screenHpx = LocalWindowInfo.current.containerSize.height.toFloat()
     var sheetFraction by remember { mutableFloatStateOf(MODEL_SELECT_INITIAL_FRACTION) }
     var sheetClosing by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val sheetResizeConnection = object : NestedScrollConnection {
         override fun onPostScroll(
             consumed: Offset,

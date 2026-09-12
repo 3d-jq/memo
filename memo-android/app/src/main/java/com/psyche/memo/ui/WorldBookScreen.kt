@@ -581,6 +581,7 @@ private fun EntryActionSheet(
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -661,6 +662,7 @@ internal fun WorldBookEditSheet(
     var enabled by remember { mutableStateOf(book?.enabled ?: true) }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -774,6 +776,7 @@ internal fun WorldBookEntryEditSheet(
     }
 
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
@@ -963,6 +966,7 @@ private fun <T> InjectionPickerSheet(
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
     ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
