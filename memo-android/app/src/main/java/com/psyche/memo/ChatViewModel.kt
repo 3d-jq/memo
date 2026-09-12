@@ -22,6 +22,9 @@ import com.psyche.memo.llm.stream.StreamChunkHandler
 import com.psyche.memo.ui.chat.ToolHandler
 import com.psyche.memo.ui.chat.ToolUiPart
 import com.psyche.memo.ui.chat.TranslateLanguage
+import com.psyche.memo.ui.snackbar.AppNotification
+import com.psyche.memo.ui.snackbar.NotificationType
+import com.psyche.memo.ui.snackbar.SnackbarManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -141,28 +144,33 @@ class ChatViewModel(
     private val injectPresets: Boolean = false
 
     init {
-        // Start with the first configured provider and its default model;
-        // leave both empty when nothing is configured (the top bar then shows
-        // no model subtitle, like kelivo before a model is picked).
-        // First enabled provider wins (providers_page order = DB order);
-        // the previous hardcoded openai/anthropic lookup missed user-added
-        // providers like LongCat.
-        // settings.currentModel（model_display_helper.dart:44-58）——默认模型页
-        // 选的「聊天模型」是新会话的 fallback，优先于"第一个启用的 provider"。
-        val storedSelection = com.psyche.memo.DefaultModelPrefs.parseModelSelection(
-            container.preferenceRepository.readJson("selected_model_v1"),
+        // resolveChatModel（model_display_helper.dart L44-58）—— 「这条会话用哪个
+        // 模型」的唯一链：会话覆盖 → 助手默认 → 全局默认（selected_model_v1）。
+        // 新建会话此时还没有会话行（draft 不落库），助手/全局就是它的模型来源；
+        // 只认全局会把助手配好的模型漏掉、也让"新建对话后模型要重新选"变成常态。
+        val assistant = container.currentAssistant()
+        val assistantSelection = assistant?.chatModelProvider
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { provider ->
+                assistant.chatModelId?.takeIf { it.isNotEmpty() }?.let { provider to it }
+            }
+        val fallbackSelection = com.psyche.memo.DefaultModelPrefs.resolveChatModel(
+            // 会话覆盖优先级最高，在下面异步读库后再应用（此处不重复读）。
+            conversation = null,
+            assistant = assistantSelection,
+            // 偏好值是 JSON 文本（带引号的 `"Zhipu AI::glm-5.3-flash"`）；必须解包
+            // 再 parse，否则引号会混进 provider/model，模型选择器显示"未选中"、
+            // 请求也拿不到 key（init 原先就是漏了这一步）。
+            global = com.psyche.memo.DefaultModelPrefs.parseStoredModelSelection(
+                container.preferenceRepository.readJson("selected_model_v1"),
+            ),
         )
-        if (storedSelection != null) {
-            selectedProviderId.value = storedSelection.first
-            selectedModelId.value = storedSelection.second
+        if (fallbackSelection != null) {
+            selectedProviderId.value = fallbackSelection.first
+            selectedModelId.value = fallbackSelection.second
         }
-        val firstProvider = container.firstEnabledProviderConfig()
-        if (firstProvider != null && selectedModelId.value.isEmpty()) {
-            selectedProviderId.value = firstProvider.id
-            selectedModelId.value = firstProvider.models.firstOrNull()
-                ?: firstProvider.modelOverrides.keys.firstOrNull()
-                ?: ""
-        }
+        // 三层都解析不出模型时**保持为空** —— 与原版一致：不替用户猜 provider，
+        // 发送/重生成时按 `no_model` 提示「请先选择模型」（hasModelOrWarn）。
         if (!isTemporary) {
             // Home page shows the conversation's stored title; matches the
             // "New Chat" default of home_page_controller._createNewConversation.
@@ -176,7 +184,7 @@ class ChatViewModel(
                 }
                 title.value = stored?.title?.trim() ?: ""
                 // resolveChatModel（model_select_sheet.dart:283-303）：会话级
-                // chat_model_* 优先于全局默认——重启后仍保留用户上次的选择。
+                // chat_model_* 优先于助手默认/全局默认——重启后仍保留上次的选择。
                 val provider = stored?.chatModelProvider
                 val model = stored?.chatModelId
                 if (!provider.isNullOrEmpty() && !model.isNullOrEmpty()) {
@@ -348,10 +356,32 @@ class ChatViewModel(
         writeSuggestions(emptyList())
     }
 
+    /**
+     * 原版 `ChatActionResult.noModel()`（chat_actions.dart L1193 send / L1578
+     * regenerate / L1816 continue-after-tool-answer）：会话、助手、全局三层都解析
+     * 不出模型时**不发请求、也不吞草稿**，只提示 `homePagePleaseSelectModel`
+     * （"Please select a model first"）。调用点必须放在各自「改状态」之前
+     * （send 清输入框、regenerate 删后续消息之前）。
+     */
+    private fun hasModelOrWarn(): Boolean {
+        if (selectedProviderId.value.isNotEmpty() && selectedModelId.value.isNotEmpty()) return true
+        val message = MemoApplication.instance
+            ?.getString(com.psyche.memo.ui.R.string.home_page_please_select_model)
+            .orEmpty()
+        SnackbarManager.show(
+            AppNotification(
+                message = message,
+                type = NotificationType.WARNING,
+            ),
+        )
+        return false
+    }
+
     fun send() {
         val text = input.value.trim()
         val pending = _attachments.value
         if ((text.isEmpty() && pending.isEmpty()) || _streaming.value) return
+        if (!hasModelOrWarn()) return
         input.value = ""
         _attachments.value = emptyList()
         clearSuggestions()
@@ -642,10 +672,11 @@ class ChatViewModel(
         }
     }
 
+    /** 偏好值 → 纯文本（值可能是带引号的 JSON 串，也可能是裸串）。 */
     private fun readPrefString(key: String): String? =
-        container.preferenceRepository.readJson(key)
-            ?.let { raw -> runCatching { kotlinx.serialization.json.Json.parseToJsonElement(raw).jsonPrimitive.content }.getOrDefault(raw) }
-            ?.takeIf { it.isNotBlank() }
+        com.psyche.memo.DefaultModelPrefs.decodeStoredString(
+            container.preferenceRepository.readJson(key),
+        )
 
     private fun readBoolPref(key: String): Boolean {
         val raw = container.preferenceRepository.readJson(key) ?: return false
@@ -844,6 +875,7 @@ class ChatViewModel(
         val msgs = _messages.value
         val idx = msgs.indexOfFirst { it.id == userMessageId }
         if (idx < 0) return
+        if (!hasModelOrWarn()) return
         val anchor = msgs[idx]
         clearSuggestions()
         viewModelScope.launch {
@@ -877,7 +909,7 @@ class ChatViewModel(
             val edited = target.copy(parts = newParts)
             _messages.value = msgs.take(idx) + edited
             if (shouldSend && target.role == "user") {
-                startGeneration(edited.toChatMessage())
+                if (hasModelOrWarn()) startGeneration(edited.toChatMessage())
             }
             return true
         }
@@ -908,7 +940,7 @@ class ChatViewModel(
             val visible = _messages.value.firstOrNull {
                 it.groupId == newVersionRow.groupId && it.version == newVersionRow.version
             }
-            if (visible != null) startGeneration(visible.toChatMessage())
+            if (visible != null && hasModelOrWarn()) startGeneration(visible.toChatMessage())
         }
         return true
     }
@@ -1719,6 +1751,7 @@ class ChatViewModel(
      */
     fun resumeAfterToolAnswer(messageId: String, part: ToolUiPart, resultJson: String) {
         if (_streaming.value) return
+        if (!hasModelOrWarn()) return
         val targetUi = _messages.value.firstOrNull { it.id == messageId } ?: return
         val updatedParts = targetUi.parts.map { p ->
             if (p is ToolCallPart) {

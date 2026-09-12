@@ -58,6 +58,91 @@ class DefaultModelPrefsTest {
     }
 
     // ------------------------------------------------------------------
+    // 偏好值是 JSON 文本：写入端 DefaultModelScreen.writeString 用
+    // JsonPrimitive 包了一层（真机库里存的就是 `"Zhipu AI::glm-5.3-flash"`）。
+    // 直接 parse 原始串会把引号吃进 provider（模型选择器显示"未选中"、
+    // 新建对话后模型像是没选），所以存储侧读取必须解包。
+    // ------------------------------------------------------------------
+
+    @Test
+    fun parseStored_quotedValueDecodesWithoutLeakingQuotes() {
+        assertEquals(
+            "Zhipu AI" to "glm-5.3-flash",
+            DefaultModelPrefs.parseStoredModelSelection("\"Zhipu AI::glm-5.3-flash\""),
+        )
+    }
+
+    @Test
+    fun parseStored_bareValueStillAccepted() {
+        // 旧数据/手写值没有 JSON 引号，解包失败时按原样读取。
+        assertEquals(
+            "OpenAI" to "gpt-4o",
+            DefaultModelPrefs.parseStoredModelSelection("OpenAI::gpt-4o"),
+        )
+    }
+
+    @Test
+    fun parseStored_missingOrBlankReturnsNull() {
+        assertNull(DefaultModelPrefs.parseStoredModelSelection(null))
+        assertNull(DefaultModelPrefs.parseStoredModelSelection(""))
+        assertNull(DefaultModelPrefs.parseStoredModelSelection("\"\""))
+        assertNull(DefaultModelPrefs.parseStoredModelSelection("   "))
+    }
+
+    @Test
+    fun decodeStoredString_blankBecomesNull() {
+        assertNull(DefaultModelPrefs.decodeStoredString(null))
+        assertNull(DefaultModelPrefs.decodeStoredString(""))
+        assertNull(DefaultModelPrefs.decodeStoredString("\"" + "  " + "\""))
+        assertEquals("x", DefaultModelPrefs.decodeStoredString("\"x\""))
+        assertEquals("x", DefaultModelPrefs.decodeStoredString("x"))
+    }
+
+    // ------------------------------------------------------------------
+    // resolveChatModel（model_display_helper.dart L44-58）：会话覆盖 →
+    // 助手默认 → 全局默认。新建会话没有会话行，必须落到助手/全局。
+    // ------------------------------------------------------------------
+
+    @Test
+    fun resolveChatModel_conversationWins() {
+        val conversation = "conv-provider" to "conv-model"
+        val assistant = "assistant-provider" to "assistant-model"
+        val global = "global-provider" to "global-model"
+        assertEquals(
+            conversation,
+            DefaultModelPrefs.resolveChatModel(conversation, assistant, global),
+        )
+    }
+
+    @Test
+    fun resolveChatModel_assistantBeatsGlobal() {
+        val assistant = "assistant-provider" to "assistant-model"
+        val global = "global-provider" to "global-model"
+        assertEquals(
+            assistant,
+            DefaultModelPrefs.resolveChatModel(null, assistant, global),
+        )
+    }
+
+    @Test
+    fun resolveChatModel_fallsBackToGlobalThenNull() {
+        val global = "global-provider" to "global-model"
+        assertEquals(global, DefaultModelPrefs.resolveChatModel(null, null, global))
+        assertNull(DefaultModelPrefs.resolveChatModel(null, null, null))
+    }
+
+    @Test
+    fun resolveChatModel_newConversationInheritsAssistantModel() {
+        // 用户实测的 bug：新建对话后模型像是没选（要重选一次）。会话行不存在时
+        // 必须解析出助手的模型，而不是掉到兜底 provider。
+        val assistant = DefaultModelPrefs.parseStoredModelSelection("\"Zhipu AI::glm-5.3-flash\"")
+        assertEquals(
+            "Zhipu AI" to "glm-5.3-flash",
+            DefaultModelPrefs.resolveChatModel(null, assistant, null),
+        )
+    }
+
+    // ------------------------------------------------------------------
     // Prompt normalization — setTitlePrompt semantics.
     // ------------------------------------------------------------------
 

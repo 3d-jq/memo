@@ -156,6 +156,35 @@ Do not interpret or translate—only transcribe and describe what is visually pr
     }
 
     /**
+     * Decodes a preference value: `preference_rows` stores JSON text, so a
+     * `provider::model` selection is the *quoted* string
+     * `"Zhipu AI::glm-5.3-flash"` (DefaultModelScreen.writeString wraps it with
+     * `JsonPrimitive`), while an old/hand-written value can be a bare string.
+     * Both must decode to the plain text — parsing the raw JSON without this
+     * step eats a quote into the provider key, so the model picker finds no
+     * match and the chat sends with an unknown provider.
+     */
+    fun decodeStoredString(raw: String?): String? =
+        raw?.let { text ->
+            runCatching { Json.parseToJsonElement(text).jsonPrimitive.content }.getOrDefault(text)
+        }?.takeIf { it.isNotBlank() }
+
+    /** [parseModelSelection] over a value as stored (JSON-encoded) in prefs. */
+    fun parseStoredModelSelection(raw: String?): Pair<String, String>? =
+        parseModelSelection(decodeStoredString(raw))
+
+    /**
+     * resolveChatModel (model_display_helper.dart L44-58) — the single chain
+     * deciding "the model this chat sends with": the conversation's own
+     * override, else the assistant's model, else the global default.
+     */
+    fun resolveChatModel(
+        conversation: Pair<String, String>?,
+        assistant: Pair<String, String>?,
+        global: Pair<String, String>?,
+    ): Pair<String, String>? = conversation ?: assistant ?: global
+
+    /**
      * setTitlePrompt / setSummaryPrompt / ... semantics: a blank-trimmed
      * input falls back to the default prompt; otherwise the original string
      * (untrimmed) is stored.
