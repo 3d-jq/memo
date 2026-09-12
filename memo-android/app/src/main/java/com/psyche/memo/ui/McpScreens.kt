@@ -56,6 +56,7 @@ import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.Shield
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Timer
 import com.composables.icons.lucide.Trash2
@@ -553,13 +554,40 @@ private fun McpServerEditSheet(
                             value = tool.enabled,
                             onToggle = { tools[index] = tool.copy(enabled = it) },
                         )
-                        SettingsIosDivider()
-                        SettingsSwitchRow(
-                            icon = Lucide.Check,
-                            label = stringResource(R.string.mcp_conversation_sheet_title),
-                            value = tool.needsApproval,
-                            onToggle = { tools[index] = tool.copy(needsApproval = it) },
-                        )
+                        // 审批行（mcp_server_edit_sheet.dart L639-683）：**只在工具启用时**
+                        // 出现，且是工具卡内的紧凑一行（Shield 13dp + 12sp 文案 +
+                        // IosSwitch），文案是 `mcpToolNeedsApproval`（需要审批）——
+                        // 之前这里错绑了 `mcp_conversation_sheet_title`（"MCP服务器"），
+                        // 于是每个工具都多出一行"MCP服务器"，看起来像 MCP 服务被重复列出。
+                        if (tool.enabled) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Lucide.Shield,
+                                    contentDescription = null,
+                                    tint = if (tool.needsApproval) {
+                                        cs.primary
+                                    } else {
+                                        cs.onSurface.copy(alpha = 0.4f)
+                                    },
+                                    modifier = Modifier.size(13.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.mcp_tool_needs_approval),
+                                    style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+                                    modifier = Modifier.weight(1f),
+                                )
+                                IosSwitch(
+                                    value = tool.needsApproval,
+                                    onValueChanged = { tools[index] = tool.copy(needsApproval = it) },
+                                )
+                            }
+                        }
                     }
                 }
             }

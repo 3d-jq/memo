@@ -457,6 +457,20 @@ private fun loadQuickPhrases(container: AppContainerImpl): List<com.psyche.memo.
     return repo.globalPhrases() + if (assistant != null) repo.forAssistant(assistant.id) else emptyList()
 }
 
+/**
+ * 消息头/顶栏用哪个助手（assistant_rows 主键）：会话行绑定的助手优先；**新建会话是
+ * draft**（`ChatViewModel.ensureConversationRow` 要等首条消息落库才写行），行还不存在
+ * 时回落到当前助手 —— 原版 draft 在内存里就带着 `assistantId`，等价于
+ * `currentConversation.assistantId`（chat_message_widget 的 assistant 由
+ * AssistantProvider.currentAssistant 提供）。
+ */
+internal fun headerAssistantId(
+    conversationAssistantId: String?,
+    currentAssistantId: String?,
+): String? =
+    conversationAssistantId?.takeIf { it.isNotEmpty() }
+        ?: currentAssistantId?.takeIf { it.isNotEmpty() }
+
 @Composable
 fun ChatContent(
     container: AppContainerImpl,
@@ -692,25 +706,21 @@ fun ChatContent(
     // ---- 助手名称/头像：与抽屉助手卡一致的数据源（assistant_rows） ----
     // 整行读出来（不只 name）：消息头要按 chat_message_widget.dart:2787-2802
     // 的规则在「助手头像」和「模型图标」之间二选一。
-    var assistantRow by remember { mutableStateOf<com.psyche.memo.data.model.Assistant?>(null) }
-    androidx.compose.runtime.LaunchedEffect(conversationId) {
-        assistantRow = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val aId = runCatching { container.conversationDao.get(conversationId)?.assistantId }
-                .getOrNull()
-            if (aId.isNullOrEmpty()) return@withContext null
-            runCatching {
-                com.psyche.memo.data.db.PayloadEntityDao(
-                    container.database.readableDatabase,
-                    "assistant_rows",
-                    primaryKey = "id",
-                ).get(aId)?.let { row ->
-                    com.psyche.memo.data.model.Assistant.fromJsonString(
-                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
-                        row.payload,
-                    )
-                }
-            }.getOrNull()
-        }
+    //
+    // 会话行绑定的助手优先；**新建会话是 draft**（`ensureConversationRow` 要等首条
+    // 消息落库才写行）→ 行还不存在，此时与原版 `currentConversation.assistantId`
+    // 等价的是「当前助手」。原来写成 `LaunchedEffect(conversationId)` 一次性读，
+    // draft 那一刻读到 null 就再也不会重读 ⇒ 新建对话聊起来后头部一直显示兜底名
+    // （"助手"）+ 模型图标，切出去再进来才正常。
+    val currentAssistantId by container.currentAssistantId.collectAsState()
+    val assistantRow = remember(conversationId, messages.isNotEmpty(), currentAssistantId) {
+        runCatching {
+            val aId = headerAssistantId(
+                conversationAssistantId = container.conversationDao.get(conversationId)?.assistantId,
+                currentAssistantId = currentAssistantId,
+            )
+            aId?.let { container.assistantStore.get(it) }
+        }.getOrNull()
     }
     // settings_provider.dart:1069 —— display_show_model_icon_v1 默认 true。
     // 设置页（ChatItemDisplaySettingsScreen）的 display_* 开关走
@@ -1965,9 +1975,9 @@ private fun MessageRow(
                 // chat_message_widget.dart:2787-2802 —— useAssistantAvatar 优先
                 // （助手头像四态），否则 showModelIcon 时显示该消息的模型品牌
                 // 图标；两者都不显示时头部只有名字。
-                val useAssistantAvatar = assistant?.useAssistantAvatar == true
-                if (useAssistantAvatar && assistant != null) {
-                    AssistantListAvatar(assistant, 32.dp)
+                val headerAssistant = assistant
+                if (headerAssistant != null && headerAssistant.useAssistantAvatar) {
+                    AssistantListAvatar(headerAssistant, 32.dp)
                     Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
                 } else if (showModelIcon) {
                     MessageModelIcon(
