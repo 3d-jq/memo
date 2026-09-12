@@ -102,6 +102,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 
 30. **l10n 键绑错不会编译报错，只会显示"另一个功能的文案"**：MCP 服务编辑 sheet 的工具审批开关错绑 `mcp_conversation_sheet_title`（＝"MCP服务器"），于是**每个启用的工具都多出一行"MCP服务器"**，看起来像 MCP 服务被重复列出（用户实测「这个MCP工具界面会显示好几个MCP服务这个选项」）。正确键是 `mcp_tool_needs_approval`（"需要审批"／"Require approval"），且那一行只在 `tool.enabled` 时才出现（`mcp_server_edit_sheet.dart` L639-683：Shield 13dp + 12sp 文案 + IosSwitch 的卡内紧凑行）。**加行/改行时按 Flutter 里的 `l10n.xxx` 找同名 snake_case 键，别按"意思相近"挑键。**
 
+31. **JSON null 陷阱：kotlinx 的 `JsonNull` 也是 `JsonPrimitive`，`.content` 会给字面量 `"null"`**（2026-09-12 用户实测「换 DeepSeek 输出全是乱的、会输出 null」）：DeepSeek 思考阶段每个 chunk 都是 `{"content":null,"reasoning_content":"…"}`、正文块是 `{"content":"…","reasoning_content":null}`，`ChatCompletionsDecoder.extractDeltaText` 用 `(content as? JsonPrimitive).content` 就把 "null" 当正文追加 —— 正文里夹满 null；`finish_reason: null` 同理会变成字符串 `"null"`。**凡是解析外部 JSON（provider 响应、模型输出的工具参数/记忆 JSON、用户粘贴的配置）取字符串，一律 `contentOrNull`**（对 JsonNull 返回 null；`.toIntOrNull()`/`.toBooleanStrictOrNull()` 那种顺带安全，`content` 不安全）。已全量替换：三个 provider 解码器与非流式客户端、附件 part、`ToolHandler`/`MemoryTools`/`LocalToolExecutors`/`MemorySmartAdd`/`MemoryPipeline`/搜索解析/供应商导入/MCP 导入/ChatViewModel 自定义请求头、`DefaultModelPrefs.decodeStoredString`。锁定测试：`OpenAiClientIntegrationTest.nullContentAndReasoningNeverBecomeTheLiteralNull`（DeepSeek 形状的四段流，正文/思考都不许出现 "null"）+ `JsonNullTrapTest`（钉住 kotlinx 行为本身）。
+
 ## 5. 批次进度（收工更新）
 
 | 批次 | 范围 | 状态 |
