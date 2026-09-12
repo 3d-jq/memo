@@ -51,3 +51,20 @@
 ## 提示词（tip）交互约定（2026-09-09 用户两次纠正后确认）
 - 设置行 tip ≠ 裸副标题。原项目 `_iosSwitchRow`：`subtitle` 裸排（12sp@56%）；`tip` 是 MemoryTipIcon（28dp BadgeInfo 16sp@45%）+ Flutter Tooltip **浮动气泡**（tap 触发、preferBelow、maxWidth 280、点别处收起），M3 对应 `TooltipBox + PlainTooltip` + tap→state.show()（isPersistent=true）。
 - **教训**：交互形态（浮泡/行内展开/跳转）也属 UI/UX 1:1 范围——改 UI 交互前必须先读原项目组件源码（widget 全定义），不许拿代码库已有的简化版（如 MemoryUi.kt 的行内展开）当参考替代原项目。
+
+## lint 任务有缓存：**改动 app 模块后 lint 必须实跑一次**（2026-09-12 血泪）
+- `:app:lintDebug` 只要 app 没改动就命中 UP-TO-DATE，**历史 lint error 会被缓存藏起来**，门禁照样报绿。2026-09-12 我一改 app，lint 立刻重跑并报出 `AssistantEditMemoryTab.kt` 的 `StateFlowValueCalledInComposition`（**是上一批提交带进来的既有 error，不是我这批引入的**）。
+- 判据：门禁/`lintDebug` 变红但报错文件你没碰过 → 先怀疑「缓存刚被我的改动失效」，而不是自己改错了。
+- 现状：`:app:lintDebug` 仍有 **30 warnings + 21 hints**（`LocalClipboardManager` deprecated、`Condition is always 'true'` 等）。门禁只在 lint **error** 时失败，故长期绿灯；用户尚未表态是否清零。
+- 顺手记：Compose 里读 `StateFlow` 一律 `collectAsState().value`（要 smart cast 就别用 `by` 委托，委托属性不能 smart cast）。
+
+## 远端备份（WebDAV/S3）移植要点（2026-09-12 子块 5/6 沉淀）
+- **SigV4 百分号编码必须大写十六进制**；**签名串本身是十六进制小写**。方向相反，搞反了签名能算出来但 S3 回 `SignatureDoesNotMatch`。用 AWS 官方向量锁死（`GET /test.txt` + `Range` @20130524T000000Z → `f0e8b8…6bdb41`）。
+- **签名里的 Host 省略默认端口**（443/80），与客户端实际发出的 Host 一致；`host`/`content-length` 别手动塞 OkHttp 头（重复写 S3 直接拒），但签名里必须有。
+- **XML 解析测试放 app 模块（Robolectric）**：`core:data` 无 Robolectric，纯 JUnit 里 `XmlPullParserFactory.newInstance()` 是 stub（`not mocked`）。惯例＝core:data 放纯逻辑、app 放 Robolectric；跨模块被测 API 得 public。
+- 流式上传签 `UNSIGNED-PAYLOAD`（但带 `content-length`）；缓冲上传签真实 SHA-256；错误文档用 `peekBody`（流式路径不能消费 body），分页 listing 反过来必须读完整 body。
+- 远端配置键（`webdav_config_v1`/`s3_config_v1`）都在 `SettingsKeyRegistry` 的 preference 集合里 → 会进备份；新增配置键后**必须确认这一步**，否则设置不进备份。
+
+## 设备验证纪律：**不许猜坐标点击**（2026-09-10 事故 + 2026-09-12 定规）
+- 早前用 `adb shell input tap` 猜坐标，误开并改动了用户的 Temperature 与「上下文消息数量」（64→101），事后只能导出 DB 手改回。**先 `adb shell uiautomator dump /sdcard/ui.xml`，取 `text="…"` 对应的 `bounds="[x1,y1][x2,y2]"` 再点**，或干脆只装机、让用户自己点（用户 2026-09-12 明确「你装机就行 我来实测」）。
+- 装机后顺手 `dumpsys package com.psyche.memo.dev | grep versionCode` 记版本，方便对齐用户实测的包。
