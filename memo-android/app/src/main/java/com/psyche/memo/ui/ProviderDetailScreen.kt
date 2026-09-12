@@ -59,12 +59,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Check
-import com.composables.icons.lucide.BadgePercent
-import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.Boxes
-import com.composables.icons.lucide.Cloud
-import com.composables.icons.lucide.KeyRound
-import com.composables.icons.lucide.Power
 import com.composables.icons.lucide.Zap
 import com.composables.icons.lucide.CheckCheck
 import com.composables.icons.lucide.ChevronRight
@@ -550,13 +545,11 @@ private fun ConfigTab(
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
             }
             SettingsSwitchRow(
-                icon = Lucide.Power,
                 label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_enabled_title),
                 value = cfg.enabled,
                 onToggle = { onCfgChange(cfg.copy(enabled = it)) },
             )
             SettingsSwitchRow(
-                icon = Lucide.KeyRound,
                 label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_multi_key_mode_title),
                 value = cfg.multiKeyEnabled == true,
                 onToggle = { onCfgChange(cfg.copy(multiKeyEnabled = it)) },
@@ -599,7 +592,6 @@ private fun ConfigTab(
             }
             if (cfg.classifiedKind() == "gemini") {
                     SettingsSwitchRow(
-                    icon = Lucide.Cloud,
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_vertex_ai_title),
                     value = cfg.vertexAI == true,
                     onToggle = { onCfgChange(cfg.copy(vertexAI = it)) },
@@ -609,7 +601,6 @@ private fun ConfigTab(
                     // provider_detail_page L1197-1209 —— AIhubmix 专属：APP-Code 开关 +
                 // 行尾 ⓘ（帮助文案）。
                 SettingsSwitchRow(
-                    icon = Lucide.BadgePercent,
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_aihubmix_app_code_label),
                     tip = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_aihubmix_app_code_help),
                     value = cfg.aihubmixAppCodeEnabled == true,
@@ -618,7 +609,6 @@ private fun ConfigTab(
             }
             if (supportsClaudePromptCaching) {
                     SettingsSwitchRow(
-                    icon = Lucide.Database,
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_claude_prompt_caching_title),
                     tip = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_claude_prompt_caching_help),
                     value = cfg.claudePromptCachingEnabled,
@@ -733,6 +723,8 @@ private fun ConfigTab(
                 label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_api_path_label),
                 chatPath = cfg.chatPath,
                 useResponseApi = cfg.useResponseApi,
+                // 与同屏的 LabeledInput（名称 / API Base Url）同字号同高度。
+                textStyle = MaterialTheme.typography.bodyLarge,
                 onSelect = {
                     onCfgChange(
                         cfg.copy(

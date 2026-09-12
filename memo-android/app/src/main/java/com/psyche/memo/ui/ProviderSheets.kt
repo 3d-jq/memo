@@ -45,7 +45,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -272,9 +274,12 @@ fun AddProviderSheet(
                 when (tab.intValue) {
                     0 -> {
                         SwitchRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_enabled_label), openaiEnabled) { openaiEnabled = it }
+                        // 每个输入块之间 10dp（add_provider_sheet.dart 的 SizedBox(height: 10)）。
                         Spacer(Modifier.height(10.dp))
                         InputRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_name_label), openaiName) { openaiName = it }
+                        Spacer(Modifier.height(10.dp))
                         InputRow("API Key", openaiKey) { openaiKey = it }
+                        Spacer(Modifier.height(10.dp))
                         InputRow("API Base Url", openaiBase) { openaiBase = it }
                         // 「Response API」开关 + 手填路径合并成 combobox（与详情页一致）。
                         Spacer(Modifier.height(10.dp))
@@ -291,11 +296,16 @@ fun AddProviderSheet(
                         Spacer(Modifier.height(10.dp))
                         InputRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_name_label), googleName) { googleName = it }
                         if (!googleVertex) {
+                            Spacer(Modifier.height(10.dp))
                             InputRow("API Key", googleKey) { googleKey = it }
+                            Spacer(Modifier.height(10.dp))
                             InputRow("API Base Url", googleBase) { googleBase = it }
                         } else {
+                            Spacer(Modifier.height(10.dp))
                             InputRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_vertex_ai_location_label), googleLocation) { googleLocation = it }
+                            Spacer(Modifier.height(10.dp))
                             InputRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_vertex_ai_project_id_label), googleProject) { googleProject = it }
+                            Spacer(Modifier.height(10.dp))
                             InputRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_vertex_ai_service_account_json_label), googleSaJson, minLines = 3) { googleSaJson = it }
                         }
                     }
@@ -303,7 +313,9 @@ fun AddProviderSheet(
                         SwitchRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_enabled_label), claudeEnabled) { claudeEnabled = it }
                         Spacer(Modifier.height(10.dp))
                         InputRow(stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_name_label), claudeName) { claudeName = it }
+                        Spacer(Modifier.height(10.dp))
                         InputRow("API Key", claudeKey) { claudeKey = it }
+                        Spacer(Modifier.height(10.dp))
                         InputRow("API Base Url", claudeBase) { claudeBase = it }
                     }
                 }
@@ -417,7 +429,7 @@ internal fun InputRow(
                 focusedBorderColor = cs.primary.copy(alpha = 0.5f),
                 unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag(PROVIDER_INPUT_FIELD_TAG),
         )
     }
 }
@@ -732,20 +744,33 @@ internal fun apiPathOptionFor(chatPath: String?, useResponseApi: Boolean?): ApiP
 internal fun useResponseApiFor(path: String): Boolean? =
     if (path == "/responses") true else null
 
+/** 只读字段外壳的测试标记（锁「与同屏输入框同高」）。 */
+internal const val API_PATH_FIELD_TAG = "apiPathField"
+
+/** 添加页输入框的测试标记（同上，用于比对两者几何一致）。 */
+internal const val PROVIDER_INPUT_FIELD_TAG = "providerInputField"
+
 /**
  * API 路径选择器（**用户 2026-09-12 二次点名**：「把这个 api 路径还原样式吧，
  * 把这个 sheet 改成点击出来那个 combobox 来选择」）：
  *
- * - 外观还原 `provider_detail_page._inputRow` —— 13sp 标签 + r12 圆角字段，
- *   字段里显示当前路径（不是选项名），与原版手填框视觉一致；
+ * - 外观与同屏的「名称 / API Base Url」输入框**完全一致**（用户三次点名：
+ *   「这个api这个输入框大小样式和名称和baseURL这个样式不一样大小了 统一下嘛」）
+ *   —— 直接复用同一个 `OutlinedTextField` 外壳（56dp 高、r12、surfaceCard 底、
+ *   同一组边框色），只把输入关掉（`readOnly`）+ 盖一层透明点击层；
  * - 交互改成**锚定下拉**（点击字段正下方弹出菜单，即「combobox」），不再用
- *   底部 sheet；菜单项是「选项名 + 路径」。
+ *   底部 sheet；菜单项是「选项名 + 路径」，**选中项靠变色表示、不打勾**（用户
+ *   2026-09-12：「这个conbox这个选择变色就是 不打勾 不然里面的内容要换行」）。
+ *
+ * [textStyle] 由调用方传同屏字段的正文样式（详情页 `LabeledInput` = bodyLarge，
+ * 添加页 `InputRow` = bodyMedium），这样字段高度与字号都和邻居一致。
  */
 @Composable
 internal fun ApiPathField(
     label: String,
     chatPath: String?,
     useResponseApi: Boolean?,
+    textStyle: TextStyle = MaterialTheme.typography.bodyMedium,
     onSelect: (ApiPathOption) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -762,30 +787,38 @@ internal fun ApiPathField(
         )
         Spacer(Modifier.height(6.dp))
         Box {
-            Row(
+            OutlinedTextField(
+                value = current.path,
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                textStyle = textStyle,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = semantic.surfaceCard,
+                    unfocusedContainerColor = semantic.surfaceCard,
+                    focusedBorderColor = cs.primary.copy(alpha = 0.5f),
+                    unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
+                ),
+                modifier = Modifier.fillMaxWidth().testTag(API_PATH_FIELD_TAG),
+            )
+            // 箭头画在字段**外面**（不用 `trailingIcon`）：图标槽会把字段撑高到
+            // 68dp，而旁边的名称/baseUrl 是 56dp —— 用户看到的「大小不一样」。
+            Icon(
+                Lucide.ChevronDown,
+                contentDescription = null,
+                tint = cs.onSurface.copy(alpha = 0.6f),
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
-                    .border(0.8.dp, cs.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                    .clickable { expanded = true }
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = current.path,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    Lucide.ChevronDown,
-                    contentDescription = null,
-                    tint = cs.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.size(16.dp),
-                )
-            }
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp)
+                    .size(18.dp),
+            )
+            // 只读字段自己不接点击（只会聚焦），盖一层透明层来开菜单。
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable { expanded = true },
+            )
             androidx.compose.material3.DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
@@ -797,36 +830,37 @@ internal fun ApiPathField(
                 API_PATH_OPTIONS.forEach { option ->
                     val selected = option.path == current.path
                     androidx.compose.material3.DropdownMenuItem(
+                        modifier = Modifier.background(
+                            if (selected) cs.primary.copy(alpha = 0.08f) else Color.Transparent,
+                        ),
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = option.label,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontSize = 14.sp,
                                         color = if (selected) cs.primary else cs.onSurface,
                                     ),
                                 )
-                                Spacer(Modifier.width(16.dp))
+                                Spacer(Modifier.width(10.dp))
                                 Text(
                                     text = option.path,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         fontSize = 13.sp,
-                                        color = cs.onSurface.copy(alpha = 0.55f),
+                                        color = if (selected) {
+                                            cs.primary
+                                        } else {
+                                            cs.onSurface.copy(alpha = 0.55f)
+                                        },
                                     ),
                                 )
                             }
-                        },
-                        trailingIcon = if (selected) {
-                            {
-                                Icon(
-                                    Lucide.Check,
-                                    contentDescription = null,
-                                    tint = cs.primary,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        } else {
-                            null
                         },
                         onClick = {
                             onSelect(option)

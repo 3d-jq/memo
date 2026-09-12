@@ -419,10 +419,14 @@ internal fun RowScope.TipHuggingLabel(
  * BadgeInfo 图标的 Tooltip 浮动气泡（tap 触发、maxWidth 280、点别处收起），
  * 不在行内裸排——用户规范：项目内不统一的原生 subtitle 提示全部收敛为 Tooltip。
  * ⓘ 的位置见 [TipHuggingLabel]（紧跟标签文字，用户 2026-09-12 点名）。
+ *
+ * [icon] 可空：原版 `_iosRow`（provider_detail_page L1350-1390）的每一行都**只有
+ * 标签 + 开关**，没有前置图标 —— 供应商详情页照此传 null（用户 2026-09-12 比对
+ * 原版后点名：「人家这个是否启用和多Key管理 没有图标呀」）。
  */
 @Composable
 fun SettingsSwitchRow(
-    icon: ImageVector,
+    icon: ImageVector? = null,
     label: String,
     tip: String? = null,
     value: Boolean,
@@ -441,15 +445,17 @@ fun SettingsSwitchRow(
             .padding(horizontal = 12.dp, vertical = if (tip == null) 2.dp else 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.width(36.dp)) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = cs.onSurface.copy(alpha = 0.9f),
-                modifier = Modifier.size(20.dp),
-            )
+        if (icon != null) {
+            Box(modifier = Modifier.width(36.dp)) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = cs.onSurface.copy(alpha = 0.9f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
         }
-        Spacer(Modifier.width(12.dp))
         TipHuggingLabel(
             label = label,
             tip = tip,

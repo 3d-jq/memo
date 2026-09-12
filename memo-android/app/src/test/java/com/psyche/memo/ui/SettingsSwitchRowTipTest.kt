@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Sun
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -113,5 +115,30 @@ class SettingsSwitchRowTipTest {
         assertTrue("ⓘ 应紧贴文字，实际间隙 ${icon.left - label.right}", icon.left - label.right < 14.dp)
         // 并且整体靠左：旧排布（标签 Expanded → ⓘ → 开关）会把它推到半屏之外。
         assertTrue("ⓘ 不该被推到行尾", icon.left < (root.right - root.left) * 0.5f)
+    }
+
+    /**
+     * 用户 2026-09-12（供应商详情页）：「人家这个是否启用和多Key管理 没有图标呀」
+     * —— 原版 `_iosRow`（provider_detail_page L1350-1390）只有「标签 + 开关」，
+     * 没有前置图标。传 `icon = null` 时标签必须顶到行左内边距（12dp），不留 36dp
+     * 图标槽；带图标时则要留出那一段。
+     */
+    @Test
+    fun nullIconDropsTheLeadingIconGutter() {
+        compose.setContent {
+            MaterialTheme {
+                Column {
+                    SettingsSwitchRow(label = "无图标", value = false, onToggle = {})
+                    SettingsSwitchRow(icon = Lucide.Sun, label = "有图标", value = false, onToggle = {})
+                }
+            }
+        }
+        val root = compose.onRoot().getUnclippedBoundsInRoot()
+        val without = compose.onNodeWithText("无图标", useUnmergedTree = true).getUnclippedBoundsInRoot()
+        val with = compose.onNodeWithText("有图标", useUnmergedTree = true).getUnclippedBoundsInRoot()
+
+        assertEquals(12.dp, without.left - root.left)
+        // 带图标那行的标签被 36dp 图标位 + 12dp 间隔推到后面。
+        assertEquals(60.dp, with.left - root.left)
     }
 }
