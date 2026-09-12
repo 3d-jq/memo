@@ -34,11 +34,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -54,7 +56,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.annotation.VisibleForTesting
 import com.psyche.memo.ui.theme.LocalSemanticColors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.min
@@ -81,7 +87,8 @@ class AppNotification(
 internal class SnackbarEntry(
     val id: Long,
     val notification: AppNotification,
-    val anim: Animatable<Float, *> = Animatable(0f),
+    /** Set by the manager when the countdown ends; drives the exit fade. */
+    @Volatile var expiring: Boolean = false,
     @Volatile var removed: Boolean = false,
 )
 
@@ -92,29 +99,76 @@ object SnackbarManager {
     /** Mirrors AppSnackBarManager._maxVisible. */
     const val MAX_VISIBLE = 3
 
+    /** Entrance / exit fade durations, matching the original's 300ms controller. */
+    internal const val ENTER_MS = 300L
+    internal const val EXIT_MS = 300L
+
+    /** How many toasts are queued, visible or not (the original's `activeToasts`). */
+    val activeCount: Int get() = entries.size
+
+    /** Queued messages, newest first — the read-only view the original exposes. */
+    val activeMessages: List<String> get() = entries.map { it.notification.message }
+
+    /**
+     * The queue's clock, deliberately outside the composition.
+     *
+     * The original schedules its `Timer` in `AppSnackBarManager.show()`
+     * (`snackbar.dart` L78), so a toast that arrives while three others are on
+     * screen still expires on time. Driving the delay from the item instead
+     * meant only the [MAX_VISIBLE] rendered toasts ever ran it — every other
+     * entry sat in [entries] indefinitely, and then replayed its entrance
+     * animation and full countdown whenever it finally reached the visible
+     * window. That is what made a burst of toasts look stuck.
+     *
+     * Only [delay] runs here: the fades stay in the item, where a
+     * MonotonicFrameClock exists (`Animatable`/`animateFloatAsState` throw
+     * outside the composition).
+     */
+    private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
+
     fun show(notification: AppNotification) {
         val entry = SnackbarEntry(nextId++, notification)
         entries.add(0, entry)
+        scope.launch {
+            delay(notification.durationMs)
+            expire(entry)
+        }
     }
 
-    internal fun dismiss(entry: SnackbarEntry) {
-        if (entry.removed) return
+    /**
+     * Begin the exit: flip [SnackbarEntry.expiring] so a *visible* toast fades
+     * out, then drop the entry once the fade has had its time. Works the same
+     * for an off-screen toast, which simply disappears — it was never seen.
+     */
+    internal fun expire(entry: SnackbarEntry) {
+        if (entry.removed || entry.expiring) return
+        entry.expiring = true
+        scope.launch {
+            delay(EXIT_MS)
+            removeNow(entry)
+        }
+    }
+
+    /** Drops the entry. Idempotent; used by the swipe gesture and by [expire]. */
+    internal fun removeNow(entry: SnackbarEntry) {
         entry.removed = true
+        entries.remove(entry)
+    }
+
+    /**
+     * Empties the queue. Public only for the cross-module Robolectric test that
+     * pins the drain behaviour; production code never calls it.
+     */
+    @VisibleForTesting
+    fun resetForTest() {
+        entries.forEach { it.removed = true }
+        entries.clear()
+        nextId = 0L
     }
 }
 
 @Composable
 fun AppSnackBarOverlay(content: @Composable () -> Unit) {
-    val scope = rememberCoroutineScope()
-
-    fun dismiss(entry: SnackbarEntry) {
-        scope.launch {
-            // Exit: fade/slide back out (reverse of entrance), then remove.
-            entry.anim.animateTo(0f, tween(300, easing = CubicBezierEasing(0.33f, 1f, 0.68f, 1f)))
-            SnackbarManager.entries.remove(entry)
-        }
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         content()
 
@@ -125,19 +179,26 @@ fun AppSnackBarOverlay(content: @Composable () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             contentAlignment = Alignment.TopCenter,
         ) {
-            // Render bottom-most first so the top toast draws last.
+            // Render bottom-most first so the top toast draws last. Each item
+            // carries its entry's id as its composition key: without it the
+            // slots are matched by position, so a dismissal shifts every toast
+            // up one slot and Compose reuses each composable for a different
+            // entry (restarting its state) — the stack visibly scrambled.
             val visible = SnackbarManager.entries.take(SnackbarManager.MAX_VISIBLE)
             for (i in visible.indices.reversed()) {
                 val entry = visible[i]
-                ToastItem(
-                    entry = entry,
-                    isTop = i == 0,
-                    visualIndex = i,
-                    onDismiss = { dismiss(entry) },
-                    // Swiping throws the toast off-screen; fading it out again
-                    // afterwards is what made the gesture feel like it stalled.
-                    onSwipedOut = { SnackbarManager.entries.remove(entry) },
-                )
+                key(entry.id) {
+                    ToastItem(
+                        entry = entry,
+                        isTop = i == 0,
+                        visualIndex = i,
+                        onDismiss = { SnackbarManager.expire(entry) },
+                        // Swiping throws the toast off-screen; fading it out
+                        // again afterwards is what made the gesture feel like
+                        // it stalled.
+                        onSwipedOut = { SnackbarManager.removeNow(entry) },
+                    )
+                }
             }
         }
     }
@@ -156,12 +217,28 @@ private fun ToastItem(
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
 
-    // Entrance + auto-dismiss timer.
-    LaunchedEffect(entry.id) {
-        entry.anim.animateTo(1f, tween(300, easing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)))
-        delay(entry.notification.durationMs)
-        onDismiss()
-    }
+    // Entrance: compose at 0 and let the first frame flip it to 1, so
+    // animateFloatAsState has somewhere to animate *from*. Exit: the manager
+    // flips `expiring` when the countdown ends (no timer here — the countdown
+    // must run whether or not this toast is inside the visible window).
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val fade by animateFloatAsState(
+        targetValue = when {
+            entry.expiring -> 0f
+            entered -> 1f
+            else -> 0f
+        },
+        animationSpec = tween(
+            durationMillis = if (entry.expiring) SnackbarManager.EXIT_MS.toInt() else SnackbarManager.ENTER_MS.toInt(),
+            easing = if (entry.expiring) {
+                CubicBezierEasing(0.33f, 1f, 0.68f, 1f)
+            } else {
+                CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
+            },
+        ),
+        label = "toastFade",
+    )
 
     // Swipe-up offset (negative = up); top toast only.
     // snackbar.dart compares in logical pixels (dp): dismiss when dragged past
@@ -187,7 +264,6 @@ private fun ToastItem(
         if (delta < 0f) dragOffset.floatValue = min(0f, dragOffset.floatValue + delta)
     }
 
-    val fade = entry.anim.value
     val baseOpacity = 1f - (visualIndex * 0.2f)
     val stackOffset = visualIndex * 8f
     // snackbar.dart `Tween(begin: Offset(0,-1), end: Offset.zero)` —— 从上方(-100)落下
