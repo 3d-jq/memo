@@ -62,6 +62,7 @@ import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Shield
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Timer
+import com.composables.icons.lucide.Trash
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import com.psyche.memo.AppContainerImpl
@@ -418,136 +419,122 @@ private fun McpServerEditSheet(
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            // Basic / Tools tabs
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
-                    .padding(4.dp),
-            ) {
-                listOf(
-                    stringResource(R.string.mcp_server_edit_sheet_tab_basic),
-                    stringResource(R.string.mcp_server_edit_sheet_tab_tools),
-                ).forEachIndexed { index, label ->
-                    val selected = tab == index
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .background(if (selected) cs.primary.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(10.dp))
-                            .clickable { tab = index }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = label,
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (selected) cs.primary else cs.onSurface,
-                            ),
-                        )
-                    }
-                }
+            // 原版：tab 条**只在编辑已有服务器**时出现（mcp_server_edit_sheet.dart L465
+            // `if (isEdit) … _SegTabBar`）；新增时只有基础表单（L484）。
+            if (existing != null) {
+                Spacer(Modifier.height(12.dp))
+                EditSegTabBar(
+                    tabs = listOf(
+                        stringResource(R.string.mcp_server_edit_sheet_tab_basic),
+                        stringResource(R.string.mcp_server_edit_sheet_tab_tools),
+                    ),
+                    selected = tab,
+                    onSelect = { tab = it },
+                )
             }
             Spacer(Modifier.height(12.dp))
 
             Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
-                if (tab == 0) {
-                    SettingsSwitchRow(
-                        icon = Lucide.Terminal,
-                        label = stringResource(R.string.mcp_server_edit_sheet_enabled_label),
-                        value = enabled,
-                        onToggle = { enabled = it },
-                    )
-                    SettingsIosDivider()
+                if (existing == null || tab == 0) {
+                    // 基础表单 1:1 `_basicForm`（L185-275）：启用卡 → 名称 → 传输选择条
+                    // →（SSE 提示）→ 服务器地址 → 自定义请求头（每行一张卡 + 添加按钮）。
+                    SettingsSectionCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.mcp_server_edit_sheet_enabled_label),
+                                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium, color = cs.onSurface),
+                                modifier = Modifier.weight(1f),
+                            )
+                            IosSwitch(value = enabled, onValueChanged = { enabled = it })
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
                     McpField(
                         label = stringResource(R.string.mcp_server_edit_sheet_name_label),
                         value = name,
                         onValueChange = { name = it },
+                        hint = "My MCP",
                     )
-                    SettingsIosDivider()
+                    Spacer(Modifier.height(10.dp))
                     Text(
                         text = stringResource(R.string.mcp_server_edit_sheet_transport_label),
-                        style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.8f)),
-                        modifier = Modifier.padding(start = 12.dp, top = 12.dp),
+                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = cs.onSurface),
                     )
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        listOf("http" to "Streamable HTTP", "sse" to "SSE").forEach { (value, label) ->
-                            val selected = transport == value
-                            Text(
-                                text = label,
-                                style = TextStyle(
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = if (selected) cs.primary else cs.onSurface,
-                                ),
-                                modifier = Modifier
-                                    .padding(end = 8.dp)
-                                    .background(
-                                        if (selected) cs.primary.copy(alpha = 0.12f) else semantic.surfaceFill,
-                                        RoundedCornerShape(10.dp),
-                                    )
-                                    .clickable { transport = value }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                            )
-                        }
+                    Spacer(Modifier.height(6.dp))
+                    EditSegTabBar(
+                        tabs = listOf("Streamable HTTP", "SSE"),
+                        selected = if (transport == "http") 0 else 1,
+                        onSelect = { transport = if (it == 0) "http" else "sse" },
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    if (transport == "sse") {
+                        Text(
+                            text = stringResource(R.string.mcp_server_edit_sheet_sse_retry_hint),
+                            style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)),
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
                     }
                     McpField(
                         label = stringResource(R.string.mcp_server_edit_sheet_url_label),
                         value = url,
                         onValueChange = { url = it },
-                        hint = if (transport == "sse") "https://example.com/sse" else "https://example.com/mcp",
+                        hint = if (transport == "sse") "http://localhost:3000/sse" else "http://localhost:3000",
                     )
-                    SettingsIosDivider()
+                    Spacer(Modifier.height(16.dp))
                     Text(
                         text = stringResource(R.string.mcp_server_edit_sheet_custom_headers_title),
-                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.8f)),
-                        modifier = Modifier.padding(start = 12.dp, top = 12.dp),
+                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                     )
+                    Spacer(Modifier.height(8.dp))
                     headers.forEachIndexed { index, (key, value) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                                .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
                         ) {
                             McpField(
                                 label = stringResource(R.string.mcp_server_edit_sheet_header_name_label),
                                 value = key,
                                 onValueChange = { headers[index] = it to headers[index].second },
-                                modifier = Modifier.weight(1f),
+                                hint = stringResource(R.string.mcp_server_edit_sheet_header_name_hint),
                             )
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.height(10.dp))
                             McpField(
                                 label = stringResource(R.string.mcp_server_edit_sheet_header_value_label),
                                 value = value,
                                 onValueChange = { headers[index] = headers[index].first to it },
-                                modifier = Modifier.weight(1f),
+                                hint = stringResource(R.string.mcp_server_edit_sheet_header_value_hint),
                             )
-                            Box(
-                                modifier = Modifier.size(34.dp).clickable { headers.removeAt(index) },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(Lucide.X, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
+                            Box(modifier = Modifier.align(Alignment.End)) {
+                                Box(
+                                    modifier = Modifier.size(34.dp).clickable { headers.removeAt(index) },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Lucide.Trash,
+                                        contentDescription = stringResource(R.string.mcp_server_edit_sheet_remove_header_tooltip),
+                                        tint = cs.error,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
                             }
                         }
+                        Spacer(Modifier.height(10.dp))
                     }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { headers.add("" to "") }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Lucide.Plus, contentDescription = null, tint = cs.primary, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.mcp_server_edit_sheet_add_header),
-                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
-                        )
-                    }
+                    IosTileButton(
+                        label = stringResource(R.string.mcp_server_edit_sheet_add_header),
+                        icon = Lucide.Plus,
+                        backgroundColor = cs.primary,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        onClick = { headers.add("" to "") },
+                    )
                 } else {
                     // 工具卡（mcp_server_edit_sheet.dart L511-690）：原版在工具 tab 里
                     // 没有计数/同步行 —— 同步按钮在 sheet 顶栏右侧，列表就是
@@ -675,10 +662,11 @@ private fun McpServerEditSheet(
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(20.dp))
             IosTileButton(
                 label = stringResource(R.string.mcp_server_edit_sheet_save),
-                icon = Lucide.Check,
+                // 原版：新增用 Plus、编辑用 Check（mcp_server_edit_sheet.dart L705）。
+                icon = if (existing == null) Lucide.Plus else Lucide.Check,
                 backgroundColor = cs.primary,
                 onClick = {
                     val server = currentServer()
@@ -710,7 +698,9 @@ private fun McpField(
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
-    Column(modifier = modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+    // 原版 `_inputRow`（L120-169）本身没有外边距：表单整体由 sheet 的 16dp 内边距与
+    // 调用处的 Spacer 控制；请求头卡内同理（卡自己有 12dp padding）。
+    Column(modifier = modifier) {
         Text(label, style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.8f)))
         Spacer(Modifier.height(6.dp))
         OutlinedTextField(

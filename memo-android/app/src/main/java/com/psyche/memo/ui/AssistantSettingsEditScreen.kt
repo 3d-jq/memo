@@ -403,9 +403,10 @@ fun AssistantDetailSectionScreen(
 }
 
 
-/** _SegTabBar L632-720: 44dp capsule, r18 shell, 4dp inset, 6dp gaps, ≥88dp scrollable segments. */
+/** _SegTabBar L632-720: 44dp capsule, r18 shell, 4dp inset, 6dp gaps, ≥88dp scrollable segments.
+ *  MCP 服务器编辑 sheet 的传输选择条（`_SegChoiceBar`）也是同一套参数，复用这个。 */
 @Composable
-private fun EditSegTabBar(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+internal fun EditSegTabBar(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
     BoxWithConstraints(
