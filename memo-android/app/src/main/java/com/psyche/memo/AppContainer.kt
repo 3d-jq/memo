@@ -413,6 +413,35 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
             }
         }
     }
+
+    /**
+     * Provider-wide sweep — `settings_provider.removeProviderConfig` +
+     * `chatService.clearConversationModelOverrides(providerKey)`
+     * (provider_detail_page.dart L283-299): deleting a provider must drop **every**
+     * reference to it, not only the ids currently listed on it (a conversation can
+     * still pin a model that was already removed from the provider).
+     */
+    fun clearProviderReferences(providerKey: String) {
+        runCatching {
+            val store = assistantStore
+            store.getAll()
+                .filter { it.chatModelProvider == providerKey }
+                .forEach { store.update(it.copy(chatModelProvider = null, chatModelId = null)) }
+        }
+        runCatching {
+            conversationDao.getAll()
+                .filter { it.chatModelProvider == providerKey }
+                .forEach { conversationDao.setChatModel(it.id, null, null) }
+        }
+        runCatching {
+            val pinned = com.psyche.memo.ui.readPinnedModels(this)
+            val kept = pinned.filterNot { entry ->
+                val separator = entry.indexOf("::")
+                separator > 0 && entry.substring(0, separator) == providerKey
+            }.toSet()
+            if (kept.size != pinned.size) com.psyche.memo.ui.writePinnedModels(this, kept)
+        }
+    }
 }
 
 /**
