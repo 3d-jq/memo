@@ -76,6 +76,7 @@ import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.db.PayloadEntityDao
 import com.psyche.memo.data.model.ProviderConfig
+import com.psyche.memo.llm.client.probeStream
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
@@ -122,7 +123,7 @@ fun ProviderDetailScreen(
     var showNetwork by remember { mutableStateOf(false) }
     var showMultiKey by remember { mutableStateOf(false) }
     var showBalance by remember { mutableStateOf(false) }
-    var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var showTest by remember { mutableStateOf(false) }
     // Model selection mode, hoisted so the AppBar can drive it (L208-233).
     var modelSelectMode by remember { mutableStateOf(false) }
     var showShare by remember { mutableStateOf(false) }
@@ -143,10 +144,8 @@ fun ProviderDetailScreen(
     }
     val selectedModels = remember { mutableStateListOf<String>() }
     val deletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_deleted_snackbar)
-    val testOkTemplate = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_test_success_message)
     val shareTooltip = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_share_tooltip)
     val deleteTooltip = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_tooltip)
-    val noModelsMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_no_models_title)
     // 原版 `isUserAdded`（L134-153）：内置供应商不给删。
     val userAdded = providerId !in com.psyche.memo.data.repo.ProviderRepository.BUILTIN_KEYS
 
@@ -200,29 +199,8 @@ fun ProviderDetailScreen(
             if (tabIndex == 0) {
                 IconActionButton(Lucide.HeartPulse, cs.onSurface, testButtonLabel) {
                     Haptics.light(view)
-                    val model = cfg.models.firstOrNull()
-                    if (model == null) {
-                        testResult = false to noModelsMessage
-                    } else {
-                        scope.launch {
-                            val client = container.clientFor(cfg.classifiedKind())
-                            val ok = runCatching {
-                                client.complete(
-                                    com.psyche.memo.llm.client.LlmRequest(
-                                        providerId = cfg.id,
-                                        modelId = model,
-                                        messages = listOf(com.psyche.memo.llm.client.LlmMessage(role = "user", content = "hi")),
-                                        apiKey = cfg.apiKey,
-                                        baseUrl = container.baseUrlFor(cfg.id),
-                                        chatPath = cfg.chatPath,
-                                        useResponseApi = cfg.useResponseApi == true,
-                                    ),
-                                )
-                            }
-                            testResult = if (ok.isSuccess) true to model
-                            else false to (ok.exceptionOrNull()?.message ?: "error")
-                        }
-                    }
+                    // provider_detail_page L3328-3337 `_openTestDialog`。
+                    showTest = true
                 }
             } else {
                 // Multi-select entry: CheckCheck to enter, X to leave
@@ -370,16 +348,13 @@ fun ProviderDetailScreen(
         )
     }
 
-    testResult?.let { (ok, detail) ->
-        LaunchedEffect(ok, detail) {
-            SnackbarManager.show(
-                AppNotification(
-                    message = if (ok) testOkTemplate + " ($detail)" else detail,
-                    type = if (ok) NotificationType.SUCCESS else NotificationType.ERROR,
-                ),
-            )
-            testResult = null
-        }
+    // ---- 测试连接对话框（provider_detail_page L3328-3337 + L4200-4516）----
+    if (showTest) {
+        ConnectionTestDialog(
+            cfg = cfg,
+            container = container,
+            onDismiss = { showTest = false },
+        )
     }
 
     // ---- #11 sub-pages ----
@@ -1022,7 +997,9 @@ private fun ModelsTab(
     val scope = rememberCoroutineScope()
     var showCreate by remember { mutableStateOf(false) }
     var detailModel by remember { mutableStateOf<String?>(null) }
-    var fetching by remember { mutableStateOf(false) }
+    var showFetch by remember { mutableStateOf(false) }
+    // 批量检测是否要求流式（provider_detail_page `_detectUseStream`）。
+    var detectUseStream by remember { mutableStateOf(false) }
     // Connection-check state per model id (_detectionResults / _pendingModels /
     // _currentDetectingModel collapsed into one map).
     val checks = remember { mutableStateMapOf<String, ModelCheckResult>() }
@@ -1136,13 +1113,13 @@ private fun ModelsTab(
         Spacer(Modifier.height(12.dp))
         ModelActionToolbar(
             selectMode = selectMode,
-            fetching = fetching,
             detecting = detecting,
+            detectUseStream = detectUseStream,
             hasModels = models.isNotEmpty(),
             allSelected = selected.size == models.size && models.isNotEmpty(),
             selectionCount = selected.size,
             hasFailed = models.any { checks[it]?.state == ModelCheckState.FAILURE },
-            onFetch = { fetching = true },
+            onFetch = { showFetch = true },
             onAddNew = { showCreate = true },
             onDeleteAll = { deleteAllConfirm = true },
             onToggleSelectAll = {
@@ -1154,6 +1131,10 @@ private fun ModelsTab(
                     selected.addAll(models)
                 }
             },
+            onToggleUseStream = {
+                Haptics.light(view)
+                detectUseStream = !detectUseStream
+            },
             onDetect = {
                 scope.launch {
                     detecting = true
@@ -1163,7 +1144,7 @@ private fun ModelsTab(
                     // Serial, 500ms apart (_startDetection L3216-3274).
                     targets.forEach { id ->
                         checks[id] = ModelCheckResult(ModelCheckState.RUNNING)
-                        val (ok, message) = runConnectionCheck(container, cfg, id)
+                        val (ok, message) = runConnectionCheck(container, cfg, id, detectUseStream)
                         checks[id] = if (ok) {
                             ModelCheckResult(ModelCheckState.SUCCESS)
                         } else {
@@ -1184,17 +1165,14 @@ private fun ModelsTab(
         )
     }
 
-    // ---- Fetch executes against the provider's /models endpoint (core:llm). ----
-    LaunchedEffect(fetching) {
-        if (!fetching) return@LaunchedEffect
-        val client = container.clientFor(cfg.classifiedKind())
-        val fetched = runCatching {
-            client.listModels(container.baseUrlFor(cfg.id), cfg.apiKey)
-        }.getOrNull()
-        val ids = fetched?.map { it.id }.orEmpty()
-        val merged = (models + ids.filter { it !in models }).distinct()
-        if (merged.size > models.size) saveModels(merged)
-        fetching = false
+    // ---- 从服务器获取模型：选择面板（provider_detail_page L3341-4019）----
+    if (showFetch) {
+        FetchModelsSheet(
+            cfg = cfg,
+            container = container,
+            onCfgChange = { onCfgChange(it) },
+            onDismiss = { showFetch = false },
+        )
     }
 
     if (showCreate) {
@@ -1278,25 +1256,35 @@ internal fun applyModelMove(models: List<String>, from: Int, to: Int): List<Stri
     return models.toMutableList().apply { add(to, removeAt(from)) }
 }
 
-/** Runs one non-streaming probe against a single model. Returns ok to message. */
-private suspend fun runConnectionCheck(
+/**
+ * 单个模型的连接自检，返回 (是否成功, 文案)。
+ *
+ * [useStream] 对应原版 `ProviderManager.testConnection(useStream:)`
+ * （model_provider.dart L424-664）：非流式走一次普通请求；流式走
+ * [com.psyche.memo.llm.client.probeStream]，要求服务端真的回 SSE。
+ */
+internal suspend fun runConnectionCheck(
     container: AppContainerImpl,
     cfg: ProviderConfig,
     modelId: String,
+    useStream: Boolean = false,
 ): Pair<Boolean, String> {
     val client = container.clientFor(cfg.classifiedKind())
+    val request = com.psyche.memo.llm.client.LlmRequest(
+        providerId = cfg.id,
+        modelId = modelId,
+        messages = listOf(com.psyche.memo.llm.client.LlmMessage(role = "user", content = "hi")),
+        apiKey = cfg.apiKey,
+        baseUrl = container.baseUrlFor(cfg.id),
+        chatPath = cfg.chatPath,
+        useResponseApi = cfg.useResponseApi == true,
+    )
     val result = runCatching {
-        client.complete(
-            com.psyche.memo.llm.client.LlmRequest(
-                providerId = cfg.id,
-                modelId = modelId,
-                messages = listOf(com.psyche.memo.llm.client.LlmMessage(role = "user", content = "hi")),
-                apiKey = cfg.apiKey,
-                baseUrl = container.baseUrlFor(cfg.id),
-                chatPath = cfg.chatPath,
-                useResponseApi = cfg.useResponseApi == true,
-            ),
-        )
+        if (useStream) {
+            if (!client.probeStream(request)) error("no stream data")
+        } else {
+            client.complete(request)
+        }
     }
     return if (result.isSuccess) true to modelId else false to (result.exceptionOrNull()?.message ?: "error")
 }

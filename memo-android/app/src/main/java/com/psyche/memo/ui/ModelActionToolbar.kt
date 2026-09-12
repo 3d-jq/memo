@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.AudioWaveform
 import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.CheckCheck
 import com.composables.icons.lucide.CircleX
@@ -35,6 +36,7 @@ import com.composables.icons.lucide.HeartPulse
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Square
+import com.composables.icons.lucide.SquareEqual
 import com.composables.icons.lucide.Trash2
 import com.psyche.memo.ui.theme.LocalSemanticColors
 
@@ -53,8 +55,8 @@ import com.psyche.memo.ui.theme.LocalSemanticColors
 @Composable
 internal fun ModelActionToolbar(
     selectMode: Boolean,
-    fetching: Boolean,
     detecting: Boolean,
+    detectUseStream: Boolean,
     hasModels: Boolean,
     allSelected: Boolean,
     selectionCount: Int,
@@ -63,6 +65,7 @@ internal fun ModelActionToolbar(
     onAddNew: () -> Unit,
     onDeleteAll: () -> Unit,
     onToggleSelectAll: () -> Unit,
+    onToggleUseStream: () -> Unit,
     onDetect: () -> Unit,
     onDeleteFailed: () -> Unit,
     onDeleteSelected: () -> Unit,
@@ -92,8 +95,6 @@ internal fun ModelActionToolbar(
                     icon = Lucide.Boxes,
                     showLabel = !compact,
                     compact = compact,
-                    loading = fetching,
-                    enabled = !fetching,
                     onClick = onFetch,
                 )
                 Spacer(Modifier.width(itemGap))
@@ -128,9 +129,16 @@ internal fun ModelActionToolbar(
                     onClick = onToggleSelectAll,
                 )
                 Spacer(Modifier.width(itemGap))
-                // Streaming toggle lives here in Flutter; the model detail
-                // sheet owns it in this port, so the row keeps the gap and
-                // moves straight to detection.
+                // 「使用流式」批量开关（L2745-2749 + `_buildSelectionToolbarStreamButton`，
+                // L2786+）：不选中态、图标在 AudioWaveform/SquareEqual 之间切换，
+                // 决定批量检测是否要求 SSE（`_detectUseStream` → testConnection(useStream:)）。
+                StreamingToggleButton(
+                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_use_streaming_label),
+                    enabled = !detecting,
+                    useStream = detectUseStream,
+                    onClick = onToggleUseStream,
+                )
+                Spacer(Modifier.width(itemGap))
                 ToolbarButton(
                     label = stringResource(
                         if (detecting) com.psyche.memo.ui.R.string.provider_detail_page_batch_detecting
@@ -166,6 +174,40 @@ internal fun ModelActionToolbar(
                 )
             }
         }
+    }
+}
+
+/**
+ * 批量检测的「使用流式」开关（`_buildSelectionToolbarStreamButton`）：44dp 圆形
+ * 描边按钮，选中态自带 8% onSurface 底；图标在 AudioWaveform（流式）/ SquareEqual
+ * （非流式）之间切换，长度 160ms（原版 AnimatedSwitcher + ScaleTransition）。
+ */
+@Composable
+private fun StreamingToggleButton(
+    label: String,
+    enabled: Boolean,
+    useStream: Boolean,
+    onClick: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .background(
+                if (useStream) cs.onSurface.copy(alpha = 0.08f) else Color.Transparent,
+                RoundedCornerShape(999.dp),
+            )
+            .border(0.5.dp, cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = if (useStream) Lucide.AudioWaveform else Lucide.SquareEqual,
+            contentDescription = label,
+            tint = cs.onSurface,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
