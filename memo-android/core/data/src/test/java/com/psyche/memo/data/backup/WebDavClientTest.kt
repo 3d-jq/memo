@@ -4,6 +4,7 @@ import okhttp3.OkHttpClient
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -62,5 +63,28 @@ class WebDavClientTest {
         val raw = WebDavConfig(url = "u").toJson()
         val parsed = WebDavConfig.fromJson(Json.parseToJsonElement(raw.toString()).jsonObject)
         assertEquals(WebDavConfig.DEFAULT_PATH, parsed.path)
+    }
+
+    @Test
+    fun `content switches round-trip and default to on`() {
+        // The Backup-page toggles write these; a config stored before they
+        // existed must still read back as "include everything".
+        val defaults = WebDavConfig.fromJson(
+            Json.parseToJsonElement(WebDavConfig(url = "u").toJson().toString()).jsonObject,
+        )
+        assertTrue(defaults.includeChats)
+        assertTrue(defaults.includeFiles)
+
+        val off = WebDavConfig(url = "u", includeChats = false, includeFiles = false)
+        val parsed = WebDavConfig.fromJson(
+            Json.parseToJsonElement(off.toJson().toString()).jsonObject,
+        )
+        assertFalse(parsed.includeChats)
+        assertFalse(parsed.includeFiles)
+
+        // A legacy payload without the two keys keeps the on defaults.
+        val legacy = Json.parseToJsonElement("""{"url":"u","path":"p"}""").jsonObject
+        assertTrue(WebDavConfig.fromJson(legacy).includeChats)
+        assertTrue(WebDavConfig.fromJson(legacy).includeFiles)
     }
 }

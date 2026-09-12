@@ -95,6 +95,7 @@ fun BackupScreen(
     onBack: () -> Unit,
     onOpenLocalSnapshots: () -> Unit,
     onOpenWebDavSettings: () -> Unit = {},
+    onOpenS3Settings: () -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -102,9 +103,32 @@ fun BackupScreen(
     val runner = rememberBackupTaskRunner()
 
     // "Chats" / "Files" switches (backup_page.dart L307 / L323). They select
-    // what an export contains, exactly like the original pair of switches.
-    var includeChats by remember { mutableStateOf(true) }
-    var includeFiles by remember { mutableStateOf(true) }
+    // what an export contains; the original's callback writes BOTH the WebDAV
+    // and the S3 config, because the two remote targets each carry their own
+    // copy of the pair.
+    val initialRemoteConfig = remember { container.backupService.webDavConfig() }
+    var includeChats by remember { mutableStateOf(initialRemoteConfig.includeChats) }
+    var includeFiles by remember { mutableStateOf(initialRemoteConfig.includeFiles) }
+
+    fun setIncludeChats(value: Boolean) {
+        includeChats = value
+        container.backupService.saveWebDavConfig(
+            container.backupService.webDavConfig().copy(includeChats = value),
+        )
+        container.backupService.saveS3Config(
+            container.backupService.s3Config().copy(includeChats = value),
+        )
+    }
+
+    fun setIncludeFiles(value: Boolean) {
+        includeFiles = value
+        container.backupService.saveWebDavConfig(
+            container.backupService.webDavConfig().copy(includeFiles = value),
+        )
+        container.backupService.saveS3Config(
+            container.backupService.s3Config().copy(includeFiles = value),
+        )
+    }
 
     // Values only a @Composable can resolve, captured so the SAF callbacks
     // (plain lambdas) can still produce localized messages.
@@ -122,13 +146,22 @@ fun BackupScreen(
     var restartReport by remember { mutableStateOf<RestoreReportUi?>(null) }
 
     // ── WebDAV (sub-block 5) ──────────────────────────────────────────────
-    val webDavTitle = backupTaskLabels(UiR.string.backup_page_backup_now)
+    val backupNowTitle = backupTaskLabels(UiR.string.backup_page_backup_now)
     val restoreTitle = backupTaskLabels(UiR.string.backup_page_restore)
     var webDavItems by remember { mutableStateOf<List<com.psyche.memo.data.backup.WebDavFileItem>>(emptyList()) }
     var showWebDavSheet by remember { mutableStateOf(false) }
     var webDavRestoreTarget by remember { mutableStateOf<com.psyche.memo.data.backup.WebDavFileItem?>(null) }
     var showWebDavModeDialog by remember { mutableStateOf(false) }
     var showWebDavDeleteConfirm by remember { mutableStateOf<com.psyche.memo.data.backup.WebDavFileItem?>(null) }
+
+    // ── S3 (sub-block 6) ──────────────────────────────────────────────────
+    var s3Items by remember {
+        mutableStateOf<List<com.psyche.memo.data.backup.S3FileItem>>(emptyList())
+    }
+    var showS3Sheet by remember { mutableStateOf(false) }
+    var s3RestoreTarget by remember { mutableStateOf<com.psyche.memo.data.backup.S3FileItem?>(null) }
+    var showS3ModeDialog by remember { mutableStateOf(false) }
+    var s3DeleteConfirm by remember { mutableStateOf<com.psyche.memo.data.backup.S3FileItem?>(null) }
 
     fun toast(message: String, type: NotificationType) {
         SnackbarManager.show(AppNotification(message, type))
@@ -296,7 +329,7 @@ fun runWebDavRestore(item: com.psyche.memo.data.backup.WebDavFileItem, mode: Res
 fun runWebDavBackupNow() {
     scope.launch {
         val ok = runner.run(
-            labels = webDavTitle,
+            labels = backupNowTitle,
             errorMessage = { it.message ?: it.toString() },
         ) { progress, isCancelled ->
             container.backupService.backupToWebDav(
@@ -338,6 +371,93 @@ fun deleteWebDavItem(item: com.psyche.memo.data.backup.WebDavFileItem) {
     }
 }
 
+// ── 6. S3 备份 (S3 Backup) — 4 nav rows, sub-block 6 ──
+// 服务器设置 / 测试连接 / 恢复（远端列表 sheet → 模式 → 恢复）/ 立即备份，
+// 对齐 backup_page.dart 的 S3 分区（L802-1240）。配置存在 `s3_config_v1`，
+// 每次操作前重新读取，这样从设置子页返回后立即生效。
+fun currentS3Config() = container.backupService.s3Config()
+fun runS3Test() {
+    scope.launch {
+        runCatching {
+            withContext(Dispatchers.IO) { container.backupService.testS3(currentS3Config()) }
+        }.onSuccess {
+            toast(testDone, NotificationType.SUCCESS)
+        }.onFailure {
+            toast(it.message ?: it.toString(), NotificationType.ERROR)
+        }
+    }
+}
+fun runS3List() {
+    scope.launch {
+        val ok = runner.run(
+            labels = restoreTitle,
+            errorMessage = { it.message ?: it.toString() },
+        ) { progress, _ ->
+            s3Items = container.backupService.listS3(
+                currentS3Config(),
+                onProgress = { progress(it) },
+            )
+        }
+        if (ok) showS3Sheet = true
+    }
+}
+fun runS3BackupNow() {
+    scope.launch {
+        val ok = runner.run(
+            labels = backupNowTitle,
+            errorMessage = { it.message ?: it.toString() },
+        ) { progress, isCancelled ->
+            container.backupService.backupToS3(
+                config = currentS3Config(),
+                onProgress = { progress(it) },
+                isCancelled = isCancelled,
+            )
+        }
+        if (!ok) return@launch
+        container.backupReminder.recordBackupCompleted()
+        toast(backupUploaded, NotificationType.INFO)
+    }
+}
+fun runS3Restore(item: com.psyche.memo.data.backup.S3FileItem, mode: RestoreMode) {
+    scope.launch {
+        var report: com.psyche.memo.data.backup.RestoreReportView? = null
+        val ok = runner.run(
+            labels = restoreTitle,
+            errorMessage = { restoreFailedPrefix.format(it.message ?: it.toString()) },
+        ) { progress, isCancelled ->
+            report = container.backupService.restoreFromS3(
+                config = currentS3Config(),
+                item = item,
+                mode = mode,
+                onProgress = { progress(it) },
+                isCancelled = isCancelled,
+            )
+        }
+        val done = report
+        if (ok && done != null) {
+            restartReport = RestoreReportUi(
+                skippedConversations = done.skippedConversations,
+                details = reportDetails(done),
+            )
+        }
+    }
+}
+fun deleteS3Item(item: com.psyche.memo.data.backup.S3FileItem) {
+    scope.launch {
+        runCatching {
+            withContext(Dispatchers.IO) {
+                container.backupService.deleteS3Item(currentS3Config(), item)
+            }
+        }
+        // 删完刷新列表（与 WebDAV 的 `_deleteAndReload` 同语义）。
+        runCatching {
+            withContext(Dispatchers.IO) {
+                s3Items = container.backupService.listS3(currentS3Config())
+            }
+        }
+    }
+}
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -359,14 +479,14 @@ fun deleteWebDavItem(item: com.psyche.memo.data.backup.WebDavFileItem) {
                     Lucide.MessageSquare,
                     stringResource(UiR.string.backup_page_chats_label),
                     value = includeChats,
-                    onChange = { includeChats = it },
+                    onChange = { setIncludeChats(it) },
                 )
                 BackupDivider()
                 BackupSwitchRow(
                     Lucide.FileText,
                     stringResource(UiR.string.backup_page_files_label),
                     value = includeFiles,
-                    onChange = { includeFiles = it },
+                    onChange = { setIncludeFiles(it) },
                 )
             }
 
@@ -568,24 +688,34 @@ fun deleteWebDavItem(item: com.psyche.memo.data.backup.WebDavFileItem) {
             }
 
             Spacer(Modifier.height(18.dp))
-            // ── 6. S3 备份 (S3 Backup) — 3 nav rows (sub-block 6) ────────
+            // ── 6. S3 备份 (S3 Backup) — 4 nav rows (sub-block 6) ────────
             BackupSection(title = stringResource(UiR.string.backup_page_s3_backup)) {
                 BackupPlaceholderRow(
                     Lucide.Settings,
                     stringResource(UiR.string.backup_page_s3_server_settings),
                     "",
+                    onTap = onOpenS3Settings,
                 )
                 BackupDivider()
                 BackupPlaceholderRow(
                     Lucide.Cable,
                     stringResource(UiR.string.backup_page_test_connection),
                     "",
+                    onTap = { runS3Test() },
                 )
                 BackupDivider()
                 BackupPlaceholderRow(
                     Lucide.Import,
                     stringResource(UiR.string.backup_page_restore),
                     "",
+                    onTap = { runS3List() },
+                )
+                BackupDivider()
+                BackupPlaceholderRow(
+                    Lucide.Upload,
+                    stringResource(UiR.string.backup_page_backup_now),
+                    "",
+                    onTap = { runS3BackupNow() },
                 )
             }
         }
@@ -622,8 +752,11 @@ fun deleteWebDavItem(item: com.psyche.memo.data.backup.WebDavFileItem) {
 
     // ── WebDAV sheets/dialogs（远端列表 → 模式 → 恢复 / 删除确认）─────────
     if (showWebDavSheet) {
-        com.psyche.memo.ui.backup.WebDavRemoteListSheet(
+        com.psyche.memo.ui.backup.RemoteBackupListSheet(
             items = webDavItems,
+            rowOf = {
+                com.psyche.memo.ui.backup.RemoteBackupRow(it.displayName, it.size)
+            },
             onRestore = { item ->
                 showWebDavSheet = false
                 webDavRestoreTarget = item
@@ -637,7 +770,6 @@ fun deleteWebDavItem(item: com.psyche.memo.data.backup.WebDavFileItem) {
         )
     }
     if (showWebDavModeDialog) {
-        val target = webDavRestoreTarget
         BackupImportModeDialog(
             onSelect = { mode ->
                 showWebDavModeDialog = false
@@ -676,6 +808,73 @@ fun deleteWebDavItem(item: com.psyche.memo.data.backup.WebDavFileItem) {
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { showWebDavDeleteConfirm = null }) {
+                    Text(
+                        stringResource(UiR.string.backup_page_cancel),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f),
+                    )
+                }
+            },
+        )
+    }
+
+    // ── S3 sheets/dialogs（远端列表 → 模式 → 恢复 / 删除确认）─────────────
+    if (showS3Sheet) {
+        com.psyche.memo.ui.backup.RemoteBackupListSheet(
+            items = s3Items,
+            rowOf = {
+                com.psyche.memo.ui.backup.RemoteBackupRow(it.displayName, it.size)
+            },
+            onRestore = { item ->
+                showS3Sheet = false
+                s3RestoreTarget = item
+                showS3ModeDialog = true
+            },
+            onDelete = { item ->
+                showS3Sheet = false
+                s3DeleteConfirm = item
+            },
+            onDismiss = { showS3Sheet = false },
+        )
+    }
+    if (showS3ModeDialog) {
+        BackupImportModeDialog(
+            onSelect = { mode ->
+                showS3ModeDialog = false
+                val item = s3RestoreTarget
+                s3RestoreTarget = null
+                if (item != null) runS3Restore(item, mode)
+            },
+            onDismiss = {
+                showS3ModeDialog = false
+                s3RestoreTarget = null
+            },
+        )
+    }
+    s3DeleteConfirm?.let { item ->
+        val deleteLabel = stringResource(UiR.string.backup_page_delete_tooltip)
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { s3DeleteConfirm = null },
+            title = { Text(stringResource(UiR.string.backup_page_delete_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        UiR.string.backup_page_delete_confirm_content,
+                        item.displayName,
+                    ),
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        s3DeleteConfirm = null
+                        deleteS3Item(item)
+                    },
+                ) {
+                    Text(deleteLabel, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { s3DeleteConfirm = null }) {
                     Text(
                         stringResource(UiR.string.backup_page_cancel),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f),

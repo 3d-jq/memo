@@ -198,8 +198,8 @@ class MemoBackupService(
         isCancelled: () -> Boolean = { false },
     ) {
         val archive = exportToCache(
-            includeChats = true,
-            includeFiles = true,
+            includeChats = config.includeChats,
+            includeFiles = config.includeFiles,
             onProgress = onProgress,
             isCancelled = isCancelled,
         )
@@ -243,39 +243,145 @@ class MemoBackupService(
             client(config).download(item, staged) { processed, total ->
                 bridge.report(BackupPhase.wireOf(BackupPhase.DOWNLOADING), processed, total)
             }
-            val report = try {
-                restorer.restore(
-                    archive = staged,
-                    mode = mode,
-                    onProgress = { phase, processed, total -> bridge.report(phase, processed, total) },
-                    isCancelled = isCancelled,
-                )
-            } catch (cancelled: IllegalStateException) {
-                if (cancelled.message == CANCELLED_MESSAGE) throw BackupCancelledException()
-                throw cancelled
-            }
-            return RestoreReportView(
-                mode = report.mode,
-                entityRowsWritten = report.entityRowsWritten,
-                preferenceKeysWritten = report.preferenceKeysWritten,
-                databaseRestored = report.databaseRestored,
-                assetFilesRestored = report.assetFilesRestored,
-                skippedEntries = report.skippedEntries,
-                extractedEntries = report.extractedEntries,
-                mergedConversations = report.mergeReport?.importedConversations ?: 0,
-                deduplicatedConversations = report.mergeReport?.deduplicatedConversations ?: 0,
-            )
+            return restoreStaged(restorer, staged, mode, bridge, isCancelled)
         } finally {
             runCatching { staged.delete() }
         }
     }
 
+    /**
+     * Shared restore tail for the remote sources: run [restorer] over the
+     * already-downloaded archive and project the internal report onto the
+     * public view the UI consumes.
+     */
+    private fun restoreStaged(
+        restorer: BackupRestorer,
+        staged: File,
+        mode: RestoreMode,
+        bridge: ProgressBridge,
+        isCancelled: () -> Boolean,
+    ): RestoreReportView {
+        val report = try {
+            restorer.restore(
+                archive = staged,
+                mode = mode,
+                onProgress = { phase, processed, total -> bridge.report(phase, processed, total) },
+                isCancelled = isCancelled,
+            )
+        } catch (cancelled: IllegalStateException) {
+            if (cancelled.message == CANCELLED_MESSAGE) throw BackupCancelledException()
+            throw cancelled
+        }
+        return RestoreReportView(
+            mode = report.mode,
+            entityRowsWritten = report.entityRowsWritten,
+            preferenceKeysWritten = report.preferenceKeysWritten,
+            databaseRestored = report.databaseRestored,
+            assetFilesRestored = report.assetFilesRestored,
+            skippedEntries = report.skippedEntries,
+            extractedEntries = report.extractedEntries,
+            mergedConversations = report.mergeReport?.importedConversations ?: 0,
+            deduplicatedConversations = report.mergeReport?.deduplicatedConversations ?: 0,
+        )
+    }
+
     /** `deleteWebDavBackupFile`. */
     fun deleteWebDavItem(config: WebDavConfig, item: WebDavFileItem) = client(config).delete(item)
+
+    // ── S3（backup 子块 6）────────────────────────────────────────────────────
+
+    private fun client(config: S3Config): S3Client =
+        S3Client(httpClient ?: OkHttpClient(), config)
+
+    /** `s3_config_v1` — the whole config as one preference row. */
+    fun s3Config(): S3Config = S3Config.fromJsonString(
+        preferenceRepository.readJson(KEY_S3_CONFIG),
+    )
+
+    fun saveS3Config(config: S3Config) {
+        preferenceRepository.writeJson(KEY_S3_CONFIG, config.toJson().toString())
+    }
+
+    /** `S3BackupProvider.test`. */
+    fun testS3(config: S3Config) = client(config).test()
+
+    /** `S3BackupProvider.listRemote` with the listing phase reported. */
+    fun listS3(
+        config: S3Config,
+        onProgress: BackupProgressSink? = null,
+    ): List<S3FileItem> {
+        ProgressBridge(onProgress).report(BackupPhase.wireOf(BackupPhase.LISTING_REMOTE), 0, -1)
+        return client(config).list()
+    }
+
+    /**
+     * `S3BackupProvider.backup` — export → streamed PUT → drop the local
+     * archive. `includeChats`/`includeFiles` come from the S3 config, because
+     * the S3 section carries its own two switches (the WebDAV section has no
+     * equivalent and always exports both).
+     */
+    fun backupToS3(
+        config: S3Config,
+        onProgress: BackupProgressSink? = null,
+        isCancelled: () -> Boolean = { false },
+    ) {
+        val archive = exportToCache(
+            includeChats = config.includeChats,
+            includeFiles = config.includeFiles,
+            onProgress = onProgress,
+            isCancelled = isCancelled,
+        )
+        try {
+            val bridge = ProgressBridge(onProgress)
+            client(config).upload(
+                file = archive,
+                onProgress = { processed, total ->
+                    bridge.report(BackupPhase.wireOf(BackupPhase.UPLOADING), processed, total)
+                },
+                isCancelled = isCancelled,
+            )
+        } finally {
+            runCatching { archive.delete() }
+        }
+    }
+
+    /**
+     * `S3BackupProvider.restoreFromItem` — stream the object down to cache,
+     * then run the normal restore over it.
+     */
+    fun restoreFromS3(
+        config: S3Config,
+        item: S3FileItem,
+        mode: RestoreMode,
+        onProgress: BackupProgressSink? = null,
+        isCancelled: () -> Boolean = { false },
+    ): RestoreReportView {
+        val bridge = ProgressBridge(onProgress)
+        val restorer = BackupRestorer(context, database, preferenceRepository)
+        val staged = File(context.cacheDir, "s3_restore_${System.nanoTime()}.zip")
+        try {
+            client(config).download(
+                key = item.key,
+                destination = staged,
+                expectedSize = item.size,
+                onProgress = { processed, total ->
+                    bridge.report(BackupPhase.wireOf(BackupPhase.DOWNLOADING), processed, total)
+                },
+                isCancelled = isCancelled,
+            )
+            return restoreStaged(restorer, staged, mode, bridge, isCancelled)
+        } finally {
+            runCatching { staged.delete() }
+        }
+    }
+
+    /** `deleteObject` — used by the remote list sheet. */
+    fun deleteS3Item(config: S3Config, item: S3FileItem) = client(config).delete(item.key)
 
     companion object {
         private const val COPY_BUFFER = 256 * 1024
         private const val KEY_WEBDAV_CONFIG = "webdav_config_v1"
+        private const val KEY_S3_CONFIG = S3Config.PREF_KEY
 
         /** The builder's cancellation `check` message; see [exportToCache]. */
         internal const val CANCELLED_MESSAGE = "备份已取消"

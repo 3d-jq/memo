@@ -27,6 +27,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -197,9 +198,11 @@ fun AssistantEditMemoryTab(
         }
 
         // The manual run needs a memory model and a chat with this assistant
-        // open (§ L341-353).
+        // open (§ L341-353). Collected rather than read off the StateFlow so
+        // the row re-evaluates when the open conversation changes; kept as a
+        // plain local so the null check below still smart-casts.
         val modelMissing = !com.psyche.memo.ui.MemorySettingsState(container).modelSet
-        val currentConversationId = container.currentConversationId.value
+        val currentConversationId = container.currentConversationId.collectAsState().value
         val canOrganize = !modelMissing && !organizing &&
             currentConversationId != null &&
             container.conversationDao.get(currentConversationId)?.assistantId == assistant.id

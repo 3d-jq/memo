@@ -199,7 +199,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
   2. **merge 恢复**（实体按 id upsert + preference 逐键覆盖 + 会话按 id 去重）
   4. **备份提醒**（`BackupReminderProvider` 五键 enabled/intervalDays/minutesOfDay/enabledAt/lastBackupAt + 每分钟判到期 + 会话内 snooze + `recordBackupCompleted()`）
   5. **WebDAV**（PUT/GET/PROPFIND/DELETE + Basic auth + 远端列表 + 保留策略）
-  6. **S3**（`s3_client.dart` 签名 V4 + 分片/并发）
+  6. **S3**（`s3_client.dart` 签名 V4 + 分页 list + manifest 镜像 + 流式上传/下载）—— **已完成（2026-09-12，子块 6）**
   7. **前向兼容闸门（完整版）**（`minimumReadableFormatVersion` / `minimumReadableSchemaVersion` + 同意对话框；最小版已随子块 1 落地）
   8. **Cherry Studio / Chatbox 导入**（纯 importer）
 - **依赖 RikkaHub 参考**：`D:\program\.rikkahub-ref` 的 `data-sync` 模块（WebDAV/S3/备份语义）+ `app` 侧调度，按工作约定"功能/逻辑直接搬 RikkaHub"。
@@ -304,7 +304,7 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | 3 | **本地快照** | `LocalSnapshotStore`(快照文件管理/保留数/空间上限) + `LocalSnapshotScheduler`(频率) + `LocalSnapshotsScreen` 接线 + 7 个 settings | 1 | ✅ 2026-09-11（批次表「备份-3」，5 文件 + 5 测试类） |
 | 4 | **备份提醒** | `BackupReminder`(启用/频率/上次备份时间) + 完成时 `recordBackupCompleted()` + 3 行接线 | 1 | ✅ 2026-09-12（明细见下） |
 | 5 | **WebDAV** | `WebDavClient`(PROPFIND/PUT/GET/DELETE + Basic auth) + `WebDavConfig` model + 服务器设置子页 + 测试连接 + 远端列表 + 恢复 | 1 | ✅ 2026-09-12（明细见下） |
-| 6 | **S3** | `S3Client`(SigV4 + list/put/get/delete) + `S3Config` model + 服务器设置子页 + 测试连接 + 恢复 | 1 | ⬜ |
+| 6 | **S3** | `S3Client`(SigV4 + list/put/get/delete) + `S3Config` model + 服务器设置子页 + 测试连接 + 恢复 | 1 | ✅ 2026-09-12（明细见下） |
 | 7 | **前向兼容闸门** | `minimumReadableFormatVersion` / `minimumReadableSchemaVersion` 判定 + 同意对话框（`forward_compat_consent_dialog`） | 2 | 🚧 最小版已落地（`BackupManifestCodec.declaresNewerBuild`），完整版 ⬜ |
 | 8 | **Cherry Studio / Chatbox 导入** | 两个 importer（可选，纯数据转换） | 2 | ⬜ |
 
@@ -381,8 +381,33 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 - 完整前向兼容闸门（最小版已落地：`BackupManifestCodec.declaresNewerBuild` + 导入前 `peekManifest` 校验）
 - 真机验证（装机由用户自行测试）
 
-**子块 5~8 未开始**
-- 5 WebDAV、6 S3、7 前向兼容闸门（完整版）、8 Cherry / Chatbox 导入
+**子块 7~8 未开始**
+- 7 前向兼容闸门（完整版）、8 Cherry / Chatbox 导入
+
+#### 子块 6 进展明细（2026-09-12，S3）
+
+**`core/data/backup/`（3 个新文件）**
+
+| 文件 | 职责 | 对应 Flutter |
+|---|---|---|
+| `S3Config.kt` | `S3Config`（endpoint/region/bucket/accessKeyId/secretAccessKey/sessionToken/prefix/pathStyle/userAgent/includeChats/includeFiles，键 `s3_config_v1`，字段名逐字对齐 Dart JSON）+ `S3FileItem` + `S3Exception`；路径布局（`normalizedEndpoint`/`basePathSegments`/`hostHeader`）与 `validate()` | `S3Config`（`core/models/backup.dart` L83-180）、`_normalizeEndpoint`/`_normalizedBasePathSegments`/`_hostHeader`/`_validateConfigBasics` |
+| `AwsSignatureV4.kt` | SigV4 签名（`ALGORITHM`/`awsEncode`/`canonicalQueryString`/`sign`）+ `EMPTY_PAYLOAD_SHA256`；**时钟是参数**，AWS 官方向量可复现 | `_canonicalQuery`/`_canonicalHeaders`/`_signedHeaders`/`_stringToSign`/`_signature` L169-242；写法参考 RikkaHub `AwsSignatureV4`（OkHttp 而非 Ktor） |
+| `S3Client.kt` | `test`/`upload`（流式 PUT，`UNSIGNED-PAYLOAD`）/`uploadObject`/`download`/`delete`/`list`；manifest 读改写（`readManifest`/`writeManifest`/`upsert`/`removeManifestItem`/`writeManifestIfChanged`）；分页 `listBucketObjects`；`parseListBucket`；错误文档 `errorCode`/`errorMessage`；合并 `mergeBackupItems`/`sameBackupItems`；纯编解码 `encodeManifest`/`decodeManifest`/`parseS3DateTime` | `S3BackupClient` 全量 L14-1109 |
+
+**`MemoBackupService` 扩展**：`s3Config()/saveS3Config()/testS3()/listS3()/backupToS3()/restoreFromS3()/deleteS3Item()`；远端恢复的公共尾巴抽成 `restoreStaged()`（WebDAV 也改用它，消除重复）。
+
+**UI**：`S3SettingsScreen`（route `s3_settings`，8 个输入行 + Path-style 开关行，顶栏 Check / 底部 Save 都写 `s3_config_v1` 后返回）；备份页 §6 四行全接线（服务器设置 / 测试连接 / 恢复 / 立即备份，**原版第 4 行，此前 Android 只有 3 行**），恢复走「远端列表 sheet → 模式对话框 → 恢复 → 复用重启提示」，删除有确认对话框；§1 的两个内容开关（Chats / Files）**此前只改本地 state、什么都没存** → 现在按原版写 **WebDAV + S3 两份配置**（`WebDavConfig` 因此补 `includeChats/includeFiles` 两字段，`backupToWebDav` 不再硬编码 `true/true`）。
+
+**关键结论（勿重犯）**
+1. **百分号编码必须大写十六进制**（AWS "UriEncode"）：小写签名能算出来但 S3 报 `SignatureDoesNotMatch`。签名本身（Authorization 里那串）反过来是**小写**。测试用 AWS 官方向量锁死（`GET /test.txt` + `Range`，20130524T000000Z → `f0e8b8…6bdb41`）。
+2. **流式上传签 `UNSIGNED-PAYLOAD`**，但要带 `content-length`；缓冲上传（manifest）签真实 SHA-256。
+3. **`host` 与 `content-length` 不要手动加进 OkHttp 请求头**——OkHttp 自己会按 URL/body 生成，重复写会让 S3 直接拒；签名里必须有这两个（值同源）。
+4. **host 头省略默认端口**（443/80），否则与 OkHttp 实际发出的 Host 不一致 → 签名不匹配。
+5. **`ApiResponse` 走完整 body**（分页 listing 是整份 XML），只有**流式**下载/上传的错误路径用 `peekBody`（不能消费 body）。
+6. **Dart 里 `_isMissingObjectResponse` 的 404/NoSuchKey 语义**与 manifest 缺失判定要用在 `test()` 上（manifest 不存在 = 可达）。
+7. **远端列表 sheet 已泛化为 `RemoteBackupListSheet<T>`**（原 `WebDavRemoteListSheet` 删除），WebDAV/S3 共用一个组件，对应原版的单一 `_RemoteListSheet`。
+
+**测试**：`S3ClientTest`（core:data，34 例：AWS 官方向量、时区归一化、session token、content-length 参与签名、RFC3986 编码、canonical query 排序、空载荷摘要、prefix/manifest key/path 布局/vhost/端点自带 bucket/分段编码/默认端口、配置 JSON 往返与兜底、校验逐字段、manifest 往返/排序/过滤/容错、合并语义/权威性/同刻比较）；`S3XmlParseTest`（app，Robolectric，7 例：分页解析/continuation token/空结果/不跨 Contents 继承 key/错误摘要/missing object/非 XML 正文）；`WebDavClientTest` 补内容开关往返。
 
 ### 5.10.5 已有可复用资产（**别重造**）
 - `PayloadEntityDao`（13 表通用 CRUD，`core:data/db/`）

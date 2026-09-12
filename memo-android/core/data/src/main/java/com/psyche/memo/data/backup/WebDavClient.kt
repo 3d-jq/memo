@@ -24,6 +24,12 @@ data class WebDavConfig(
     val password: String = "",
     val path: String = "memo_backups",
     val userAgent: String = "",
+    /**
+     * Backup content switches. The original keeps them on both remote configs
+     * because the Backup-page toggles write WebDAV and S3 in one callback.
+     */
+    val includeChats: Boolean = true,
+    val includeFiles: Boolean = true,
 ) {
     fun isValid(): Boolean = url.trim().isNotEmpty()
 
@@ -41,10 +47,17 @@ data class WebDavConfig(
             password = obj.str("password").orEmpty(),
             path = obj.str("path").orEmpty().ifEmpty { DEFAULT_PATH },
             userAgent = obj.str("userAgent").orEmpty(),
+            includeChats = obj.bool("includeChats", true),
+            includeFiles = obj.bool("includeFiles", true),
         )
 
         private fun JsonObject.str(key: String): String? =
             (this[key] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content
+
+        private fun JsonObject.bool(key: String, fallback: Boolean): Boolean =
+            (this[key] as? kotlinx.serialization.json.JsonPrimitive)
+                ?.takeIf { it !is kotlinx.serialization.json.JsonNull }
+                ?.content?.toBooleanStrictOrNull() ?: fallback
     }
 
     fun toJson(): JsonObject = kotlinx.serialization.json.buildJsonObject {
@@ -55,6 +68,8 @@ data class WebDavConfig(
         field("password", password)
         field("path", path)
         field("userAgent", userAgent)
+        put("includeChats", kotlinx.serialization.json.JsonPrimitive(includeChats))
+        put("includeFiles", kotlinx.serialization.json.JsonPrimitive(includeFiles))
     }
 }
 
