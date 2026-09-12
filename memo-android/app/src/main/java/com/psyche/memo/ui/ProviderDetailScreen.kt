@@ -533,7 +533,6 @@ private fun ConfigTab(
                 )
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
             }
-            SettingsIosDivider()
             // Group row (opens the group picker sheet).
             Row(
                 modifier = Modifier
@@ -549,14 +548,12 @@ private fun ConfigTab(
                 )
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
             }
-            SettingsIosDivider()
             SettingsSwitchRow(
                 icon = Lucide.Power,
                 label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_enabled_title),
                 value = cfg.enabled,
                 onToggle = { onCfgChange(cfg.copy(enabled = it)) },
             )
-            SettingsIosDivider()
             SettingsSwitchRow(
                 icon = Lucide.KeyRound,
                 label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_multi_key_mode_title),
@@ -564,21 +561,18 @@ private fun ConfigTab(
                 onToggle = { onCfgChange(cfg.copy(multiKeyEnabled = it)) },
             )
             if (cfg.multiKeyEnabled == true) {
-                SettingsIosDivider()
-                NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_manage_keys_button)) {
+                    NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_manage_keys_button)) {
                     onOpenMultiKey()
                 }
             }
             if (cfg.classifiedKind() == "openai") {
-                SettingsIosDivider()
-                SettingsSwitchRow(
+                    SettingsSwitchRow(
                     icon = Lucide.Zap,
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_response_api_title),
                     value = cfg.useResponseApi == true,
                     onToggle = { onCfgChange(cfg.copy(useResponseApi = it)) },
                 )
-                SettingsIosDivider()
-                // Balance row: label + live badge (max 108dp) when enabled +
+                    // Balance row: label + live badge (max 108dp) when enabled +
                 // chevron — provider_detail_page.dart L1850-1899.
                 Row(
                     modifier = Modifier
@@ -609,8 +603,7 @@ private fun ConfigTab(
                 }
             }
             if (cfg.classifiedKind() == "gemini") {
-                SettingsIosDivider()
-                SettingsSwitchRow(
+                    SettingsSwitchRow(
                     icon = Lucide.Cloud,
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_vertex_ai_title),
                     value = cfg.vertexAI == true,
@@ -618,8 +611,7 @@ private fun ConfigTab(
                 )
             }
             if (isAihubmix) {
-                SettingsIosDivider()
-                // provider_detail_page L1197-1209 —— AIhubmix 专属：APP-Code 开关 +
+                    // provider_detail_page L1197-1209 —— AIhubmix 专属：APP-Code 开关 +
                 // 行尾 ⓘ（帮助文案）。
                 SettingsSwitchRow(
                     icon = Lucide.BadgePercent,
@@ -630,8 +622,7 @@ private fun ConfigTab(
                 )
             }
             if (supportsClaudePromptCaching) {
-                SettingsIosDivider()
-                SettingsSwitchRow(
+                    SettingsSwitchRow(
                     icon = Lucide.Database,
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_claude_prompt_caching_title),
                     tip = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_claude_prompt_caching_help),
@@ -639,8 +630,7 @@ private fun ConfigTab(
                     onToggle = { onCfgChange(cfg.copy(claudePromptCachingEnabled = it)) },
                 )
                 if (cfg.claudePromptCachingEnabled) {
-                    SettingsIosDivider()
-                    // TTL 行（L1225-1242）：标题 + 行尾 ⓘ + 两段式分段控件。
+                            // TTL 行（L1225-1242）：标题 + 行尾 ⓘ + 两段式分段控件。
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -662,11 +652,9 @@ private fun ConfigTab(
                 }
             }
             // Custom request + network proxy entries (#11 sub-pages).
-            SettingsIosDivider()
             NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_custom_request_title)) {
                 onOpenCustomRequest()
             }
-            SettingsIosDivider()
             NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_network_tab)) {
                 onOpenNetwork()
             }
@@ -923,7 +911,10 @@ private fun LabeledInput(
     }
 }
 
-/** Bottom config/models tab switch (provider_detail _BottomTabs). */
+/** Bottom config/models tab switch (provider_detail _BottomTabs)：原版是
+ *  `SafeArea(top: false) + Padding(12, 6, 12, 10)` —— **系统手势条留白在卡片外面**，
+ *  所以卡片底边离小白条还有 10dp；之前把 `navigationBarsPadding()` 放在背景之内，
+ *  卡片被撑高一大截、底边直接贴到手势条。 */
 @Composable
 private fun BottomTabs(
     index: Int,
@@ -938,10 +929,10 @@ private fun BottomTabs(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)
             .background(semantic.surfaceCard, RoundedCornerShape(16.dp))
             .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
-            .navigationBarsPadding()
             .padding(4.dp),
     ) {
         listOf(leftIcon to leftLabel, rightIcon to rightLabel).forEachIndexed { i, (icon, label) ->
@@ -971,7 +962,6 @@ private fun BottomTabs(
         }
     }
 }
-
 /** 48dp chevron nav row inside a settings card (kelivo _TactileRow variant). */
 @Composable
 private fun NavRow(label: String, onClick: () -> Unit) {
@@ -996,7 +986,6 @@ private fun NavRow(label: String, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
     ModalBottomSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
@@ -1004,38 +993,20 @@ private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDis
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = null,
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .width(40.dp)
-                    .height(4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
-            )
-            Spacer(Modifier.height(12.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MemoSheetHandle(trailingGap = 0.dp)
             listOf("Gemini" to "gemini", "Claude" to "anthropic", "OpenAI" to "openai").forEach { (label, kind) ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(kind) }
-                        .padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (current == kind) cs.primary else cs.onSurface,
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (current == kind) {
-                        Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
-                    }
-                }
+                MemoSheetOptionRow(
+                    label = label,
+                    selected = current == kind,
+                    onClick = { onSelect(kind) },
+                )
             }
-            Spacer(Modifier.height(16.dp))
         }
     }
 }

@@ -81,8 +81,10 @@ internal fun ProviderAvatarSheet(
                 .heightIn(max = 520.dp)
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MemoSheetHandle()
+            MemoSheetHandle(trailingGap = 0.dp)
+            // 选项行统一成「更多」sheet 的卡片样式（用户 2026-09-12）。
             listOf(
                 stringResource(UiR.string.provider_avatar_choose_built_in_icon) to onPickBuiltInIcon,
                 stringResource(UiR.string.provider_avatar_input_lobehub_icon) to onPickLobehubIcon,
@@ -90,26 +92,15 @@ internal fun ProviderAvatarSheet(
                 stringResource(UiR.string.side_drawer_enter_link) to onEnterLink,
                 stringResource(UiR.string.side_drawer_reset) to onReset,
             ).forEach { (label, action) ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .height(48.dp)
-                        .background(cs.surface, RoundedCornerShape(14.dp))
-                        .clickable {
-                            onDismiss()
-                            action()
-                        }
-                        .padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    Text(
-                        text = label,
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = cs.onSurface),
-                    )
-                }
+                MemoSheetOptionRow(
+                    label = label,
+                    selected = false,
+                    onClick = {
+                        onDismiss()
+                        action()
+                    },
+                )
             }
-            Spacer(Modifier.height(4.dp))
         }
     }
 }

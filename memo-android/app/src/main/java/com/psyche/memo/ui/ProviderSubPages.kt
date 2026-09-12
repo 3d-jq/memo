@@ -208,7 +208,7 @@ fun ProviderNetworkPage(
                     onToggle = { proxyEnabled = it },
                 )
                 if (proxyEnabled) {
-                    SettingsIosDivider()
+                    // 原版网络页的卡片同样不带分隔线（SectionCard dividers 默认 false）。
                     // provider_network_page.dart:81-91 — type picker row.
                     Row(
                         modifier = Modifier
