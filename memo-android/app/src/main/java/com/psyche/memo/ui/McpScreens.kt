@@ -3,8 +3,11 @@ package com.psyche.memo.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -64,6 +67,7 @@ import com.composables.icons.lucide.X
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.McpServerConfig
 import com.psyche.memo.data.model.McpToolConfig
+import com.psyche.memo.data.model.deriveToolParams
 import com.psyche.memo.provider.mcp.McpConnectionManager
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -284,7 +288,7 @@ private fun McpServerCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun McpServerEditSheet(
     container: AppContainerImpl,
@@ -308,7 +312,6 @@ private fun McpServerEditSheet(
         mutableStateListOf<McpToolConfig>().apply { addAll(existing?.tools ?: emptyList()) }
     }
     var tab by remember { mutableIntStateOf(0) }
-    var syncing by remember { mutableStateOf(false) }
     val urlRequiredMessage = stringResource(R.string.mcp_server_edit_sheet_url_required)
     val liveStates by container.mcpConnections.states.collectAsState()
 
@@ -323,6 +326,10 @@ private fun McpServerEditSheet(
                 enabled = prior?.enabled ?: true,
                 name = remote.name,
                 description = remote.description,
+                // 参数规格由 inputSchema 派生（mcp_provider.dart L2337-2360），
+                // 与 Dart 一样把 params 写进 payload —— 少了它工具卡就没有参数
+                // chips，备份里的 MCP 工具也缺一段（原版会写）。
+                params = deriveToolParams(remote.inputSchema),
                 schema = remote.inputSchema,
                 needsApproval = prior?.needsApproval ?: false,
             )
@@ -331,7 +338,6 @@ private fun McpServerEditSheet(
             tools.clear()
             tools.addAll(merged)
         }
-        syncing = false
     }
 
     fun currentServer(): McpServerConfig = McpServerConfig(
@@ -384,6 +390,31 @@ private fun McpServerEditSheet(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Lucide.X, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                }
+                // 同步工具（mcp_server_edit_sheet.dart L447-460）：**在顶栏右侧**，
+                // 只在编辑已有服务器时出现（原版工具 tab 里没有计数/同步行）。
+                // 原版 `refreshTools` 用库里的配置抓工具；这里先落盘当前表单再重连，
+                // 否则改了 URL 点同步还是用旧地址抓（有意保留的差异，行为更直观）。
+                if (existing != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(34.dp)
+                            .clickable {
+                                val saved = currentServer()
+                                container.mcpRepository.save(saved)
+                                container.mcpConnections.reconnect(saved.id)
+                                onSaved()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Lucide.RefreshCw,
+                            contentDescription = stringResource(R.string.mcp_server_edit_sheet_sync_tools_tooltip),
+                            tint = cs.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -517,77 +548,130 @@ private fun McpServerEditSheet(
                         )
                     }
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.mcp_page_tools_count, tools.count { it.enabled }.toString(), tools.size.toString()),
-                            style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.7f)),
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (syncing) {
-                            CircularProgressIndicator(strokeWidth = 2.dp, color = cs.primary, modifier = Modifier.size(16.dp))
-                        } else {
-                            IconActionButton(Lucide.RefreshCw, cs.primary, stringResource(R.string.mcp_server_edit_sheet_sync_tools_tooltip)) {
-                                val saved = currentServer()
-                                container.mcpRepository.save(saved)
-                                syncing = true
-                                container.mcpConnections.reconnect(saved.id)
-                                onSaved()
-                            }
-                        }
-                    }
+                    // 工具卡（mcp_server_edit_sheet.dart L511-690）：原版在工具 tab 里
+                    // 没有计数/同步行 —— 同步按钮在 sheet 顶栏右侧，列表就是
+                    // 「每工具一张卡」。卡内：名称（bodyMedium+emphasis）+ 描述
+                    // 12sp@0.7 + 参数 chips（必填高亮）+ 启用开关（与名称同排、顶端对齐），
+                    // 启用时才追加卡内审批行。
                     if (tools.isEmpty()) {
-                        Text(
-                            text = stringResource(R.string.mcp_server_edit_sheet_no_tools_hint),
-                            style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)),
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.mcp_server_edit_sheet_no_tools_hint),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = cs.onSurface.copy(alpha = 0.6f),
+                                ),
+                            )
+                        }
                     }
                     tools.forEachIndexed { index, tool ->
-                        SettingsIosDivider()
-                        SettingsSwitchRow(
-                            icon = Lucide.Terminal,
-                            label = tool.name,
-                            tip = tool.description,
-                            value = tool.enabled,
-                            onToggle = { tools[index] = tool.copy(enabled = it) },
-                        )
-                        // 审批行（mcp_server_edit_sheet.dart L639-683）：**只在工具启用时**
-                        // 出现，且是工具卡内的紧凑一行（Shield 13dp + 12sp 文案 +
-                        // IosSwitch），文案是 `mcpToolNeedsApproval`（需要审批）——
-                        // 之前这里错绑了 `mcp_conversation_sheet_title`（"MCP服务器"），
-                        // 于是每个工具都多出一行"MCP服务器"，看起来像 MCP 服务被重复列出。
-                        if (tool.enabled) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                                .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                        ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top,
                             ) {
-                                Icon(
-                                    Lucide.Shield,
-                                    contentDescription = null,
-                                    tint = if (tool.needsApproval) {
-                                        cs.primary
-                                    } else {
-                                        cs.onSurface.copy(alpha = 0.4f)
-                                    },
-                                    modifier = Modifier.size(13.dp),
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = stringResource(R.string.mcp_tool_needs_approval),
-                                    style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f)),
-                                    modifier = Modifier.weight(1f),
-                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = tool.name,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = cs.onSurface,
+                                        ),
+                                    )
+                                    val description = tool.description.orEmpty()
+                                    if (description.isNotEmpty()) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = description,
+                                            style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)),
+                                        )
+                                    }
+                                    if (tool.params.isNotEmpty()) {
+                                        Spacer(Modifier.height(8.dp))
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            tool.params.forEach { param ->
+                                                // 必填 = primary 字 + primary 12% 底；
+                                                // 选填 = onSurface 50% 字 + onSurface 6% 底
+                                                // （L571-620，边框都是各自色的 50%）。
+                                                val color = if (param.required) {
+                                                    cs.primary
+                                                } else {
+                                                    cs.onSurface.copy(alpha = 0.5f)
+                                                }
+                                                val bg = if (param.required) {
+                                                    cs.primary.copy(alpha = 0.12f)
+                                                } else {
+                                                    cs.onSurface.copy(alpha = 0.06f)
+                                                }
+                                                Text(
+                                                    text = param.name,
+                                                    style = TextStyle(
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = color,
+                                                    ),
+                                                    modifier = Modifier
+                                                        .background(bg, RoundedCornerShape(999.dp))
+                                                        .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(999.dp))
+                                                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.width(8.dp))
                                 IosSwitch(
-                                    value = tool.needsApproval,
-                                    onValueChanged = { tools[index] = tool.copy(needsApproval = it) },
+                                    value = tool.enabled,
+                                    onValueChanged = { tools[index] = tool.copy(enabled = it) },
                                 )
                             }
+                            // 审批行（L639-683）：只在工具启用时出现，卡内紧凑一行
+                            // （Shield 13dp + 12sp 文案 + IosSwitch），文案是
+                            // `mcpToolNeedsApproval`（需要审批）—— 之前这里错绑了
+                            // `mcp_conversation_sheet_title`（"MCP服务器"），于是每个
+                            // 启用的工具都多出一行"MCP服务器"，看着像 MCP 服务被重复列出。
+                            if (tool.enabled) {
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        Lucide.Shield,
+                                        contentDescription = null,
+                                        tint = if (tool.needsApproval) {
+                                            cs.primary
+                                        } else {
+                                            cs.onSurface.copy(alpha = 0.4f)
+                                        },
+                                        modifier = Modifier.size(13.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(R.string.mcp_tool_needs_approval),
+                                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    IosSwitch(
+                                        value = tool.needsApproval,
+                                        onValueChanged = { tools[index] = tool.copy(needsApproval = it) },
+                                    )
+                                }
+                            }
                         }
+                        // 原版每张卡自带 `margin: EdgeInsets.only(bottom: 10)`。
+                        Spacer(Modifier.height(10.dp))
                     }
                 }
             }
