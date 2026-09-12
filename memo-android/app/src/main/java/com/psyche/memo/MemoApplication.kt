@@ -45,6 +45,8 @@ class MemoApplication : Application(), ImageLoaderFactory {
         }
         // 本机副本：启动时按调度决定要不要存一份（不阻塞启动，指纹/计数自己判定）。
         container.maybeRunLocalSnapshot()
+        // 备份提醒：读五键调度 + 启动分钟计时（到期驱动抽屉横幅）。
+        container.backupReminder.initialize()
         // 系统 TTS 播放器：用 application context 建一次，UI 收的 flow 身份保持稳定。
         com.psyche.memo.ui.chat.TtsPlayer.init(this)
     }

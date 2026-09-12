@@ -185,6 +185,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 | 修复 | **抽屉手势三连修**（2026-09-11 用户实测"一开始拉就抖一下 / 反方向也动 / 关掉再马上拉没反应"）：① 手势**挂了两处**（主内容层 + 抽屉层，兄弟节点）→ 一次拖动被两个 `pointerInput` 同时处理（offset 加两次、settle 两次）→ 只挂在公共父容器上（一处，抽屉上起手也有效）；② **无方向门控** → 反方向拖动虽被 clamp 但会触发 `onPresent()`，而 `if (presenting)` 会**插入 scrim 节点**（布局变化=抖动）→ 关闭态只跟右拖、打开态只跟左拖；③ **抽屉与 scrim 用 `if (presenting)` 插拔组合**（3f65864）→ 起手那一帧要现建整棵抽屉（含会话列表）= 抖动 → 改**常驻组合**，靠 offset/alpha 驱动（`pointerInput` 有无不影响布局）；**注意** scrim 的手势处理器必须**按需挂载**，无条件挂会让整屏点击失效（我曾踩：`awaitFirstDown` 常驻 → "点击全部失效"）→ 改为 `if (drawerOpen)` 时挂；④ **关闭动画途中反向拖动无响应**（f36fe89）——方向门控原先读**动画中的位移**（`contentOffsetPx>0`）而非**逻辑状态**，收尾动画没跑完时仍被判为"已打开"→ 新右拖被当反方向忽略；改用 `drawerOpen` 逻辑状态 + 拖动开始时 `dragJob?.cancel()` 取消收尾动画；⑤ 起手位置**不限**（f92b604）——曾按原版加 24dp 左边缘限制，用户体感"手势失效"（3x 屏仅 72px），移除改回任意位置起手 | ✅ ae7b078 / 3f65864 / f36fe89 / f92b604 |
 | 修复 | **空会话不该进历史列表**（1b143f1，用户"我什么都没发，历史就多一个新对话"）：原版新建会话是 **draft**（`chat_service.dart` L1868 `createDraftConversation`："not persisted until first message arrives"，只放 `_draftConversations` 内存，首条消息经 `_saveConversation` 才落库）→ 历史列表天然看不到空会话。我们两条创建路径（新建按钮 + 启动无历史）都**立即 insert** ✗。修：创建只生成 id 并选中（不落库），`ChatViewModel.ensureConversationRow()` 在**首条用户消息落库前**补写 conversation_rows（标题留空、绑定当前助手）；未发消息就切走则自然丢弃 | ✅ 1b143f1 |
 | 日志 | **上下文日志 + 应用日志通电**（2026-09-11 用户问"这个日志里面的上下文和应用日志 是没有接线吗？我怎么一直没有看到呀"）：三个 tab 里原先只有请求日志有数据。① **上下文**——模型从 `app/ui/LogData.kt` 搬到 `core/common/.../logging/ContextLogModels.kt`（`ContextSource`/`ContextSegment`/`ContextLogSnapshot`/`ContextLogTailReader` + 新增 `ContextTag`/`ContextTags`/`TokenEstimator`），标签挂在 `LlmMessage.contextTags` 上（= 上游 map 的 `_kelivo_ctx_segments`；provider 客户端逐字段拼 JSON，故无需"发请求前 strip"）；新增 `app/logging/ContextLogAssembler.kt`（`buildSnapshot`/`logPrepared` + `joinSystemParts`/`systemMessageTags`/`appendedSystemMessageTags`）；`ChatViewModel` 组装 history 时给系统消息各段（系统提示词/记忆规则/搜索提示词/指令注入）与最后一条用户消息（记忆快照 + 正文）打标签，世界书 `inject(..., tagContextLog = true)` 也带 `worldBook` + position 标签，请求前 `logPrepared` 落一条 JSONL。**上游语义坑**：追加段（`_appendToSystemMessage`/世界书 after）标签长度含前导 `"\n\n"`，段文本会带空行（测试 `appendedSegmentsOwnTheirLeadingBlankLine` 锁住）。② **应用**——接上 Android 有对应物的失败路径：SSE 邻接 JSON 恢复（`SseEventParser` 默认 `onRecovery`，tag `SseFramingRecovery`）、三个 provider 的畸形事件（`ChatCompletionsDecoder(providerLabel=)` / Claude / Gemini，tag `DecoderParseError`）、后台任务（标题/摘要/记忆整理/建议 → `logBackgroundTaskFailure`，tag `HomeViewModel`）、抽屉重新生成标题（`SideDrawer`）、压缩上下文（`HomePage`）、供应商保存/删除（`Provider`，**保存此前让 collect 直接崩掉**）、模型详情保存（`Model`）；上游 `ImageFallback`/`ModelOverride` 在 Android 无对应路径未接，desktop 两处不移植。③ **顺带修掉的真缺口**：**指令注入从未进入请求**（只有设置页写库）→ 按 `injectInstructionPrompts` L1748-1772 接上（`activeIds(assistantId)` → 空行连接 → 加进系统消息，来源 `instructionInjection`）。测试：`ContextLogAssemblerTest` 10、`TokenEstimatorTest` 6、`WorldBookInjectorTest` 新增 5、`SseFramingRecoveryLogTest` 2、`DecoderParseErrorLogTest` 2；全模块 1237 例绿 | ✅ 本轮 |
+| 备份-2+4 | **merge 恢复 + 备份提醒**（§5.10 子块 2/4，2026-09-12，明细见 §5.10.4）：① **会话库合并** `DatabaseSnapshotMerger`——ATTACH 快照按 id 遍历：坏 `message_order` 跳过计数、指纹相同去重、id/消息 id 冲突 ⇒ 整段会话换 `merge-<sha256前32>` 确定性新 id（消息/分组 id 重映射、`version_selections` 重写、`asset_reference_dirty_rows` 标脏），`PRAGMA foreign_key_check` 闸门；指纹只要求运行内自洽（同 Dart 字段集：排除 updated_at/is_streaming/附件 unavailable、时间折秒、group→序号）。② **settings 合并** `SettingsSnapshotMerger`——助手本地 avatar/background 优先、provider 载荷 incoming 胜 + **order-only 占位不实体化**（有意偏离，Android 无此形态，materialize 会造幽灵 provider）、其余 local-first 去重、记忆条目内容去重 + id 重排 + relatedIds 重写/悬挂清理 + migrationIds 合并；偏好 = 本地有就不动（putIfAbsent）、pinned 并集、ASR 按 id 并集、关系映射本地胜。③ `BackupRestorer` 修序：**数据库先行、settings 后写**（原 settings 写在被 swap 丢弃的库上）；MERGE 不再 `replaceAll` 误清本地实体（原 merge 实现是破坏性的）。④ **备份提醒**：`app/BackupReminder.kt`（五键进 preference_rows、`(lastBackupAt ?: enabledAt)+intervalDays` 到期、分钟 ticker、会话内 snooze）+ 备份页 §2 五行全接线（启用未选时间先弹滚轮，对齐 upstream setEnabled 的 StateError 前置）+ 双滚轮时间 sheet / 频率 sheet / 1-365 自定义对话框 + 抽屉到期横幅（新增 `onOpenBackup` 导航）+ 导出到文件成功 `recordBackupCompleted()`。⑤ 顺带点亮 §3 本机副本启用开关（原为死占位，`LocalSnapshotService.preferences` 转 public）。测试：`SettingsSnapshotMergerTest` 16、`DatabaseSnapshotMergerTest` 6、`BackupReminderTest` 6；全模块 1265 例绿 | ✅ 本轮 |
 
 ## 5.9 全量缺口审计（2026-09-09 系统普查，Flutter vs Android 逐域比对）
 
@@ -298,9 +299,9 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | # | 子块 | 产出 | 依赖 | 状态 |
 |---|---|---|---|---|
 | 1 | **归档格式 + 本地导出/导入** | `core:data/backup/BackupArchiveCodec.kt`(纯逻辑 zip 读写+manifest) / `BackupSnapshotBuilder`(13 表+prefs+db 快照) / `LocalFileExporter` / `LocalFileRestorer` / `BackupScreen` 4 行接线 / SAF 选择器 | 无 | ✅ 2026-09-10（明细见下） |
-| 2 | **恢复模式（overwrite / merge）** | merge 语义：实体按 id upsert + preference 逐键覆盖 + 会话按 id 去重；`RestoreMode` 已在 Flutter 定义 | 1 | ⬜ |
+| 2 | **恢复模式（overwrite / merge）** | merge 语义：实体按 id upsert + preference 逐键覆盖 + 会话按 id 去重；`RestoreMode` 已在 Flutter 定义 | 1 | ✅ 2026-09-12（明细见下） |
 | 3 | **本地快照** | `LocalSnapshotStore`(快照文件管理/保留数/空间上限) + `LocalSnapshotScheduler`(频率) + `LocalSnapshotsScreen` 接线 + 7 个 settings | 1 | ✅ 2026-09-11（批次表「备份-3」，5 文件 + 5 测试类） |
-| 4 | **备份提醒** | `BackupReminder`(启用/频率/上次备份时间) + 完成时 `recordBackupCompleted()` + 3 行接线 | 1 | ⬜ |
+| 4 | **备份提醒** | `BackupReminder`(启用/频率/上次备份时间) + 完成时 `recordBackupCompleted()` + 3 行接线 | 1 | ✅ 2026-09-12（明细见下） |
 | 5 | **WebDAV** | `WebDavClient`(PROPFIND/PUT/GET/DELETE + Basic auth) + `WebDavConfig` model + 服务器设置子页 + 测试连接 + 远端列表 + 恢复 | 1 | ⬜ |
 | 6 | **S3** | `S3Client`(SigV4 + list/put/get/delete) + `S3Config` model + 服务器设置子页 + 测试连接 + 恢复 | 1 | ⬜ |
 | 7 | **前向兼容闸门** | `minimumReadableFormatVersion` / `minimumReadableSchemaVersion` 判定 + 同意对话框（`forward_compat_consent_dialog`） | 2 | 🚧 最小版已落地（`BackupManifestCodec.declaresNewerBuild`），完整版 ⬜ |
@@ -346,6 +347,24 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 - **`BackupRestorer` 的 phase 常量必须用 Dart wire 值**（`reading_settings` / `validating` / `staging_candidate` / `finalizing`），否则进度标签全退化成 "Preparing"。
 - 批量正则改图标时**注意别误伤类型名**（`java.io.File` 被误加 `Lucide.` 前缀）。
 
+#### 子块 2 + 4 进展明细（2026-09-12）
+
+**子块 2 —— merge 恢复（`chat_database_repository.dart:5057-5177` + `business_settings_merger.dart` 全量）**
+- `core/data/backup/DatabaseSnapshotMerger.kt`：会话库合并。ATTACH 快照为 `merge_source` → 按 id 遍历 → ① `message_order` 负数/重复（绕过约束的坏快照）跳过计数；② 指纹（对话字段 + MCP 选择 + 消息/分段/思维签名，排除 `updated_at`/is_streaming/附件 `unavailable`，时间戳折秒，group→序号）与本地同 id 相同 ⇒ 去重跳过；③ 冲突（id 或任一消息 id 已存在）⇒ **整段会话**换成 `merge-<sha256前32>` 确定性新 id（消息/分组 id 一并重映射），永不交错；④ `PRAGMA foreign_key_check` 必须为空。报告（imported/deduplicated/skipped/remapped）进 `RestoreReportView`，重启对话框沿用 skipped 变体。
+- `core/data/backup/SettingsSnapshotMerger.kt`：settings 合并（对照 `business_settings_merger.dart` 逐函数）——助手 `{...local, ...incoming}` 且**本地 avatar/background 非空优先**；provider 载荷 incoming 胜、顺序按 `providers_order_v1`（有 order key 时）且 **order-only 占位不实体化**（Android 快照导出已过滤它们，materialize 会产生幽灵 provider——有意偏离，已注释）；其余实体 local-first 去重；记忆条目按 `(scope,assistantId,type,归一化内容)` 去重、id 冲突随机重排 + relatedIds 重写/悬挂清理 + migrationIds 合并；偏好合并 = 实体/顺序/LOCAL_ONLY 键跳过、pinned 并集、ASR 按 id 并集（本地优先）、关系映射本地胜、**其余 putIfAbsent（本地有就不动）**。
+- `BackupRestorer`：**数据库先行、settings 后写**（原先 settings 写在文件 swap 之前 = 全被丢弃，顺手修正为与上游「业务数据最后持久化」一致的顺序）；MERGE 时不再出现 `replaceAll` 误清本地实体（此前 merge 模式实体是破坏性的）。
+- 有意偏离：上游 chats-only 合并后有 `recomputeImportedAttachmentAvailability`（本地附件标不可用）——本地文件恢复永远带资产（additive copy），不触发该路径；WebDAV/S3 接上时再补。
+
+**子块 4 —— 备份提醒（`backup_reminder_provider.dart` + `backup_page.dart` §2 + `side_drawer.dart` L1520-1612）**
+- `app/BackupReminder.kt`：五键（enabled/intervalDays/minutesOfDay/enabledAt/lastBackupAt，PREFERENCE 键进 preference_rows 随备份走）+ `nextReminderAt() = (lastBackupAt ?: enabledAt) + intervalDays` 在提醒时刻 + 每分钟 ticker（替代 Flutter Timer.periodic）+ 会话内 snooze（不落盘）。容器级单例，`MemoApplication.onCreate` 调 `initialize()`。
+- 备份页 §2 全接线：启用开关（**未选时间先弹时间滚轮**，对齐 upstream `setEnabled(true)` 抛 StateError 的前置）→ 频率（预设 1/3/7/14/30 + 自定义 1-365 对话框）→ 时间 → 上次备份 → 下次提醒（后四行仅启用时显示）。导出到文件 **保存成功** 才 `recordBackupCompleted()`（对齐 backup_page L1417-1423）。
+- 抽屉横幅 `_buildBackupReminderBanner`：到期才出现，点击进备份页（新增 `onOpenBackup` 导航参数，HomeScreen/MainActivity 转发），X = 会话内 snooze。
+- 顺带：备份页 §3 本机副本的启用开关此前是死的占位 → 接 `LocalSnapshotPreferences.readSettings/writeSettings`（service 的 `preferences` 转 public）。
+
+**测试**：`SettingsSnapshotMergerTest` 16、`DatabaseSnapshotMergerTest` 6（Robolectric 双库：完好/坏序快照）、`BackupReminderTest` 6；全模块 1265 例 0 失败。
+
+**子块 2+4 待办**：WebDAV/S3 的上传成功路径接 `recordBackupCompleted()`（子块 5/6）；导入抽屉的合并报告明细（imported/deduplicated 计数展示，目前只展示 skipped）可在真机反馈后加。
+
 #### 子块 3 进展明细（2026-09-11，本机副本）
 
 5 个纯逻辑/IO 文件（`LocalSnapshotRetention` / `LocalSnapshotStore` / `LocalSnapshotSchedule` / `LocalSnapshotSettings` / `LocalSnapshotService`）+ `LocalSnapshotsScreen` 全接线 + 启动与回前台 `maybeRunLocalSnapshot()`；新增 `IcuStrings.kt`（`android.icu.text.MessageFormat`，复数串 `localSnapshotUsage` 等）。**保留策略、调度闸门、两处平台差异（DB 在 `databases/` 下不在 filesDir；运行状态必须放 SharedPreferences 否则写状态即改指纹）详见上方批次表「备份-3」行，勿重犯。** 测试：`LocalSnapshotRetentionTest` / `LocalSnapshotStoreTest` / `LocalSnapshotScheduleTest` / `LocalSnapshotServiceTest`。
@@ -354,8 +373,8 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 - 完整前向兼容闸门（最小版已落地：`BackupManifestCodec.declaresNewerBuild` + 导入前 `peekManifest` 校验）
 - 真机验证（装机由用户自行测试）
 
-**子块 2 / 4~8 未开始**
-- 2 merge 恢复、4 备份提醒、5 WebDAV、6 S3、7 前向兼容闸门（完整版）、8 Cherry / Chatbox 导入
+**子块 5~8 未开始**
+- 5 WebDAV、6 S3、7 前向兼容闸门（完整版）、8 Cherry / Chatbox 导入
 
 ### 5.10.5 已有可复用资产（**别重造**）
 - `PayloadEntityDao`（13 表通用 CRUD，`core:data/db/`）

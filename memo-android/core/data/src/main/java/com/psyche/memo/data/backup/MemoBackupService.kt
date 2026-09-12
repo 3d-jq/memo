@@ -96,6 +96,8 @@ class MemoBackupService(
             assetFilesRestored = report.assetFilesRestored,
             skippedEntries = report.skippedEntries,
             extractedEntries = report.extractedEntries,
+            mergedConversations = report.mergeReport?.importedConversations ?: 0,
+            deduplicatedConversations = report.mergeReport?.deduplicatedConversations ?: 0,
         )
     }
 
@@ -183,8 +185,11 @@ data class RestoreReportView(
     val assetFilesRestored: Int,
     val skippedEntries: List<String>,
     val extractedEntries: Int,
+    /** Conversations imported / deduplicated by a merge restore (sub-block 2). */
+    val mergedConversations: Int = 0,
+    val deduplicatedConversations: Int = 0,
 ) {
-    /** Conversations the restorer refused to merge (sub-block 2 fills this in). */
+    /** Conversations the restorer refused to merge (invalid message order). */
     val skippedConversations: Int
         get() = skippedEntries.count { it.startsWith("database/") }
 }

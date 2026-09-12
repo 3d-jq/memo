@@ -159,6 +159,7 @@ fun HomeScreen(
     container: AppContainerImpl,
     modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit,
+    onOpenBackup: () -> Unit = {},
     onOpenHistory: () -> Unit,
     onOpenProviders: () -> Unit,
     onOpenSearchServices: () -> Unit = {},
@@ -426,6 +427,7 @@ fun HomeScreen(
                         drawerOpen = false
                     },
                     onOpenSettings = onOpenSettings,
+                    onOpenBackup = onOpenBackup,
                     onOpenHistory = onOpenHistory,
                     onCurrentDeleted = ::onCurrentDeleted,
                     onOpenTranslate = onOpenTranslate,

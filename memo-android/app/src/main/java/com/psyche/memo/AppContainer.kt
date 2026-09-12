@@ -153,6 +153,12 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     }
 
     /**
+     * 备份提醒（backup 子块 4）：五键调度 + 到期判定 + 会话内 snooze，
+     * 容器级单例（横幅与备份页读同一份状态），`initialize()` 启动分钟计时。
+     */
+    val backupReminder: BackupReminder by lazy { BackupReminder(preferenceRepository) }
+
+    /**
      * Launch + resume hook: takes a copy when the schedule says one is due.
      * Cheap to call — the counters and the change fingerprint decide — and it
      * never blocks the caller.

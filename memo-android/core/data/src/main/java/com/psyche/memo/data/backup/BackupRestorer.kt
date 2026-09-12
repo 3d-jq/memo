@@ -27,6 +27,7 @@ internal data class RestoreReport(
     val assetFilesRestored: Int,
     val skippedEntries: List<String>,
     val extractedEntries: Int = 0,
+    val mergeReport: BackupMergeReport? = null,
 )
 
 /**
@@ -38,18 +39,17 @@ enum class RestoreMode { OVERWRITE, MERGE }
 /**
  * Applies a backup archive to the current installation.
  *
- * Ported from `DataSync._restoreFromBackupFile` (`data_sync.dart` L2917), with
- * this batch implementing the parts that a **local file** restore needs:
- * extraction, verification, settings application and — for [RestoreMode.OVERWRITE]
- * — replacing the live database file.
+ * Ported from `DataSync._restoreFromBackupFile` (`data_sync.dart` L2917):
+ * extraction, verification, database application (file swap for
+ * [RestoreMode.OVERWRITE], [DatabaseSnapshotMerger] for [RestoreMode.MERGE])
+ * and the `settings.json` payload (wholesale for overwrite, merged per
+ * [SettingsSnapshotMerger] for merge).
  *
- * Deliberately *not* here yet (sub-block 2 / 7):
- *  - merge semantics for conversations and messages (only settings merge now)
- *  - the crash-safe bundle staging / lease / cutover pipeline the Flutter build
- *    uses for online restore. This implementation writes the database by
- *    swapping the file while the app is quiesced, which is correct for the
- *    offline, user-initiated local-file flow but is not a substitute for the
- *    staged pipeline.
+ * Deliberately *not* here yet (sub-block 7): the crash-safe bundle staging /
+ * lease / cutover pipeline the Flutter build uses for online restore. This
+ * implementation writes the database by swapping the file while the app is
+ * quiesced, which is correct for the offline, user-initiated local-file flow
+ * but is not a substitute for the staged pipeline.
  */
 internal class BackupRestorer(
     private val context: Context,
@@ -99,13 +99,12 @@ internal class BackupRestorer(
 
             check(!isCancelled()) { "恢复已取消" }
 
-            // ── settings ────────────────────────────────────────────────────
-            onProgress(PHASE_APPLYING_SETTINGS, 0, -1)
-            val settingsFile = File(staging, BackupManifestCodec.ENTRY_SETTINGS)
-            val applied = applySettings(settingsFile, mode)
-
             // ── database ────────────────────────────────────────────────────
+            // The database goes first so the settings payload below lands in the
+            // restored file, not in one that is about to be swapped away (the
+            // original also persists business data last for exactly this reason).
             var databaseRestored = false
+            var mergeReport: BackupMergeReport? = null
             if (manifest.includeChats) {
                 check(!isCancelled()) { "恢复已取消" }
                 onProgress(PHASE_APPLYING_DATABASE, 0, -1)
@@ -116,12 +115,15 @@ internal class BackupRestorer(
                     replaceDatabase(stagedDb)
                     databaseRestored = true
                 } else {
-                    // Merge for conversations/messages lands in sub-block 2.
-                    // Refusing is better than half-merging: the user keeps their
-                    // current data and is told plainly what happened.
-                    skipped += "database/kelivo.db (合并模式暂未支持会话合并)"
+                    mergeReport = DatabaseSnapshotMerger(database.writableDatabase).merge(stagedDb)
+                    databaseRestored = true
                 }
             }
+
+            // ── settings ────────────────────────────────────────────────────
+            onProgress(PHASE_APPLYING_SETTINGS, 0, -1)
+            val settingsFile = File(staging, BackupManifestCodec.ENTRY_SETTINGS)
+            val applied = applySettings(settingsFile, mode)
 
             // ── assets ──────────────────────────────────────────────────────
             var assetFiles = 0
@@ -142,6 +144,7 @@ internal class BackupRestorer(
                 assetFilesRestored = assetFiles,
                 skippedEntries = skipped.toList(),
                 extractedEntries = extracted.size,
+                mergeReport = mergeReport,
             )
         } finally {
             runCatching { staging.deleteRecursively() }
@@ -158,13 +161,20 @@ internal class BackupRestorer(
      *
      * The payload is keyed by *source key*; each is routed back to its table.
      * Providers arrive as a map plus an order array, everything else as an
-     * array ordered by `(sort_order, id)` — writing the array index as the new
-     * `sort_order` preserves the user's ordering.
+     * array ordered by `(sort_order, id)`.
+     *
+     * [RestoreMode.OVERWRITE] replaces each touched table wholesale (the array
+     * index becomes the new `sort_order`, preserving the exporting device's
+     * order). [RestoreMode.MERGE] goes through [SettingsSnapshotMerger] instead:
+     * shared rows update in place, backup-only rows append, local-only rows
+     * survive, and preferences are merged per the merger's rules rather than
+     * overwritten.
      */
     private fun applySettings(settingsFile: File, mode: RestoreMode): AppliedSettings {
         require(settingsFile.isFile) { "备份缺少 settings.json" }
         val root = BackupJson.parse(settingsFile.readText(Charsets.UTF_8)) as? JsonObject
             ?: throw IllegalArgumentException("settings.json 不是 JSON 对象")
+        val merge = mode == RestoreMode.MERGE
 
         var entityRows = 0
         var preferenceKeys = 0
@@ -177,49 +187,94 @@ internal class BackupRestorer(
                 val dao = PayloadEntityDao(db, entry.tableName, primaryKey = entry.payloadKey)
                 if (entry.isProvider) {
                     val providers = element as? JsonObject ?: continue
-                    // Provider keys are the map keys; ordering comes from the
-                    // separate `providers_order_v1` array.
-                    entityRows += dao.replaceAll(providers.map { (id, payload) ->
-                        PayloadEntityDao.Row(
-                            id = id,
-                            sortOrder = 0,
-                            payload = payload.toCompactJson(),
-                            updatedAt = 0L,
+                    val incoming = routeProviders(providers, root.orderArray(BackupSettingsSnapshot.KEY_PROVIDER_ORDER))
+                    entityRows += if (merge) {
+                        val existing = dao.getAll().map { row ->
+                            SettingsSnapshotMerger.Row(row.id, row.sortOrder, BackupJson.parse(row.payload) as? JsonObject ?: JsonObject(emptyMap()))
+                        }
+                        val merged = SettingsSnapshotMerger.mergeProviders(
+                            existing,
+                            incoming,
+                            preferIncomingOrder = root.containsKey(BackupSettingsSnapshot.KEY_PROVIDER_ORDER),
                         )
-                    })
+                        dao.replaceAll(merged.map { it.toDaoRow() })
+                    } else {
+                        // Provider keys are the map keys; ordering comes from the
+                        // separate `providers_order_v1` array.
+                        dao.replaceAll(incoming.map { it.toDaoRow() })
+                    }
                 } else {
                     val rows = element as? JsonArray ?: continue
                     // Array position becomes the new sort_order, preserving the
                     // ordering the exporting device had.
                     val payloads = rows.mapIndexedNotNull { index, payload ->
-                        payload.idOrNull()?.let { id -> Triple(id, payload.toCompactJson(), index) }
+                        payload.idOrNull()?.let { id -> Triple(id, payload, index) }
                     }
-                    // memory_entry_rows / assistant_memory_rows carry NOT NULL
-                    // columns beyond the payload (scope / type / status /
-                    // content_normalized / assistant_id …), so the generic DAO
-                    // is rejected by their CHECK constraints — project the
-                    // payload onto the typed columns instead.
                     entityRows += when (entry.sourceKey) {
-                        "memory_entries_v1" -> MemoryEntryRowDao(db).replaceAll(
-                            payloads.map { (id, json, index) ->
-                                MemoryEntryRowDao.Row.fromPayload(id, json, sortOrder = index)
-                            },
-                        )
-                        "assistant_memories_v1" -> AssistantMemoryRowDao(db).replaceAll(
-                            payloads.map { (id, json, index) ->
-                                AssistantMemoryRowDao.Row.fromPayload(id, json, sortOrder = index)
-                            },
-                        )
-                        else -> dao.replaceAll(
-                            payloads.map { (id, json, index) ->
+                        "memory_entries_v1" -> {
+                            val memoryDao = MemoryEntryRowDao(db)
+                            val incoming = payloads.map { (id, payload, index) ->
+                                MemoryEntryRowDao.Row.fromPayload(id, payload.toCompactJson(), sortOrder = index)
+                            }
+                            if (merge) {
+                                val existing = memoryDao.getAll().map { row ->
+                                    SettingsSnapshotMerger.Row(row.id, row.sortOrder, BackupJson.parse(row.payload) as? JsonObject ?: JsonObject(emptyMap()))
+                                }
+                                val incomingRows = payloads.map { (id, payload, index) ->
+                                    SettingsSnapshotMerger.Row(id, index, payload as? JsonObject ?: JsonObject(emptyMap()))
+                                }
+                                val merged = SettingsSnapshotMerger.mergeEntities(entry.sourceKey, existing, incomingRows)
+                                memoryDao.replaceAll(merged.map { mergedRow ->
+                                    // Re-project through the payload so the typed
+                                    // columns stay consistent with merged JSON.
+                                    MemoryEntryRowDao.Row.fromPayload(mergedRow.id, mergedRow.payload.toCompactJson(), sortOrder = mergedRow.sortOrder)
+                                })
+                            } else {
+                                memoryDao.replaceAll(incoming)
+                            }
+                        }
+                        "assistant_memories_v1" -> {
+                            val memoryDao = AssistantMemoryRowDao(db)
+                            val incoming = payloads.map { (id, payload, index) ->
+                                AssistantMemoryRowDao.Row.fromPayload(id, payload.toCompactJson(), sortOrder = index)
+                            }
+                            if (merge) {
+                                val existing = memoryDao.getAll().map { row ->
+                                    SettingsSnapshotMerger.Row(row.id, row.sortOrder, BackupJson.parse(row.payload) as? JsonObject ?: JsonObject(emptyMap()))
+                                }
+                                val incomingRows = payloads.map { (id, payload, index) ->
+                                    SettingsSnapshotMerger.Row(id, index, payload as? JsonObject ?: JsonObject(emptyMap()))
+                                }
+                                val merged = SettingsSnapshotMerger.mergeEntities(entry.sourceKey, existing, incomingRows)
+                                memoryDao.replaceAll(merged.map { mergedRow ->
+                                    AssistantMemoryRowDao.Row.fromPayload(mergedRow.id, mergedRow.payload.toCompactJson(), sortOrder = mergedRow.sortOrder)
+                                })
+                            } else {
+                                memoryDao.replaceAll(incoming)
+                            }
+                        }
+                        else -> {
+                            val toDaoRow = { id: String, payload: JsonElement, index: Int ->
                                 PayloadEntityDao.Row(
                                     id = id,
                                     sortOrder = index,
-                                    payload = json,
+                                    payload = payload.toCompactJson(),
                                     updatedAt = 0L,
                                 )
-                            },
-                        )
+                            }
+                            if (merge) {
+                                val existing = dao.getAll().map { row ->
+                                    SettingsSnapshotMerger.Row(row.id, row.sortOrder, BackupJson.parse(row.payload) as? JsonObject ?: JsonObject(emptyMap()))
+                                }
+                                val incomingRows = payloads.map { (id, payload, index) ->
+                                    SettingsSnapshotMerger.Row(id, index, payload as? JsonObject ?: JsonObject(emptyMap()))
+                                }
+                                val merged = SettingsSnapshotMerger.mergeEntities(entry.sourceKey, existing, incomingRows)
+                                dao.replaceAll(merged.map { it.toDaoRow() })
+                            } else {
+                                dao.replaceAll(payloads.map { (id, payload, index) -> toDaoRow(id, payload, index) })
+                            }
+                        }
                     }
                 }
             }
@@ -231,13 +286,58 @@ internal class BackupRestorer(
         // Preferences are written outside the entity transaction because they
         // may target SharedPreferences rather than preference_rows.
         val preferences = root.filterKeys { isPreferenceKey(it) }
-        for ((key, value) in preferences) {
-            preferenceRepository.writeJson(key, value.toCompactJson())
-            preferenceKeys += 1
+        if (merge) {
+            val existing = preferences.keys.associateWith { key -> preferenceRepository.readJson(key) }
+            val toWrite = SettingsSnapshotMerger.mergePreferences(existing, preferences, root.keys)
+            for ((key, value) in toWrite) {
+                preferenceRepository.writeJson(key, value)
+                preferenceKeys += 1
+            }
+        } else {
+            for ((key, value) in preferences) {
+                preferenceRepository.writeJson(key, value.toCompactJson())
+                preferenceKeys += 1
+            }
         }
 
         return AppliedSettings(entityRows = entityRows, preferenceKeys = preferenceKeys)
     }
+
+    /**
+     * `BusinessSettingsRouter._routeProviders` — rows ordered by the backup's
+     * `providers_order_v1` first, then any map keys the order array missed;
+     * ids in the order array without a config become order-only placeholders.
+     */
+    private fun routeProviders(
+        providers: JsonObject,
+        order: List<String>,
+    ): List<SettingsSnapshotMerger.Row> {
+        val orderedKeys = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
+        for (key in order) {
+            if (key.isNotEmpty() && seen.add(key)) orderedKeys.add(key)
+        }
+        for ((key, _) in providers) {
+            if (seen.add(key)) orderedKeys.add(key)
+        }
+        val orderOnly = JsonObject(mapOf("enabled" to JsonPrimitive(SettingsSnapshotMerger.PROVIDER_ORDER_ONLY_ENABLED)))
+        return orderedKeys.mapIndexed { index, key ->
+            val payload = providers[key] as? JsonObject ?: orderOnly
+            SettingsSnapshotMerger.Row(key, index, payload)
+        }
+    }
+
+    private fun SettingsSnapshotMerger.Row.toDaoRow() = PayloadEntityDao.Row(
+        id = id,
+        sortOrder = sortOrder,
+        payload = payload.toCompactJson(),
+        updatedAt = 0L,
+    )
+
+    private fun JsonObject.orderArray(key: String): List<String> =
+        (this[key] as? JsonArray)
+            ?.mapNotNull { element -> (element as? JsonPrimitive)?.content }
+            .orEmpty()
 
     // ── database swap ───────────────────────────────────────────────────────
 

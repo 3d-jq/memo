@@ -41,6 +41,9 @@ import com.composables.icons.lucide.Cable
 import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.FileText
+import com.composables.icons.lucide.Calendar
+import com.composables.icons.lucide.CircleCheck
+import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Import
 import com.composables.icons.lucide.MessageSquare
@@ -142,6 +145,9 @@ fun BackupScreen(
             }
             source.delete()
             if (written.isSuccess) {
+                // backup_page.dart L1417-1423 —— 保存成功才算一次完整备份，
+                // 推进提醒的下一次到期时间。
+                container.backupReminder.recordBackupCompleted()
                 toast(exportedAsTemplate.format(name), NotificationType.SUCCESS)
             } else {
                 toast(
@@ -270,27 +276,103 @@ fun BackupScreen(
             }
 
             Spacer(Modifier.height(18.dp))
-            // ── 2. 备份提醒 (Backup Reminder) ─────────────────────────────
-            // First row is `_iosSwitchRow` (backup_page.dart L1612); the other
-            // two are `_iosNavRow` (Frequency / Last Backup). Wired in sub-block 4.
+            // ── 2. 备份提醒 (Backup Reminder) — sub-block 4, wired ──────────
+            // Rows mirror `_BackupReminderMobileSection` (backup_page.dart
+            // L1602-1694): the enable switch (which asks for a time first when
+            // none is set), then Frequency / Time / Last Backup / Next Reminder
+            // once enabled. The record hooks live on the export path below.
+            val reminderState = com.psyche.memo.ui.backup.rememberBackupReminderState(container)
+            var showReminderTimeSheet by remember { mutableStateOf(false) }
+            var showReminderFrequencySheet by remember { mutableStateOf(false) }
+            // Frequency picked while no time is set: remember the days until the
+            // time sheet saves (upstream chains the two dialogs the same way).
+            var pendingDays by remember { mutableStateOf<Int?>(null) }
+            val enableReminder = com.psyche.memo.ui.backup.rememberBackupReminderEnableHandler(
+                container = container,
+                onNeedTimePicker = {
+                    pendingDays = null
+                    showReminderTimeSheet = true
+                },
+            )
             BackupSection(title = stringResource(UiR.string.backup_reminder_section_title)) {
                 BackupSwitchRow(
                     Lucide.Timer,
                     stringResource(UiR.string.backup_reminder_enable_title),
-                    value = false,
-                    onChange = {},
+                    value = reminderState.enabled,
+                    onChange = enableReminder,
                 )
-                BackupDivider()
-                BackupPlaceholderRow(
-                    Lucide.Repeat,
-                    stringResource(UiR.string.backup_reminder_frequency_title),
-                    "",
+                if (reminderState.enabled) {
+                    BackupDivider()
+                    BackupPlaceholderRow(
+                        Lucide.Repeat,
+                        stringResource(UiR.string.backup_reminder_frequency_title),
+                        com.psyche.memo.ui.backup.backupReminderFrequencyLabel(reminderState.intervalDays),
+                        onTap = { showReminderFrequencySheet = true },
+                    )
+                    BackupDivider()
+                    BackupPlaceholderRow(
+                        Lucide.Clock,
+                        stringResource(UiR.string.backup_reminder_time_title),
+                        com.psyche.memo.ui.backup.backupReminderTimeLabel(
+                            context,
+                            reminderState.reminderMinutesOfDay,
+                        ),
+                        onTap = { showReminderTimeSheet = true },
+                    )
+                    BackupDivider()
+                    BackupPlaceholderRow(
+                        Lucide.CircleCheck,
+                        stringResource(UiR.string.backup_reminder_last_backup_title),
+                        com.psyche.memo.ui.backup.backupReminderDateTimeLabel(
+                            context,
+                            reminderState.lastBackupAt,
+                        ),
+                    )
+                    BackupDivider()
+                    BackupPlaceholderRow(
+                        Lucide.Calendar,
+                        stringResource(UiR.string.backup_reminder_next_reminder_title),
+                        com.psyche.memo.ui.backup.backupReminderNextLabel(
+                            context,
+                            reminderState.reminder.nextReminderAt(),
+                        ),
+                    )
+                }
+            }
+
+            // 时间滚轮 / 频率 sheet（备份提醒的编辑入口）。
+            if (showReminderTimeSheet) {
+                com.psyche.memo.ui.backup.BackupReminderTimeSheet(
+                    initialMinutes = reminderState.reminderMinutesOfDay,
+                    onDismiss = {
+                        showReminderTimeSheet = false
+                        pendingDays = null
+                    },
+                    onSave = { minutes ->
+                        showReminderTimeSheet = false
+                        container.backupReminder.saveSchedule(
+                            enabled = true,
+                            intervalDays = pendingDays ?: reminderState.intervalDays,
+                            reminderMinutesOfDay = minutes,
+                        )
+                        pendingDays = null
+                    },
                 )
-                BackupDivider()
-                BackupPlaceholderRow(
-                    Lucide.History,
-                    stringResource(UiR.string.backup_reminder_last_backup_title),
-                    "",
+            }
+            if (showReminderFrequencySheet) {
+                com.psyche.memo.ui.backup.BackupReminderFrequencySheet(
+                    intervalDays = reminderState.intervalDays,
+                    onDismiss = { showReminderFrequencySheet = false },
+                    onPick = { days ->
+                        showReminderFrequencySheet = false
+                        val minutes = reminderState.reminderMinutesOfDay
+                        if (minutes == null) {
+                            pendingDays = days
+                            showReminderTimeSheet = true
+                        } else {
+                            container.backupReminder.saveSchedule(true, days, minutes)
+                        }
+                    },
                 )
             }
 
@@ -298,13 +380,25 @@ fun BackupScreen(
             // ── 3. 本地副本 (Local Copies) ─────────────────────────────────
             // Per `_LocalSnapshotMobileSection` (backup_page.dart L1546-1600):
             // only 2 rows on this page — the Enabled switch + a "Manage copies"
-            // nav row that pushes the LocalSnapshotsPage. Wired in sub-block 3.
+            // nav row that pushes the LocalSnapshotsPage. (Sub-block 3; the
+            // switch used to be a dead placeholder.)
+            val localSnapshotPrefs = remember { container.localSnapshots.preferences }
+            var snapshotEnabled by remember {
+                mutableStateOf(localSnapshotPrefs.readSettings().enabled)
+            }
             BackupSection(title = stringResource(UiR.string.local_snapshot_section_title)) {
                 BackupSwitchRow(
                     Lucide.Shield,
                     stringResource(UiR.string.local_snapshot_enabled_title),
-                    value = false,
-                    onChange = {},
+                    value = snapshotEnabled,
+                    onChange = { next ->
+                        snapshotEnabled = next
+                        scope.launch(Dispatchers.IO) {
+                            localSnapshotPrefs.writeSettings(
+                                localSnapshotPrefs.readSettings().copy(enabled = next),
+                            )
+                        }
+                    },
                 )
                 BackupDivider()
                 BackupPlaceholderRow(

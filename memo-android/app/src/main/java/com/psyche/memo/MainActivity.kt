@@ -342,6 +342,7 @@ private fun AppThemeAndContent(
                             container = container,
                             modifier = Modifier.fillMaxSize(),
                             onOpenSettings = { navController.navigate("settings") },
+                            onOpenBackup = { navController.navigate("backup") },
                             onOpenHistory = { navController.navigate("chat_history") },
                             onOpenProviders = { navController.navigate("providers") },
                             onOpenSearchServices = { navController.navigate("search_services") },

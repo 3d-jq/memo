@@ -28,7 +28,7 @@ class LocalSnapshotService(
     /** Where the live database actually is — the change fingerprint reads it. */
     val databaseFile: File,
     private val backupService: MemoBackupService,
-    private val preferences: LocalSnapshotPreferences,
+    val preferences: LocalSnapshotPreferences,
     private val store: LocalSnapshotStore = LocalSnapshotStore(appDataDirectory),
 ) {
     private val running = AtomicBoolean(false)

@@ -122,6 +122,7 @@ fun SideDrawerContent(
     onSelect: (String) -> Unit,
     onNew: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenBackup: () -> Unit = {},
     onOpenHistory: () -> Unit,
     onCurrentDeleted: () -> Unit,
     onOpenTranslate: () -> Unit = {},
@@ -297,6 +298,13 @@ fun SideDrawerContent(
                 }
             }
         } else {
+        // 0. Backup reminder banner (side_drawer.dart `_buildBackupReminderBanner`
+        //    L1520-1612, placed above the search box in the fixed header): due
+        //    only, tap goes to the backup page, X snoozes for the session.
+        com.psyche.memo.ui.backup.BackupReminderBanner(
+            container = container,
+            onOpenBackup = onOpenBackup,
+        )
         // 1. Search field (memo mobile: filled rounded TextField with a
         //    centered hint overlay when empty; leading search icon; trailing
         //    clear button when text is non-empty; history button is a separate
