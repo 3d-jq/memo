@@ -428,7 +428,9 @@ private fun ModelTile(
     val bg = if (option.selected) cs.primary.copy(alpha = 0.08f) else semantic.surfaceCard
     Row(
         modifier = Modifier
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            // 卡片尺寸/留白对齐「更多」sheet（用户 2026-09-12）：卡片左右缩进 16、
+            // 卡间距 8（原来是 12/12），行高仍是 48。
+            .padding(horizontal = 16.dp, vertical = 4.dp)
             .fillMaxWidth()
             .background(bg, RoundedCornerShape(14.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
