@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -67,7 +68,6 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.ProviderConfig
-import com.psyche.memo.data.model.ProviderGroup
 import com.psyche.memo.data.repo.ProviderRepository
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -91,7 +91,9 @@ private val sheetJson = Json { ignoreUnknownKeys = true }
 internal fun encodeProviderConfig(cfg: ProviderConfig): String {
     val kind = cfg.classifiedKind()
     val obj: JsonObject = buildJsonObject {
-        put("type", kind)
+        // wire 值按 Flutter 的 ProviderKind.name（share_provider_sheet.dart L18-27）：
+        // google / claude / openai —— 不是我们内部的 "gemini"（否则分享码在两端都导错）。
+        put("type", if (kind == "gemini") "google" else kind)
         put("name", cfg.name)
         put("apiKey", cfg.apiKey)
         if (kind != "gemini") put("baseUrl", cfg.baseUrl)
@@ -185,13 +187,19 @@ fun AddProviderSheet(
             }
             1 -> {
                 val display = googleName.trim().ifEmpty { "Google" }
-                keyName = uniqueKey(existing, "Gemini", display)
+                keyName = uniqueKey(existing, "Google", display)
                 cfg = ProviderConfig(
                     id = keyName,
                     enabled = googleEnabled,
                     name = display,
                     apiKey = googleKey.trim(),
-                    baseUrl = googleBase.trim(),
+                    // Vertex 用 aiplatform 主机；普通 Gemini 回落到默认地址
+                    // （add_provider_sheet.dart L363-368：空值也走默认，别存 ""）。
+                    baseUrl = if (googleVertex) {
+                        "https://aiplatform.googleapis.com"
+                    } else {
+                        googleBase.trim().ifEmpty { "https://generativelanguage.googleapis.com/v1beta" }
+                    },
                     providerType = "google",
                     vertexAI = if (googleVertex) true else null,
                     location = if (googleVertex) googleLocation.trim() else null,
@@ -207,7 +215,7 @@ fun AddProviderSheet(
                     enabled = claudeEnabled,
                     name = display,
                     apiKey = claudeKey.trim(),
-                    baseUrl = claudeBase.trim(),
+                    baseUrl = claudeBase.trim().ifEmpty { "https://api.anthropic.com/v1" },
                     providerType = "claude",
                 )
             }
@@ -215,8 +223,8 @@ fun AddProviderSheet(
         val repo = ProviderRepository(container.database.writableDatabase, container.preferenceRepository)
         val sortOrder = dao.get(cfg.id)?.sortOrder ?: dao.nextSortOrder()
         dao.upsert(cfg.id, sheetJson.encodeToString(ProviderConfig.serializer(), cfg), sortOrder)
-        // Register in the saved order so it slots after the builtins.
-        val order = (repo.order() + listOf(cfg.id)).distinct()
+        // 新供应商插到顺序表**最前面**（add_provider_sheet.dart L424-429）。
+        val order = (listOf(cfg.id) + repo.order()).distinct()
         repo.setOrder(order)
         onAdded()
         SnackbarManager.show(
@@ -237,9 +245,10 @@ fun AddProviderSheet(
                 .fillMaxWidth()
                 .padding(bottom = 16.dp),
         ) {
+            MemoSheetHandle(trailingGap = 0.dp)
             // Header: X left + centered 18sp semibold title.
             Box(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).height(36.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(36.dp),
             ) {
                 Text(
                     text = stringResource(com.psyche.memo.ui.R.string.add_provider_sheet_title),
@@ -644,24 +653,32 @@ fun ProviderGroupPickerSheet(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            // Ungrouped option + group rows (48dp, selected primary + check).
-            GroupPickerTile(
-                title = stringResource(com.psyche.memo.ui.R.string.provider_groups_other_ungrouped_option),
-                selected = current == null,
-                onClick = {
-                    repo.setGroupFor(providerKey, null)
-                    onDismiss()
-                },
-            )
-            groups.forEach { g ->
+            // 分组多起来要能滚（原版是 Flexible(ListView(shrinkWrap: true))）。
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                // Ungrouped option + group rows (48dp, selected primary + check).
                 GroupPickerTile(
-                    title = g.name,
-                    selected = current == g.id,
+                    title = stringResource(com.psyche.memo.ui.R.string.provider_groups_other_ungrouped_option),
+                    selected = current == null,
                     onClick = {
-                        repo.setGroupFor(providerKey, g.id)
+                        repo.setGroupFor(providerKey, null)
                         onDismiss()
                     },
                 )
+                groups.forEach { g ->
+                    GroupPickerTile(
+                        title = g.name,
+                        selected = current == g.id,
+                        onClick = {
+                            repo.setGroupFor(providerKey, g.id)
+                            onDismiss()
+                        },
+                    )
+                }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -670,12 +687,16 @@ fun ProviderGroupPickerSheet(
     if (showCreate) {
         CreateGroupDialog(
             onCreate = { name ->
-                val id = "grp_${System.currentTimeMillis()}"
-                repo.saveGroup(ProviderGroup(id = id, name = name, createdAt = System.currentTimeMillis()))
-                repo.setGroupFor(providerKey, id)
-                groups = repo.groups()
-                current = id
+                // 走 repo.createGroup：重名（大小写不敏感）返回已有分组 id、
+                // 顺带维护「未分组」位置与 cleanup（原版 provider_group_picker_sheet
+                // L42-76）；创建后**直接分配并关闭面板**，此前会留在面板上。
+                val id = repo.createGroup(name)
+                if (id.isNotEmpty()) {
+                    repo.setGroupFor(providerKey, id)
+                    current = id
+                }
                 showCreate = false
+                onDismiss()
             },
             onDismiss = { showCreate = false },
         )

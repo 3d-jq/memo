@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -92,7 +93,9 @@ internal fun decodeAiProvider(existing: Set<String>, s: String): ImportResult {
     val apiKey = str("apiKey")
     val baseUrl = str("baseUrl")
     return when (type) {
-        "google" -> {
+        // Flutter 的 wire 值就是 'google'（share_provider_sheet.dart L18-27）；
+        // 早期版本我们误写过 "gemini"，解码一并接受，避免老分享码导入成 OpenAI。
+        "google", "gemini" -> {
             val key = uniqueKey(existing, "Google", name.ifEmpty { "Google" })
             ImportResult(
                 key,
@@ -166,11 +169,13 @@ internal fun decodeChatBoxJson(existing: Set<String>, s: String): List<ImportRes
             )
         }
     }
-    (providers["google"] as? JsonObject)?.let { o ->
+    // ChatBox 的 JSON 里 Gemini 那一段的键是 'gemini'（import_provider_sheet.dart L110）；
+    // 兼容 'google' 以免漏掉别的导出器。
+    ((providers["gemini"] ?: providers["google"]) as? JsonObject)?.let { o ->
         val apiKey = str(o, "apiKey")
         if (apiKey.isNotBlank()) {
             val name = str(o, "name").ifEmpty { "Google" }
-            val key = uniqueKey(existing + out.map { it.key }, "Gemini", name)
+            val key = uniqueKey(existing + out.map { it.key }, "Google", name)
             out.add(
                 ImportResult(
                     key,
@@ -298,7 +303,8 @@ fun ImportProviderSheet(
             if (code.isNullOrBlank()) {
                 SnackbarManager.show(
                     AppNotification(
-                        message = "QR not detected",
+                        // 原版走同一条失败提示模板（import_provider_sheet.dart L431-434）。
+                        message = importFailedTemplate.format("QR not detected"),
                         type = NotificationType.ERROR,
                     ),
                 )
@@ -318,8 +324,10 @@ fun ImportProviderSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = 640.dp)
                 .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
+            MemoSheetHandle(trailingGap = 0.dp)
             // Header: camera (left) + centered title + gallery (right).
             Box(modifier = Modifier.fillMaxWidth().height(36.dp)) {
                 Box(
@@ -329,7 +337,14 @@ fun ImportProviderSheet(
                         .clickable { scanLauncher.launch(null) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Lucide.Camera, contentDescription = "Scan QR", tint = cs.onSurface, modifier = Modifier.size(22.dp))
+                    Icon(
+                        Lucide.Camera,
+                        contentDescription = stringResource(
+                            com.psyche.memo.ui.R.string.import_provider_sheet_scan_qr_tooltip,
+                        ),
+                        tint = cs.onSurface,
+                        modifier = Modifier.size(22.dp),
+                    )
                 }
                 Text(
                     text = stringResource(com.psyche.memo.ui.R.string.import_provider_sheet_title),
@@ -347,15 +362,17 @@ fun ImportProviderSheet(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Lucide.Image, contentDescription = "From gallery", tint = cs.onSurface, modifier = Modifier.size(22.dp))
+                    Icon(
+                        Lucide.Image,
+                        contentDescription = stringResource(
+                            com.psyche.memo.ui.R.string.import_provider_sheet_from_gallery_tooltip,
+                        ),
+                        tint = cs.onSurface,
+                        modifier = Modifier.size(22.dp),
+                    )
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Text(
-                text = stringResource(com.psyche.memo.ui.R.string.import_provider_sheet_description),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(10.dp))
             OutlinedTextField(
                 value = paste,
                 onValueChange = { paste = it },
@@ -363,8 +380,10 @@ fun ImportProviderSheet(
                 maxLines = 8,
                 textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 13.5.sp),
                 placeholder = {
+                    // 原版把这段说明只当输入框 hint 用（import_provider_sheet.dart
+                    // L507-544），不另起一行正文。
                     Text(
-                        stringResource(com.psyche.memo.ui.R.string.import_provider_sheet_input_hint),
+                        stringResource(com.psyche.memo.ui.R.string.import_provider_sheet_description),
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = 13.5.sp,
                             color = cs.onSurface.copy(alpha = 0.4f),

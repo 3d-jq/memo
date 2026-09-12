@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -46,33 +47,18 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Lucide
 import com.psyche.memo.AppContainerImpl
-import com.psyche.memo.data.db.PayloadEntityDao
 import com.psyche.memo.data.model.ProviderConfig
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
-import kotlinx.serialization.json.Json
 
 /**
  * Provider sub-pages (#11) — 1:1 ports of provider_network_page.dart and
- * provider_custom_request_page.dart: each control saves immediately through
- * a debounced config writer (no save button), mirroring the detail page.
+ * provider_custom_request_page.dart: each control saves immediately through a
+ * debounced write-back into the **detail page's** config state (which owns the
+ * single debounced DB writer), mirroring the original's
+ * `settings.setProviderConfig` read-modify-write.
  */
-private val subPageJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-
-/** Shared immediate-save helper: reloads the row, applies [change], persists. */
-internal fun persistProviderConfig(
-    container: AppContainerImpl,
-    providerId: String,
-    change: (ProviderConfig) -> ProviderConfig,
-) {
-    val dao = PayloadEntityDao(container.database.writableDatabase, "provider_rows", primaryKey = "provider_key")
-    val current = dao.get(providerId)?.let {
-        runCatching { subPageJson.decodeFromString(ProviderConfig.serializer(), it.payload) }.getOrNull()
-    } ?: return
-    val next = change(current)
-    dao.upsert(providerId, subPageJson.encodeToString(ProviderConfig.serializer(), next), dao.get(providerId)?.sortOrder ?: 0)
-}
 
 /** Back-chevron + title app bar used by all provider sub-pages. */
 @Composable
@@ -147,45 +133,40 @@ internal fun SubPageInput(
 fun ProviderNetworkPage(
     container: AppContainerImpl,
     providerId: String,
+    cfg: ProviderConfig,
+    onCfgChange: (ProviderConfig) -> Unit,
     onBack: () -> Unit,
 ) {
-    var proxyEnabled by remember { mutableStateOf(false) }
-    var proxyType by remember { mutableStateOf("http") }
+    var proxyEnabled by remember { mutableStateOf(cfg.proxyEnabled ?: false) }
+    var proxyType by remember { mutableStateOf(if (cfg.proxyType == "socks5") "socks5" else "http") }
     var proxyTypeSheetVisible by remember { mutableStateOf(false) }
-    var proxyHost by remember { mutableStateOf("") }
-    var proxyPort by remember { mutableStateOf("8080") }
-    var proxyUsername by remember { mutableStateOf("") }
-    var proxyPassword by remember { mutableStateOf("") }
-
-    LaunchedEffect(providerId) {
-        val dao = PayloadEntityDao(container.database.readableDatabase, "provider_rows", primaryKey = "provider_key")
-        dao.get(providerId)?.let { row ->
-            runCatching { subPageJson.decodeFromString(ProviderConfig.serializer(), row.payload) }.getOrNull()
-        }?.let { cfg ->
-            proxyEnabled = cfg.proxyEnabled ?: false
-            proxyType = if (cfg.proxyType == "socks5") "socks5" else "http"
-            proxyHost = cfg.proxyHost ?: ""
-            proxyPort = cfg.proxyPort ?: "8080"
-            proxyUsername = cfg.proxyUsername ?: ""
-            proxyPassword = cfg.proxyPassword ?: ""
-        }
-    }
+    var proxyHost by remember { mutableStateOf(cfg.proxyHost ?: "") }
+    var proxyPort by remember { mutableStateOf(cfg.proxyPort ?: "8080") }
+    var proxyUsername by remember { mutableStateOf(cfg.proxyUsername ?: "") }
+    var proxyPassword by remember { mutableStateOf(cfg.proxyPassword ?: "") }
+    // 保存走**父页面**的 cfg（原版是 settings.setProviderConfig 的读-改-写）：
+    // 子页此前直写 DB，而详情页手里还是旧 cfg，回去动一下任何一行就会把这里的
+    // 代理设置整段覆盖回去（用户可见的数据丢失）。
+    val latestCfg by rememberUpdatedState(cfg)
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(providerId) { loaded = true }
 
     // Debounced immediate save.
-    LaunchedEffect(providerId) {
+    LaunchedEffect(loaded) {
+        if (!loaded) return@LaunchedEffect
         snapshotFlow { arrayOf(proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword) }
             .debounce(400)
             .collect {
-                persistProviderConfig(container, providerId) { cfg ->
-                    cfg.copy(
+                onCfgChange(
+                    latestCfg.copy(
                         proxyEnabled = proxyEnabled,
                         proxyType = proxyType,
                         proxyHost = proxyHost,
                         proxyPort = proxyPort,
                         proxyUsername = proxyUsername,
                         proxyPassword = proxyPassword,
-                    )
-                }
+                    ),
+                )
             }
     }
 
@@ -303,29 +284,22 @@ fun ProviderNetworkPage(
 fun ProviderCustomRequestPage(
     container: AppContainerImpl,
     providerId: String,
+    cfg: ProviderConfig,
+    onCfgChange: (ProviderConfig) -> Unit,
     onBack: () -> Unit,
 ) {
-    var headers by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
-    var body by remember { mutableStateOf<List<Map<String, String>>>(emptyList()) }
+    var headers by remember { mutableStateOf(cfg.customHeaders) }
+    var body by remember { mutableStateOf(cfg.customBody) }
     var loaded by remember { mutableStateOf(false) }
+    // 同网络页：保存回写到父页面 cfg，避免详情页用旧 cfg 把这里的编辑覆盖掉。
+    val latestCfg by rememberUpdatedState(cfg)
 
-    LaunchedEffect(providerId) {
-        val dao = PayloadEntityDao(container.database.readableDatabase, "provider_rows", primaryKey = "provider_key")
-        dao.get(providerId)?.let { row ->
-            runCatching { subPageJson.decodeFromString(ProviderConfig.serializer(), row.payload) }.getOrNull()
-        }?.let { cfg ->
-            headers = cfg.customHeaders
-            body = cfg.customBody
-        }
-        loaded = true
-    }
+    LaunchedEffect(providerId) { loaded = true }
 
     LaunchedEffect(loaded, headers, body) {
         if (!loaded) return@LaunchedEffect
         kotlinx.coroutines.delay(400)
-        persistProviderConfig(container, providerId) { cfg ->
-            cfg.copy(customHeaders = headers, customBody = body)
-        }
+        onCfgChange(latestCfg.copy(customHeaders = headers, customBody = body))
     }
 
     SubPageScaffold(

@@ -151,9 +151,8 @@ internal fun buildProviderItems(
             modelCount = cfg?.models?.size ?: 0,
         )
     }.filter { item ->
-        searchQuery.isBlank() ||
-            item.name.contains(searchQuery, ignoreCase = true) ||
-            item.key.contains(searchQuery, ignoreCase = true)
+        // 原版只按**显示名**搜（providers_page.dart L593-605），内部 key 不参与。
+        searchQuery.isBlank() || item.name.contains(searchQuery, ignoreCase = true)
     }
 }
 
@@ -222,6 +221,10 @@ fun ProvidersScreen(
         if (selected.contains(key)) selected.remove(key) else selected.add(key)
     }
 
+    val deleteSelectedTemplate = stringResource(
+        com.psyche.memo.ui.R.string.providers_page_delete_selected_snackbar,
+    )
+
     fun exitSelectMode() {
         selected.clear()
         selectMode = false
@@ -237,11 +240,18 @@ fun ProvidersScreen(
             title = stringResource(com.psyche.memo.ui.R.string.providers_page_title),
             onBack = onBack,
         ) {
-            // Multi-select toggle: circleDot <-> Check.
+            // Multi-select toggle: circleDot <-> Check（选中态给「完成」提示，
+            // 原版 L174-175 切到 searchServicesPageDone）。
             IconActionButton(
                 if (selectMode) Lucide.Check else Lucide.CircleDot,
                 cs.onSurface,
-                stringResource(com.psyche.memo.ui.R.string.providers_page_multi_select_tooltip),
+                stringResource(
+                    if (selectMode) {
+                        com.psyche.memo.ui.R.string.search_services_page_done
+                    } else {
+                        com.psyche.memo.ui.R.string.providers_page_multi_select_tooltip
+                    },
+                ),
             ) {
                 if (selectMode) selected.clear()
                 selectMode = !selectMode
@@ -360,13 +370,16 @@ fun ProvidersScreen(
                     onSelectAll = {
                         Haptics.light(view)
                         selected.clear()
-                        items.forEach { selected.add(it.key) }
+                        // 原版只全选**非内置**供应商（providers_page.dart L434-459）：
+                        // 内置行删掉会让 OpenAI/Gemini 这些种子行整条消失。
+                        items.forEach { if (it.key !in ProviderRepository.BUILTIN_KEYS) selected.add(it.key) }
                     },
                     onMoveToGroup = {
-                        if (selected.size == 1) showGroupPickerFor = selected.first()
+                        // 原版对**整个选中集**生效（L624-641），不只单选。
+                        if (selected.isNotEmpty()) showGroupPickerFor = selected.first()
                     },
                     onExport = {
-                        if (selected.size == 1) showExportFor = selected.first()
+                        if (selected.isNotEmpty()) showExportFor = selected.first()
                     },
                 )
             }
@@ -429,15 +442,19 @@ fun ProvidersScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        selected.forEach { key ->
+                        // 内置供应商不给删（原版 L664 keysToDelete 只收非内置）。
+                        val doomed = selected.filterNot { it in ProviderRepository.BUILTIN_KEYS }
+                        doomed.forEach { key ->
                             pDao.delete(key)
+                            // 删掉的供应商还要从助手/会话/收藏里摘干净（同详情页删除路径）。
+                            container.clearProviderReferences(key)
                         }
                         providers = loadProviders(container)
                         showDeleteConfirm = false
                         exitSelectMode()
                         SnackbarManager.show(
                             AppNotification(
-                                message = "Deleted",
+                                message = deleteSelectedTemplate.format(doomed.size),
                                 type = NotificationType.SUCCESS,
                             ),
                         )

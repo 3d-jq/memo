@@ -217,12 +217,27 @@ private fun ModelCheckIndicator(check: ModelCheckResult) {
                 .border(2.dp, cs.onSurface.copy(alpha = 0.3f), androidx.compose.foundation.shape.CircleShape),
         )
 
-        ModelCheckState.SUCCESS -> Icon(
-            imageVector = Lucide.CircleCheck,
-            contentDescription = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_detect_success),
-            tint = semantic.success,
-            modifier = Modifier.size(16.dp),
-        )
+        // 成功也带 tooltip（provider_detail_page L4076-4091：成功/失败都在
+        // Tooltip 里，点一下才显示）。
+        ModelCheckState.SUCCESS -> {
+            val tipState = rememberTooltipState(isPersistent = true)
+            val scope = rememberCoroutineScope()
+            val successLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_detect_success)
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                state = tipState,
+                tooltip = { PlainTooltip { Text(successLabel) } },
+            ) {
+                Icon(
+                    imageVector = Lucide.CircleCheck,
+                    contentDescription = successLabel,
+                    tint = semantic.success,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clickable { scope.launch { tipState.show() } },
+                )
+            }
+        }
 
         ModelCheckState.FAILURE -> {
             val tipState = rememberTooltipState(isPersistent = true)

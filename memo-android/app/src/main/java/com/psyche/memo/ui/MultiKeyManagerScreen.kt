@@ -130,6 +130,16 @@ fun MultiKeyManagerScreen(
 
     suspend fun testSingleKey(modelId: String, key: ApiKeyConfig): Boolean = runCatching {
         val client = container.clientFor(cfg.classifiedKind())
+        // 与真实聊天同一条合并路径：provider 层 {name,value} 行 → 请求头映射，
+        // {key,value} 行 → 请求体（CustomRequestMerger）。
+        val extraHeaders = com.psyche.memo.llm.client.CustomRequestMerger.mergeHeaders(
+            provider = cfg.customHeaders.mapNotNull { row ->
+                row["name"]?.trim()?.takeIf { it.isNotEmpty() }?.let { it to row["value"].orEmpty() }
+            }.toMap(),
+        )
+        val extraBody = com.psyche.memo.llm.client.CustomRequestMerger.mergeBody(
+            providerRows = cfg.customBody,
+        )
         client.complete(
             LlmRequest(
                 providerId = cfg.id,
@@ -139,19 +149,25 @@ fun MultiKeyManagerScreen(
                 baseUrl = container.baseUrlFor(cfg.id),
                 chatPath = cfg.chatPath,
                 useResponseApi = cfg.useResponseApi == true,
+                extraHeaders = extraHeaders,
+                extraBodyJson = extraBody.takeIf { it.isNotEmpty() }?.toString(),
             ),
         )
     }.isSuccess
 
-    suspend fun runTests(toTest: List<ApiKeyConfig>, modelId: String) {
-        val base = cfg
-        val out = (base.apiKeys ?: emptyList()).toMutableList()
+    /**
+     * 逐条测试并写回结果。[baseList] 是这次测试要基于的密钥表（可能是**刚导入
+     * 还没进 cfg** 的那一份 —— 原版 `_detectOnly` 会重新读一次 settings，我们
+     * 不能拿闭包里的旧 cfg，否则 `indexOfFirst` 找不到新键、整批测试被跳过）。
+     */
+    suspend fun runTests(baseList: List<ApiKeyConfig>, toTest: List<ApiKeyConfig>, modelId: String) {
+        val out = baseList.toMutableList()
         for (k in toTest) {
             val idx = out.indexOfFirst { it.id == k.id }
             if (idx < 0) continue
             val ok = testSingleKey(modelId, k)
             out[idx] = MultiKeyLogic.applyTestResult(out[idx], ok, System.currentTimeMillis())
-            onCfgChange(base.copy(apiKeys = out.toList()))
+            onCfgChange(cfg.copy(apiKeys = out.toList()))
             // Small delay between tests for UX (upstream 120ms).
             delay(120)
         }
@@ -174,7 +190,8 @@ fun MultiKeyManagerScreen(
         detecting = true
         scope.launch {
             try {
-                runTests(cfg.apiKeys ?: emptyList(), model)
+                val all = cfg.apiKeys ?: emptyList()
+                runTests(baseList = all, toTest = all, modelId = model)
             } finally {
                 detecting = false
             }
@@ -187,7 +204,7 @@ fun MultiKeyManagerScreen(
         testingKeyId = key.id
         scope.launch {
             try {
-                runTests(listOf(key), model)
+                runTests(baseList = cfg.apiKeys ?: emptyList(), toTest = listOf(key), modelId = model)
             } finally {
                 testingKeyId = null
             }
@@ -248,10 +265,14 @@ fun MultiKeyManagerScreen(
                 type = NotificationType.SUCCESS,
             ),
         )
-        // Auto-detect imported keys (_detectOnly).
+        // Auto-detect imported keys (_detectOnly)：用**新表**做基准测新增的那些。
         scope.launch {
             val model = resolveDetectModel() ?: return@launch
-            runTests(newKeys.filter { it.key in unique }, model)
+            runTests(
+                baseList = newKeys,
+                toTest = newKeys.filter { it.key in unique },
+                modelId = model,
+            )
         }
     }
 

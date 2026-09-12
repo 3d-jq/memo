@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,6 +78,7 @@ import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.data.db.PayloadEntityDao
 import com.psyche.memo.data.model.ProviderConfig
+import com.psyche.memo.data.repo.ProviderRepository
 import com.psyche.memo.llm.client.probeStream
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -362,6 +365,8 @@ fun ProviderDetailScreen(
         ProviderCustomRequestPage(
             container = container,
             providerId = providerId,
+            cfg = cfg,
+            onCfgChange = { cfg = it },
             onBack = { showCustomRequest = false },
         )
     }
@@ -369,6 +374,8 @@ fun ProviderDetailScreen(
         ProviderNetworkPage(
             container = container,
             providerId = providerId,
+            cfg = cfg,
+            onCfgChange = { cfg = it },
             onBack = { showNetwork = false },
         )
     }
@@ -477,47 +484,78 @@ private fun ConfigTab(
         val supportsClaudePromptCaching = kind == "anthropic" || (kind == "openai" && isOpenRouter)
         var showKindSheet by remember { mutableStateOf(false) }
         var showGroupSheet by remember { mutableStateOf(false) }
-        SettingsSectionCard {
-            // Provider kind row (Gemini/Claude/OpenAI) with selection sheet.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showKindSheet = true }
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_type_title),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = when (kind) {
-                        "gemini" -> "Gemini"
-                        "anthropic" -> "Claude"
-                        else -> "OpenAI"
-                    },
+        // 分组名要跟着分组选择面板的保存刷新（面板直接写库）。
+        var groupTick by remember { mutableStateOf(0) }
+        val currentGroup = remember(providerId, groupTick) {
+            runCatching {
+                val repo = ProviderRepository(container.database.readableDatabase, container.preferenceRepository)
+                repo.groupById(repo.groupFor(providerId).orEmpty())?.name.orEmpty()
+            }.getOrDefault("")
+        }
+        // provider_detail_page L2053-2056：内置 MemoIN（原 KelivoIN）不显示类型行。
+        if (keyLower != "memoin") {
+            SettingsSectionCard {
+                // Provider kind row (Gemini/Claude/OpenAI) with selection sheet.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showKindSheet = true }
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_provider_type_title),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = when (kind) {
+                            "gemini" -> "Gemini"
+                            "anthropic" -> "Claude"
+                            else -> "OpenAI"
+                        },
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 15.sp,
-                        color = cs.onSurface.copy(alpha = 0.6f),
+                        // 原版这里是不透明的 onSurface（L2058-2061），只有分组那行才用 0.6。
+                        color = cs.onSurface,
                     ),
                 )
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
             }
-            // Group row (opens the group picker sheet).
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showGroupSheet = true }
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(com.psyche.memo.ui.R.string.provider_groups_picker_title),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
+            // Group row (provider_detail_page L2073-2130): 标签是「分组」，右侧显示
+            // 当前分组名（最宽 55% 行宽、右对齐、超长省略；未分组显示「其他」），
+            // 再是 chevron。
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showGroupSheet = true }
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(com.psyche.memo.ui.R.string.provider_groups_group_label),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, color = cs.onSurface),
+                        modifier = Modifier.weight(1f),
+                    )
+                    BoxWithConstraints(modifier = Modifier.weight(1f, fill = false)) {
+                        Text(
+                            text = currentGroup.ifEmpty {
+                                stringResource(com.psyche.memo.ui.R.string.provider_groups_other)
+                            },
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 15.sp,
+                                color = cs.onSurface,
+                            ),
+                            modifier = Modifier.widthIn(max = maxWidth * 0.55f),
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(16.dp))
+                }
             }
             SettingsSwitchRow(
                 label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_enabled_title),
@@ -545,12 +583,15 @@ private fun ConfigTab(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_balance_title),
+                        // 原版 L1873 用的是 `providerDetailPageBalanceInfo`（「获取账户余额」），
+                        // 不是余额页标题那个 `_balance_title`。
+                        text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_balance_info),
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
                         maxLines = 1,
                         modifier = Modifier.weight(1f),
                     )
                     if (cfg.balanceEnabled == true) {
+                        // 徽标内部自带 108dp 上限与失败 tooltip。
                         ProviderBalanceBadge(
                             cfg = cfg,
                             container = container,
@@ -611,12 +652,13 @@ private fun ConfigTab(
                     }
                 }
             }
-            // Custom request + network proxy entries (#11 sub-pages).
+            // Network 行在 Custom request 行**之前**（provider_detail_page L1243-1330）。
+            NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_network_tab)) {
+                onOpenNetwork()
+            }
             NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_custom_request_title)) {
                 onOpenCustomRequest()
             }
-            NavRow(label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_network_tab)) {
-                onOpenNetwork()
             }
         }
 
@@ -635,7 +677,11 @@ private fun ConfigTab(
             ProviderGroupPickerSheet(
                 container = container,
                 providerKey = providerId,
-                onDismiss = { showGroupSheet = false },
+                onDismiss = {
+                    showGroupSheet = false
+                    // 面板直接写库，关闭后重新读一次分组名。
+                    groupTick++
+                },
                 onOpenManager = {
                     showGroupSheet = false
                     onOpenGroups()
@@ -734,6 +780,23 @@ private fun ConfigTab(
                 value = cfg.serviceAccountJson ?: "",
                 onValueChange = { onCfgChange(cfg.copy(serviceAccountJson = it)) },
             )
+        }
+        // 内置 SiliconFlow 的合作方标识（provider_detail_page L1430-1442）：
+        // 高度 64、居中，按明暗主题换 dark/light 两张图。
+        if (providerId.lowercase() == "siliconflow") {
+            Spacer(Modifier.height(18.dp))
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                coil.compose.AsyncImage(
+                    model = if (semantic.isDark) {
+                        "file:///android_asset/icons/Powered-by-dark.png"
+                    } else {
+                        "file:///android_asset/icons/Powered-by-light.png"
+                    },
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                    modifier = Modifier.height(64.dp),
+                )
+            }
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -1005,16 +1068,18 @@ private fun ModelsTab(
     val checks = remember { mutableStateMapOf<String, ModelCheckResult>() }
     var detecting by remember { mutableStateOf(false) }
     var deleteAllConfirm by remember { mutableStateOf(false) }
-    var pendingDelete by remember { mutableStateOf<List<String>?>(null) }
+    var pendingDelete by remember { mutableStateOf<Pair<List<String>, DeleteKind>?>(null) }
 
     val models = cfg.models
     val modelDeletedMessage = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_model_deleted_snackbar)
+    val selectedDeletedTemplate = stringResource(
+        com.psyche.memo.ui.R.string.provider_detail_page_selected_models_deleted_snackbar,
+    )
     val undoLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_undo_button)
     val confirmTitle = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_confirm_delete_title)
     val confirmContent = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_confirm_delete_content)
     val cancelLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_cancel_button)
     val deleteLabel = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_button)
-    val deleteAllTooltip = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_all_models_tooltip)
     val deleteAllWarning = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_all_models_warning)
 
     fun saveModels(next: List<String>) {
@@ -1022,37 +1087,44 @@ private fun ModelsTab(
     }
 
     /**
-     * Deletes [ids] and shows the undo snackbar. Mirrors `_confirmDeleteModels`
-     * (L3148-3214) + the slidable action's delete body (L1623-1708): the models,
-     * their overrides and every reference to them (assistant chat model,
-     * conversation pin, pinned favourites) all go, and undo restores the models
-     * at their original indices.
+     * Deletes [ids]. Mirrors `_confirmDeleteModels` (L3148-3214) + the slidable
+     * action's delete body (L1623-1708): the models, their overrides and every
+     * reference to them (assistant chat model, conversation pin, pinned
+     * favourites) all go.
+     *
+     * 单行滑动删除 = 「已删除模型」+ 撤销；批量（选中/检测失败）删除 = 带数量的
+     * 「已删除 N 个模型」**且没有撤销**（原版 L3205-3213）。
      */
-    fun deleteModels(ids: List<String>) {
+    fun deleteModels(ids: List<String>, kind: DeleteKind) {
         if (ids.isEmpty()) return
         val idSet = ids.toSet()
         val previousOverrides = ids.mapNotNull { id -> cfg.modelOverrides[id]?.let { id to it } }.toMap()
         val indexed = ids.mapNotNull { id -> models.indexOf(id).takeIf { it >= 0 }?.let { it to id } }
         saveModels(models.filterNot { it in idSet })
         container.clearModelReferences(cfg.id, ids)
+        val undoable = kind == DeleteKind.ROW
         SnackbarManager.show(
             AppNotification(
-                message = modelDeletedMessage,
+                message = if (undoable) modelDeletedMessage else selectedDeletedTemplate.format(ids.size),
                 type = NotificationType.INFO,
-                actionLabel = undoLabel,
-                onAction = {
-                    // Restore at the original positions (ascending, so an
-                    // earlier insert never shifts a later target index).
-                    val restored = models.toMutableList()
-                    indexed.sortedBy { it.first }.forEach { (index, id) ->
-                        restored.add(index.coerceAtMost(restored.size), id)
+                actionLabel = if (undoable) undoLabel else null,
+                onAction = if (!undoable) {
+                    null
+                } else {
+                    {
+                        // Restore at the original positions (ascending, so an
+                        // earlier insert never shifts a later target index).
+                        val restored = models.toMutableList()
+                        indexed.sortedBy { it.first }.forEach { (index, id) ->
+                            restored.add(index.coerceAtMost(restored.size), id)
+                        }
+                        onCfgChange(
+                            cfg.copy(
+                                models = restored,
+                                modelOverrides = cfg.modelOverrides + previousOverrides,
+                            ),
+                        )
                     }
-                    onCfgChange(
-                        cfg.copy(
-                            models = restored,
-                            modelOverrides = cfg.modelOverrides + previousOverrides,
-                        ),
-                    )
                 },
             ),
         )
@@ -1066,15 +1138,18 @@ private fun ModelsTab(
         if (models.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // provider_detail_page L1479-1488：标题 18sp onSurface、
+                    // 副标题 13sp **primary**、两行都居中。
                     Text(
                         text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_no_models_title),
-                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, color = cs.onSurface),
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_no_models_subtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = cs.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp, color = cs.primary),
                     )
                 }
             }
@@ -1105,7 +1180,7 @@ private fun ModelsTab(
                         if (selected.contains(model)) selected.remove(model) else selected.add(model)
                     },
                     onEdit = { detailModel = model },
-                    onRequestDelete = { pendingDelete = listOf(model) },
+                    onRequestDelete = { pendingDelete = listOf(model) to DeleteKind.ROW },
                 )
             }
         }
@@ -1139,7 +1214,9 @@ private fun ModelsTab(
                 scope.launch {
                     detecting = true
                     val targets = selected.toList()
-                    checks.clear()
+                    // 只清掉本轮要测的那些（原版 L3223 removeWhere；此前清空全部，
+                    // 会把其它行已经测出来的绿勾/红叉一起抹掉）。
+                    targets.forEach { checks.remove(it) }
                     targets.forEach { checks[it] = ModelCheckResult(ModelCheckState.PENDING) }
                     // Serial, 500ms apart (_startDetection L3216-3274).
                     targets.forEach { id ->
@@ -1157,10 +1234,10 @@ private fun ModelsTab(
             },
             onDeleteFailed = {
                 val failed = models.filter { checks[it]?.state == ModelCheckState.FAILURE }
-                if (failed.isNotEmpty()) pendingDelete = failed
+                if (failed.isNotEmpty()) pendingDelete = failed to DeleteKind.FAILED
             },
             onDeleteSelected = {
-                if (selected.isNotEmpty()) pendingDelete = selected.toList()
+                if (selected.isNotEmpty()) pendingDelete = selected.toList() to DeleteKind.SELECTED
             },
         )
     }
@@ -1202,14 +1279,27 @@ private fun ModelsTab(
     }
 
     // ---- Delete confirmation (single row / failed set / selection). ----
-    pendingDelete?.let { ids ->
+    // 三条路径的**正文文案不同**（原版 L3120-3147）：单行滑动用通用文案，
+    // 「删除选中」和「删除检测失败」带模型数量。
+    pendingDelete?.let { (ids, kind) ->
+        val content = when (kind) {
+            DeleteKind.ROW -> confirmContent
+            DeleteKind.SELECTED -> stringResource(
+                com.psyche.memo.ui.R.string.provider_detail_page_delete_selected_models_confirm,
+                ids.size,
+            )
+            DeleteKind.FAILED -> stringResource(
+                com.psyche.memo.ui.R.string.provider_detail_page_delete_failed_detected_models_confirm,
+                ids.size,
+            )
+        }
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text(confirmTitle) },
-            text = { Text(confirmContent) },
+            text = { Text(content) },
             confirmButton = {
                 TextButton(onClick = {
-                    deleteModels(ids)
+                    deleteModels(ids, kind)
                     pendingDelete = null
                     if (selectMode) {
                         selected.clear()
@@ -1228,7 +1318,9 @@ private fun ModelsTab(
     if (deleteAllConfirm) {
         AlertDialog(
             onDismissRequest = { deleteAllConfirm = false },
-            title = { Text(deleteAllTooltip) },
+            // 原版 `_deleteAllModels`（L3276-3326）：标题是通用「确认删除」，
+            // 正文才是「此操作不可撤回」。
+            title = { Text(confirmTitle) },
             text = { Text(deleteAllWarning) },
             confirmButton = {
                 TextButton(onClick = {
@@ -1245,6 +1337,9 @@ private fun ModelsTab(
         )
     }
 }
+
+/** 删除确认的来源（三种文案：单行通用 / 删除选中带数量 / 删除失败带数量）。 */
+private enum class DeleteKind { ROW, SELECTED, FAILED }
 
 /**
  * One reorder step applied to a model list — the same

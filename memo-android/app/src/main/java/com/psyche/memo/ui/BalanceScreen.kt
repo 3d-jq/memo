@@ -25,7 +25,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -318,6 +322,7 @@ private fun BalanceQueryButton(label: String, enabled: Boolean, onTap: () -> Uni
  * providers with balance enabled; re-fetches when the relevant config parts
  * change (upstream cache key fields).
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun ProviderBalanceBadge(
     cfg: ProviderConfig,
@@ -328,24 +333,52 @@ internal fun ProviderBalanceBadge(
     val cs = MaterialTheme.colorScheme
     val badgeColor = color ?: cs.onSurface.copy(alpha = 0.62f)
     var value by remember { mutableStateOf("~") }
+    var error by remember { mutableStateOf("") }
 
+    // 原版 `provider_balance_badge.dart` L133-135：非 OpenAI 或未开余额时
+    // **什么都不画**（此前恒画一个「~」）。L160-166 把失败原因放进 tooltip。
     val canFetch = cfg.classifiedKind() == "openai" && cfg.balanceEnabled == true
+    if (!canFetch) return
     LaunchedEffect(cfg.id, cfg.balanceApiPath, cfg.balanceResultPath, cfg.apiKey, cfg.multiKeyEnabled, cfg.apiKeys?.size) {
-        if (!canFetch) return@LaunchedEffect
-        value = runCatching {
+        runCatching {
             ProviderBalanceService.fetchBalance(cfg, container.httpClient)
-        }.getOrElse { "!" }
+        }.onSuccess {
+            value = it
+            error = ""
+        }.onFailure {
+            value = "!"
+            error = it.message ?: it.toString()
+        }
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Lucide.Coins, contentDescription = null, tint = badgeColor, modifier = Modifier.size(14.dp))
-        Spacer(Modifier.width(4.dp))
-        Text(
-            text = value,
-            style = style.copy(color = badgeColor),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 108.dp),
-        )
+    val badge: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Lucide.Coins, contentDescription = null, tint = badgeColor, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = value,
+                style = style.copy(color = badgeColor),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 108.dp),
+            )
+        }
+    }
+    if (error.isEmpty()) {
+        badge()
+    } else {
+        val tipState = rememberTooltipState(isPersistent = true)
+        val scope = rememberCoroutineScope()
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            state = tipState,
+            tooltip = {
+                PlainTooltip {
+                    Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_balance_error, error))
+                }
+            },
+        ) {
+            Box(modifier = Modifier.clickable { scope.launch { tipState.show() } }) { badge() }
+        }
     }
 }
