@@ -19,6 +19,13 @@
   - `app/.../ChatViewModel.kt` — `roundHandler` + 局部 `roundUpdate()` 把流中折叠直推 UI；`stop()` 取消路径走 `closeOpenReasoningSegment`。
 - **教训（推广）：「UI/UX 忠于原项目」不只含静态视觉，也含交互时序**——什么时候折、什么时候转，都是规格的一部分，不许简化成"结束时统一处理"。
 
+  - **引用来源筛选 + 解不出的标记：已偏离原版（2026-09-12 用户拍板"可以去掉白名单可以吧？不然出现这个 ? 这个太影响体验了"）**：
+    - `extractCitationItems`（`app/.../ui/chat/CitationSourcesSheet.kt`）**原版按工具名白名单**（只认 `search_web`/`builtin_search`）→ 现改为**按结构判定**：任何工具只要 content 是 JSON 且带 `items[]` 就收（`get_time_info`/`memory_*` 这类无关 JSON 仍被排除）。
+    - 解不出序号的引用标记**不再渲染 `?`，整段不画**（`resolveCitationCapsule` 返回空 display text ⇒ 调用方 `return`；`[citation](id)` 内联分支同理）。数字型 label 元数据仍优先显示。
+    - **原版是"按工具名过滤 + 回落 `?`"，别按原版改回去**（已记入 PORTING.md §5.11）。
+    - **两道门，别只记一道**：① 工具名/结构；② 结果必须是 **JSON**。纯文本结果（实测 MCP `aihot_get_latest` 返回纯文本，模型只能拿 `https://aihot.news/items/<cuid>` 的末段当 id）**现在被静默丢弃**——既不显示 `?` 也不可点。要可点需工具侧按 `items[{id,index,url}]` 结构化返回。
+    - 取证坑：`message_part_rows` 关联列是 **`revision_id` → `message_rows.id`**；`part_id` 是 INTEGER 自增主键（按它分组会查不到任何引用 → 得出"没问题"的错误结论）。
+
 ## Markdown 表格渲染 = `TextMeasurer` 实测列宽，绝不按字符数（2026-09-10 用户拍板）
 - **现状**：`core/ui/.../markdown/MarkdownRenderer.kt` 已有完整 GFM 表格渲染（表头 13sp w600 / 正文 13.5sp / `height 1.42` / padding 10×9 / 表头 primary 底 / `outlineVariant` 边框 / r12 圆角卡片；≥4 列固定列宽 + 横向滚动，对齐原项目 `_compactColumnWidth` L3522）。
 - **列宽必须是 `TextMeasurer` 实测**（对齐原项目 `FlexColumnWidth`）。曾按字符数算权重 → `"排名"`(2 字) vs `"2 小时 45 分钟"`(9 字符) 差 6 倍 → 第一列被压到 1/6 宽、整列裁掉，用户明确不满："没有什么好用的库来渲染这个表格吗 你自己手写 问题太大了"。
