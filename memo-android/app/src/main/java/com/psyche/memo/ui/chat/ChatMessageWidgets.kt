@@ -477,10 +477,13 @@ fun ThinkingShimmerText(
     phrases: List<String> = ThinkingPhrases.ALL,
     intervalMs: Long = 2200,
     sweepMs: Int = 1500,
-    fontSize: TextUnit = 13.sp,
+    // 用户 2026-09-12「这个文字可以大一点」：13sp → 15sp（贴助手正文 15.7sp）。
+    fontSize: TextUnit = 15.sp,
 ) {
     val cs = MaterialTheme.colorScheme
-    val base = cs.onSurface.copy(alpha = 0.55f)
+    // 用户 2026-09-12「颜色也改成主题色吧 现在是黑色的」：底色/高光都用主题色，
+    // 扫光靠透明度差（0.5 → 1.0）表现 —— 明暗主题下都成立。
+    val base = cs.primary.copy(alpha = 0.5f)
     val highlight = cs.primary
 
     // 轮换短语：定时切片，切换用 Crossfade（不打断正在扫的高光）。
