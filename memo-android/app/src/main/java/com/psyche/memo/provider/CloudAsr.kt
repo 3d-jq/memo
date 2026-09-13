@@ -1,8 +1,13 @@
 package com.psyche.memo.provider
 
 import com.psyche.memo.ui.AsrServiceOptions
+import com.psyche.memo.ui.DashScopeAsrOptions
 import com.psyche.memo.ui.MimoAsrOptions
+import com.psyche.memo.ui.OpenAiRealtimeAsrOptions
 import com.psyche.memo.ui.StepAsrOptions
+import com.psyche.memo.ui.VolcengineAsrOptions
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.io.ByteArrayOutputStream
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -20,6 +25,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okio.BufferedSource
+import okio.ByteString.Companion.toByteString
 
 /** 云端 ASR 失败（原版 `AsrException`）。 */
 class AsrException(message: String) : Exception(message)
@@ -73,7 +79,558 @@ object CloudAsrService {
     ): CloudAsrSession = when (options) {
         is MimoAsrOptions -> MimoAsrSession(client, options, isCancelled)
         is StepAsrOptions -> StepAsrSession(client, options, isCancelled)
+        is VolcengineAsrOptions -> VolcengineAsrSession(client, options, isCancelled)
+        is OpenAiRealtimeAsrOptions -> RealtimeAsrSession(            client = client,
+            url = openAiEndpoint(options.websocketUrl),
+            headers = mapOf("Authorization" to "Bearer ${options.apiKey}"),
+            label = "OpenAI Realtime",
+            apiKey = options.apiKey,
+            sessionUpdate = openAiSessionUpdate(options),
+            addEvent = { audio, _ ->
+                buildJsonObject {
+                    put("type", "input_audio_buffer.append")
+                    put("audio", audio)
+                }
+            },
+            commitEvent = { _ ->
+                buildJsonObject { put("type", "input_audio_buffer.commit") }
+            },
+            finishEvent = null,
+            waitForSessionFinished = false,
+            isCancelled = isCancelled,
+        )
+        is DashScopeAsrOptions -> RealtimeAsrSession(
+            client = client,
+            url = dashScopeEndpoint(options.websocketUrl, options.model),
+            headers = mapOf("Authorization" to "Bearer ${options.apiKey}"),
+            label = "DashScope",
+            apiKey = options.apiKey,
+            sessionUpdate = dashScopeSessionUpdate(options),
+            addEvent = { audio, eventId ->
+                buildJsonObject {
+                    put("event_id", eventId)
+                    put("type", "input_audio_buffer.append")
+                    put("audio", audio)
+                }
+            },
+            // 开了 VAD 就由服务端断句，不再显式 commit（原版 `vadThreshold > 0 ? null : …`）。
+            commitEvent = if (options.vadThreshold > 0) {
+                null
+            } else {
+                { eventId ->
+                    buildJsonObject {
+                        put("event_id", eventId)
+                        put("type", "input_audio_buffer.commit")
+                    }
+                }
+            },
+            finishEvent = { eventId ->
+                buildJsonObject {
+                    put("event_id", eventId)
+                    put("type", "session.finish")
+                }
+            },
+            waitForSessionFinished = true,
+            isCancelled = isCancelled,
+        )
         else -> throw AsrException("${options.name} is not a supported cloud ASR service")
+    }
+
+    /** `_openAiEndpoint`：没带 `intent` 就补上 `transcription`。 */
+    internal fun openAiEndpoint(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.contains("intent=")) return trimmed
+        val separator = if (trimmed.contains("?")) "&" else "?"
+        return "$trimmed${separator}intent=transcription"
+    }
+
+    /** `_dashScopeEndpoint`：没带 `model` 就补上。 */
+    internal fun dashScopeEndpoint(raw: String, model: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.contains("model=")) return trimmed
+        val separator = if (trimmed.contains("?")) "&" else "?"
+        return "$trimmed$separator" + "model=" + java.net.URLEncoder.encode(model, "UTF-8")
+    }
+
+    /** `_openAiSessionUpdate`（cloud_asr_service.dart:1700-1734）。 */
+    internal fun openAiSessionUpdate(options: OpenAiRealtimeAsrOptions): JsonObject = buildJsonObject {
+        put("type", "session.update")
+        put("session", buildJsonObject {
+            put("type", "transcription")
+            put("audio", buildJsonObject {
+                put("input", buildJsonObject {
+                    put("format", buildJsonObject {
+                        put("type", "audio/pcm")
+                        put("rate", options.sampleRate)
+                    })
+                    put("transcription", buildJsonObject {
+                        put("model", options.model)
+                        if (options.language.trim().isNotEmpty()) {
+                            // gpt-live-transcribe 用 languages 数组，其它模型用 language。
+                            if (options.model == "gpt-live-transcribe") {
+                                put("languages", buildJsonArray { add(JsonPrimitive(options.language)) })
+                            } else {
+                                put("language", options.language)
+                            }
+                        }
+                        if (options.prompt.trim().isNotEmpty()) put("prompt", options.prompt)
+                    })
+                    put("noise_reduction", buildJsonObject { put("type", "near_field") })
+                    if (options.vadThreshold > 0) {
+                        put("turn_detection", buildJsonObject {
+                            put("type", "server_vad")
+                            put("threshold", options.vadThreshold)
+                            put("prefix_padding_ms", options.prefixPaddingMs)
+                            put("silence_duration_ms", options.silenceDurationMs)
+                        })
+                    } else {
+                        put("turn_detection", kotlinx.serialization.json.JsonNull)
+                    }
+                })
+            })
+        })
+    }
+
+    /** `_dashScopeSessionUpdate`（cloud_asr_service.dart:1736-1753）。 */
+    internal fun dashScopeSessionUpdate(options: DashScopeAsrOptions): JsonObject = buildJsonObject {
+        put("event_id", "memo_asr_session_update")
+        put("type", "session.update")
+        put("session", buildJsonObject {
+            put("input_audio_format", "pcm")
+            put("sample_rate", options.sampleRate)
+            put("input_audio_transcription", buildJsonObject {
+                if (options.language.trim().isNotEmpty()) put("language", options.language)
+            })
+            if (options.vadThreshold > 0) {
+                put("turn_detection", buildJsonObject {
+                    put("type", "server_vad")
+                    put("threshold", options.vadThreshold)
+                    put("silence_duration_ms", options.silenceDurationMs)
+                })
+            } else {
+                put("turn_detection", kotlinx.serialization.json.JsonNull)
+            }
+        })
+    }
+
+    /**
+     * Volcengine ASR（RikkaHub `speech/.../VolcengineASRController.kt` 的协议移植；
+     * 原版 Flutter 侧是同一套二进制帧，见 `cloud_asr_service.dart::_VolcengineAsrSession`）。
+     *
+     * 帧格式：4 字节头（0x11 / (msgType<<4|flags) / (serialization<<4|compression) / 0）
+     * + 4 字节大端 payload 长度 + payload；配置帧 gzip 压缩、JSON 序列化，
+     * 音频帧不压缩；`MSG_SERVER_RESPONSE`(0x09) 的 `result.text` 是「到目前的完整文本」，
+     * 带 `FLAG_LAST_PACKET` 的那一帧表示收尾；`MSG_ERROR`(0x0F) 是 4 字节错误码 + 消息。
+     */
+    private class VolcengineAsrSession(
+        client: OkHttpClient,
+        private val options: VolcengineAsrOptions,
+        private val isCancelled: () -> Boolean,
+    ) : CloudAsrSession, okhttp3.WebSocketListener() {
+
+        private val finished = java.util.concurrent.CountDownLatch(1)
+        @Volatile private var transcript = ""
+        @Volatile private var terminal: AsrException? = null
+        @Volatile private var cleanedUp = false
+        private var socket: okhttp3.WebSocket? = null
+        private var onPartial: ((String) -> Unit)? = null
+        private var onError: ((Exception) -> Unit)? = null
+
+        init {
+            val request = Request.Builder()
+                .url(options.websocketUrl.trim())
+                .addHeader("X-Api-Key", options.apiKey)
+                .addHeader("X-Api-Resource-Id", options.resourceId)
+                .addHeader("X-Api-Request-Id", java.util.UUID.randomUUID().toString())
+                .addHeader("X-Api-Sequence", "-1")
+                .build()
+            socket = client.newWebSocket(request, this)
+        }
+
+        override fun observePartials(onPartial: (String) -> Unit, onError: (Exception) -> Unit) {
+            this.onPartial = onPartial
+            this.onError = onError
+            terminal?.let(onError)
+        }
+
+        override fun addPcm16(chunk: ByteArray) {
+            if (chunk.isEmpty()) return
+            ensureActive()
+            val ws = socket ?: throw AsrException("Volcengine ASR WebSocket is closed")
+            // 队列积压就丢帧（RikkaHub 同款背压，避免内存涨爆）。
+            if (ws.queueSize() > MAX_WS_QUEUE_BYTES) return
+            sendFrame(MSG_AUDIO_ONLY, flags = 0, serialization = SER_NONE, compression = COMP_NONE, payload = chunk)
+        }
+
+        override fun finish(): String {
+            ensureActive()
+            sendFrame(
+                MSG_AUDIO_ONLY,
+                flags = FLAG_LAST_PACKET,
+                serialization = SER_NONE,
+                compression = COMP_NONE,
+                payload = ByteArray(0),
+            )
+            val ok = finished.await(COMPLETION_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            terminal?.let { cleanup(); throw it }
+            cleanup()
+            if (!ok) throw AsrException("Volcengine ASR timed out waiting for the final transcript")
+            return transcript.trim()
+        }
+
+        override fun cancel() {
+            terminal = terminal ?: AsrException("Volcengine ASR session was cancelled")
+            finished.countDown()
+            cleanup()
+        }
+
+        override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+            runCatching {
+                val payload = volcengineGzip(configPayload())
+                sendFrame(MSG_FULL_CLIENT_REQUEST, 0, SER_JSON, COMP_GZIP, payload)
+            }.onFailure { fail(AsrException("Volcengine ASR session setup failed")) }
+        }
+
+        override fun onMessage(webSocket: okhttp3.WebSocket, bytes: okio.ByteString) {
+            if (cleanedUp) return
+            handleBinaryResponse(bytes.toByteArray())
+        }
+
+        override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+            fail(AsrException("Volcengine ASR WebSocket failed"))
+        }
+
+        override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
+            // 服务端先关：已经有结论就正常收尾，否则报错。
+            if (!cleanedUp && terminal == null) {
+                if (transcript.isNotEmpty()) finished.countDown()
+                else fail(AsrException("Volcengine ASR connection closed before the final transcript"))
+            }
+        }
+
+        private fun configPayload(): ByteArray {
+            val audio = buildJsonObject {
+                put("format", "pcm")
+                put("rate", SAMPLE_RATE)
+                put("bits", 16)
+                put("channel", 1)
+                if (options.language.trim().isNotEmpty()) put("language", options.language)
+            }
+            val json = buildJsonObject {
+                // RikkaHub 用 "rikkahub"、Flutter 用 "kelivo"：按品牌规则用 memo。
+                put("user", buildJsonObject { put("uid", "memo") })
+                put("audio", audio)
+                put("request", buildJsonObject {
+                    put("model_name", "bigmodel")
+                    put("enable_itn", true)
+                    put("enable_punc", true)
+                    put("show_utterances", true)
+                    put("result_type", "full")
+                })
+            }
+            return json.toString().toByteArray(Charsets.UTF_8)
+        }
+
+        private fun handleBinaryResponse(data: ByteArray) {
+            if (data.size < 4) return
+            val byte1 = data[1].toInt() and 0xFF
+            val byte2 = data[2].toInt() and 0xFF
+            val messageType = (byte1 shr 4) and 0x0F
+            val messageFlags = byte1 and 0x0F
+            val compression = byte2 and 0x0F
+            var offset = 4
+
+            when (messageType) {
+                MSG_SERVER_RESPONSE -> {
+                    if ((messageFlags and FLAG_HAS_SEQUENCE) != 0) offset += 4
+                    if (offset + 4 > data.size) return
+                    val payloadSize = ByteBuffer.wrap(data, offset, 4).order(ByteOrder.BIG_ENDIAN).int
+                    offset += 4
+                    if (payloadSize <= 0 || offset + payloadSize > data.size) return
+                    var payload = data.copyOfRange(offset, offset + payloadSize)
+                    if (compression == COMP_GZIP) {
+                        payload = runCatching { volcengineGunzip(payload) }.getOrElse { return }
+                    }
+                    val json = runCatching { Json.parseToJsonElement(String(payload, Charsets.UTF_8)).jsonObject }
+                        .getOrNull() ?: return
+                    val text = (json["result"] as? JsonObject)?.get("text")?.jsonPrimitive?.contentOrNull.orEmpty()
+                    if (text.isNotEmpty() && text != transcript) {
+                        transcript = text
+                        onPartial?.invoke(text)
+                    }
+                    // 带 FLAG_LAST_PACKET 的响应 = 服务端收尾。
+                    if ((messageFlags and FLAG_LAST_PACKET) != 0) finished.countDown()
+                }
+                MSG_ERROR -> {
+                    if (offset + 4 > data.size) return
+                    offset += 4 // 错误码
+                    if (offset + 4 > data.size) return
+                    val msgSize = ByteBuffer.wrap(data, offset, 4).order(ByteOrder.BIG_ENDIAN).int
+                    offset += 4
+                    val message = if (msgSize > 0 && offset + msgSize <= data.size) {
+                        String(data, offset, msgSize, Charsets.UTF_8)
+                    } else {
+                        "Volcengine ASR error"
+                    }
+                    fail(AsrException(redact(message, options.apiKey)))
+                }
+                else -> Unit
+            }
+        }
+
+        private fun sendFrame(
+            messageType: Int,
+            flags: Int,
+            serialization: Int,
+            compression: Int,
+            payload: ByteArray,
+        ) {
+            val header = byteArrayOf(
+                0x11.toByte(),
+                ((messageType shl 4) or (flags and 0x0F)).toByte(),
+                ((serialization shl 4) or (compression and 0x0F)).toByte(),
+                0x00,
+            )
+            val size = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(payload.size).array()
+            val sent = runCatching {
+                socket?.send((header + size + payload).toByteString()) ?: false
+            }.getOrDefault(false)
+            if (!sent && !cleanedUp) throw AsrException("Volcengine ASR WebSocket send failed")
+        }
+
+        private fun ensureActive() {
+            terminal?.let { throw it }
+            if (isCancelled()) cancel()
+            terminal?.let { throw it }
+        }
+
+        private fun fail(error: AsrException) {
+            if (terminal != null) return
+            val safe = AsrException(redact(error.message ?: "Volcengine ASR failed", options.apiKey))
+            terminal = safe
+            finished.countDown()
+            onError?.invoke(safe)
+            cleanup()
+        }
+
+        private fun cleanup() {
+            if (cleanedUp) return
+            cleanedUp = true
+            runCatching { socket?.close(1000, "finished") }
+            socket = null
+        }
+
+        companion object {
+            const val SAMPLE_RATE = 16000
+            private const val MSG_FULL_CLIENT_REQUEST = 0x01
+            private const val MSG_AUDIO_ONLY = 0x02
+            private const val MSG_SERVER_RESPONSE = 0x09
+            private const val MSG_ERROR = 0x0F
+            private const val SER_NONE = 0x00
+            private const val SER_JSON = 0x01
+            private const val COMP_NONE = 0x00
+            private const val COMP_GZIP = 0x01
+            private const val FLAG_HAS_SEQUENCE = 0x01
+            private const val FLAG_LAST_PACKET = 0x02
+            private const val MAX_WS_QUEUE_BYTES = 100_000L
+        }
+    }
+
+    /**
+     * OpenAI Realtime / DashScope 共用的实时会话（原版 `_RealtimeAsrSession` 519-807）：
+     * `input_audio_buffer.append` 送音频，`commit`/`session.finish` 收尾；转写按
+     * `item_id` 累积（delta 增量、text 覆盖当前项、completed 定型），最终文本按项顺序拼接。
+     */
+    private class RealtimeAsrSession(
+        client: OkHttpClient,
+        url: String,
+        headers: Map<String, String>,
+        private val label: String,
+        private val apiKey: String,
+        private val sessionUpdate: JsonObject,
+        private val addEvent: (audioBase64: String, eventId: String) -> JsonObject,
+        private val commitEvent: ((eventId: String) -> JsonObject)?,
+        private val finishEvent: ((eventId: String) -> JsonObject)?,
+        private val waitForSessionFinished: Boolean,
+        private val isCancelled: () -> Boolean,
+    ) : CloudAsrSession, okhttp3.WebSocketListener() {
+
+        private val partialByItem = LinkedHashMap<String, String>()
+        private val completedByItem = LinkedHashMap<String, String>()
+        private val itemOrder = ArrayList<String>()
+        private var eventSequence = 0
+        private var hasAudio = false
+        private var cleanedUp = false
+        @Volatile private var terminal: AsrException? = null
+        private var onPartial: ((String) -> Unit)? = null
+        private var onError: ((Exception) -> Unit)? = null
+        private val finished = java.util.concurrent.CountDownLatch(1)
+        private var socket: okhttp3.WebSocket? = null
+
+        init {
+            val builder = Request.Builder().url(url)
+            headers.forEach { (k, v) -> builder.header(k, v) }
+            socket = client.newWebSocket(builder.build(), this)
+            send(sessionUpdate)
+        }
+
+        override fun observePartials(onPartial: (String) -> Unit, onError: (Exception) -> Unit) {
+            this.onPartial = onPartial
+            this.onError = onError
+            terminal?.let(onError)
+        }
+
+        override fun addPcm16(chunk: ByteArray) {
+            if (chunk.isEmpty()) return
+            ensureActive()
+            hasAudio = true
+            val audio = java.util.Base64.getEncoder().encodeToString(chunk)
+            send(addEvent(audio, nextEventId()))
+        }
+
+        override fun finish(): String {
+            ensureActive()
+            if (!hasAudio && finishEvent == null) {
+                cleanup()
+                return currentTranscript()
+            }
+            if (hasAudio) commitEvent?.let { send(it(nextEventId())) }
+            finishEvent?.let { send(it(nextEventId())) }
+            val ok = finished.await(COMPLETION_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (!ok && terminal == null) {
+                cleanup()
+                throw AsrException("$label ASR timed out waiting for the final transcript")
+            }
+            terminal?.let { cleanup(); throw it }
+            cleanup()
+            return currentTranscript()
+        }
+
+        override fun cancel() {
+            terminal = terminal ?: AsrException("$label ASR session was cancelled")
+            finished.countDown()
+            cleanup()
+        }
+
+        override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+            if (cleanedUp) return
+            handleMessage(text)
+        }
+
+        override fun onMessage(webSocket: okhttp3.WebSocket, bytes: okio.ByteString) {
+            if (cleanedUp) return
+            handleMessage(bytes.utf8())
+        }
+
+        override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+            fail(AsrException("$label ASR WebSocket failed"))
+        }
+
+        override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
+            if (!cleanedUp && terminal == null) {
+                // 服务端先关：只要已经收到过结论就照常收尾，否则报错（原版 `_handleSocketDone`）。
+                if (completedByItem.isNotEmpty() || waitForSessionFinished) finished.countDown()
+                else fail(AsrException("$label ASR connection closed before the final transcript"))
+            }
+        }
+
+        private fun handleMessage(text: String) {
+            val json = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull()
+            if (json == null) {
+                fail(AsrException("$label ASR returned invalid JSON"))
+                return
+            }
+            when (json["type"]?.jsonPrimitive?.contentOrNull.orEmpty()) {
+                "conversation.item.input_audio_transcription.delta" -> {
+                    val item = itemId(json)
+                    val delta = json["delta"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    if (delta.isNotEmpty()) {
+                        rememberItem(item)
+                        partialByItem[item] = partialByItem[item].orEmpty() + delta
+                        publish()
+                    }
+                }
+                "conversation.item.input_audio_transcription.text" -> {
+                    val item = itemId(json)
+                    val value = json["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    if (value.isNotEmpty()) {
+                        rememberItem(item)
+                        partialByItem[item] = value
+                        publish()
+                    }
+                }
+                "conversation.item.input_audio_transcription.completed" -> {
+                    val item = itemId(json)
+                    rememberItem(item)
+                    val transcript = json["transcript"]?.jsonPrimitive?.contentOrNull?.trim()
+                        ?: partialByItem[item]?.trim().orEmpty()
+                    partialByItem.remove(item)
+                    completedByItem[item] = transcript
+                    publish()
+                    // 不等 session.finished 的 provider（OpenAI）在这里就算结束。
+                    if (!waitForSessionFinished) finished.countDown()
+                }
+                "conversation.item.input_audio_transcription.failed" -> {
+                    val detail = (json["error"] as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull
+                        ?: (json["error"]?.jsonPrimitive?.contentOrNull)
+                    fail(AsrException(redact("$label ASR transcription failed${detail?.let { ": $it" } ?: ""}", apiKey)))
+                }
+                "session.finished" -> finished.countDown()
+                "error" -> {
+                    val detail = (json["error"] as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull
+                        ?: json["error"]?.jsonPrimitive?.contentOrNull
+                    fail(AsrException(redact("$label ASR server error${detail?.let { ": $it" } ?: ""}", apiKey)))
+                }
+            }
+        }
+
+        private fun rememberItem(item: String) {
+            if (!itemOrder.contains(item)) itemOrder.add(item)
+        }
+
+        private fun itemId(json: JsonObject): String =
+            json["item_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() } ?: "default"
+
+        private fun currentTranscript(): String = itemOrder
+            .map { completedByItem[it] ?: partialByItem[it].orEmpty() }
+            .filter { it.trim().isNotEmpty() }
+            .joinToString(" ")
+
+        private fun publish() {
+            onPartial?.invoke(currentTranscript())
+        }
+
+        private fun nextEventId(): String {
+            eventSequence++
+            return "memo_asr_$eventSequence"
+        }
+
+        private fun send(event: JsonObject) {
+            val sent = runCatching { socket?.send(event.toString()) ?: false }.getOrDefault(false)
+            if (!sent) throw AsrException("$label ASR WebSocket send failed")
+        }
+
+        private fun ensureActive() {
+            terminal?.let { throw it }
+            if (isCancelled()) cancel()
+            terminal?.let { throw it }
+        }
+
+        private fun fail(error: AsrException) {
+            if (terminal != null) return
+            val safe = AsrException(redact(error.message ?: "$label ASR failed", apiKey))
+            terminal = safe
+            finished.countDown()
+            onError?.invoke(safe)
+            cleanup()
+        }
+
+        private fun cleanup() {
+            if (cleanedUp) return
+            cleanedUp = true
+            runCatching { socket?.close(1000, "finished") }
+            socket = null
+        }
     }
 
     /** `_segmentByteLimit`：按秒数算的目标字节数与 6MB 取小；秒数 <= 0 就是 6MB。 */
@@ -509,6 +1066,46 @@ object CloudAsrService {
 
     /** 只给测试用：把 SSE 文本喂给解析器（等价 `parseStepSseTranscript`）。 */
     internal fun parseStepSseForTest(body: String): String = parseStepSseTranscript(body)
+
+    // ------------------------------------------------------------------ Volcengine 二进制帧
+    // 协议来自 RikkaHub `speech/.../VolcengineASRController.kt`（同 Flutter 侧
+    // `cloud_asr_service.dart::_VolcengineAsrSession`）：放到外层是为了能直接单测。
+
+    internal const val VOLC_MSG_FULL_CLIENT_REQUEST = 0x01
+    internal const val VOLC_MSG_AUDIO_ONLY = 0x02
+    internal const val VOLC_MSG_SERVER_RESPONSE = 0x09
+    internal const val VOLC_MSG_ERROR = 0x0F
+    internal const val VOLC_SER_NONE = 0x00
+    internal const val VOLC_SER_JSON = 0x01
+    internal const val VOLC_COMP_NONE = 0x00
+    internal const val VOLC_COMP_GZIP = 0x01
+
+    /** `buildFrame`：4 字节头 + 4 字节大端长度 + payload。 */
+    internal fun volcengineFrame(
+        messageType: Int,
+        flags: Int,
+        serialization: Int,
+        compression: Int,
+        payload: ByteArray,
+    ): ByteArray {
+        val header = byteArrayOf(
+            0x11.toByte(),
+            ((messageType shl 4) or (flags and 0x0F)).toByte(),
+            ((serialization shl 4) or (compression and 0x0F)).toByte(),
+            0x00,
+        )
+        val size = ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(payload.size).array()
+        return header + size + payload
+    }
+
+    internal fun volcengineGzip(data: ByteArray): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        java.util.zip.GZIPOutputStream(out).use { it.write(data) }
+        return out.toByteArray()
+    }
+
+    internal fun volcengineGunzip(data: ByteArray): ByteArray =
+        java.util.zip.GZIPInputStream(data.inputStream()).use { it.readBytes() }
 
     /** 只给测试用：从 SSE 流式读（生产路径是一次性 body 解析）。 */
     internal fun readSseData(source: BufferedSource, onData: (String) -> Unit) {
