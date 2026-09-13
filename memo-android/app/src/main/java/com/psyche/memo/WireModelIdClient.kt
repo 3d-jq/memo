@@ -29,6 +29,9 @@ internal class WireModelIdClient(
     override fun streamChat(request: LlmRequest): Flow<StreamChunk> =
         delegate.streamChat(request.mapped())
 
+    override fun completeAsChunks(request: LlmRequest): Flow<StreamChunk> =
+        delegate.completeAsChunks(request.mapped())
+
     override suspend fun complete(request: LlmRequest): LlmTextResult =
         delegate.complete(request.mapped())
 

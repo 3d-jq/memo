@@ -96,6 +96,47 @@ class GeminiClient(
         return decodeCandidate(obj)
     }
 
+    override fun completeAsChunks(request: LlmRequest): Flow<StreamChunk> = flow {
+        val maxRetries = if (retryOptions().enabled) retryOptions().maxRetries else 0
+        var attemptCount = 0
+        while (true) {
+            if (cancellations.isCancelled(request.providerId)) throw kotlinx.coroutines.CancellationException("cancelled")
+            attemptCount++
+            var yielded = false
+            try {
+                for (chunk in runNonStream(request)) {
+                    yielded = true
+                    emit(chunk)
+                }
+                return@flow
+            } catch (e: Throwable) {
+                if (cancellations.isCancelled(request.providerId)) throw kotlinx.coroutines.CancellationException("cancelled")
+                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions())) throw e
+                val delayMs = backoffDelay(attemptCount - 1, retryOptions())
+                emit(StreamChunk.Error("retrying in ${delayMs}ms: ${e.message}"))
+                delay(delayMs)
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun runNonStream(request: LlmRequest): List<StreamChunk> {
+        val body = buildBody(request)
+        val call = newCall(request, body, stream = false)
+        val response = await(call)
+        val text = withContext(Dispatchers.IO) { response.body?.string() }
+        response.close()
+        if (!response.isSuccessful) throw IOException("HTTP ${response.code} ${text ?: ""}")
+        val obj = json.parseToJsonElement(text ?: "{}").jsonObject
+        val state = GeminiStreamState()
+        val out = ArrayList<StreamChunk>()
+        out.addAll(
+            decodeEvent(com.psyche.memo.llm.stream.SseEvent(null, null, obj.toString(), null), state),
+        )
+        // finishReason 缺失时兜一条 Finish，别让生成循环等一个永远不会来的终止块。
+        if (!state.finishEmitted) out.add(StreamChunk.Finish(state.finishReason, state.usageJson))
+        return out
+    }
+
     /** Gemini list via /v1beta/models?key=... — limited support; UI uses configured models too. */
     override suspend fun listModels(baseUrl: String, apiKey: String): List<com.psyche.memo.llm.client.LlmModelInfo> {
         val url = if (baseUrl.endsWith("/v1beta")) "$baseUrl/models?key=$apiKey" else "$baseUrl/v1beta/models?key=$apiKey"

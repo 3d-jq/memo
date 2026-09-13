@@ -17,6 +17,14 @@ interface LlmClient {
     /** Streamed chat completion. [requestId] identifies cancellation. */
     fun streamChat(request: LlmRequest): Flow<StreamChunk>
 
+    /**
+     * 助手「流式输出」关闭时的**非流式**请求（`chat_actions.dart:2109` 的
+     * `!ctx.streamOutput` 分支）：同一个请求体但 `stream = false`，拿到整份响应后
+     * **喂给同一个解码器**，产出的 chunk 序列与 [streamChat] 完全一致（文本/思考/
+     * 工具调用/用量），上层生成循环因此不需要第二条分支。
+     */
+    fun completeAsChunks(request: LlmRequest): Flow<StreamChunk>
+
     /** Single (non-streamed) completion, used by title/summary generation. */
     suspend fun complete(request: LlmRequest): LlmTextResult
 

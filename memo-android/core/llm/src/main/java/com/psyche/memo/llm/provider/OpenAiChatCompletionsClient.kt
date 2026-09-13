@@ -9,6 +9,7 @@ import com.psyche.memo.llm.core.CancellationRegistry
 import com.psyche.memo.llm.retry.AutoRetryOptions
 import com.psyche.memo.llm.retry.backoffDelay
 import com.psyche.memo.llm.retry.shouldRetryError
+import com.psyche.memo.llm.stream.SseEvent
 import com.psyche.memo.llm.stream.SseEventParser
 import com.psyche.memo.llm.stream.StreamChunk
 import kotlinx.coroutines.Dispatchers
@@ -157,6 +158,59 @@ class OpenAiChatCompletionsClient(
         } finally {
             response.close()
         }
+    }
+
+    override fun completeAsChunks(request: LlmRequest): Flow<StreamChunk> = flow {
+        // 与流式同样的重试语义（retryingStream）：没吐过 chunk 且错误可重试才重试，
+        // 取消立刻中止 —— 非流式请求撞上 429/5xx 不该直接判死整条回复。
+        val maxRetries = if (retryOptions().enabled) retryOptions().maxRetries else 0
+        var attemptCount = 0
+        while (true) {
+            if (isCancelled(request)) throw kotlinx.coroutines.CancellationException("cancelled")
+            attemptCount++
+            var yielded = false
+            try {
+                for (chunk in runNonStream(request)) {
+                    yielded = true
+                    emit(chunk)
+                }
+                return@flow
+            } catch (e: Throwable) {
+                if (isCancelled(request)) throw kotlinx.coroutines.CancellationException("cancelled")
+                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions())) throw e
+                val delayMs = backoffDelay(attemptCount - 1, retryOptions())
+                emit(StreamChunk.Error("retrying in ${delayMs}ms: ${e.message}"))
+                delay(delayMs)
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun runNonStream(request: LlmRequest): List<StreamChunk> {
+        val body = buildBody(request, stream = false)
+        val call = newCall(request, body)
+        val response = await(call)
+        val text = withContext(Dispatchers.IO) { response.body?.string() }
+        response.close()
+        if (!response.isSuccessful) throw IOException("HTTP ${response.code} ${text ?: ""}")
+        val obj = json.parseToJsonElement(text ?: "{}").jsonObject
+        val out = ArrayList<StreamChunk>()
+        if (ResponsesApi.isResponses(request)) {
+            responsesReasoningText(obj).takeIf { it.isNotEmpty() }
+                ?.let { out.add(StreamChunk.ReasoningDelta(it)) }
+            responsesOutputText(obj).takeIf { it.isNotEmpty() }
+                ?.let { out.add(StreamChunk.TextDelta(it)) }
+            val wrapped = buildJsonObject {
+                put("type", "response.completed")
+                put("response", obj)
+            }
+            val decoder = ResponsesDecoder(providerLabel = request.providerId)
+            out.addAll(decoder.accept(SseEvent(null, null, wrapped.toString(), null)).chunks)
+            return out
+        }
+        val decoder = ChatCompletionsDecoder(providerLabel = request.providerId)
+        out.addAll(decoder.accept(SseEvent(null, null, obj.toString(), null)).chunks)
+        out.addAll(decoder.accept(SseEvent(null, null, "[DONE]", null)).chunks)
+        return out
     }
 
     private suspend fun runStream(

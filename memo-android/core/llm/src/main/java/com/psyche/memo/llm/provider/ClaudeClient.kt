@@ -20,6 +20,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -224,6 +225,67 @@ class ClaudeClient(
                 }
             }
         }
+        return out
+    }
+
+    /**
+     * 「流式输出」关闭：一次性请求后把整份 `message` 摊成与流式一致的 chunk
+     * （text → TextDelta、thinking → ReasoningDelta、tool_use → ToolCallDelta），
+     * 最后补一条 Finish（stop_reason + 同一份 usage 形状）。
+     */
+    override fun completeAsChunks(request: LlmRequest): Flow<StreamChunk> = flow {
+        val maxRetries = if (retryOptions().enabled) retryOptions().maxRetries else 0
+        var attemptCount = 0
+        while (true) {
+            if (cancellations.isCancelled(request.providerId)) throw kotlinx.coroutines.CancellationException("cancelled")
+            attemptCount++
+            var yielded = false
+            try {
+                for (chunk in runNonStream(request)) {
+                    yielded = true
+                    emit(chunk)
+                }
+                return@flow
+            } catch (e: Throwable) {
+                if (cancellations.isCancelled(request.providerId)) throw kotlinx.coroutines.CancellationException("cancelled")
+                if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions())) throw e
+                val delayMs = backoffDelay(attemptCount - 1, retryOptions())
+                emit(StreamChunk.Error("retrying in ${delayMs}ms: ${e.message}"))
+                delay(delayMs)
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private suspend fun runNonStream(request: LlmRequest): List<StreamChunk> {
+        val body = buildBody(request, stream = false)
+        val call = newCall(request, body)
+        val response = await(call)
+        val text = withContext(Dispatchers.IO) { response.body?.string() }
+        response.close()
+        if (!response.isSuccessful) throw IOException("HTTP ${response.code} ${text ?: ""}")
+        val obj = json.parseToJsonElement(text ?: "{}").jsonObject
+        val out = ArrayList<StreamChunk>()
+        (obj["content"] as? JsonArray)?.forEach { element ->
+            val block = element as? JsonObject ?: return@forEach
+            when ((block["type"] as? JsonPrimitive)?.contentOrNull) {
+                "text" -> (block["text"] as? JsonPrimitive)?.contentOrNull
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { out.add(StreamChunk.TextDelta(it)) }
+                "thinking" -> (block["thinking"] as? JsonPrimitive)?.contentOrNull
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { out.add(StreamChunk.ReasoningDelta(it)) }
+                "tool_use" -> {
+                    val id = (block["id"] as? JsonPrimitive)?.contentOrNull ?: ""
+                    val name = (block["name"] as? JsonPrimitive)?.contentOrNull ?: ""
+                    if (name.isNotEmpty()) {
+                        val args = block["input"]?.let { if (it is JsonPrimitive) it.content else it.toString() }
+                        out.add(StreamChunk.ToolCallDelta(id, name, args ?: ""))
+                    }
+                }
+            }
+        }
+        val stopReason = (obj["stop_reason"] as? JsonPrimitive)?.contentOrNull
+        out.add(StreamChunk.Finish(stopReason, buildClaudeUsageJson(null, obj["usage"] as? JsonObject)))
         return out
     }
 

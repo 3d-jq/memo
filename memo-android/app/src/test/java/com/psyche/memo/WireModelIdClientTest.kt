@@ -21,12 +21,18 @@ class WireModelIdClientTest {
 
     private class Recorder : LlmClient {
         var lastStream: LlmRequest? = null
+        var lastNonStream: LlmRequest? = null
         var lastComplete: LlmRequest? = null
         var listModelsCalls = 0
 
         override fun supports(providerId: String): Boolean = providerId == "openai"
         override fun streamChat(request: LlmRequest): Flow<StreamChunk> {
             lastStream = request
+            return emptyFlow()
+        }
+
+        override fun completeAsChunks(request: LlmRequest): Flow<StreamChunk> {
+            lastNonStream = request
             return emptyFlow()
         }
 
@@ -66,6 +72,14 @@ class WireModelIdClientTest {
         val client = WireModelIdClient(delegate) { "upstream-42" }
         client.complete(request("my-alias"))
         assertEquals("upstream-42", delegate.lastComplete?.modelId)
+    }
+
+    @Test
+    fun nonStreamChatIsRewrittenToo() {
+        val delegate = Recorder()
+        val client = WireModelIdClient(delegate) { "upstream-42" }
+        client.completeAsChunks(request("my-alias"))
+        assertEquals("upstream-42", delegate.lastNonStream?.modelId)
     }
 
     @Test

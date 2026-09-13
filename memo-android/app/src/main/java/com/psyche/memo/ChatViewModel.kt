@@ -1938,7 +1938,14 @@ class ChatViewModel(
                 autoCollapse = { readBool(AUTO_COLLAPSE_THINKING_KEY, true) },
                 onSegmentClosed = { roundUpdate() },
             )
-            client.streamChat(request).collect { chunk ->
+            // 助手「流式输出」关闭 → 走一次性请求（`chat_actions.dart:2109` 的非流式
+            // 分支）：同一个解码器产出的 chunk 序列，下面这段循环一行都不用改。
+            val chunks = if (assistant?.streamOutput == false) {
+                client.completeAsChunks(request)
+            } else {
+                client.streamChat(request)
+            }
+            chunks.collect { chunk ->
                 roundHandler.handle(chunk)
                 when (chunk) {
                     is StreamChunk.TextDelta,
