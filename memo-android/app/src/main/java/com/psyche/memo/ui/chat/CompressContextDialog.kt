@@ -1,10 +1,7 @@
 package com.psyche.memo.ui.chat
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,88 +40,77 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Package2
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.ContextCompactionPrefs
 import com.psyche.memo.DefaultModelPrefs
-import com.psyche.memo.common.CompressText
+import com.psyche.memo.common.CompressModel
 import com.psyche.memo.common.Haptics
+import com.psyche.memo.common.SessionCompaction
 import com.psyche.memo.ui.IosSheetButton
+import com.psyche.memo.ui.IosSwitch
 import kotlinx.serialization.json.jsonPrimitive
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.R as UiR
 
 /**
- * Port of home_page.dart _CompressContextOptionsDialog: compress-model picker,
- * the four-part mode segmented control (start / recent / unlimited / keep N),
- * the character or keep-count field and the keep-recent token estimate.
+ * 压缩上下文对话框 —— 改成 opencode 的阈值机制：自动压缩开关、原样保留的最近
+ * tokens、预留缓冲 tokens、上下文窗口默认值，加一个「开始压缩」按钮立刻压一次
+ * （opencode `/compact` 不看阈值）。旧的「起始/最近/无限制 + 字符数 + 保留 N 条」
+ * 选项随机制一起删掉。
  */
 @Composable
 fun CompressContextDialog(
     container: AppContainerImpl,
     messages: List<Pair<String, String>>,
     onDismiss: () -> Unit,
-    onConfirm: (mode: CompressText.Mode, maxChars: Int?, keepUserMessages: Int?) -> Unit,
+    onConfirm: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
     val view = LocalView.current
 
-    val userMessageCount = remember(messages) { CompressText.countUserMessages(messages) }
-    var mode by remember { mutableStateOf(readMode(container)) }
-    var maxCharsText by remember { mutableStateOf(readIntPref(container, "compress_max_chars_v1", CompressText.DEFAULT_MAX_CHARS).toString()) }
-    var keepCountText by remember {
-        mutableStateOf(
-            readIntPref(
-                container,
-                "compress_keep_user_messages_v1",
-                CompressText.defaultKeepUserMessageCountFor(userMessageCount),
-            ).toString(),
+    val initial = remember { ContextCompactionPrefs.read(container, null, null) }
+    // 当前对话的估算 tokens（opencode estimate = 字符数 / 4）。
+    val usedTokens = remember(messages) {
+        SessionCompaction.estimate(
+            messages.mapIndexedNotNull { _, (role, text) ->
+                if (text.isBlank()) null
+                else SessionCompaction.serialize(
+                    SessionCompaction.Entry(role, listOf(SessionCompaction.Part.Text(text))),
+                )
+            }.joinToString("\n\n"),
         )
     }
+    var auto by remember { mutableStateOf(initial.auto) }
+    var keepText by remember { mutableStateOf(initial.keepTokens.toString()) }
+    var bufferText by remember { mutableStateOf(initial.buffer.toString()) }
+    var windowText by remember { mutableStateOf(initial.contextWindow.toString()) }
     var error by remember { mutableStateOf<String?>(null) }
     var showModelSheet by remember { mutableStateOf(false) }
 
-    val keepCount = keepCountText.trim().toIntOrNull()
-    val keepCoversAll = userMessageCount == 0 || (keepCount ?: 0) >= userMessageCount
-    val totalText = remember(messages) { CompressText.buildConversationText(messages) }
-
-    fun persistSelections() {
-        container.preferenceRepository.writeJson(
-            "compress_limit_mode_v1",
-            kotlinx.serialization.json.JsonPrimitive(mode.name.lowercase()).toString(),
-        )
-        if (mode == CompressText.Mode.KEEP_RECENT) {
-            keepCount?.takeIf { it > 0 }?.let {
-                container.preferenceRepository.writeJson("compress_keep_user_messages_v1", kotlinx.serialization.json.JsonPrimitive(it).toString())
-            }
-        } else {
-            maxCharsText.trim().toIntOrNull()?.takeIf { it > 0 }?.let {
-                container.preferenceRepository.writeJson("compress_max_chars_v1", kotlinx.serialization.json.JsonPrimitive(it).toString())
-            }
-        }
+    val keep = keepText.trim().toIntOrNull()
+    val buffer = bufferText.trim().toIntOrNull()
+    val window = windowText.trim().toIntOrNull()
+    val threshold = if (buffer != null && window != null && window > 0 && buffer > 0) {
+        (window - buffer).coerceAtLeast(0)
+    } else {
+        0
     }
 
-    fun submit() {
-        if (mode == CompressText.Mode.KEEP_RECENT) {
-            if (keepCount == null || keepCount <= 0) {
-                error = container.appContext.getString(UiR.string.compress_context_invalid_limit)
-                return
-            }
-            if (keepCoversAll) return
-            persistSelections()
-            onConfirm(mode, null, keepCount)
+    fun persist() {
+        if (keep == null || keep < 0 || buffer == null || buffer <= 0 || window == null || window <= 0) {
+            error = container.appContext.getString(UiR.string.compress_context_invalid_limit)
             return
         }
-        if (mode == CompressText.Mode.START || mode == CompressText.Mode.RECENT) {
-            val maxChars = maxCharsText.trim().toIntOrNull()
-            if (maxChars == null || maxChars <= 0) {
-                error = container.appContext.getString(UiR.string.compress_context_invalid_limit)
-                return
-            }
-            persistSelections()
-            onConfirm(mode, maxChars, null)
-            return
-        }
-        persistSelections()
-        onConfirm(mode, null, null)
+        ContextCompactionPrefs.write(
+            container,
+            SessionCompaction.Settings(
+                auto = auto,
+                buffer = buffer,
+                keepTokens = keep,
+                contextWindow = window,
+            ),
+        )
+        error = null
     }
 
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
@@ -135,7 +121,7 @@ fun CompressContextDialog(
             Column(
                 modifier = Modifier
                     .width(380.dp)
-                    .heightIn(max = 560.dp)
+                    .heightIn(max = 600.dp)
                     .padding(start = 18.dp, top = 18.dp, end = 18.dp, bottom = 14.dp),
             ) {
                 Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -185,84 +171,64 @@ fun CompressContextDialog(
                         )
                     }
                     Spacer(Modifier.height(16.dp))
-                    // Mode segmented control
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ModeSegment(stringResource(UiR.string.compress_context_keep_start), mode == CompressText.Mode.START, true) {
-                            mode = CompressText.Mode.START
-                            error = null
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(UiR.string.compress_context_auto_title),
+                                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = cs.onSurface),
+                            )
+                            Spacer(Modifier.height(3.dp))
+                            Text(
+                                text = stringResource(UiR.string.compress_context_auto_subtitle),
+                                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.62f)),
+                            )
                         }
-                        ModeSegment(stringResource(UiR.string.compress_context_keep_recent), mode == CompressText.Mode.RECENT, true) {
-                            mode = CompressText.Mode.RECENT
-                            error = null
-                        }
-                        ModeSegment(stringResource(UiR.string.compress_context_unlimited), mode == CompressText.Mode.UNLIMITED, true) {
-                            mode = CompressText.Mode.UNLIMITED
-                            error = null
-                        }
-                        ModeSegment(
-                            stringResource(UiR.string.compress_context_keep_recent_messages),
-                            mode == CompressText.Mode.KEEP_RECENT,
-                            userMessageCount > 1,
-                        ) {
-                            mode = CompressText.Mode.KEEP_RECENT
-                            error = null
-                        }
-                    }
-                    if (mode == CompressText.Mode.START || mode == CompressText.Mode.RECENT) {
-                        Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = maxCharsText,
-                            onValueChange = {
-                                maxCharsText = it.filter(Char::isDigit)
+                        IosSwitch(
+                            value = auto,
+                            onValueChanged = {
+                                auto = it
                                 error = null
                             },
-                            label = { Text(stringResource(UiR.string.compress_context_max_chars_label)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                    if (mode == CompressText.Mode.KEEP_RECENT) {
-                        Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = keepCountText,
-                            onValueChange = {
-                                keepCountText = it.filter(Char::isDigit)
-                                error = null
-                            },
-                            label = { Text(stringResource(UiR.string.compress_context_keep_count_label)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = if (keepCoversAll) {
-                                stringResource(UiR.string.compress_context_keep_all_messages)
-                            } else {
-                                val kept = CompressText.buildConversationText(
-                                    CompressText.selectKeepRecentMessages(messages, keepCount ?: 0),
-                                )
-                                val summarized = (totalText.length - kept.length).coerceAtLeast(0)
-                                val est = CompressText.estimateCompressionTokens(totalText, kept)
-                                stringResource(
-                                    UiR.string.compress_context_estimate_preview,
-                                    summarized.toString(),
-                                    kept.length.toString(),
-                                    est.minResultTokens.toString(),
-                                    est.maxResultTokens.toString(),
-                                    est.totalTokens.toString(),
-                                )
-                            },
-                            style = TextStyle(
-                                fontSize = 12.sp,
-                                lineHeight = 16.sp,
-                                color = if (keepCoversAll) cs.error else cs.onSurface.copy(alpha = 0.62f),
-                            ),
-                        )
-                    }
+                    Spacer(Modifier.height(10.dp))
+                    NumberField(
+                        value = keepText,
+                        onValueChange = { keepText = it; error = null },
+                        label = stringResource(UiR.string.compress_context_keep_tokens_label),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    NumberField(
+                        value = bufferText,
+                        onValueChange = { bufferText = it; error = null },
+                        label = stringResource(UiR.string.compress_context_buffer_label),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    NumberField(
+                        value = windowText,
+                        onValueChange = { windowText = it; error = null },
+                        label = stringResource(UiR.string.compress_context_window_label),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(UiR.string.compress_context_window_description),
+                        style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.62f)),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(
+                            UiR.string.compress_context_estimate_line,
+                            usedTokens.toString(),
+                            threshold.toString(),
+                        ),
+                        style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.62f)),
+                    )
                     error?.let {
                         Spacer(Modifier.height(6.dp))
                         Text(it, style = TextStyle(fontSize = 12.sp, color = cs.error, fontWeight = FontWeight.Medium))
@@ -280,7 +246,10 @@ fun CompressContextDialog(
                     IosSheetButton(
                         label = stringResource(UiR.string.compress_context_start_button),
                         filled = true,
-                        onTap = { submit() },
+                        onTap = {
+                            persist()
+                            if (error == null) onConfirm()
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -307,37 +276,18 @@ fun CompressContextDialog(
     }
 }
 
-/** _CompressModeSegmented option. */
+/** 一个正整数设置行（保留 tokens / 缓冲 / 上下文窗口）。 */
 @Composable
-private fun ModeSegment(label: String, selected: Boolean, enabled: Boolean, onTap: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .background(
-                if (selected) cs.primary.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent,
-                RoundedCornerShape(10.dp),
-            )
-            .border(
-                1.dp,
-                if (selected) cs.primary.copy(alpha = 0.5f) else cs.outlineVariant.copy(alpha = 0.35f),
-                RoundedCornerShape(10.dp),
-            )
-            .clickable(enabled = enabled, onClick = onTap)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-    ) {
-        Text(
-            text = label,
-            style = TextStyle(
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = when {
-                    !enabled -> cs.onSurface.copy(alpha = 0.35f)
-                    selected -> cs.primary
-                    else -> cs.onSurface.copy(alpha = 0.8f)
-                },
-            ),
-        )
-    }
+private fun NumberField(value: String, onValueChange: (String) -> Unit, label: String) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onValueChange(it.filter(Char::isDigit)) },
+        label = { Text(label) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** LoadingDialogCard — modal spinner with a label. */
@@ -360,24 +310,10 @@ fun CompressLoadingDialog() {
     )
 }
 
-private fun readMode(container: AppContainerImpl): CompressText.Mode {
-    val raw = container.preferenceRepository.readJson("compress_limit_mode_v1")
-        ?.removeSurrounding("\"")?.lowercase()
-    return CompressText.Mode.entries.firstOrNull { it.name.lowercase() == raw } ?: CompressText.Mode.START
-}
-
-private fun readIntPref(container: AppContainerImpl, key: String, default: Int): Int {
-    val raw = container.preferenceRepository.readJson(key) ?: return default
-    return runCatching {
-        kotlinx.serialization.json.Json.parseToJsonElement(raw)
-            .let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
-    }.getOrNull() ?: default
-}
-
 /** _compressModelDisplayName — compress → summary → title → assistant → current. */
 private fun compressModelDisplay(container: AppContainerImpl): String? {
     val assistant = container.currentAssistant()
-    val model = CompressText.resolveCompressModel(
+    val model = CompressModel.resolve(
         DefaultModelPrefs.parseModelSelection(readString(container, "compress_model_v1")),
         DefaultModelPrefs.parseModelSelection(readString(container, "summary_model_v1")),
         DefaultModelPrefs.parseModelSelection(readString(container, "title_model_v1")),

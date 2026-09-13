@@ -22,6 +22,9 @@ import com.psyche.memo.llm.stream.StreamChunkHandler
 import com.psyche.memo.ui.chat.ToolHandler
 import com.psyche.memo.ui.chat.ToolUiPart
 import com.psyche.memo.ui.chat.TranslateLanguage
+import com.psyche.memo.ui.chat.checkpointPart
+import com.psyche.memo.ui.chat.compactionEntry
+import com.psyche.memo.ui.chat.compactionWindow
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
@@ -528,149 +531,182 @@ class ChatViewModel(
         _contextVersion.value = _contextVersion.value + 1
     }
 
+    /** compactWindow 的返回值：成功时 [message] 是新建的检查点，否则 [errorKey]。 */
+    private data class CompactionResult(val message: UiMessage?, val errorKey: String?)
+
     /**
-     * home_view_model.compressContext —— 把折叠后的会话文本按模式截取/分块，交给
-     * compress 模型总结（必要时分块 + 多轮合并），然后新建会话把摘要作为第一条
-     * 用户消息（keepRecent 模式则保留最近若干轮用户消息）。
-     * [onResult] 回传新会话 id 与错误 key（成功时 error 为 null）。
+     * 手动「立即压缩」（opencode `SessionCompaction.create` + `process`，不看阈值）：
+     * 把窗口里较早的部分归纳成锚定摘要，落成一条检查点消息。
+     * [onResult] 回传错误 key（成功为 null）。
      */
-    fun compressContext(
-        mode: com.psyche.memo.common.CompressText.Mode,
-        maxChars: Int?,
-        keepUserMessages: Int?,
-        onResult: (newConversationId: String?, errorKey: String?) -> Unit,
-    ) {
+    fun compactContextNow(onResult: (errorKey: String?) -> Unit) {
         if (_streaming.value) {
-            onResult(null, "busy")
+            onResult("busy")
             return
         }
         viewModelScope.launch {
             try {
-                val pairs = _messages.value.map { it.role to it.content }
-                if (pairs.isEmpty()) {
-                    onResult(null, "no_messages")
+                val window = compactionWindow(_messages.value)
+                if (window.isEmpty()) {
+                    onResult("no_messages")
                     return@launch
                 }
-                val contents = com.psyche.memo.common.CompressText.buildCompressRequestContents(
-                    pairs,
-                    mode,
-                    maxChars,
+                val settings = ContextCompactionPrefs.read(
+                    container,
+                    selectedProviderId.value,
+                    selectedModelId.value,
                 )
-                if (contents.isEmpty()) {
-                    onResult(null, "no_messages")
-                    return@launch
-                }
-                val assistant = container.currentAssistant()
-                val model = com.psyche.memo.common.CompressText.resolveCompressModel(
-                    readModelSelection("compress_model_v1"),
-                    readModelSelection("summary_model_v1"),
-                    readModelSelection("title_model_v1"),
-                    assistant?.chatModelProvider?.let { p -> assistant.chatModelId?.let { m -> p to m } },
-                    selectedProviderId.value.takeIf { it.isNotEmpty() }
-                        ?.let { p -> selectedModelId.value.takeIf { it.isNotEmpty() }?.let { m -> p to m } },
-                ) ?: run {
-                    onResult(null, "no_model")
-                    return@launch
-                }
-                val template = readPrefString("compress_prompt_v1")
-                    ?: com.psyche.memo.DefaultModelPrefs.DEFAULT_COMPRESS_PROMPT
-                val locale = java.util.Locale.getDefault().toLanguageTag()
-                val thinking = readBoolPref("compress_generation_thinking_enabled_v1")
-                val budgetChars = com.psyche.memo.common.CompressText.compressRequestCharBudget(
-                    readContextWindowTokens(model.first, model.second),
+                val result = compactWindow(
+                    window = window,
+                    anchorOrder = Int.MAX_VALUE,
+                    settings = settings,
+                    entryOf = { message, _ -> compactionEntry(message) },
+                    beforeSkeletonId = null,
                 )
-                suspend fun summarize(text: String): String {
-                    val prompt = template.replace("{content}", text).replace("{locale}", locale)
-                    val request = LlmRequest(
-                        providerId = model.first,
-                        modelId = model.second,
-                        messages = listOf(LlmMessage(role = "user", content = prompt)),
-                        apiKey = container.apiKeyFor(model.first) ?: "",
-                        baseUrl = container.baseUrlFor(model.first),
-                        chatPath = container.providerConfig(model.first)?.chatPath,
-                        useResponseApi = container.usesResponseApi(model.first),
-                        thinkingBudget = if (thinking) -1 else 0,
-                    )
-                    return container.clientFor(model.first).complete(request)
-                        .parts.joinToString("").trim()
-                }
-
-                var partials = contents.map { withContext(Dispatchers.IO) { summarize(it) } }
-                if (partials.any { it.isEmpty() }) {
-                    onResult(null, "empty_summary")
-                    return@launch
-                }
-                var mergeRound = 0
-                while (partials.size > 1 && mergeRound < 8) {
-                    mergeRound++
-                    val packed = com.psyche.memo.common.CompressText.chunkPlainTexts(partials, budgetChars)
-                    partials = packed.map { withContext(Dispatchers.IO) { summarize(it) } }
-                    if (partials.any { it.isEmpty() }) {
-                        onResult(null, "empty_summary")
-                        return@launch
-                    }
-                }
-                val summary = if (partials.size == 1) {
-                    partials.single()
-                } else {
-                    withContext(Dispatchers.IO) {
-                        summarize(com.psyche.memo.common.Utf16SafeCut.truncateHead(partials.joinToString("\n\n"), budgetChars))
-                    }
-                }
-                if (summary.isEmpty()) {
-                    onResult(null, "empty_summary")
-                    return@launch
-                }
-
-                val kept = if (mode == com.psyche.memo.common.CompressText.Mode.KEEP_RECENT) {
-                    com.psyche.memo.common.CompressText.selectKeepRecentMessages(pairs, keepUserMessages ?: 0)
-                } else {
-                    null
-                }
-                val source = container.conversationDao.get(conversationId)
-                val newConversation = com.psyche.memo.data.model.Conversation.create(
-                    title = source?.title ?: "",
-                    assistantId = source?.assistantId ?: container.currentAssistantId.value,
-                )
-                withContext(Dispatchers.IO) {
-                    container.conversationDao.insert(newConversation)
-                    var order = 0
-                    container.messageDao.insert(
-                        com.psyche.memo.data.model.ChatMessage(
-                            id = com.psyche.memo.data.model.ChatMessage.newId(),
-                            role = "user",
-                            parts = listOf(com.psyche.memo.data.model.TextPart(summary)),
-                            timestamp = System.currentTimeMillis(),
-                            conversationId = newConversation.id,
-                            groupId = com.psyche.memo.data.model.ChatMessage.newId(),
-                            messageOrder = order++,
-                        ),
-                    )
-                    kept?.forEach { (role, content) ->
-                        container.messageDao.insert(
-                            com.psyche.memo.data.model.ChatMessage(
-                                id = com.psyche.memo.data.model.ChatMessage.newId(),
-                                role = role,
-                                parts = listOf(com.psyche.memo.data.model.TextPart(content)),
-                                timestamp = System.currentTimeMillis(),
-                                conversationId = newConversation.id,
-                                groupId = com.psyche.memo.data.model.ChatMessage.newId(),
-                                messageOrder = order++,
-                            ),
-                        )
-                    }
-                }
-                onResult(newConversation.id, null)
+                onResult(result.errorKey)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 // home_page.dart L1843-1848 —— 压缩失败也写应用日志（页面上仍有 toast）。
                 com.psyche.memo.common.logging.FlutterLogger.log(
-                    "[CompressContext] dialog failed: $e\n${e.stackTraceToString()}",
+                    "[CompressContext] failed: $e\n${e.stackTraceToString()}",
                     tag = "HomePage",
                 )
-                onResult(null, e.message ?: "error")
+                onResult("failed")
             }
+        }
+    }
+
+    /**
+     * opencode `compactAfterOverflow` —— 把 [window] 里 `messageOrder < anchorOrder`
+     * 的部分折叠成一条压缩检查点（摘要 + 原样保留的最近上下文）并落库。
+     *
+     * [entryOf] 决定每条消息怎么序列化（发送链路上是「带注入内容的正文」，手动压缩
+     * 是消息自身正文）；[beforeSkeletonId] 非空时把新检查点插到 UI 列表里那条消息
+     * 之前（流式骨架）。
+     */
+    private suspend fun compactWindow(
+        window: List<UiMessage>,
+        anchorOrder: Int,
+        settings: com.psyche.memo.common.SessionCompaction.Settings,
+        entryOf: (UiMessage, Int) -> com.psyche.memo.common.SessionCompaction.Entry?,
+        beforeSkeletonId: String?,
+    ): CompactionResult {
+        val previousPart = window.lastOrNull { it.checkpointPart() != null }?.checkpointPart()
+        val summarizable = window.filter { it.checkpointPart() == null && it.messageOrder < anchorOrder }
+        if (summarizable.isEmpty() && previousPart == null) return CompactionResult(null, "no_messages")
+        val serialized = summarizable.mapIndexedNotNull { index, message ->
+            entryOf(message, index)
+                ?.let(com.psyche.memo.common.SessionCompaction::serialize)
+                ?.takeIf { it.isNotEmpty() }
+        }
+        val selection = com.psyche.memo.common.SessionCompaction
+            .select(serialized, settings.keepTokens)
+            ?: return CompactionResult(null, "no_messages")
+        if (selection.head.isEmpty() && previousPart == null) return CompactionResult(null, "no_messages")
+
+        val assistant = container.currentAssistant()
+        val model = com.psyche.memo.common.CompressModel.resolve(
+            readModelSelection("compress_model_v1"),
+            readModelSelection("summary_model_v1"),
+            readModelSelection("title_model_v1"),
+            assistant?.chatModelProvider?.let { p -> assistant.chatModelId?.let { m -> p to m } },
+            selectedProviderId.value.takeIf { it.isNotEmpty() }
+                ?.let { p -> selectedModelId.value.takeIf { it.isNotEmpty() }?.let { m -> p to m } },
+        ) ?: return CompactionResult(null, "no_model")
+
+        val locale = java.util.Locale.getDefault().toLanguageTag()
+        val contexts = buildList {
+            previousPart?.recent?.takeIf { it.isNotEmpty() }?.let(::add)
+            selection.head.takeIf { it.isNotEmpty() }?.let(::add)
+        }
+        val custom = readPrefString("compress_prompt_v1")
+        val prompt = if (custom == null || custom == com.psyche.memo.common.SessionCompaction.SUMMARY_TEMPLATE) {
+            // 默认走 opencode 的锚定摘要模板（含 previous-summary 更新指令）。
+            com.psyche.memo.common.SessionCompaction.buildPrompt(previousPart?.summary, contexts, locale)
+        } else {
+            custom.replace("{content}", contexts.joinToString("\n\n")).replace("{locale}", locale)
+        }
+        val summaryOutput = minOf(
+            assistant?.maxTokens ?: com.psyche.memo.common.SessionCompaction.SUMMARY_OUTPUT_TOKENS,
+            com.psyche.memo.common.SessionCompaction.SUMMARY_OUTPUT_TOKENS,
+        )
+        // opencode：摘要提示词本身就超出窗口（留出摘要输出）时放弃压缩。
+        if (com.psyche.memo.common.SessionCompaction.estimate(prompt) > settings.contextWindow - summaryOutput) {
+            com.psyche.memo.common.logging.FlutterLogger.log(
+                "[CompressContext] prompt does not fit the context window; skipped",
+                tag = "HomePage",
+            )
+            return CompactionResult(null, "failed")
+        }
+        val summary = withContext(Dispatchers.IO) { runCompactionSummary(model, prompt, summaryOutput) }
+        if (summary.isBlank()) return CompactionResult(null, "empty_summary")
+
+        val boundary = summarizable.lastOrNull()?.messageOrder ?: previousPart?.boundaryOrder ?: -1
+        val parts: List<MessagePart> = listOf(
+            TextPart(summary),
+            com.psyche.memo.data.model.CompactionPart(summary, selection.recent, boundary),
+        )
+        val order = if (isTemporary) {
+            (_messages.value.maxOfOrNull { it.messageOrder } ?: -1) + 1
+        } else {
+            withContext(Dispatchers.IO) { container.messageDao.nextOrder(conversationId) }
+        }
+        val message = UiMessage(
+            id = ChatMessage.newId(),
+            role = "user",
+            parts = parts,
+            isStreaming = false,
+            timestamp = System.currentTimeMillis(),
+            groupId = ChatMessage.newId(),
+            messageOrder = order,
+        )
+        if (!isTemporary) {
+            withContext(Dispatchers.IO) {
+                container.messageDao.insert(message.toChatMessage())
+            }
+        }
+        insertUiMessage(message, beforeSkeletonId)
+        com.psyche.memo.common.logging.FlutterLogger.log(
+            "[CompressContext] compacted: summarized=${selection.head.length} chars, " +
+                "kept=${selection.recent.length} chars, boundary=$boundary",
+            tag = "HomePage",
+        )
+        return CompactionResult(message, null)
+    }
+
+    /** 压缩用的总结请求（compress → summary → title → 助手 → 当前模型链）。 */
+    private suspend fun runCompactionSummary(
+        model: Pair<String, String>,
+        prompt: String,
+        maxTokens: Int,
+    ): String {
+        val request = LlmRequest(
+            providerId = model.first,
+            modelId = model.second,
+            messages = listOf(LlmMessage(role = "user", content = prompt)),
+            apiKey = container.apiKeyFor(model.first) ?: "",
+            baseUrl = container.baseUrlFor(model.first),
+            chatPath = container.providerConfig(model.first)?.chatPath,
+            useResponseApi = container.usesResponseApi(model.first),
+            thinkingBudget = if (readBoolPref("compress_generation_thinking_enabled_v1")) -1 else 0,
+            maxTokens = maxTokens,
+        )
+        return container.clientFor(model.first).complete(request).parts.joinToString("").trim()
+    }
+
+    /** 把新落库的消息并入 UI 列表（[beforeId] 非空时插到它之前）。 */
+    private fun insertUiMessage(message: UiMessage, beforeId: String?) {
+        val list = _messages.value
+        if (beforeId == null) {
+            _messages.value = list + message
+            return
+        }
+        val index = list.indexOfFirst { it.id == beforeId }
+        _messages.value = if (index < 0) {
+            list + message
+        } else {
+            list.toMutableList().apply { add(index, message) }
         }
     }
 
@@ -695,21 +731,6 @@ class ChatViewModel(
 
     private fun readModelSelection(key: String): Pair<String, String>? =
         com.psyche.memo.DefaultModelPrefs.parseModelSelection(readPrefString(key))
-
-    /** readModelContextWindowTokens —— 模型 override 里的上下文字段。 */
-    private fun readContextWindowTokens(providerId: String, modelId: String): Int? {
-        val override = container.providerConfig(providerId)?.modelOverrides?.get(modelId)
-            as? kotlinx.serialization.json.JsonObject ?: return null
-        for (key in listOf(
-            "contextWindow", "context_window", "maxContextTokens",
-            "max_context_tokens", "contextLength", "context_length",
-        )) {
-            val value = (override[key] as? kotlinx.serialization.json.JsonPrimitive)
-                ?.content?.toIntOrNull()
-            if (value != null && value > 0) return value
-        }
-        return null
-    }
 
     /** 供 UI 观察清空后刷新标签。 */
     private val _contextVersion = kotlinx.coroutines.flow.MutableStateFlow(0)
@@ -1176,7 +1197,7 @@ class ChatViewModel(
                 // message_builder_service.dart L215-221 —— truncateIndex 之后
                 // 的消息才进入请求（"清空上下文"）。
                 val startOrder = contextStartOrder()
-                val rawMessages = _messages.value.dropLast(1)
+                var rawMessages = _messages.value.dropLast(1)
                     .let { all -> if (startOrder == null) all else all.filter { it.messageOrder >= startOrder } }
                 // ocr_service.dart：开启 OCR 时先把图片识别成文本块前置进用户轮次
                 // （模型没有视觉能力也能读图）；结果按图片内容哈希缓存。
@@ -1234,53 +1255,134 @@ class ChatViewModel(
                         com.psyche.memo.provider.MemoryBlockBuilder.buildPrefix(container, current)
                     }
                 }.orEmpty()
-                val lastUserIndex = rawMessages.indexOfLast { it.role == "user" }
+                var lastUserMessageId = rawMessages.lastOrNull { it.role == "user" }?.id
                 val assistant = container.currentAssistant()
                 // 助手正则（user scope, send 目标）与消息模板/时间后缀的来源。
                 val sendRegexRules = com.psyche.memo.data.model.AssistantRegexApplier.decodeRules(
                     container.currentAssistant()?.regexRules.orEmpty(),
                 )
                 val messageTemplate = assistant?.messageTemplate?.takeIf { it.isNotBlank() } ?: "{{ message }}"
+
+                /**
+                 * message_builder_service.dart L1106-1116 —— 用户消息过消息模板 +
+                 * 可选时间后缀（模板变量 {{message}}/{{role}}/{{time}}/{{date}}），
+                 * 再按助手正则（user scope + send 目标）改写；[carriesMemory] 的那条
+                 * 前置记忆快照前缀。压缩（阈值估算 + 摘要序列化）与请求组装共用这一份。
+                 */
+                fun assembledBody(msg: UiMessage, carriesMemory: Boolean): String {
+                    val rawText = (ocrBlocks[msg.id] ?: "") + (fileBlocks[msg.id] ?: "") +
+                        msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+                    val body = if (msg.role == "user") {
+                        val templated = com.psyche.memo.llm.prompt.PromptTransformer
+                            .applyMessageTemplate(messageTemplate, "user", rawText)
+                        if (assistant?.appendCurrentTimeToUserMessage == true) {
+                            templated + "\n\n" +
+                                com.psyche.memo.ui.MemoryPrompts.formatCurrentTimeTag(msg.timestamp)
+                        } else {
+                            templated
+                        }
+                    } else {
+                        rawText
+                    }
+                    // regex user scope + send 目标（message_generation_service L148-154）。
+                    val content = if (msg.role == "user") {
+                        com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
+                            body,
+                            sendRegexRules,
+                            com.psyche.memo.data.model.AssistantRegexScope.USER,
+                            com.psyche.memo.data.model.AssistantRegexApplier.Target.SEND,
+                        )
+                    } else {
+                        body
+                    }
+                    return (if (carriesMemory) memoryPrefix else "") + content
+                }
+
+                val systemParts = buildSystemPromptParts(assistant)
+                val tools = offeredTools()
+
+                // ---- 上下文压缩（opencode packages/core/src/session/compaction.ts）----
+                // 阈值：estimate(system + messages + tools) > 窗口 − max(输出预算, buffer)
+                // 时先把较早的上下文折叠成一条检查点（锚定摘要 + 原样保留的最近上下文），
+                // 然后按 opencode 的窗口语义组装请求：检查点 + 它 boundaryOrder 之后的消息，
+                // 检查点之前的消息不再发送（opencode history.load 的 latestCompaction）。
+                val compactionSettings = ContextCompactionPrefs.read(
+                    container,
+                    selectedProviderId.value,
+                    selectedModelId.value,
+                )
+                if (compactionSettings.auto) {
+                    val estimates = com.psyche.memo.common.SessionCompaction.estimateRequest(
+                        system = systemParts.joinToString("\n\n") { it.second },
+                        messages = compactionWindow(rawMessages).mapNotNull { msg ->
+                            if (msg.checkpointPart() != null) return@mapNotNull null
+                            val body = assembledBody(msg, msg.id == lastUserMessageId && memoryPrefix.isNotEmpty())
+                            if (body.isEmpty()) null else msg.role to body
+                        },
+                        toolsJson = toolsJsonForEstimate(tools),
+                    )
+                    if (
+                        com.psyche.memo.common.SessionCompaction.shouldCompact(
+                            estimates,
+                            compactionSettings.contextWindow,
+                            assistant?.maxTokens ?: 0,
+                            compactionSettings.buffer,
+                        )
+                    ) {
+                        val result = compactWindow(
+                            window = compactionWindow(rawMessages),
+                            anchorOrder = userMessage.messageOrder,
+                            settings = compactionSettings,
+                            entryOf = { msg, _ ->
+                                val entry = compactionEntry(msg)
+                                if (entry == null || msg.role != "user") {
+                                    entry
+                                } else {
+                                    entry.copy(
+                                        parts = listOf(
+                                            com.psyche.memo.common.SessionCompaction.Part.Text(
+                                                assembledBody(msg, msg.id == lastUserMessageId && memoryPrefix.isNotEmpty()),
+                                            ),
+                                        ),
+                                    )
+                                }
+                            },
+                            beforeSkeletonId = assistantId,
+                        )
+                        val checkpoint = result.message
+                        if (checkpoint != null) {
+                            val boundary = checkpoint.checkpointPart()?.boundaryOrder ?: -1
+                            // opencode：压缩后历史 = 检查点 + boundary 之后的消息。
+                            rawMessages = listOf(checkpoint) + rawMessages.filter { it.messageOrder > boundary }
+                            lastUserMessageId = rawMessages.lastOrNull { it.role == "user" }?.id
+                        } else {
+                            com.psyche.memo.common.logging.FlutterLogger.log(
+                                "[CompressContext] auto compact skipped: ${result.errorKey}",
+                                tag = "HomePage",
+                            )
+                        }
+                    }
+                }
                 // 上下文日志：组装期给承载注入内容的轮次打来源标签
                 // （context_log_models.dart 的 `_kelivo_ctx_segments`），请求前由
                 // ContextLogAssembler 切片写盘。历史轮次不带标签，读取时按 role 推断。
                 val tagContextLog = com.psyche.memo.logging.ContextLogger.isEnabled
                 val history = rawMessages
                     .mapIndexedNotNull { index, msg ->
-                        val carriesMemory = index == lastUserIndex && memoryPrefix.isNotEmpty()
-                        // message_builder_service.dart L1106-1116 —— 用户消息过
-                        // 消息模板 + 可选的时间后缀（模板变量 {{message}}/{{role}}/
-                        // {{time}}/{{date}}，默认 {{ message }} 恒等）。
-                        val rawText = (ocrBlocks[msg.id] ?: "") + (fileBlocks[msg.id] ?: "") +
-                            msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
-                        val body = if (msg.role == "user") {
-                            val templated = com.psyche.memo.llm.prompt.PromptTransformer
-                                .applyMessageTemplate(messageTemplate, "user", rawText)
-                            if (assistant?.appendCurrentTimeToUserMessage == true) {
-                                templated + "\n\n" +
-                                    com.psyche.memo.ui.MemoryPrompts.formatCurrentTimeTag(msg.timestamp)
-                            } else {
-                                templated
-                            }
+                        val carriesMemory = msg.id == lastUserMessageId && memoryPrefix.isNotEmpty()
+                        // 压缩检查点整条替换成 opencode 的 <conversation-checkpoint> user 轮次
+                        // （to-llm-message.ts 的 compaction 分支）。
+                        val checkpoint = msg.checkpointPart()
+                        val finalBody = if (checkpoint != null) {
+                            com.psyche.memo.common.SessionCompaction
+                                .checkpointText(checkpoint.summary, checkpoint.recent)
                         } else {
-                            rawText
+                            assembledBody(msg, carriesMemory)
                         }
-                        // regex user scope + send 目标（message_generation_service L148-154）。
-                        val content = if (msg.role == "user") {
-                            com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
-                                body,
-                                sendRegexRules,
-                                com.psyche.memo.data.model.AssistantRegexScope.USER,
-                                com.psyche.memo.data.model.AssistantRegexApplier.Target.SEND,
-                            )
-                        } else {
-                            body
-                        }
-                        val finalBody = (if (index == lastUserIndex) memoryPrefix else "") + content
                         // Images ride along as part payloads; only user turns may
                         // carry them (assistant media is stashed by the original
                         // OpenAI builder instead of replayed).
-                        val attachments = if (msg.role == "user") {
+                        val attachments = if (msg.role == "user" && checkpoint == null) {
                             msg.parts.filterIsInstance<com.psyche.memo.data.model.ImagePart>()
                                 .map { it.encodePayload() }
                         } else {
@@ -1314,7 +1416,7 @@ class ChatViewModel(
                 // System prompt injection (message_builder_service.dart L167-189):
                 // 助手提示词 + 记忆规则 + 搜索引用块 + 指令注入，按序拼进系统消息；
                 // 世界书随后 wrap 在它外面。每段带来源标签供上下文日志使用。
-                val systemParts = buildSystemPromptParts(assistant)
+                // （systemParts 在压缩阈值估算前就已组装，见上。）
                 if (systemParts.isNotEmpty()) {
                     val assembler = com.psyche.memo.logging.ContextLogAssembler
                     val existing = history.indexOfFirst { it.role == "system" }
@@ -1389,7 +1491,7 @@ class ChatViewModel(
                 // MCP/memory executors are unported, so their tools are not
                 // offered. Deviation from the original's full
                 // LocalToolsService.buildToolDefinitions set.
-                val tools = offeredTools()
+                // （tools 在压缩阈值估算前就已组装，见上。）
                 runGenerationLoop(
                     assistantId = assistantId,
                     history = history,
@@ -2055,6 +2157,23 @@ class ChatViewModel(
         }
         return out
     }
+
+    /**
+     * 阈值估算用的工具定义 JSON —— opencode `estimate({… , tools})` 的 `request.tools`
+     * （名称 + 描述 + 参数 schema）。
+     */
+    private fun toolsJsonForEstimate(tools: List<LlmToolSpec>): String = JsonArray(
+        tools.map { tool ->
+            JsonObject(
+                linkedMapOf(
+                    "name" to JsonPrimitive(tool.name),
+                    "description" to JsonPrimitive(tool.description),
+                    "parameters" to runCatching { Json.parseToJsonElement(tool.inputSchemaJson) }
+                        .getOrElse { JsonPrimitive(tool.inputSchemaJson) },
+                ),
+            )
+        },
+    ).toString()
 
     /**
      * message_builder_service.dart 的系统消息组装顺序（L167-189）：

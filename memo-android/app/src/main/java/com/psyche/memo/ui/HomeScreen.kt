@@ -1655,17 +1655,15 @@ fun ChatContent(
             container = container,
             messages = messages.map { it.role to it.content },
             onDismiss = { showCompressDialog = false },
-            onConfirm = { mode, maxChars, keepUserMessages ->
+            // opencode 阈值机制：压缩就地插入检查点，不再新建会话。
+            onConfirm = {
                 showCompressDialog = false
                 compressing = true
-                vm.compressContext(mode, maxChars, keepUserMessages) { newId, errorKey ->
+                vm.compactContextNow { errorKey ->
                     compressing = false
-                    if (newId != null) {
-                        onOpenConversation(newId)
-                    } else {
+                    if (errorKey != null) {
                         val message = when (errorKey) {
                             "no_messages" -> container.appContext.getString(UiR.string.compress_context_no_messages)
-                            "no_conversation" -> container.appContext.getString(UiR.string.compress_context_no_conversation)
                             "no_model" -> container.appContext.getString(UiR.string.compress_context_no_model)
                             "empty_summary" -> container.appContext.getString(UiR.string.compress_context_empty_summary)
                             else -> container.appContext.getString(UiR.string.compress_context_failed)

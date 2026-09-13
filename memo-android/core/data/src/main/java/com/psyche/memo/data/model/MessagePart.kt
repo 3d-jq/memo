@@ -29,12 +29,20 @@ sealed class MessagePart {
         const val KIND_IMAGE = "image"
         const val KIND_FILE = "file"
 
+        /**
+         * 上下文压缩检查点（本工程新增，opencode compaction 消息的等价物）：
+         * payload 是 {"summary","recent","boundary"}。它**不是**发给模型的普通
+         * 消息 —— 组装请求时整条替换成 `<conversation-checkpoint>` user 轮次。
+         */
+        const val KIND_COMPACTION = "compaction"
+
         fun fromRow(kind: String, payload: String): MessagePart = when (kind) {
             KIND_TEXT -> TextPart(payload)
             KIND_REASONING -> ReasoningPart(payload)
             KIND_TOOL_CALL -> ToolCallPart(payload)
             KIND_IMAGE -> ImagePart.fromPayload(payload)
             KIND_FILE -> FilePart.fromPayload(payload)
+            KIND_COMPACTION -> CompactionPart.fromPayload(payload)
             else -> UnknownPart(rawKind = kind, payload = payload)
         }
     }
@@ -186,6 +194,44 @@ data class FilePart(
 class UnknownPart(val rawKind: String, val payload: String) : MessagePart() {
     override val kind: String get() = rawKind
     override fun encodePayload(): String = payload
+}
+
+/**
+ * 上下文压缩检查点（见 [MessagePart.KIND_COMPACTION]）。
+ *
+ * [summary] 是模型按锚定模板归纳出的摘要；[recent] 是压缩时**原样保留**的最近
+ * 上下文（opencode `select` 的 recent）；[boundaryOrder] 是已被折叠的最后一条消息
+ * 的 `message_order` —— 组装请求时 order ≤ boundary 的消息都不再发送。
+ */
+data class CompactionPart(
+    val summary: String,
+    val recent: String,
+    val boundaryOrder: Int,
+) : MessagePart() {
+    override val kind: String get() = KIND_COMPACTION
+
+    override fun encodePayload(): String = JsonObject(
+        linkedMapOf(
+            "summary" to JsonPrimitive(summary),
+            "recent" to JsonPrimitive(recent),
+            "boundary" to JsonPrimitive(boundaryOrder),
+        ),
+    ).toString()
+
+    companion object {
+        fun fromPayload(payload: String): CompactionPart {
+            val json = try {
+                Json.parseToJsonElement(payload).jsonObject
+            } catch (e: Exception) {
+                JsonObject(emptyMap())
+            }
+            return CompactionPart(
+                summary = getOrNull(json, "summary") ?: "",
+                recent = getOrNull(json, "recent") ?: "",
+                boundaryOrder = getOrNull(json, "boundary")?.toIntOrNull() ?: -1,
+            )
+        }
+    }
 }
 
 private fun getOrNull(json: JsonObject, key: String): String? =

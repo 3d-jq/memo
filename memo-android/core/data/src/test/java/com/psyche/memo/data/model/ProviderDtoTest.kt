@@ -91,4 +91,23 @@ class ProviderDtoTest {
         assertEquals("future_part", unknown.kind)
         assertEquals("""{"a":1}""", unknown.encodePayload())
     }
+
+    @Test
+    fun compactionPartRoundTripsThroughTheRow() {
+        val part = CompactionPart(summary = "## Goal\n- ship it", recent = "[User]: hi", boundaryOrder = 7)
+        assertEquals("compaction", part.kind)
+        val row = MessagePart.fromRow(part.kind, part.encodePayload())
+        assertTrue(row is CompactionPart)
+        assertEquals("## Goal\n- ship it", (row as CompactionPart).summary)
+        assertEquals("[User]: hi", row.recent)
+        assertEquals(7, row.boundaryOrder)
+    }
+
+    @Test
+    fun compactionPartToleratesBrokenPayloads() {
+        val part = CompactionPart.fromPayload("not json")
+        assertEquals("", part.summary)
+        assertEquals("", part.recent)
+        assertEquals(-1, part.boundaryOrder)
+    }
 }

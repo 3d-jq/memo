@@ -92,27 +92,13 @@ Rules:
 {content}
 </content>"""
 
-    /** defaultCompressPrompt — settings_provider.dart L3967-3989. */
-    const val DEFAULT_COMPRESS_PROMPT = """Provide a detailed summary of the following conversation for continuing in a new session.
-
-The new session will not have access to the original conversation history, so preserve all context needed to continue seamlessly.
-
-Focus on:
-- Key topics discussed and why they matter
-- Important decisions made and their reasoning
-- Current work in progress and its state
-- Next steps or open questions to address
-- Any relevant technical details, code snippets, or configurations mentioned
-
-Requirements:
-1. Write in {locale} language, matching the original conversation language
-2. Be concise but complete — do not omit important context
-3. Output the summary directly without prefaces or meta-commentary
-4. Start with a clear indicator (e.g., "[Summary of previous conversation]" or equivalent)
-
-<conversation>
-{content}
-</conversation>"""
+    /**
+     * 压缩提示词默认值 —— opencode 的锚定摘要模板
+     * （`packages/core/src/session/compaction.ts` 的 SUMMARY_TEMPLATE，含
+     * `{locale}`/`{content}` 变量位）。上下文压缩改成阈值机制后，这份模板就是
+     * 「把较早的上下文归纳成检查点」的提示词；用户自定义时同样支持这两个变量。
+     */
+    const val DEFAULT_COMPRESS_PROMPT = com.psyche.memo.common.SessionCompaction.SUMMARY_TEMPLATE
 
     /** defaultTranslatePrompt — settings_provider.dart L3687-3699. */
     const val DEFAULT_TRANSLATE_PROMPT = """You are a translation expert, skilled in translating various languages, and maintaining accuracy, faithfulness, and elegance in translation.

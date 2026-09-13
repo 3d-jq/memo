@@ -524,6 +524,15 @@ fun ModelDetailSheet(
         }
     }
     var builtInTools by remember { mutableStateOf(BuiltInToolNames.parseFromOverride(initialOv)) }
+    // 上下文窗口（模型级 override 的 contextWindow）—— 上下文压缩的阈值基准。
+    var contextWindowText by remember {
+        mutableStateOf(
+            listOf("contextWindow", "context_window", "maxContextTokens", "contextLength")
+                .firstNotNullOfOrNull { key ->
+                    (initialOv?.get(key) as? JsonPrimitive)?.content?.toIntOrNull()?.takeIf { it > 0 }
+                }?.toString().orEmpty(),
+        )
+    }
 
     fun setType(next: String) {
         // _setType (L218-248) via ModelEditTypeSwitch.apply.
@@ -615,6 +624,8 @@ fun ModelDetailSheet(
             if (!isEmbedding) put("abilities", JsonArray(abilities.toList().map(::JsonPrimitive)))
             put("headers", headersJson)
             put("body", bodiesJson)
+            // 上下文压缩阈值基准（未填则设置页的全局默认值生效）。
+            contextWindowText.trim().toIntOrNull()?.takeIf { it > 0 }?.let { put("contextWindow", it) }
             if (!isEmbedding && builtInOrdered.isNotEmpty()) {
                 put("builtInTools", JsonArray(builtInOrdered.map(::JsonPrimitive)))
             }
@@ -815,6 +826,8 @@ fun ModelDetailSheet(
                         bodies = bodies,
                         onAddBody = { bodies = bodies + BodyKV() },
                         onDeleteBody = { idx -> bodies = bodies.filterIndexed { i, _ -> i != idx } },
+                        contextWindowText = contextWindowText,
+                        onContextWindowChange = { contextWindowText = it },
                     )
                     else -> if (showBuiltinToolsTab && cfg != null) {
                         ToolsTab(
@@ -1236,6 +1249,8 @@ private fun AdvancedTab(
     bodies: List<BodyKV>,
     onAddBody: () -> Unit,
     onDeleteBody: (Int) -> Unit,
+    contextWindowText: String,
+    onContextWindowChange: (String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Column(Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp)) {
@@ -1248,6 +1263,24 @@ private fun AdvancedTab(
             // The Flutter button's onTap is an empty closure (L607-610).
             OutlinedAddButton(label = stringResource(R.string.model_detail_sheet_add_provider_override), onClick = {})
         }
+    }
+    // 上下文窗口（本工程新增）：上下文压缩的阈值基准 —— 模型没填就用设置里的默认值。
+    Column(Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp)) {
+        Text(
+            text = stringResource(R.string.model_detail_sheet_context_window_title),
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+        )
+        Spacer(Modifier.height(8.dp))
+        DetailField(
+            value = contextWindowText,
+            onValueChange = { onContextWindowChange(it.filter(Char::isDigit)) },
+            hint = stringResource(R.string.model_detail_sheet_context_window_hint),
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = stringResource(R.string.model_detail_sheet_context_window_description),
+            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.7f)),
+        )
     }
     Column(Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp)) {
         Text(
