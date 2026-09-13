@@ -52,7 +52,12 @@ import kotlinx.serialization.json.jsonPrimitive
 class ChatViewModel(
     private val container: AppContainerImpl,
     private val conversationId: String,
-    injectPresets: Boolean = false,
+    /**
+     * 新会话标记（HomeScreen 的 `pendingPresetInject`）：为真时 init 里把助手的
+     * 预设对话落成真实消息。**注意别在类体里再声明一个同名字段** —— 那会屏蔽这个
+     * 构造参数，注入静默失效（2026-09-13 修的真 bug，见 ChatPresetInjectionTest）。
+     */
+    private val injectPresets: Boolean = false,
 ) : ViewModel() {
 
     private val isTemporary: Boolean = conversationId == com.psyche.memo.data.model.Conversation.TEMPORARY_ID
@@ -144,8 +149,6 @@ class ChatViewModel(
 
     /** 在途翻译请求（messageId → Job），新请求顶掉旧的（TS _runs 语义）。 */
     private val translationJobs = mutableMapOf<String, Job>()
-
-    private val injectPresets: Boolean = false
 
     init {
         // resolveChatModel（model_display_helper.dart L44-58）—— 「这条会话用哪个

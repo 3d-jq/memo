@@ -118,6 +118,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 
 38. **非流式（「流式输出」关）必须复用同一个解码器，别另写一套解析**（2026-09-13 补助手域最后一块）：原版关掉 `assistant.streamOutput` 走 `ChatApiService.generateMessage`（非流式 HTTP），我们让 `LlmClient.completeAsChunks(request)` 用**同一个 body（`stream=false`）+ 同一个解码器**产出与 `streamChat` 完全一致的 chunk 序列，生成循环一行都不用改。各家的接法：chat-completions 把整份响应当一条事件喂 `ChatCompletionsDecoder`（它本来就认 `message` 形状：`content`/`reasoning_content`/完整 `tool_calls`），再补一条 `[DONE]` 触发 Finish；Responses 自己发 `responsesOutputText`/`responsesReasoningText`，再把 body 包成 `response.completed` 交 `ResponsesDecoder`（它按这个事件收 `output[]` 的 function_call + usage）；Claude 摊 `content[]`（text/thinking/tool_use）后补 Finish；Gemini 把 body 当一条事件喂自己的解码器（`candidates`/`usageMetadata` 形状相同）。**重试语义照抄流式**（没吐过 chunk 且可重试才重试），否则 429 会把整条回复判死。测试 `NonStreamChatTest`（5 例：四家 + 重试）。
 
+39. **别在类体里再声明一个与构造参数同名的属性 —— 它会静默屏蔽那个参数**（2026-09-13 查出来的真 bug）：`ChatViewModel` 的构造参数 `injectPresets`（新会话标记，`HomeScreen.pendingPresetInject` 传进来）在类体里又被写成 `private val injectPresets: Boolean = false`，于是 `init` 里的 `if (injectPresets)` 读的是那个恒假的**属性** ⇒ **助手的「预设对话」从来没注入过**（用户问「提示词这个部分可以用吧」时才发现；系统提示词/消息模板/追加当前时间三项是好的）。修法：把构造参数直接声明成 `private val`，删掉类体里那份；`ChatPresetInjectionTest`（3 例）锁住「新会话按序落库 / 已存在消息的会话不重注 / 没标记就不注」，并且**验证过把门闸写死为假时它会失败**。排查同类问题：`grep -n "val <参数名>"`，看有没有第二处声明。
+
 ## 5. 批次进度（收工更新）
 
 | 批次 | 范围 | 状态 |
