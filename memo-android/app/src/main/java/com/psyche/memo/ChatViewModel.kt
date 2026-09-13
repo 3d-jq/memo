@@ -868,9 +868,13 @@ class ChatViewModel(
 
     /**
      * Regenerate from a user message (chat_message_widget onResend +
-     * _confirmRegeneration): the confirm dialog lives in the UI layer; here
-     * the messages below the anchor are deleted and the anchor's text is
-     * sent again. The anchor row itself is kept.
+     * _confirmRegeneration): the confirm dialog lives in the UI layer.
+     *
+     * `display_regenerate_delete_trailing_messages_v1`（默认**关**，
+     * chat_actions.dart:1523 `truncateFuture`）：
+     * - 开 → 锚点分组之后出现的分组整组删掉（含它们的全部版本），再重新生成；
+     * - 关 → 不删任何行；新回复作为「锚点之后第一条助手消息」所属分组的**新版本**
+     *   追加（chat_database_repository.dart:4532-4622），旧回复仍可在版本选择器里翻回。
      */
     fun regenerate(userMessageId: String) {
         if (_streaming.value) return
@@ -880,14 +884,40 @@ class ChatViewModel(
         if (!hasModelOrWarn()) return
         val anchor = msgs[idx]
         clearSuggestions()
+        val deleteTrailing = container.preferenceRepository
+            .readJson("display_regenerate_delete_trailing_messages_v1") == "1"
+        val anchorGroupId = anchor.groupId.ifEmpty { anchor.id }
+        // 关掉开关时的版本追加目标（原版 targetGroupId = 下一条助手行的 group）。
+        val targetGroupId = if (deleteTrailing) {
+            null
+        } else {
+            msgs.drop(idx + 1).firstOrNull { it.role == "assistant" }?.groupId
+        }
         viewModelScope.launch {
+            val nextVersion = if (targetGroupId != null && !isTemporary) {
+                withContext(Dispatchers.IO) {
+                    container.messageDao.maxVersionForGroup(conversationId, targetGroupId) + 1
+                }
+            } else {
+                0
+            }
             if (!isTemporary) {
                 withContext(Dispatchers.IO) {
-                    container.messageDao.deleteAfterOrder(conversationId, anchor.messageOrder)
+                    if (deleteTrailing) {
+                        container.messageDao.deleteTrailingGroups(conversationId, anchorGroupId)
+                    }
                 }
             }
-            _messages.value = msgs.take(idx + 1)
-            startGeneration(anchor.toChatMessage())
+            if (deleteTrailing) {
+                _messages.value = msgs.take(idx + 1)
+            }
+            if (targetGroupId != null) versionSelections[targetGroupId] = nextVersion
+            startGeneration(
+                anchor.toChatMessage(),
+                assistantGroupId = targetGroupId,
+                assistantVersion = nextVersion,
+                replaceVisibleGroupId = targetGroupId,
+            )
         }
     }
 
@@ -906,11 +936,31 @@ class ChatViewModel(
         if (idx < 0) return false
         val target = msgs[idx]
         if (target.parts.none { it is TextPart }) return false
+        // chat_edit_assistant_keep_thinking_tool_cards_v1（默认关）：
+        // home_page_controller.dart:1497-1518 —— 关掉时新版本的 parts 里不留思考段与
+        // 工具调用，思考元数据也一起清空；打开时**整份 parts 与思考元数据都继承**。
+        val keepThinkingAndToolCards = container.preferenceRepository
+            .readJson("chat_edit_assistant_keep_thinking_tool_cards_v1") == "1"
+        val isAssistant = target.role == "assistant"
+        fun editedParts(original: List<MessagePart>): List<MessagePart> {
+            val base = if (isAssistant && !keepThinkingAndToolCards) {
+                ChatMessage.partsWithoutThinkingAndToolCards(original)
+            } else {
+                original
+            }
+            return ChatMessage.partsWithReplacedText(base, newContent)
+        }
         if (isTemporary) {
-            val newParts = ChatMessage.partsWithReplacedText(target.parts, newContent)
-            val edited = target.copy(parts = newParts)
+            val edited = target.copy(
+                parts = editedParts(target.parts),
+                reasoningSegmentsJson = if (isAssistant && !keepThinkingAndToolCards) {
+                    null
+                } else {
+                    target.reasoningSegmentsJson
+                },
+            )
             _messages.value = msgs.take(idx) + edited
-            if (shouldSend && target.role == "user") {
+            if (shouldSend) {
                 if (hasModelOrWarn()) startGeneration(edited.toChatMessage())
             }
             return true
@@ -919,10 +969,11 @@ class ChatViewModel(
             val orig = container.messageDao.get(messageId) ?: return@withContext null
             val groupId = orig.groupId.ifEmpty { orig.id }
             val version = container.messageDao.maxVersionForGroup(conversationId, groupId) + 1
+            val dropReasoning = orig.role == "assistant" && !keepThinkingAndToolCards
             val row = ChatMessage(
                 id = ChatMessage.newId(),
                 role = orig.role,
-                parts = ChatMessage.partsWithReplacedText(orig.parts, newContent),
+                parts = editedParts(orig.parts),
                 timestamp = System.currentTimeMillis(),
                 modelId = orig.modelId,
                 providerId = orig.providerId,
@@ -930,13 +981,21 @@ class ChatViewModel(
                 groupId = groupId,
                 version = version,
                 messageOrder = container.messageDao.nextOrder(conversationId),
+                // home_page_controller.dart:1517-1518 + repository `preserveReasoning`
+                // （chat_database_repository.dart:4834）：保留开关打开时思考元数据
+                // 随 parts 一起继承。
+                reasoningSegmentsJson = if (dropReasoning) null else orig.reasoningSegmentsJson,
+                reasoningStartAt = if (dropReasoning) null else orig.reasoningStartAt,
+                reasoningFinishedAt = if (dropReasoning) null else orig.reasoningFinishedAt,
             )
             container.messageDao.insert(row)
             row
         } ?: return false
         versionSelections[newVersionRow.groupId] = newVersionRow.version
         reloadTail()
-        if (shouldSend && target.role == "user") {
+        // Save & Send（home_page_controller.dart:1533-1536）：助手消息保存后同样
+        // 立刻重新生成——`assistantAsNewReply`，锚点就是刚写入的新版本。
+        if (shouldSend) {
             // The collapsed list now shows the edited version in the group's
             // original position; generate against it.
             val visible = _messages.value.firstOrNull {
@@ -1051,7 +1110,17 @@ class ChatViewModel(
         com.psyche.memo.service.ChatNotificationManager.onGenerationEnded(conversationId)
     }
 
-    private fun startGeneration(userMessage: ChatMessage) {
+    private fun startGeneration(
+        userMessage: ChatMessage,
+        /**
+         * 重新生成且「删除后续消息」关闭时，新回复并入这个已有的助手分组
+         * （`chat_database_repository.dart:4532-4622` 的 targetGroupId 语义）。
+         */
+        assistantGroupId: String? = null,
+        assistantVersion: Int = 0,
+        /** 非空时把该分组当前可见的那条换成流式骨架（原地重生成，不追加到末尾）。 */
+        replaceVisibleGroupId: String? = null,
+    ) {
         generationJob?.cancel()
         _streaming.value = true
         beginBackgroundGeneration()
@@ -1062,14 +1131,22 @@ class ChatViewModel(
                 container.streamingConversationIds.value + conversationId
             // Assistant skeleton: streaming message grows as chunks arrive.
             val assistantId = ChatMessage.newId()
-            append(
-                UiMessage(
-                    id = assistantId,
-                    role = "assistant",
-                    parts = emptyList(),
-                    isStreaming = true,
-                ),
+            val skeleton = UiMessage(
+                id = assistantId,
+                role = "assistant",
+                parts = emptyList(),
+                isStreaming = true,
+                groupId = assistantGroupId ?: assistantId,
+                version = assistantVersion,
             )
+            val replaceIndex = replaceVisibleGroupId?.let { gid ->
+                _messages.value.indexOfFirst { it.groupId == gid }
+            } ?: -1
+            if (replaceIndex >= 0) {
+                _messages.value = _messages.value.toMutableList().apply { this[replaceIndex] = skeleton }
+            } else {
+                append(skeleton)
+            }
             // Parts accumulated across rounds; each round folds into its own
             // handler, then its parts/segments merge here (the original's single
             // UI handler folds every round into one parts list).
@@ -1090,6 +1167,8 @@ class ChatViewModel(
                     usage = usage,
                     durationMs = System.currentTimeMillis() - generationStartMs,
                     segmentsJson = segmentsJson ?: encodeSegments(allSegments),
+                    groupId = assistantGroupId,
+                    version = assistantVersion,
                 )
             }
             try {
@@ -2287,6 +2366,9 @@ class ChatViewModel(
         durationMs: Long = 0L,
         /** 已算好的 `reasoning_segments_json`（含展开态）；null 时由 [segments] 兜底编码。 */
         segmentsJson: String? = null,
+        /** 并入已有助手分组（重新生成 + 不删后续）时传入；null = 自成一组。 */
+        groupId: String? = null,
+        version: Int = 0,
     ) {
         if (isTemporary || parts.isEmpty()) return
         val providerId = selectedProviderId.value
@@ -2318,8 +2400,8 @@ class ChatViewModel(
                         completionTokens = usage?.completionTokens,
                         cachedTokens = usage?.cachedTokens,
                         durationMs = durationMs.takeIf { it > 0 },
-                        groupId = assistantId,
-                        version = 0,
+                        groupId = groupId ?: assistantId,
+                        version = version,
                         messageOrder = container.messageDao.nextOrder(conversationId),
                     ),
                 )
@@ -2372,7 +2454,16 @@ class ChatViewModel(
          * conversation (drawer duplicateConversation semantics, truncated at
          * the anchor). New row id, streaming cleared.
          */
-        fun forkCopy(m: ChatMessage, newConversationId: String): ChatMessage = ChatMessage(
+        fun forkCopy(
+            m: ChatMessage,
+            newConversationId: String,
+            /** 保留版本模式：源分组 → 新分组（版本号原样保留，分组内仍是多版本）。 */
+            groupId: String? = null,
+            /** 拍平模式：每个分组只留一条，统一 version = 0。 */
+            version: Int? = null,
+            /** 拍平模式按顺序重排 message_order。 */
+            messageOrder: Int? = null,
+        ): ChatMessage = ChatMessage(
             id = ChatMessage.newId(),
             role = m.role,
             parts = m.parts,
@@ -2385,14 +2476,14 @@ class ChatViewModel(
             translation = m.translation,
             reasoningStartAt = m.reasoningStartAt,
             reasoningFinishedAt = m.reasoningFinishedAt,
-            groupId = m.groupId,
-            version = m.version,
+            groupId = groupId ?: m.groupId,
+            version = version ?: m.version,
             promptTokens = m.promptTokens,
             completionTokens = m.completionTokens,
             cachedTokens = m.cachedTokens,
             durationMs = m.durationMs,
             updatedAt = m.updatedAt,
-            messageOrder = m.messageOrder,
+            messageOrder = messageOrder ?: m.messageOrder,
         )
     }
 }

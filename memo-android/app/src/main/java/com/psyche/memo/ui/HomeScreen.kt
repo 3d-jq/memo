@@ -260,9 +260,16 @@ fun HomeScreen(
     }
 
     fun onCurrentDeleted() {
-        // Mirror _handlePostDeleteNavigation: land on the most recent
-        // conversation or a fresh one.
+        // side_drawer.dart:848-880 `_handlePostDeleteNavigation`：删掉当前会话后
+        // 优先「新建会话」（display_new_chat_after_delete_v1 打开），否则落到最近的
+        // 一条；都没有才新建。
         temporaryActive = false
+        val preferNewChat = container.preferenceRepository
+            .readJson("display_new_chat_after_delete_v1") == "1"
+        if (preferNewChat) {
+            newConversation()
+            return
+        }
         val latest = container.conversationDao.getAll().firstOrNull()
         if (latest != null) {
             selectedConversationId = latest.id
@@ -425,13 +432,13 @@ fun HomeScreen(
                     container = container,
                     open = presenting,
                     selectedId = selectedConversationId,
-                    onSelect = { id ->
+                    onSelect = { id, closeDrawer ->
                         selectedConversationId = id
-                        drawerOpen = false
+                        if (closeDrawer) drawerOpen = false
                     },
-                    onNew = {
+                    onNew = { closeDrawer ->
                         newConversation()
-                        drawerOpen = false
+                        if (closeDrawer) drawerOpen = false
                     },
                     onOpenSettings = onOpenSettings,
                     onOpenBackup = onOpenBackup,
@@ -546,6 +553,12 @@ fun ChatContent(
         com.psyche.memo.ui.chat.LongPasteSettings.fromPrefs { key ->
             container.preferenceRepository.readJson(key)
         }
+    }
+    // 消息导航按钮三态（display_mobile_message_nav_buttons_mode_v1，默认 scroll）。
+    val navButtonsMode = remember {
+        container.preferenceRepository.readJson("display_mobile_message_nav_buttons_mode_v1")
+            ?.trim()?.trim('"')?.takeIf { it == MOBILE_NAV_ALWAYS || it == MOBILE_NAV_NEVER }
+            ?: MOBILE_NAV_SCROLL
     }
     val chatHaptics = LocalHapticsSettings.current
     val chatView = LocalView.current
@@ -706,25 +719,67 @@ fun ChatContent(
 
     // 创建分支 = 复制会话语义定位到该条：新会话仅携带该条及其之前的消息
     // （drawer duplicateConversation 的事务化复制，按 message_order 截断）。
+    //
+    // `chat_fork_keep_message_versions_v1`（默认关，chat_service.dart:3484-3543）：
+    // - 开 → `forkConversationWithVersions`：按**分组首条** order 截断，保留每个
+    //   分组的所有版本（分组 id 重新映射，版本号原样保留）；
+    // - 关 → 每个分组只留当前可见（回退最高）版本，拍平成各自独立的新组（version 0）。
     fun forkAt(messageId: String) {
         if (isTemporary) return
+        val visibleIds = messages.map { it.id }.toSet()
         coroutineScope.launch {
             val newId = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 val src = container.conversationDao.get(conversationId)
                     ?: return@withContext null
                 val anchor = container.messageDao.get(messageId)
                     ?: return@withContext null
+                val keepVersions = container.preferenceRepository
+                    .readJson("chat_fork_keep_message_versions_v1") == "1"
                 val dup = Conversation.create(
                     title = src.title,
                     assistantId = src.assistantId,
                 )
                 container.conversationDao.insert(dup)
-                val rows = container.messageDao
-                    .getAllForConversation(conversationId)
-                    .filter { it.messageOrder <= anchor.messageOrder }
-                container.messageDao.insertAllInTransaction(rows.map { m ->
-                    ChatViewModel.forkCopy(m, dup.id)
-                })
+                val all = container.messageDao.getAllForConversation(conversationId)
+                // 分组首条 order：截断与「保留哪些分组」都按它判断，而不是被点那条的 order。
+                val firstOrder = LinkedHashMap<String, Int>()
+                for (row in all) {
+                    val gid = row.groupId.ifEmpty { row.id }
+                    val prev = firstOrder[gid]
+                    if (prev == null || row.messageOrder < prev) firstOrder[gid] = row.messageOrder
+                }
+                val anchorGroupId = anchor.groupId.ifEmpty { anchor.id }
+                val anchorFirst = firstOrder[anchorGroupId] ?: anchor.messageOrder
+                val keptGroups = firstOrder.filterValues { it <= anchorFirst }.keys
+                val copies: List<com.psyche.memo.data.model.ChatMessage> = if (keepVersions) {
+                    val groupMap = keptGroups.associateWith { com.psyche.memo.data.model.ChatMessage.newId() }
+                    all.filter { (it.groupId.ifEmpty { it.id }) in keptGroups }
+                        .map { ChatViewModel.forkCopy(it, dup.id, groupId = groupMap[it.groupId.ifEmpty { it.id }]) }
+                } else {
+                    val chosen = LinkedHashMap<String, com.psyche.memo.data.model.ChatMessage>()
+                    for (row in all) {
+                        val gid = row.groupId.ifEmpty { row.id }
+                        if (gid !in keptGroups) continue
+                        val cur = chosen[gid]
+                        chosen[gid] = when {
+                            cur == null -> row
+                            row.id in visibleIds -> row
+                            cur.id in visibleIds -> cur
+                            row.version > cur.version -> row
+                            else -> cur
+                        }
+                    }
+                    chosen.values.mapIndexed { index, row ->
+                        ChatViewModel.forkCopy(
+                            row,
+                            dup.id,
+                            groupId = com.psyche.memo.data.model.ChatMessage.newId(),
+                            version = 0,
+                            messageOrder = index,
+                        )
+                    }
+                }
+                container.messageDao.insertAllInTransaction(copies)
                 dup.id
             }
             if (newId != null) onOpenConversation(newId)
@@ -1239,27 +1294,31 @@ fun ChatContent(
                     }
                 }
                 // 滚动导航面板（scroll_nav_buttons.dart）：贴输入栏上方右侧。
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 12.dp, bottom = 12.dp),
-                ) {
-                    com.psyche.memo.ui.chat.ScrollNavButtonsPanel(
-                        visible = navVisible,
-                        onScrollToTop = {
-                            coroutineScope.launch { timelineListState.animateScrollToItem(0) }
-                        },
-                        onPreviousMessage = { jumpAdjacentQuestion(previous = true) },
-                        onNextMessage = { jumpAdjacentQuestion(previous = false) },
-                        onScrollToBottom = {
-                            coroutineScope.launch {
-                                timelineListState.animateScrollToItem(
-                                    (messages.size - 1).coerceAtLeast(0),
-                                )
-                            }
-                            autoStick = true
-                        },
-                    )
+                // home_page.dart:1504-1516 移动端三态：always 常显 / scroll 跟随
+                // 滚动（默认）/ never 整块不渲染。
+                if (navButtonsMode != MOBILE_NAV_NEVER) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 12.dp, bottom = 12.dp),
+                    ) {
+                        com.psyche.memo.ui.chat.ScrollNavButtonsPanel(
+                            visible = navButtonsMode == MOBILE_NAV_ALWAYS || navVisible,
+                            onScrollToTop = {
+                                coroutineScope.launch { timelineListState.animateScrollToItem(0) }
+                            },
+                            onPreviousMessage = { jumpAdjacentQuestion(previous = true) },
+                            onNextMessage = { jumpAdjacentQuestion(previous = false) },
+                            onScrollToBottom = {
+                                coroutineScope.launch {
+                                    timelineListState.animateScrollToItem(
+                                        (messages.size - 1).coerceAtLeast(0),
+                                    )
+                                }
+                                autoStick = true
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -3450,6 +3509,11 @@ private const val MARKDOWN_PRELOAD_MESSAGES = 60
 
 /** 距顶多少 dp 内触发往前加载历史（message_list_view.dart:1816 的 96 逻辑像素）。 */
 private const val HISTORY_LOAD_TRIGGER_DP = 96f
+
+/** 消息导航按钮三态（settings_provider.dart:4991-5005 的默认值为 scroll）。 */
+private const val MOBILE_NAV_ALWAYS = "always"
+private const val MOBILE_NAV_SCROLL = "scroll"
+private const val MOBILE_NAV_NEVER = "never"
 
 private val TIME_FORMATTER = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 

@@ -119,8 +119,9 @@ import java.util.Locale
 fun SideDrawerContent(
     container: AppContainerImpl,
     selectedId: String?,
-    onSelect: (String) -> Unit,
-    onNew: () -> Unit,
+    /** side_drawer.dart `closeDrawer: !keepSidebarOpenOnTopicTap`。 */
+    onSelect: (id: String, closeDrawer: Boolean) -> Unit,
+    onNew: (closeDrawer: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenBackup: () -> Unit = {},
     onOpenHistory: () -> Unit,
@@ -180,22 +181,40 @@ fun SideDrawerContent(
             assistantList = runCatching { container.assistantStore.getAll() }.getOrDefault(emptyList())
         }
     }
+    // side_drawer.dart:4182-4190（话题）/ :3014（助手）：点一下是否关抽屉看设置。
+    val keepSidebarOnTopicTap = remember {
+        container.preferenceRepository
+            .readJson("display_keep_sidebar_open_on_topic_tap_v1") == "1"
+    }
+    val keepSidebarOnAssistantTap = remember {
+        container.preferenceRepository
+            .readJson("display_keep_sidebar_open_on_assistant_tap_v1") == "1"
+    }
+    // display_show_chat_list_date_v1（默认关）：会话列表是否显示日期分组头。
+    val showChatListDate = remember {
+        container.preferenceRepository
+            .readJson("display_show_chat_list_date_v1") == "1"
+    }
+
     fun switchAssistant(a: Assistant) {
         container.setCurrentAssistant(a.id)
-        assistantsExpanded = false
+        // side_drawer.dart:3012-3018 `_handleSelectAssistant`：closeDrawer 由
+        // display_keep_sidebar_open_on_assistant_tap_v1 决定，且关闭时才收起助手列表。
+        val closeDrawer = !keepSidebarOnAssistantTap
+        if (closeDrawer) assistantsExpanded = false
         // _handleSelectAssistant 3034-3058：设置开启“切换助手后新建会话”时总是
         // 新建；否则有该助手的会话就跳到最近一条，没有才新建。
         val forceNewChat = container.preferenceRepository
             .readJson("display_new_chat_on_assistant_switch_v1") == "1"
         if (forceNewChat) {
-            onNew()
+            onNew(closeDrawer)
             return
         }
         val recent = conversations
             .filter { it.assistantId == a.id }
             .maxByOrNull { it.updatedAt }
         Haptics.light(view)
-        if (recent != null) onSelect(recent.id) else onNew()
+        if (recent != null) onSelect(recent.id, closeDrawer) else onNew(closeDrawer)
     }
     // 用户栏名字来自 UserProvider（user_name），未设置过时用本地化默认名 ——
     // 原版 side_drawer 的 widget.userName 也是从 UserProvider 透传进来的。
@@ -561,14 +580,20 @@ fun SideDrawerContent(
                 },
                 onOpenConversation = { id ->
                     Haptics.light(view)
-                    onSelect(id)
+                    onSelect(id, !keepSidebarOnTopicTap)
                 },
             )
             }
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 10.dp, top = 4.dp, end = 10.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(
+                    start = 10.dp,
+                    // side_drawer.dart:2702-2704 —— 隐藏日期头时列表顶部留 10（显示时 4）。
+                    top = if (showChatListDate) 4.dp else 10.dp,
+                    end = 10.dp,
+                    bottom = 16.dp,
+                ),
             ) {
             if (isFilteredEmpty) {
                 item(key = "empty") {
@@ -589,21 +614,26 @@ fun SideDrawerContent(
                 }
             } else {
                 sections.forEachIndexed { sIdx, section ->
-                    item(key = "h_${section.key}") {
-                        // Mirrors the mobile _SidebarHeaderRow render
-                        // (side_drawer.dart L4140): plain text, 14sp semibold,
-                        // primary color, padding (14, 6, 0, 6) — no chevron.
-                        val label = section.labelTextResId?.let { stringResource(it) }
-                            ?: formatSectionDate(section.bucket!!)
-                        Text(
-                            text = label,
-                            modifier = Modifier.padding(start = 14.dp, top = 6.dp, end = 0.dp, bottom = 6.dp),
-                            style = TextStyle(
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = cs.primary,
-                            ),
-                        )
+                    // side_drawer.dart:4098-4105 —— display_show_chat_list_date_v1
+                    // 关掉时只过滤掉**按日期的分组头**（Today/Yesterday/日期），
+                    // Pinned 头保留。
+                    if (showsSectionHeader(section, showChatListDate)) {
+                        item(key = "h_${section.key}") {
+                            // Mirrors the mobile _SidebarHeaderRow render
+                            // (side_drawer.dart L4140): plain text, 14sp semibold,
+                            // primary color, padding (14, 6, 0, 6) — no chevron.
+                            val label = section.labelTextResId?.let { stringResource(it) }
+                                ?: formatSectionDate(section.bucket!!)
+                            Text(
+                                text = label,
+                                modifier = Modifier.padding(start = 14.dp, top = 6.dp, end = 0.dp, bottom = 6.dp),
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = cs.primary,
+                                ),
+                            )
+                        }
                     }
                     itemsIndexed(section.items, key = { _, c -> c.id }) { idx, conv ->
                         val isCurrent = conv.id == selectedId
@@ -637,7 +667,8 @@ fun SideDrawerContent(
                                                 if (isChecked) selectedIds.remove(conv.id) else selectedIds.add(conv.id)
                                             } else {
                                                 Haptics.light(view)
-                                                onSelect(conv.id)
+                                                // side_drawer.dart:4182-4190 话题行 onTap。
+                                                onSelect(conv.id, !keepSidebarOnTopicTap)
                                             }
                                         },
                                         onLongClick = { if (!selectionMode) menuFor = conv },
@@ -1273,6 +1304,13 @@ internal data class ConversationSection(
     val bucket: Date?,
     val items: List<Conversation>,
 )
+
+/**
+ * side_drawer.dart:4098-4105 —— `display_show_chat_list_date_v1` 关掉时，
+ * `visibleRows` 会把按日期分组的表头整批滤掉，Pinned 表头保留（分组本身不变）。
+ */
+internal fun showsSectionHeader(section: ConversationSection, showChatListDate: Boolean): Boolean =
+    showChatListDate || section.key == "pinned"
 
 internal fun groupedRows(items: List<Conversation>): List<ConversationSection> {
     val now = Calendar.getInstance()

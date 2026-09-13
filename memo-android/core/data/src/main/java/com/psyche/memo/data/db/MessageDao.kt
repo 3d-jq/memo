@@ -352,6 +352,29 @@ class MessageDao(private val db: SQLiteDatabase) {
         db.delete("message_rows", "conversation_id = ? AND message_order > ?", arrayOf(conversationId, order.toString()))
     }
 
+    /**
+     * 重新生成「删除后续消息」打开时的裁剪（chat_database_repository.dart:4624-4662
+     * `_truncateLinearMessageGroupsAfter`）：按**分组首条**的 message_order 判断，
+     * 删掉锚点分组之后出现的**所有分组**（连同它们的全部版本），锚点分组本身的其它
+     * 版本保留。`deleteAfterOrder` 是按单行 order 切的，会误删保留分组里的高版本行。
+     */
+    fun deleteTrailingGroups(conversationId: String, anchorGroupId: String) {
+        val anchorFirst = db.rawQuery(
+            "SELECT MIN(message_order) FROM message_rows WHERE conversation_id = ? AND group_id = ?",
+            arrayOf(conversationId, anchorGroupId),
+        ).use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else null }
+            ?: return
+        val groups = ArrayList<String>()
+        db.rawQuery(
+            "SELECT group_id FROM message_rows WHERE conversation_id = ? " +
+                "GROUP BY group_id HAVING MIN(message_order) > ?",
+            arrayOf(conversationId, anchorFirst.toString()),
+        ).use { cursor ->
+            while (cursor.moveToNext()) cursor.getString(0)?.let { groups.add(it) }
+        }
+        for (groupId in groups) deleteByGroup(conversationId, groupId)
+    }
+
     /** Deletes every version of a message group (delete-all-versions action). */
     fun deleteByGroup(conversationId: String, groupId: String) {
         val ids = ArrayList<String>()

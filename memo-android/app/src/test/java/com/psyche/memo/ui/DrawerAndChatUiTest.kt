@@ -88,7 +88,7 @@ class DrawerAndChatUiTest {
                 SideDrawerContent(
                     container = container,
                     selectedId = null,
-                    onSelect = {},
+                    onSelect = { _, _ -> },
                     onNew = {},
                     onOpenSettings = {},
                     onOpenHistory = {},
@@ -121,7 +121,7 @@ class DrawerAndChatUiTest {
                 SideDrawerContent(
                     container = container,
                     selectedId = null,
-                    onSelect = {},
+                    onSelect = { _, _ -> },
                     onNew = {},
                     onOpenSettings = {},
                     onOpenHistory = {},

@@ -88,4 +88,26 @@ class SideDrawerGroupingTest {
     fun `empty input yields no sections`() {
         assertTrue(groupedRows(emptyList()).isEmpty())
     }
+
+    // display_show_chat_list_date_v1（side_drawer.dart:4098-4105）：关掉只滤日期头。
+    @Test
+    fun `date headers are hidden unless the setting is on`() {
+        val today = conv("Today", todayStart + 1000)
+        val pinned = conv("Pinned", todayStart + 500, pinned = true)
+        val sections = groupedRows(listOf(today, pinned))
+        val pinnedSection = sections.first { it.key == "pinned" }
+        val todaySection = sections.first { it.key == "today" }
+
+        // 打开：两类表头都显示。
+        assertTrue(showsSectionHeader(pinnedSection, showChatListDate = true))
+        assertTrue(showsSectionHeader(todaySection, showChatListDate = true))
+        // 关闭：日期头滤掉，Pinned 头保留。
+        assertTrue(showsSectionHeader(pinnedSection, showChatListDate = false))
+        assertEquals(false, showsSectionHeader(todaySection, showChatListDate = false))
+        // 日期型分组（带 bucket、无字符串资源）同样被滤掉。
+        val older = conv("Older", todayStart - 3L * 24 * 3600 * 1000)
+        val olderSection = groupedRows(listOf(older)).first()
+        assertEquals(null, olderSection.labelTextResId)
+        assertEquals(false, showsSectionHeader(olderSection, showChatListDate = false))
+    }
 }

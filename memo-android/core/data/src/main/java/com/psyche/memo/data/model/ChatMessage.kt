@@ -59,5 +59,13 @@ class ChatMessage(
             if (!replaced) out.add(0, TextPart(newContent))
             return out
         }
+
+        /**
+         * chat_message.dart:237-245 `partsWithoutThinkingAndToolCards` —— 编辑助手
+         * 消息且「保留思考/工具卡」关闭时，思考段与工具调用整个丢掉，图片/文件/
+         * 未知 part 保留。
+         */
+        fun partsWithoutThinkingAndToolCards(original: List<MessagePart>): List<MessagePart> =
+            original.filterNot { it is ReasoningPart || it is ToolCallPart }
     }
 }
