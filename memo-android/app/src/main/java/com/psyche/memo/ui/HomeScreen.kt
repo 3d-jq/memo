@@ -668,11 +668,26 @@ fun ChatContent(
             }
         }
     }
-    // 语音输入执行器（chat_input_bar.dart 的系统 ASR 分支）。应用上下文持有，
-    // 避免持有 Activity 导致的 SpeechRecognizer 泄漏。
+    // 语音输入执行器（chat_input_bar.dart 的分派）：选中的云端 ASR 服务已配置时
+    // 走网络识别（CloudAsrService + AudioRecord），否则回系统 SpeechRecognizer。
+    // 应用上下文持有，避免持有 Activity 导致的 SpeechRecognizer 泄漏。
     val voiceAppContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     val voiceInput = remember {
-        com.psyche.memo.ui.chat.VoiceInputController(voiceAppContext)
+        com.psyche.memo.ui.chat.VoiceInputController(
+            context = voiceAppContext,
+            cloudOptions = { selectedCloudAsrService(container) },
+            httpClient = container.httpClient,
+        )
+    }
+    // 云端 ASR 需要运行时 RECORD_AUDIO 授权（原版由 permission_handler 申请）。
+    val voiceFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val micPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            voiceFocusManager.clearFocus()
+            voiceInput.start()
+        }
     }
     var showMiniMap by remember { mutableStateOf(false) }
     val timelineListState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -1435,6 +1450,9 @@ fun ChatContent(
             inputOpacityLight = inputOpacityLight,
             inputOpacityDark = inputOpacityDark,
             longPaste = longPaste,
+            onRequestMicPermission = {
+                micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+            },
             onPasteText = { text ->
                 // 写失败（IO 异常）时退回「直接插入」，与原版一致。
                 val attachment = com.psyche.memo.provider.AttachmentStore
@@ -2404,6 +2422,9 @@ private fun MessageRow(
                     Spacer(Modifier.height(6.dp))
                     com.psyche.memo.ui.chat.ThinkingShimmerText(
                         modifier = Modifier.padding(start = 2.dp),
+                        phrases = timelineSettings.thinkingIndicator.phrases,
+                        fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
+                        colorArgb = timelineSettings.thinkingIndicator.colorArgb,
                     )
                 }
                 if (msg.failed) {
@@ -2842,6 +2863,8 @@ private fun ChatInputBar(
     longPaste: com.psyche.memo.ui.chat.LongPasteSettings = com.psyche.memo.ui.chat.LongPasteSettings(),
     /** 判定为长粘贴时把文本交出去（写文件 + 变成附件，不插入输入框）。 */
     onPasteText: (String) -> Unit = {},
+    /** 麦克风权限未授予时请求（HomeScreen 持有 launcher）。 */
+    onRequestMicPermission: () -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     // 源码 chat_input_bar.dart:2547 —— theme.brightness == Brightness.dark。
@@ -2862,6 +2885,8 @@ private fun ChatInputBar(
     val voiceAvailable = remember(voice) { voice?.canUse() == true }
     // CIB:_startVoiceInput —— 成功启动后 unfocus。
     val voiceFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    /** 麦克风权限查询用（点击回调里不能读 LocalContext）。 */
+    val voiceMicContext = androidx.compose.ui.platform.LocalContext.current
     // CIB onPartialResults —— 实时转写进输入框。
     LaunchedEffect(voiceState) {
         val listening = voiceState as? com.psyche.memo.ui.chat.VoiceInputController.State.Listening
@@ -3248,8 +3273,19 @@ private fun ChatInputBar(
                                             stringResource(UiR.string.chat_input_bar_voice_input_tooltip),
                                             {
                                                 if (!voiceActive) {
-                                                    voiceFocusManager.clearFocus()
-                                                    voice?.start()
+                                                    // 先确保麦克风权限（云端与系统识别都要），
+                                                    // 授权回调里再真正开始（原版 permission_handler 同款顺序）。
+                                                    val micContext = voiceMicContext
+                                                    val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                                                        micContext,
+                                                        android.Manifest.permission.RECORD_AUDIO,
+                                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                                    if (granted) {
+                                                        voiceFocusManager.clearFocus()
+                                                        voice?.start()
+                                                    } else {
+                                                        onRequestMicPermission()
+                                                    }
                                                 }
                                             },
                                             cs,
@@ -3524,6 +3560,20 @@ private fun InputIconAsset(
  */
 /** 预热 Markdown 解析缓存时最多处理的最近消息条数。 */
 private const val MARKDOWN_PRELOAD_MESSAGES = 60
+
+/**
+ * 选中的云端 ASR 服务（`asr_selected_service_id_v1` + `asr_services_v1`）：
+ * 没选 / 不存在 / 未配置 → null（回系统识别）。已接的 kind 只有 MiMo 与 Step，
+ * 其余云端 kind 交给 [com.psyche.memo.provider.CloudAsrService] 抛错——这里先按
+ * 「已配置」返回，让 UI 能显示麦克风，失败时控制器自己回 Idle。
+ */
+private fun selectedCloudAsrService(container: AppContainerImpl): com.psyche.memo.ui.AsrServiceOptions? {
+    val store = container.asrServicesStore
+    if (store.services.isEmpty()) store.load()
+    val id = store.selectedServiceId ?: return null
+    val service = store.services.firstOrNull { it.id == id } ?: return null
+    return service.takeIf { it.isConfigured }
+}
 
 /** 距顶多少 dp 内触发往前加载历史（message_list_view.dart:1816 的 96 逻辑像素）。 */
 private const val HISTORY_LOAD_TRIGGER_DP = 96f

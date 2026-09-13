@@ -26,7 +26,7 @@ fills in native-side details and shared feature implementations.
 这些地方**故意**与原版不同（**完整清单见 `memo-android/docs/PORTING.md` §5.11**，含平台差异与踩坑）：
 - **旧版（V1）记忆模式不移植**（用户点名：Memo 无老数据）
 - **供应商分组整块删除**：UI（详情页分组行 / 列表分组头折叠 / 移动分组钮 / 分组管理页与路由）与数据层（`ProviderGroup`、`ProviderGroupLogic`、三个分组偏好键、备份里的 `provider_groups_v1` 实体）全删——用户 2026-09-12「把分组这个去掉吧 我感觉没有什么用」「去掉就彻底呀」。**勿按原版加回来**
-- **流式等待提示＝扫光文字**：`ThinkingShimmerText`（15sp 主题色轮换短语 + 扫光，列表末尾单独一行靠左），替代原版三点脉动（`LoadingIndicator`）。用户点名改；工具卡里的小三点保持原版。**勿按原版修回三点**
+- **流式等待提示＝扫光文字**：`ThinkingShimmerText`（主题色轮换短语 + 扫光，列表末尾单独一行靠左），替代原版三点脉动（`LoadingIndicator`）。用户点名改；工具卡里的小三点保持原版。**勿按原版修回三点**。2026-09-13 用户又要求可自定义 → 显示设置 → 渲染 → 「流式等待提示」三行（字号 10–28sp／颜色跟随主题或 `#RRGGBB`／提示词逐行编辑），键 `display_thinking_indicator_font_size_v1`·`_color_v1`·`_phrases_v1`（本工程新增，原项目没有这个指示器）
 - **⏸ `memo-android/docs/UI_AUDIT_2026-09-12.md` 是用户自己的 UI/UX 审计报告，用户说「先不做」**：不要当待办自行开工、也不要删
 - **语音播放图标按消息归属**：原版 `chat_message_widget.dart:3253-3291` 用全局 `isActive`，读一条消息会让**所有**消息显示停止、且暂停不可见；我们按 `ownerId` 只让被朗读的那条响应（暂停显示"继续"）——用户实测后要求
 - **搜索引用胶囊尺寸**：原版 20dp/12sp/20% 底，用户要求缩小一档（16dp/10sp/16%，全圆）

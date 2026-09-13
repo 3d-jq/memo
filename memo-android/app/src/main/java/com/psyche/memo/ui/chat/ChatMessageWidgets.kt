@@ -478,13 +478,18 @@ fun ThinkingShimmerText(
     intervalMs: Long = 2200,
     sweepMs: Int = 1500,
     // 用户 2026-09-12「这个文字可以大一点」：13sp → 15sp（贴助手正文 15.7sp）。
+    // 2026-09-13 起这三个都可由设置页自定义（见 ThinkingIndicatorSettings）。
     fontSize: TextUnit = 15.sp,
+    /** null = 跟随主题色（原行为）。 */
+    colorArgb: Int? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     // 用户 2026-09-12「颜色也改成主题色吧 现在是黑色的」：底色/高光都用主题色，
-    // 扫光靠透明度差（0.5 → 1.0）表现 —— 明暗主题下都成立。
-    val base = cs.primary.copy(alpha = 0.5f)
-    val highlight = cs.primary
+    // 扫光靠透明度差（0.5 → 1.0）表现 —— 明暗主题下都成立；设置里选了自定义色就
+    // 用那个色（同样靠透明度差做扫光）。
+    val accent = colorArgb?.let { Color(it) } ?: cs.primary
+    val base = accent.copy(alpha = 0.5f)
+    val highlight = accent
 
     // 轮换短语：定时切片，切换用 Crossfade（不打断正在扫的高光）。
     var index by remember(phrases) { mutableIntStateOf(0) }

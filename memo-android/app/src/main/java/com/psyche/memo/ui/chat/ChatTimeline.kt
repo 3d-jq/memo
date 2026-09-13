@@ -126,6 +126,8 @@ data class ChatTimelineSettings(
     // （settings_provider.dart，两个默认都是 true）。
     val mathRendering: Boolean = true,
     val dollarLatex: Boolean = true,
+    /** 流式等待提示（扫光文字）的字号/颜色/提示词 —— 用户自定义（2026-09-13）。 */
+    val thinkingIndicator: ThinkingIndicatorSettings = ThinkingIndicatorSettings(),
     // 用户（user）消息侧 —— settings_provider.dart:1068-1085（三个默认都是 true），
     // 由 chat_message_widget.dart:1719-1735 的用户头消费。
     val showUserAvatar: Boolean = true,
@@ -165,6 +167,7 @@ data class ChatTimelineSettings(
                     ?.trim()?.trim('"')?.toFloatOrNull() ?: 1f,
                 mathRendering = bool("display_enable_math_rendering_v1", true),
                 dollarLatex = bool("display_enable_dollar_latex_v1", true),
+                thinkingIndicator = ThinkingIndicatorSettings.fromPrefs(read),
                 showUserAvatar = bool("display_show_user_avatar_v1", true),
                 showUserName = bool("display_show_user_name_v1", true),
                 showUserTimestamp = bool("display_show_user_timestamp_v1", true),
