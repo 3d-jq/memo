@@ -2064,23 +2064,37 @@ private fun MessageRow(
                 if (isUser) {
                     for (part in msg.parts) {
                         when (part) {
-                            is TextPart ->
-                                // CMW:2046-2054 —— 用户正文 15.5 / 行高 1.45×15.5。
+                            is TextPart -> {
                                 // visual 规则在显示层改写（chat_message_widget.dart L1291）。
-                                com.psyche.memo.ui.markdown.MarkdownText(
-                                    markdown = remember(part.text) {
-                                        com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
-                                            part.text,
-                                            assistantRegexRulesCache,
-                                            com.psyche.memo.data.model.AssistantRegexScope.USER,
-                                            com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
-                                        )
-                                    },
-                                    baseFontSize = ChatStyleSpec.USER_TEXT_SP,
-                                    baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
-                                    onCitationTap = handleCitationTap,
-                                    citationInfoResolver = citationResolver,
-                                )
+                                val visual = remember(part.text) {
+                                    com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
+                                        part.text,
+                                        assistantRegexRulesCache,
+                                        com.psyche.memo.data.model.AssistantRegexScope.USER,
+                                        com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
+                                    )
+                                }
+                                if (timelineSettings.enableUserMarkdown) {
+                                    // CMW:2046-2054 —— 用户正文 15.5 / 行高 1.45×15.5。
+                                    com.psyche.memo.ui.markdown.MarkdownText(
+                                        markdown = visual,
+                                        baseFontSize = ChatStyleSpec.USER_TEXT_SP,
+                                        baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
+                                        onCitationTap = handleCitationTap,
+                                        citationInfoResolver = citationResolver,
+                                    )
+                                } else {
+                                    // 关掉 Markdown：同字号/行高的纯文本（CMW:2055-2066）。
+                                    Text(
+                                        text = visual,
+                                        style = TextStyle(
+                                            fontSize = ChatStyleSpec.USER_TEXT_SP.sp,
+                                            lineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP.sp,
+                                            color = cs.onSurface,
+                                        ),
+                                    )
+                                }
+                            }
                             is ImagePart -> Unit // 已整组渲染在气泡顶部
                             else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                         }
@@ -2091,23 +2105,37 @@ private fun MessageRow(
                     assistantBlocks.forEachIndexed { index, block ->
                         if (index > 0) Spacer(Modifier.height(8.dp))
                         when (block) {
-                            is com.psyche.memo.ui.chat.AssistantBlock.Text ->
+                            is com.psyche.memo.ui.chat.AssistantBlock.Text -> {
                                 // visual 规则（chat_message_widget.dart L1276）。
-                                com.psyche.memo.ui.markdown.MarkdownText(
-                                    markdown = remember(block.text) {
-                                        com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
-                                            block.text,
-                                            assistantRegexRulesCache,
-                                            com.psyche.memo.data.model.AssistantRegexScope.ASSISTANT,
-                                            com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
-                                        )
-                                    },
-                                    baseFontSize = 15.7f,
-                                    baseLineHeight = 23.55f,
-                                    onCitationTap = handleCitationTap,
-                                    citationInfoResolver = citationResolver,
-                                    tableActions = tableActions,
-                                )
+                                val visual = remember(block.text) {
+                                    com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
+                                        block.text,
+                                        assistantRegexRulesCache,
+                                        com.psyche.memo.data.model.AssistantRegexScope.ASSISTANT,
+                                        com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
+                                    )
+                                }
+                                if (timelineSettings.enableAssistantMarkdown) {
+                                    com.psyche.memo.ui.markdown.MarkdownText(
+                                        markdown = visual,
+                                        baseFontSize = 15.7f,
+                                        baseLineHeight = 23.55f,
+                                        onCitationTap = handleCitationTap,
+                                        citationInfoResolver = citationResolver,
+                                        tableActions = tableActions,
+                                    )
+                                } else {
+                                    // 关掉 Markdown：同字号/行高纯文本（CMW:2432-2441）。
+                                    Text(
+                                        text = visual,
+                                        style = TextStyle(
+                                            fontSize = 15.7.sp,
+                                            lineHeight = 23.55.sp,
+                                            color = cs.onSurface,
+                                        ),
+                                    )
+                                }
+                            }
                             is com.psyche.memo.ui.chat.AssistantBlock.Thinking ->
                                 com.psyche.memo.ui.chat.ChainOfThoughtCard(
                                     steps = block.steps,
