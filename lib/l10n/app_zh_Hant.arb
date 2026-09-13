@@ -851,7 +851,6 @@
   "compressContextDone": "上下文已壓縮",
   "compressContextUsageTitle": "上下文佔用",
   "compressContextUsageDetail": "約 {used} / {threshold} tokens（距自動壓縮），視窗 {window}",
-  "compressContextUsageSemantics": "上下文佔用約 {used} / {threshold} tokens，點擊查看詳情",
   "compressContextWindowFromModel": "用模型編輯頁為該模型設定的上下文長度：{tokens} tokens。",
   "compressContextEstimateLine": "目前上下文 ≈ {tokens} tokens，自動閾值 ≈ {threshold} tokens",
   "compressContextKeepStart": "最開始",

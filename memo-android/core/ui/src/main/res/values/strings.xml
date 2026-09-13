@@ -674,7 +674,6 @@ Updating Memo first is the safer choice.</string>
     <string name="compress_context_start_button">Compress</string>
     <string name="compress_context_unlimited">Unlimited</string>
     <string name="compress_context_usage_detail">About %1$s / %2$s tokens before auto compaction (window %3$s)</string>
-    <string name="compress_context_usage_semantics">Context usage about %1$s of %2$s tokens; tap for details</string>
     <string name="compress_context_usage_title">Context usage</string>
     <string name="compress_context_window_description">Default window used when the model does not define one; the model editor overrides it.</string>
     <string name="compress_context_window_from_model">Using the context length set for this model in the model editor: %1$s tokens.</string>

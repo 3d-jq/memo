@@ -1439,15 +1439,6 @@ fun ChatContent(
         }
         val searchSvcName = searchSvc?.let { stringResource(com.psyche.memo.ui.SearchServiceUi.nameRes(it)) }
         val searchIconAsset = searchSvcName?.let { BrandAssets.assetForName(it) }
-        // 输入栏上方的上下文占用条（用户 2026-09-13 定：常显 2dp 细条，点开上下文管理）。
-        contextUsage?.let { usage ->
-            com.psyche.memo.ui.chat.ContextUsageBar(
-                usedTokens = usage.usedTokens,
-                thresholdTokens = usage.thresholdTokens,
-                auto = usage.auto,
-                onClick = { showContextSheet = true },
-            )
-        }
         ChatInputBar(
             input = input,
             enterToSend = remember {

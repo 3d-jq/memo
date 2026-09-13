@@ -1025,7 +1025,6 @@
   "compressContextDone": "Context compacted",
   "compressContextUsageTitle": "Context usage",
   "compressContextUsageDetail": "About {used} / {threshold} tokens before auto compaction (window {window})",
-  "compressContextUsageSemantics": "Context usage about {used} of {threshold} tokens; tap for details",
   "compressContextWindowFromModel": "Using the context length set for this model in the model editor: {tokens} tokens.",
   "compressContextEstimateLine": "Current context ≈ {tokens} tokens, auto threshold ≈ {threshold} tokens",
   "compressContextKeepStart": "Start",

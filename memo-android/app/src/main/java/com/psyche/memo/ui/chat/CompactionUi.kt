@@ -1,15 +1,10 @@
 package com.psyche.memo.ui.chat
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,8 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,57 +70,15 @@ fun CompactionDivider(
     }
 }
 
-/** 进度条配色分档（占用/阈值）：<70% 主题色、70–90% 琥珀、>90% 红。 */
+/**
+ * 上下文占用配色分档（上下文管理 sheet 的详情卡用）：<70% 主题色、70–90% 琥珀、
+ * >90% 红；自动压缩关掉时统一灰（不误导成"快满了"）。
+ */
 internal fun contextUsageColor(fraction: Float, cs: androidx.compose.material3.ColorScheme, auto: Boolean): Color {
     if (!auto) return cs.onSurfaceVariant.copy(alpha = 0.4f)
     return when {
         fraction < 0.7f -> cs.primary
         fraction < 0.9f -> Color(0xFFE0A02A)
         else -> cs.error
-    }
-}
-
-/**
- * 输入栏上方那条常显的 2dp 上下文占用条（**用户 2026-09-13 定**：放这里、按自动压缩
- * 阈值算分母、点开看详情）。没有占用数据时不渲染。
- */
-@Composable
-fun ContextUsageBar(
-    usedTokens: Int,
-    thresholdTokens: Int,
-    auto: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val cs = MaterialTheme.colorScheme
-    val fraction = if (thresholdTokens <= 0) 0f else (usedTokens.toFloat() / thresholdTokens).coerceIn(0f, 1f)
-    val description = stringResource(
-        UiR.string.compress_context_usage_semantics,
-        usedTokens.toString(),
-        thresholdTokens.toString(),
-    )
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            // 细条本身太难点：整条（全宽 × 14dp）都是触控区，视觉上仍是 2dp。
-            .height(14.dp)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp)
-                .height(2.dp)
-                .background(cs.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(999.dp)),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(2.dp)
-                    .background(contextUsageColor(fraction, cs, auto), RoundedCornerShape(999.dp)),
-            )
-        }
     }
 }

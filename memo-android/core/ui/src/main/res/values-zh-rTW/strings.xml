@@ -674,7 +674,6 @@
     <string name="compress_context_start_button">開始壓縮</string>
     <string name="compress_context_unlimited">無限制</string>
     <string name="compress_context_usage_detail">約 %1$s / %2$s tokens（距自動壓縮），視窗 %3$s</string>
-    <string name="compress_context_usage_semantics">上下文佔用約 %1$s / %2$s tokens，點擊查看詳情</string>
     <string name="compress_context_usage_title">上下文佔用</string>
     <string name="compress_context_window_description">模型編輯頁填了上下文長度時以它為準；留空則用這裡的預設值。</string>
     <string name="compress_context_window_from_model">用模型編輯頁為該模型設定的上下文長度：%1$s tokens。</string>
