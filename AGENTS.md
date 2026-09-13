@@ -92,8 +92,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - **存储功能补全（用户点名）**：上传管理器=原项目形态（来源筛选/排序/3 列缩略图网格/点击预览/长按选择/批量删除）、用量条 10 分类 10 色（撞色修复）、LOGS「查看日志」+ LOCAL_SNAPSHOTS「管理副本」入口
 - **图片查看器补全（用户点名）**：底部毛玻璃功能栏（保存/分享/镜像×2/旋转×2）+ 每图独立变换状态（收尾-9）
 
-待移植 / 剩余（仅以下；**2026-09-12 清理过一轮旧账**，M2d 记忆收尾 / C tab 布局页 / S4 用量卡 / 消息模板·预设对话卡都已落地，不再列）
-- 真机 API-key 聊天冒烟验证（设备已连，待跑；用户已在真机上跑 DeepSeek/GLM 聊天）
+待移植 / 剩余（仅以下；**2026-09-12 清理过一轮旧账**，M2d 记忆收尾 / C tab 布局页 / S4 用量卡 / 消息模板·预设对话卡都已落地，不再列；**2026-09-13 再清一轮**：真机聊天冒烟早已在进行——用户日常用 DeepSeek/GLM/智谱真机对话并按实测报 bug）
 - MCP-3：OAuth 授权流程、会话内 MCP sheet、STDIO 传输（桌面专属不移植）
 - 备份剩余（§5.10 子块 7~8）：前向兼容闸门（完整版）/ Cherry·Chatbox 导入（子块 1~6 已通）
 - **§5.12 五个接线批**（设置写了但没消费）：渲染批 ✅ **已收官**（气泡风格整页〔样式/助手·用户覆盖 JSON/贴合内容/按段拆分，frosted 只画 tint〕、用户·助手 Markdown 开关、代码块 chrome〔折叠·行数·移动端换行·底部渐隐·Copy·HTML 预览〕、**$LaTeX 数学渲染**〔照 RikkaHub：`jlatexmath-android` fork + `markdown/Latex.kt`，块级 MathBlock／行内 InlineTextContent，两开关接线〕）/ 输入批 ✅（聊天字体大小、App·代码字体加载、自动滚动、输入框不透明度、长粘贴转文件、图片画质管线；裁剪器与 markdown 图片链接未做）/ 聊天行为批 ✅（重新生成删后续、Fork 保版本、编辑助手消息保思考·工具卡、消息导航三态、会话列表日期、侧栏保持展开×2、删除后新建会话、启动时新建会话〔默认开，按原版〕）/ 语音批 **基本收官**（用户 2026-09-12「按照原项目 都做了吧」：网络 TTS 11/12 家 HTTP + 合成缓存 + 播放引擎 + 保存音频；云端 ASR **7 种全通**——system/mimo/step/openai_realtime/dashscope/volcengine〔照 RikkaHub `speech/` 模块移植〕/qwen_audio + `AudioRecord` 采集 + 运行时授权；⬜ 只差 **qwenAudio TTS 的 WebSocket**，sherpa_onnx 桌面向不移植）/ 模型批 ✅（apiModelId wire 映射〔WireModelIdClient〕、模型层 headers·body〔已核对形状〕、**contextWindow 已接线**〔模型编辑页 Advanced 的「上下文长度」→ opencode 压缩阈值基准〕；builtInTools 门控随厂商内置工具本体）
