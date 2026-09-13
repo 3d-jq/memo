@@ -313,7 +313,8 @@ fun RenderingSettingsScreen(
                     SettingsRow(
                         com.composables.icons.lucide.Lucide.MessageCircle,
                         stringResource(UiR.string.display_settings_page_thinking_indicator_phrases_title),
-                        detailText = indicatorPhrases.joinToString("、"),
+                        detailText = indicatorPhrases.take(3).joinToString("、") +
+                            if (indicatorPhrases.size > 3) " …" else "",
                         onTap = { phrasesSheetVisible = true },
                     )
                 }
