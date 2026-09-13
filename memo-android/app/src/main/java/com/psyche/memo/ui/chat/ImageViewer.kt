@@ -10,6 +10,8 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,6 +57,7 @@ import com.composables.icons.lucide.RotateCw
 import com.composables.icons.lucide.Share2
 import com.composables.icons.lucide.X
 import com.composables.icons.lucide.ImageOff
+import com.psyche.memo.data.model.FilePart
 import com.psyche.memo.data.model.ImagePart
 import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.ui.R as UiR
@@ -80,9 +83,10 @@ internal fun viewableImageUris(parts: List<MessagePart>): List<String> =
 /**
  * 消息时间线里的图片 part 渲染（chat_message_widget.dart
  * _buildAttachmentPreview ImagePart 分支）：112dp cover 缩略图，圆角 10，
- * 按 part 顺序横向 Wrap 排布；unavailable / 空 uri 显示 ImageOff 占位。
- * 点击打开全屏查看器（从当前图开始，可在全部图片间翻页）。
+ * 按 part 顺序 Wrap 排布（原版 `Wrap(spacing: 8, runSpacing: 8)`）；unavailable /
+ * 空 uri 显示 ImageOff 占位。点击打开全屏查看器（从当前图开始，可在全部图片间翻页）。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MessageImageAttachments(
     parts: List<MessagePart>,
@@ -90,43 +94,93 @@ fun MessageImageAttachments(
 ) {
     val entries = parts.filterIsInstance<ImagePart>()
     if (entries.isEmpty()) return
-    val cs = MaterialTheme.colorScheme
     val viewable = viewableImageUris(parts)
-
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (part in entries) {
-            val uri = part.uri.trim()
-            val resolved = uri.ifBlank { "" }
-            val viewIndex = viewable.indexOf(resolved)
-            val unavailable = part.unavailable == true || resolved.isEmpty()
-            Box(
-                modifier = Modifier
-                    .size(112.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(cs.onSurface.copy(alpha = 0.07f))
-                    .clickable(enabled = !unavailable && viewIndex >= 0) {
-                        onOpenViewer(viewable, viewIndex)
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                if (unavailable) {
-                    Icon(
-                        Lucide.ImageOff,
-                        contentDescription = androidx.compose.ui.res.stringResource(
-                            UiR.string.chat_message_widget_attachment_unavailable,
-                        ),
-                        tint = cs.onSurface.copy(alpha = 0.45f),
-                        modifier = Modifier.size(20.dp),
-                    )
-                } else {
-                    AsyncImage(
-                        model = resolved,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+            ImageAttachmentTile(part = part, viewable = viewable, onOpenViewer = onOpenViewer)
+        }
+    }
+}
+
+/**
+ * 附件预览（chat_message_widget.dart `_buildAttachmentPreview`）：**按 part 顺序**把
+ * 图片（112dp 图块）与文件（[MessageDocCard]）排进一个 `Wrap(spacing 8, runSpacing 8)`，
+ * 用户侧右对齐、助手侧左对齐。
+ *
+ * 关键结构：附件是正文气泡的**兄弟**、排在气泡**上方**（用户 CMW:1835-1843、
+ * 助手 CMW:2848-2851），不要把文档卡塞进气泡里——塞进去会变成「气泡里一块近不透明的
+ * cover 底」，用户实测报「文档发在对话界面渲染有问题」。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun MessageAttachmentPreview(
+    parts: List<MessagePart>,
+    alignEnd: Boolean,
+    onOpenViewer: (uris: List<String>, initialIndex: Int) -> Unit,
+) {
+    val entries = parts.filter { it is ImagePart || it is FilePart }
+    if (entries.isEmpty()) return
+    val viewable = viewableImageUris(parts)
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (alignEnd) {
+            Arrangement.spacedBy(8.dp, Alignment.End)
+        } else {
+            Arrangement.spacedBy(8.dp, Alignment.Start)
+        },
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (part in entries) {
+            when (part) {
+                is ImagePart -> ImageAttachmentTile(
+                    part = part,
+                    viewable = viewable,
+                    onOpenViewer = onOpenViewer,
+                )
+                is FilePart -> MessageDocCard(part)
+                else -> Unit
             }
+        }
+    }
+}
+
+/** 单张图片附件块（112dp、r10、cover；不可用 → ImageOff 占位）。 */
+@Composable
+internal fun ImageAttachmentTile(
+    part: ImagePart,
+    viewable: List<String>,
+    onOpenViewer: (uris: List<String>, initialIndex: Int) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val uri = part.uri.trim()
+    val viewIndex = viewable.indexOf(uri)
+    val unavailable = part.unavailable == true || uri.isEmpty()
+    Box(
+        modifier = Modifier
+            .size(112.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(cs.onSurface.copy(alpha = 0.07f))
+            .clickable(enabled = !unavailable && viewIndex >= 0) {
+                onOpenViewer(viewable, viewIndex)
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (unavailable) {
+            Icon(
+                Lucide.ImageOff,
+                contentDescription = androidx.compose.ui.res.stringResource(
+                    UiR.string.chat_message_widget_attachment_unavailable,
+                ),
+                tint = cs.onSurface.copy(alpha = 0.45f),
+                modifier = Modifier.size(20.dp),
+            )
+        } else {
+            AsyncImage(
+                model = uri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -69,6 +70,7 @@ import com.composables.icons.lucide.Shield
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.User
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.ui.chat.openDocument
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -1240,46 +1242,60 @@ private fun UploadManagerSection(
             )
         } else if (images) {
             Spacer(Modifier.height(8.dp))
-            // L2040-2056: 3-column thumbnail grid, tap opens viewer, long-press selects.
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxWidth().height(((sorted.size / 3 + 1) * 116).dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                userScrollEnabled = false,
-            ) {
-                items(sorted.size) { index ->
-                    val entry = sorted[index]
-                    StorageImageTile(
-                        entry = entry,
-                        selected = entry.path in selected,
-                        selectMode = selectMode,
-                        onTap = {
-                            if (selectMode) {
-                                selected = if (entry.path in selected) selected - entry.path else selected + entry.path
-                            } else {
-                                viewerPaths = sorted.map { it.path }
-                                viewerIndex = index
+            // 原版 SliverGridDelegateWithMaxCrossAxisExtent(140, spacing 10)：列数按
+            // 「可用宽 ÷ 140」算，缩略图 1:1（用户实测「文件显示有问题」——固定 3 列 +
+            // 8dp 间距比原版小一档）。这里用等宽行拼出来，避免嵌套 Lazy 网格要写死高度。
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val gap = 10.dp
+                val columns = (((maxWidth + gap) / (140.dp + gap)).toInt()).coerceAtLeast(1)
+                Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                    sorted.chunked(columns).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                            row.forEach { entry ->
+                                StorageImageTile(
+                                    entry = entry,
+                                    selected = entry.path in selected,
+                                    selectMode = selectMode,
+                                    modifier = Modifier.weight(1f).aspectRatio(1f),
+                                    onTap = {
+                                        if (selectMode) {
+                                            selected = if (entry.path in selected) {
+                                                selected - entry.path
+                                            } else {
+                                                selected + entry.path
+                                            }
+                                        } else {
+                                            viewerPaths = sorted.map { it.path }
+                                            viewerIndex = sorted.indexOf(entry)
+                                        }
+                                    },
+                                    onToggle = {
+                                        selected = if (entry.path in selected) selected - entry.path else selected + entry.path
+                                    },
+                                )
                             }
-                        },
-                        onToggle = {
-                            selected = if (entry.path in selected) selected - entry.path else selected + entry.path
-                        },
-                    )
+                            // 末行补齐占位，缩略图宽度与其它行一致。
+                            repeat(columns - row.size) {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
                 }
             }
         } else {
             Spacer(Modifier.height(8.dp))
-            SectionCard {
-                sorted.forEachIndexed { i, entry ->
+            // 原版每个文件行是独立卡片（r12 + 1dp border + onSurface@3% 底，
+            // 行间 8dp），不是一张大卡加分隔线。
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                sorted.forEach { entry ->
                     StorageFileRow(
                         entry = entry,
                         selected = entry.path in selected,
-                        onTap = {
+                        selectMode = selectMode,
+                        onToggle = {
                             selected = if (entry.path in selected) selected - entry.path else selected + entry.path
                         },
                     )
-                    if (i != sorted.lastIndex) DividerRow()
                 }
             }
         }
@@ -1338,18 +1354,19 @@ private fun StorageImageTile(
     entry: StorageFileEntry,
     selected: Boolean,
     selectMode: Boolean,
+    modifier: Modifier = Modifier,
     onTap: () -> Unit,
     onToggle: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Box(
-        modifier = Modifier
-            .aspectRatio(1f)
+        modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(cs.onSurface.copy(alpha = 0.04f))
+            .background(cs.onSurface.copy(alpha = 0.03f))
             .border(
-                width = if (selected) 1.5.dp else 1.dp,
-                color = if (selected) cs.primary.copy(alpha = 0.55f) else cs.onSurface.copy(alpha = 0.08f),
+                width = 1.dp,
+                // 原版 _ImageTile：未选 onSurface@10%、选中 primary@55%。
+                color = if (selected) cs.primary.copy(alpha = 0.55f) else cs.onSurface.copy(alpha = 0.10f),
                 shape = RoundedCornerShape(12.dp),
             )
             .combinedClickable(onClick = onTap, onLongClick = onToggle),
@@ -1374,22 +1391,37 @@ private fun StorageImageTile(
     }
 }
 
-/** _FileRow: checkbox + paperclip + name/size-time column. */
+/**
+ * _FileRow: 独立卡片（r12 + 1dp onSurface@8% 边 + onSurface@3% 底，clip 到圆角），
+ * 行内 checkbox + 回形针 + 名称/大小·时间；**非选择态点按 = 打开文件**、长按 = 进选择
+ * （原版 storage_space_page.dart L2060-2076 / L2316-2411）。
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun StorageFileRow(
     entry: StorageFileEntry,
     selected: Boolean,
-    onTap: () -> Unit,
+    selectMode: Boolean,
+    onToggle: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val context = androidx.compose.ui.platform.LocalContext.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onTap)
+            .clip(RoundedCornerShape(12.dp))
+            .background(cs.onSurface.copy(alpha = 0.03f))
+            .border(1.dp, cs.onSurface.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .combinedClickable(
+                onClick = {
+                    if (selectMode) onToggle() else openDocument(context, entry.path, mimeOfName(entry.name))
+                },
+                onLongClick = onToggle,
+            )
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        IosCheckbox(value = selected, onValueChanged = { onTap() }, size = 20.dp, hitTestSize = 22.dp, borderWidth = 1.6.dp)
+        IosCheckbox(value = selected, onValueChanged = { onToggle() }, size = 20.dp, hitTestSize = 22.dp, borderWidth = 1.6.dp)
         Spacer(Modifier.width(10.dp))
         Icon(
             Lucide.Paperclip,
@@ -1412,6 +1444,13 @@ private fun StorageFileRow(
             )
         }
     }
+}
+
+/** 按扩展名猜 mime（打开文件时给系统一个类型；猜不到走 octet-stream）。 */
+internal fun mimeOfName(name: String): String? {
+    val ext = name.substringAfterLast('.', "").lowercase()
+    if (ext.isEmpty()) return null
+    return android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
 }
 
 /** _fmtTime for file rows — yyyy-MM-dd HH:mm, locale-independent short form. */

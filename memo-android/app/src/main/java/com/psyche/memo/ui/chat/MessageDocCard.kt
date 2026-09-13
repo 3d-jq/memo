@@ -79,6 +79,13 @@ fun MessageDocCard(
     }
 }
 
+/**
+ * 打开本地文件（FileProvider content uri）或 http(s) 链接。
+ *
+ * 存储页的文件行也用这个（原版 `_openFile` → OpenFilex 同一语义）。
+ */
+internal fun openDocument(context: Context, path: String, mime: String?) = openDoc(context, path, mime)
+
 /** 打开本地文件（FileProvider content uri）或 http(s) 链接。 */
 private fun openDoc(context: Context, path: String, mime: String?) {
     if (path.isEmpty()) return

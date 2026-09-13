@@ -2293,18 +2293,24 @@ private fun MessageRow(
                         onClick = {},
                     ),
             ) {
-                // 图片附件（chat_message_widget.dart _buildAttachmentPreview
-                // ImagePart 分支）：整组渲染，点击可跨图翻页查看。用户侧的附件
-                // 是文本气泡的**兄弟**（CMW:1835-1843，同一个 0.75w 列），助手侧
-                // 每块图片自带气泡（_buildAssistantImageBlock CMW:2545-2566，
-                // 恒定撑满整行，不受 assistantBubbleFitContent 影响）。
-                if (msg.parts.any { it is ImagePart }) {
-                    if (isUser) {
-                        com.psyche.memo.ui.chat.MessageImageAttachments(
+                // 附件（图片 + 文档）渲染在正文气泡**上方**、是气泡的兄弟，
+                // 按 part 顺序 Wrap（chat_message_widget.dart `_buildAttachmentPreview`
+                // + 用户 CMW:1835-1843 / 助手 CMW:2848-2851）。**别把文档卡塞进气泡**：
+                // 卡自身是近不透明的 surface 底，塞进半透明气泡里会变成一块突兀的方块
+                // （用户实测「文档发在对话界面渲染有问题」）。
+                val userAttachmentParts = msg.parts.filter { it is ImagePart || it is com.psyche.memo.data.model.FilePart }
+                if (isUser) {
+                    if (userAttachmentParts.isNotEmpty()) {
+                        com.psyche.memo.ui.chat.MessageAttachmentPreview(
                             parts = msg.parts,
+                            alignEnd = true,
                             onOpenViewer = { uris, index -> viewerState = uris to index },
                         )
-                    } else {
+                    }
+                } else {
+                    // 助手侧：图片仍按原版走「整块图片气泡」，文档走裸附件预览
+                    // （原版 fromParts 时 mediaPreview 只收 FilePart）。
+                    if (msg.parts.any { it is ImagePart }) {
                         com.psyche.memo.ui.chat.ChatBubbleSurface(
                             isUser = false,
                             modifier = Modifier.fillMaxWidth(),
@@ -2314,6 +2320,13 @@ private fun MessageRow(
                                 onOpenViewer = { uris, index -> viewerState = uris to index },
                             )
                         }
+                    }
+                    if (msg.parts.any { it is com.psyche.memo.data.model.FilePart }) {
+                        com.psyche.memo.ui.chat.MessageAttachmentPreview(
+                            parts = msg.parts,
+                            alignEnd = false,
+                            onOpenViewer = { uris, index -> viewerState = uris to index },
+                        )
                     }
                 }
                 if (isUser) {
@@ -2357,20 +2370,28 @@ private fun MessageRow(
                                     }
                                 }
                                 is ImagePart -> Unit // 已整组渲染在气泡上方
-                                is com.psyche.memo.data.model.FilePart ->
-                                    com.psyche.memo.ui.chat.MessageDocCard(part)
+                                is com.psyche.memo.data.model.FilePart -> Unit // 同上（附件预览）
                                 else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
                     // CMW:2382-2403 _buildBubbleContainer(isUser: true)：整条用户
-                    // 正文一个气泡（primary@0.15/0.08 + r16 + 内边距 12）。
-                    if (userHasText) {
+                    // 正文一个气泡（primary@0.15/0.08 + r16 + 内边距 12）；附件与气泡
+                    // 之间 8pt（CMW:1840-1841）。
+                    val userHasBubbleContent = userHasText || msg.parts.any {
+                        it !is TextPart && it !is ImagePart && it !is com.psyche.memo.data.model.FilePart
+                    }
+                    if (userHasBubbleContent) {
+                        if (userAttachmentParts.isNotEmpty()) Spacer(Modifier.height(8.dp))
                         com.psyche.memo.ui.chat.ChatBubbleSurface(isUser = true) { userContent() }
-                    } else {
-                        userContent()
                     }
                 } else {
+                    if (msg.parts.any { it is ImagePart } ||
+                        msg.parts.any { it is com.psyche.memo.data.model.FilePart }
+                    ) {
+                        // 附件块与正文块之间 8pt（CMW:2848-2851）。
+                        Spacer(Modifier.height(8.dp))
+                    }
                     // CMW:2951-3009 —— 文本气泡与思考卡按 part 到达顺序交替出现，
                     // addVisible 在相邻块之间插 8pt；每段文本各自一个气泡
                     // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs

@@ -5,12 +5,17 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.psyche.memo.ChatViewModel
 import java.io.File
-import java.util.UUID
 
 /**
  * Attachment intake — copies a picked content URI into the app's upload
  * directory and reports the stored path (file_upload_service.dart semantics:
  * the picker's URI is never kept, only the managed copy).
+ *
+ * **命名与去重照原版**（`FileImportHelper.copyXFile` + `UploadDedupe`）：上传目录里
+ * 存的是**原始文件名**（撞名才 `name(1).ext`），同样字节的文件复用已有副本。此前
+ * 我们写成 `att_<millis>_<uuid>_<name>`，于是「聊天记录 → 存储 → 文件」里显示的
+ * 是这串内部名（用户实测报「文件显示有问题」）。展示名取**落盘后的 basename**
+ * （file_upload_service.dart:310 `p.basename(savedPath)`），与存储页一致。
  */
 object AttachmentStore {
 
@@ -28,46 +33,89 @@ object AttachmentStore {
         val isImage = (mime?.startsWith("image/") == true) || ext in imageExtensions
         val dir = File(context.filesDir, "upload").apply { mkdirs() }
         val safeName = displayName.replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(80)
-
-        // 图片先过画质管线（file_upload_service.dart:56/77 的 ImageCompressor），
-        // 非图片保持原来的流式拷贝（不把大文件整块读进内存）。
-        if (!isImage) {
-            val dest = File(dir, "att_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}_$safeName")
-            return runCatching {
-                resolver.openInputStream(uri)?.use { input ->
-                    dest.outputStream().use { output -> input.copyTo(output) }
-                } ?: return null
-                ChatViewModel.PendingAttachment(
-                    uri = dest.absolutePath,
-                    mime = mime ?: guessMime(ext, isImage),
-                    name = displayName,
-                    isImage = false,
-                )
-            }.getOrNull()
-        }
+            .ifEmpty { "attachment" }
 
         val bytes = runCatching {
             resolver.openInputStream(uri)?.use { it.readBytes() }
         }.getOrNull() ?: return null
-        val compressed = ImageCompressor.compress(bytes, config)
+
+        // 图片先过画质管线（file_upload_service.dart:56/77 的 ImageCompressor）；
+        // 压过就是 JPEG（image_compressor.dart:105-107 强制 .jpg），名字与 mime 跟着走。
+        val compressed = if (isImage) ImageCompressor.compress(bytes, config) else null
         val data = compressed ?: bytes
-        // 压过就是 JPEG（image_compressor.dart:105-107 强制 .jpg），mime 也跟着走。
-        val outputName = if (compressed != null) {
-            safeName.substringBeforeLast('.', safeName) + ".jpg"
-        } else {
-            safeName
+        val outputName = when {
+            !isImage -> safeName
+            compressed != null -> safeName.substringBeforeLast('.', safeName) + ".jpg"
+            else -> safeName
         }
-        val dest = File(dir, "att_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}_$outputName")
-        return runCatching {
-            dest.writeBytes(data)
-            ChatViewModel.PendingAttachment(
-                uri = dest.absolutePath,
-                mime = if (compressed != null) "image/jpeg" else (mime ?: guessMime(ext, isImage)),
-                name = displayName,
-                isImage = true,
-            )
-        }.getOrNull()
+        val saved = store(dir, data, outputName) ?: return null
+        return ChatViewModel.PendingAttachment(
+            uri = saved.absolutePath,
+            mime = when {
+                compressed != null -> "image/jpeg"
+                else -> mime ?: guessMime(ext, isImage)
+            },
+            name = saved.name,
+            isImage = isImage,
+        )
     }
+
+    /**
+     * 落盘：同名字段族里有字节相同的旧文件就复用它，否则用 `name`、`name(1)`…
+     * 里第一个空位（`UploadDedupe.findIdentical` + `reserveUniqueFile`）。
+     */
+    internal fun store(dir: File, bytes: ByteArray, fileName: String): File? {
+        findIdentical(dir, bytes, fileName)?.let { return it }
+        val dest = reserveUnique(dir, fileName) ?: return null
+        return runCatching { dest.writeBytes(bytes); dest }.getOrNull()
+    }
+
+    /** 同名字段族（`name.ext` 与 `name(1).ext`…）+ 同字节 → 复用已有文件。 */
+    private fun findIdentical(dir: File, bytes: ByteArray, fileName: String): File? {
+        val stored = runCatching { dir.listFiles()?.filter { it.isFile }.orEmpty() }.getOrDefault(emptyList())
+        if (stored.isEmpty()) return null
+        val names = stored.mapTo(HashSet()) { it.name }
+        val candidates = stored.filter { file ->
+            val matchesName = file.name == fileName ||
+                (fileName in names && isVersionOf(file.name, fileName))
+            matchesName && runCatching { file.length() }.getOrDefault(-1L) == bytes.size.toLong()
+        }
+        if (candidates.isEmpty()) return null
+        val digest = sha256(bytes)
+        for (candidate in candidates) {
+            val existing = runCatching { sha256(candidate.readBytes()) }.getOrNull() ?: continue
+            if (existing.contentEquals(digest)) return candidate
+        }
+        return null
+    }
+
+    /** `name.ext`、`name(1).ext`… 里第一个能独占创建的名字。 */
+    private fun reserveUnique(dir: File, fileName: String): File? {
+        val dot = fileName.lastIndexOf('.')
+        val base = if (dot > 0) fileName.substring(0, dot) else fileName
+        val ext = if (dot > 0) fileName.substring(dot) else ""
+        var counter = 0
+        while (counter < 1000) {
+            val suffix = if (counter == 0) "" else "($counter)"
+            val candidate = File(dir, "$base$suffix$ext")
+            if (runCatching { candidate.createNewFile() }.getOrDefault(false)) return candidate
+            if (!candidate.exists()) return null
+            counter++
+        }
+        return null
+    }
+
+    /** `notes(2).txt` 是不是 `notes.txt` 的版本名（扩展名必须相同）。 */
+    private fun isVersionOf(candidateName: String, fileName: String): Boolean {
+        if (candidateName.substringAfterLast('.', "") != fileName.substringAfterLast('.', "")) return false
+        val base = fileName.substringBeforeLast('.', fileName)
+        val candidateBase = candidateName.substringBeforeLast('.', candidateName)
+        if (!candidateBase.startsWith(base)) return false
+        return Regex("^\\(\\d+\\)$").matches(candidateBase.substring(base.length))
+    }
+
+    private fun sha256(bytes: ByteArray): ByteArray =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
 
     /**
      * Camera capture lands directly in the upload dir; caller passes the file.
