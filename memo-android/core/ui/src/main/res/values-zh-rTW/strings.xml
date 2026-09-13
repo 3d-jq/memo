@@ -672,6 +672,7 @@
     <string name="compress_context_start_button">開始壓縮</string>
     <string name="compress_context_unlimited">無限制</string>
     <string name="compress_context_window_description">模型編輯頁填了上下文長度時以它為準；留空則用這裡的預設值。</string>
+    <string name="compress_context_window_from_model">用模型編輯頁為該模型設定的上下文長度：%1$s tokens。</string>
     <string name="compress_context_window_label">上下文視窗 tokens</string>
     <string name="compressing_context">正在壓縮上下文...</string>
     <string name="context_log_all_loaded">已載入全部日誌</string>

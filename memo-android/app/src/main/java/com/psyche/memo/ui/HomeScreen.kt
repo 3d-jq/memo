@@ -697,7 +697,7 @@ fun ChatContent(
     var editFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
     var regenerateFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
     var selectCopyFor by remember { mutableStateOf<String?>(null) }
-    var htmlPreviewFor by remember { mutableStateOf<String?>(null) }
+    var htmlPreviewFor by remember { mutableStateOf<com.psyche.memo.ui.chat.HtmlPreviewRequest?>(null) }
 
     val clipboard = androidx.compose.ui.platform.LocalClipboard.current
     val clipboardScope = rememberCoroutineScope()
@@ -1306,7 +1306,11 @@ fun ChatContent(
                                 vm.toggleReasoningSegment(msg.id, segmentIndex)
                             },
                             conversationId = conversationId,
-                            onOpenHtmlPreview = { code -> htmlPreviewFor = code },
+                            // 代码块上的「预览」是**原始 HTML**（原版 HtmlPreviewPage），
+                            // 不是消息正文的 markdown 渲染。
+                            onOpenHtmlPreview = { code ->
+                                htmlPreviewFor = com.psyche.memo.ui.chat.HtmlPreviewRequest(code, rawHtml = true)
+                            },
                             approvalService = approvalService,
                             askUserService = askUserService,
                             onRecoveredAnswer = { part, result ->
@@ -1654,6 +1658,9 @@ fun ChatContent(
         com.psyche.memo.ui.chat.CompressContextDialog(
             container = container,
             messages = messages.map { it.role to it.content },
+            // 阈值基准取当前会话的聊天模型（模型编辑页的「上下文长度」）。
+            providerId = providerId,
+            modelId = modelId,
             onDismiss = { showCompressDialog = false },
             // opencode 阈值机制：压缩就地插入检查点，不再新建会话。
             onConfirm = {
@@ -1762,7 +1769,10 @@ fun ChatContent(
                     com.psyche.memo.ui.chat.MessageMoreAction.SELECT_COPY ->
                         selectCopyFor = target.content
                     com.psyche.memo.ui.chat.MessageMoreAction.RENDER_WEB_VIEW ->
-                        htmlPreviewFor = target.content
+                        htmlPreviewFor = com.psyche.memo.ui.chat.HtmlPreviewRequest(
+                            target.content,
+                            rawHtml = false,
+                        )
                     com.psyche.memo.ui.chat.MessageMoreAction.SHARE -> {
                         // message_more_sheet.dart Share —— 系统分享纯文本。
                         val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -1826,9 +1836,9 @@ fun ChatContent(
         )
     }
 
-    htmlPreviewFor?.let { markdown ->
+    htmlPreviewFor?.let { request ->
         com.psyche.memo.ui.chat.HtmlPreviewScreen(
-            markdown = markdown,
+            request = request,
             onBack = { htmlPreviewFor = null },
         )
     }

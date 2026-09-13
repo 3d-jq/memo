@@ -54,6 +54,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -61,6 +64,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -93,6 +97,7 @@ import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.ImageDown
 import com.psyche.memo.ui.R
+import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.theme.alphaBlend
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -1326,15 +1331,33 @@ private fun CodeBlockView(
     }
 
     // 原版：bodyBg = surfaceContainer@80%，headerBg = surfaceContainerHighest@80%，
-    // r16 + 1dp outlineVariant 边框，垂直外边距 6。
+    // r16 + 1dp outlineVariant 边框，垂直外边距 6。原版 Container 另有两条关键行为：
+    // `clipBehavior: Clip.antiAlias`（把 header 的方角裁进 16dp 圆角）与
+    // `foregroundDecoration`（边框画在内容**之上**）。缺这两条时头部方角会盖住上两个
+    // 圆角、边框在上角也被盖掉，看起来像"顶部两个角有阴影"（用户实测报障）。
     val bodyBg = cs.surfaceContainer.copy(alpha = CODE_BLOCK_FILL_ALPHA)
     val headerBg = cs.surfaceContainerHighest.copy(alpha = CODE_BLOCK_FILL_ALPHA)
+    val borderColor = codeBlockBorderColor(cs, LocalSemanticColors.current.isDark)
+    val corner = 16.dp
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(bodyBg, RoundedCornerShape(16.dp))
-                .border(1.dp, cs.outlineVariant, RoundedCornerShape(16.dp)),
+                .clip(RoundedCornerShape(corner))
+                .background(bodyBg)
+                .drawWithContent {
+                    drawContent()
+                    // 边框画在内容之上（原版 foregroundDecoration）；描边内缩半个线宽，
+                    // 免得被上面的 clip 裁掉一半。
+                    val stroke = 1.dp.toPx()
+                    drawRoundRect(
+                        color = borderColor,
+                        topLeft = Offset(stroke / 2f, stroke / 2f),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        cornerRadius = CornerRadius(corner.toPx() - stroke / 2f),
+                        style = Stroke(width = stroke),
+                    )
+                },
         ) {
             Row(
                 modifier = Modifier
@@ -1449,6 +1472,16 @@ private fun CodeBlockIconAction(
 }
 
 private const val CODE_BLOCK_FILL_ALPHA = 0.80f
+
+/**
+ * 原版 `_codeBlockBorderColor`：调色板的 `outlineVariant` 是纯黑/纯白时，改用
+ * `onSurfaceVariant` 与 `surface` 的 alphaBlend，避免代码块描边变成刺眼的纯色。
+ */
+private fun codeBlockBorderColor(cs: androidx.compose.material3.ColorScheme, isDark: Boolean): Color {
+    val outlineVariant = cs.outlineVariant
+    if (outlineVariant != Color.Black && outlineVariant != Color.White) return outlineVariant
+    return alphaBlend(cs.onSurfaceVariant, if (isDark) 0.32 else 0.24, cs.surface)
+}
 
 /**
  * Inline formatting with real styles (gpt_markdown md_widget behavior):

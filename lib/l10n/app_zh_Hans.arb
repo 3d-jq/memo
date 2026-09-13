@@ -885,6 +885,7 @@
   "compressContextBufferLabel": "预留缓冲 tokens",
   "compressContextWindowLabel": "上下文窗口 tokens",
   "compressContextWindowDescription": "模型编辑页填了上下文长度时以它为准；留空则用这里的默认值。",
+  "compressContextWindowFromModel": "用模型编辑页为该模型设置的上下文长度：{tokens} tokens。",
   "compressContextEstimateLine": "当前上下文 ≈ {tokens} tokens，自动阈值 ≈ {threshold} tokens",
   "compressContextKeepStart": "最开始",
   "compressContextKeepRecent": "最近",

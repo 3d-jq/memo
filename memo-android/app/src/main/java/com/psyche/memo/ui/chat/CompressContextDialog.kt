@@ -61,6 +61,9 @@ import com.psyche.memo.ui.R as UiR
 fun CompressContextDialog(
     container: AppContainerImpl,
     messages: List<Pair<String, String>>,
+    /** 当前会话的聊天模型 —— 压缩阈值的基准取自它的「上下文长度」。 */
+    providerId: String,
+    modelId: String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -68,7 +71,14 @@ fun CompressContextDialog(
     val semantic = LocalSemanticColors.current
     val view = LocalView.current
 
-    val initial = remember { ContextCompactionPrefs.read(container, null, null) }
+    // 模型 override 里填了「上下文长度」就以它为准（与自动压缩的判定同源）；
+    // 没填时用设置里的全局默认值。
+    val modelWindow = remember(providerId, modelId) {
+        ContextCompactionPrefs.modelContextWindow(container, providerId, modelId)
+    }
+    val initial = remember(providerId, modelId) {
+        ContextCompactionPrefs.read(container, providerId, modelId)
+    }
     // 当前对话的估算 tokens（opencode estimate = 字符数 / 4）。
     val usedTokens = remember(messages) {
         SessionCompaction.estimate(
@@ -83,13 +93,13 @@ fun CompressContextDialog(
     var auto by remember { mutableStateOf(initial.auto) }
     var keepText by remember { mutableStateOf(initial.keepTokens.toString()) }
     var bufferText by remember { mutableStateOf(initial.buffer.toString()) }
-    var windowText by remember { mutableStateOf(initial.contextWindow.toString()) }
+    var windowText by remember(providerId, modelId) { mutableStateOf(initial.contextWindow.toString()) }
     var error by remember { mutableStateOf<String?>(null) }
     var showModelSheet by remember { mutableStateOf(false) }
 
     val keep = keepText.trim().toIntOrNull()
     val buffer = bufferText.trim().toIntOrNull()
-    val window = windowText.trim().toIntOrNull()
+    val window = if (modelWindow != null) modelWindow else windowText.trim().toIntOrNull()
     val threshold = if (buffer != null && window != null && window > 0 && buffer > 0) {
         (window - buffer).coerceAtLeast(0)
     } else {
@@ -97,19 +107,17 @@ fun CompressContextDialog(
     }
 
     fun persist() {
-        if (keep == null || keep < 0 || buffer == null || buffer <= 0 || window == null || window <= 0) {
+        if (keep == null || keep < 0 || buffer == null || buffer <= 0) {
             error = container.appContext.getString(UiR.string.compress_context_invalid_limit)
             return
         }
-        ContextCompactionPrefs.write(
-            container,
-            SessionCompaction.Settings(
-                auto = auto,
-                buffer = buffer,
-                keepTokens = keep,
-                contextWindow = window,
-            ),
-        )
+        if (modelWindow == null && (window == null || window <= 0)) {
+            error = container.appContext.getString(UiR.string.compress_context_invalid_limit)
+            return
+        }
+        ContextCompactionPrefs.writeSettings(container, auto = auto, keepTokens = keep, buffer = buffer)
+        // 模型自己填了上下文长度时不写全局默认值（写了也不会被用到，徒增困惑）。
+        if (modelWindow == null && window != null) ContextCompactionPrefs.writeDefaultWindow(container, window)
         error = null
     }
 
@@ -214,10 +222,15 @@ fun CompressContextDialog(
                         value = windowText,
                         onValueChange = { windowText = it; error = null },
                         label = stringResource(UiR.string.compress_context_window_label),
+                        enabled = modelWindow == null,
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = stringResource(UiR.string.compress_context_window_description),
+                        text = if (modelWindow != null) {
+                            stringResource(UiR.string.compress_context_window_from_model, modelWindow.toString())
+                        } else {
+                            stringResource(UiR.string.compress_context_window_description)
+                        },
                         style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.62f)),
                     )
                     Spacer(Modifier.height(10.dp))
@@ -278,12 +291,18 @@ fun CompressContextDialog(
 
 /** 一个正整数设置行（保留 tokens / 缓冲 / 上下文窗口）。 */
 @Composable
-private fun NumberField(value: String, onValueChange: (String) -> Unit, label: String) {
+private fun NumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    enabled: Boolean = true,
+) {
     OutlinedTextField(
         value = value,
         onValueChange = { onValueChange(it.filter(Char::isDigit)) },
         label = { Text(label) },
         singleLine = true,
+        enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth(),

@@ -41,12 +41,17 @@ object ContextCompactionPrefs {
         )
     }
 
-    fun write(container: AppContainerImpl, settings: SessionCompaction.Settings) {
+    /** 写自动压缩 / 保留 tokens / 缓冲 tokens（三个与模型无关的设置）。 */
+    fun writeSettings(container: AppContainerImpl, auto: Boolean, keepTokens: Int, buffer: Int) {
         val prefs = container.preferenceRepository
-        prefs.writeJson(AUTO_V1, JsonPrimitive(settings.auto).toString())
-        prefs.writeJson(KEEP_TOKENS_V1, JsonPrimitive(settings.keepTokens).toString())
-        prefs.writeJson(BUFFER_V1, JsonPrimitive(settings.buffer).toString())
-        prefs.writeJson(WINDOW_V1, JsonPrimitive(settings.contextWindow).toString())
+        prefs.writeJson(AUTO_V1, JsonPrimitive(auto).toString())
+        prefs.writeJson(KEEP_TOKENS_V1, JsonPrimitive(keepTokens).toString())
+        prefs.writeJson(BUFFER_V1, JsonPrimitive(buffer).toString())
+    }
+
+    /** 写全局默认上下文窗口（模型自己填了 `contextWindow` 时不用写）。 */
+    fun writeDefaultWindow(container: AppContainerImpl, contextWindow: Int) {
+        container.preferenceRepository.writeJson(WINDOW_V1, JsonPrimitive(contextWindow).toString())
     }
 
     /** 模型 override 的上下文窗口；未填 → null（回落到全局默认值）。 */
