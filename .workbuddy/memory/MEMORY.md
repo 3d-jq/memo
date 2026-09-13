@@ -72,6 +72,12 @@
 - 流式上传签 `UNSIGNED-PAYLOAD`（但带 `content-length`）；缓冲上传签真实 SHA-256；错误文档用 `peekBody`（流式路径不能消费 body），分页 listing 反过来必须读完整 body。
 - 远端配置键（`webdav_config_v1`/`s3_config_v1`）都在 `SettingsKeyRegistry` 的 preference 集合里 → 会进备份；新增配置键后**必须确认这一步**，否则设置不进备份。
 
+## Compose 移植：**原版「布局前回调」读几何的行为不能照搬**（2026-09-13）
+- 典型例子：原项目 `didChangeMetrics`（回调发生在**新视口布局之前**）里判 `isNearBottom(24)` 然后 `requestBottomOnNextLayout`。Compose 里 `LaunchedEffect` 的协程体（走 `AndroidUiDispatcher`）**可能在本帧 layout 之后**才跑，那时 `layoutInfo` 已是新几何 → 判据必然为假 → **功能静默失效（不报错、就是不动）**。
+- 判据要换成**同一份状态在组合里的等价表达**：这里用了 `following`（=「尾巴在底部且用户没接管」，由位置判定维护），与 effect 运行时机无关。抽成纯函数 `shouldPinTimelineOnImeRise(previous, next, pointerDown, following)` + 单测锁死。
+- 键盘抬起顶起对话 = 原版 `resizeToAvoidBottomInset: true`（布局半边我们本来就有：输入栏吃 IME inset + 列表 `weight(1f)`）+ 上面那套「钉底」（缺的正是这半边）。收起键盘不用管：视口长回去后 LazyList 自己把 `pixels` 夹回新 `maxScrollExtent`，仍贴底。
+- **往 PORTING.md §4 追加坑条目要先查当前最大号 + 查重**：2026-09-13 我按自己上次的号写 `28.`，和用户后加的条目撞号（两个 `28.`）；改成末尾新号并校验「1..N 连续无重」。
+
 ## 设备验证纪律：**不许猜坐标点击**（2026-09-10 事故 + 2026-09-12 定规）
 - 早前用 `adb shell input tap` 猜坐标，误开并改动了用户的 Temperature 与「上下文消息数量」（64→101），事后只能导出 DB 手改回。**先 `adb shell uiautomator dump /sdcard/ui.xml`，取 `text="…"` 对应的 `bounds="[x1,y1][x2,y2]"` 再点**，或干脆只装机、让用户自己点（用户 2026-09-12 明确「你装机就行 我来实测」）。
 - 装机后顺手 `dumpsys package com.psyche.memo.dev | grep versionCode` 记版本，方便对齐用户实测的包。
