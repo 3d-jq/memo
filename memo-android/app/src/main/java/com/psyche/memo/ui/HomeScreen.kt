@@ -868,45 +868,52 @@ fun ChatContent(
     fun scrollTimelineToBottom() {
         timelineListState.requestScrollToItem(messages.size + 10)
     }
-    // 用户滚动（拖动 / 惯性 / 滚轮 / 键盘）一发生就让位：停止跟随 + 显示导航条。
-    // Compose 的 isScrollInProgress 只反映**用户驱动**的滚动（我们的
-    // requestScrollToItem 不置位），因此可以像 scroll_controller.dart:374-425
-    // handleUserScrollIntent 那样当「真实滚动意图」用。此前用 interactionSource 的
-    // DragInteraction 判断，拖动/惯性期间拿不到稳定事件 ⇒ 跟随没让位，用户上滑会被
-    // 拉回底部（用户实测）。
+    fun nearBottomDp(dp: Int): Boolean =
+        bottomGapPx() <= with(scrollDensity) { dp.dp.toPx() }
+    /** 导航条 2s 后隐藏（scroll_controller.dart `_navButtonsHideDelayMs=2000`）。 */
+    fun armNavHideTimer() {
+        navHideJob?.cancel()
+        navHideJob = coroutineScope.launch {
+            kotlinx.coroutines.delay(2000)
+            navVisible = false
+        }
+    }
+    /**
+     * scroll_controller.dart:384-392 handleUserScrollIntent 的空闲计时 —— 收手后等
+     * `autoScrollIdleSeconds` 再按**当时的位置**定论（refreshAutoStickToBottom
+     * 332-344：停在半路就继续不跟随，停在底部就恢复跟随；惯性滑到底也算）。
+     */
+    fun armIdleStickTimer() {
+        idleStickJob?.cancel()
+        idleStickJob = coroutineScope.launch {
+            kotlinx.coroutines.delay(autoScrollIdleSeconds.coerceAtLeast(1) * 1000L)
+            userScrolling = false
+            if (nearBottomDp(56)) {
+                if (autoScrollEnabled || autoStick) autoStick = true
+            } else {
+                autoStick = false
+            }
+        }
+    }
+    /**
+     * scroll_controller.dart:374-425 handleUserScrollIntent —— 记录「用户滚动意图」并
+     * 立刻让位；**程序化滚动绝不触发**。原版挂在指针按下（`Listener.onPointerDown`）与
+     * 滚轮/键盘上，而不是「滚动状态变了」上：拖动/惯性期间那些状态观察不一定更新，
+     * 跟随就抢不走手势（用户实测「大模型输出时上滑，他自己往下跑」）。
+     */
+    fun userScrollIntent() {
+        userScrolling = true
+        autoStick = false
+        navVisible = true
+        navHideJob?.cancel()
+        idleStickJob?.cancel()
+    }
+    // 手指按下 → 立即让位；抬起 → 空闲计时（中途没位移＝只是点一下，仍在底部就直接恢复）。
     androidx.compose.runtime.LaunchedEffect(timelineListState) {
         snapshotFlow { timelineListState.isScrollInProgress }
             .distinctUntilChanged()
             .collect { scrolling ->
-                if (scrolling) {
-                    userScrolling = true
-                    autoStick = false
-                    navVisible = true
-                    navHideJob?.cancel()
-                    idleStickJob?.cancel()
-                } else {
-                    // 收手：导航条 2s 后隐藏（_navButtonsHideDelayMs=2000）；跟随要等
-                    // `autoScrollIdleSeconds` 再判一次贴底（scroll_controller.dart:384-392
-                    // —— 惯性滑到底的情况，收手那一刻还不在底部）。
-                    navHideJob?.cancel()
-                    navHideJob = coroutineScope.launch {
-                        kotlinx.coroutines.delay(2000)
-                        navVisible = false
-                    }
-                    idleStickJob?.cancel()
-                    idleStickJob = coroutineScope.launch {
-                        kotlinx.coroutines.delay(autoScrollIdleSeconds.coerceAtLeast(1) * 1000L)
-                        userScrolling = false
-                        // refreshAutoStickToBottom（scroll_controller.dart:332-344）：
-                        // 空闲计时到点后按**当时的位置**定论 —— 惯性停在中途就不再跟随，
-                        // 停在底部则恢复跟随。
-                        if (bottomGapPx() <= with(scrollDensity) { 56.dp.toPx() }) {
-                            if (autoScrollEnabled || autoStick) autoStick = true
-                        } else {
-                            autoStick = false
-                        }
-                    }
-                }
+                if (scrolling) userScrollIntent() else armIdleStickTimer()
             }
     }
     // scroll_controller.dart:346-362 _onScrollControllerChanged —— 用户自己滚回底部
@@ -918,7 +925,7 @@ fun ChatContent(
         snapshotFlow { bottomGapPx() }
             .distinctUntilChanged()
             .collect { gap ->
-                if (gap != Float.MAX_VALUE && gap <= with(scrollDensity) { 24.dp.toPx() }) {
+                if (gap != Float.MAX_VALUE && nearBottomDp(24)) {
                     userScrolling = false
                     idleStickJob?.cancel()
                     if (autoScrollEnabled || autoStick) autoStick = true
@@ -1271,7 +1278,41 @@ fun ChatContent(
             ) {
                 LazyColumn(
                     state = timelineListState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // scroll_controller.dart:374-425 / message_list_view.dart:1711-1721
+                        // —— 原版把「用户滚动意图」挂在**指针事件**上（Listener.onPointerDown
+                        // 立刻 handleUserScrollIntent()，抬起再记一次）。照抄：手指一按下
+                        // 就停止跟随（不消费事件，只旁听），抬指后按「有没有位移」区分
+                        // 「拖动」与「只点一下」。
+                        .pointerInput(autoScrollIdleSeconds) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitFirstDown(
+                                        requireUnconsumed = false,
+                                        pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial,
+                                    )
+                                    val startIndex = timelineListState.firstVisibleItemIndex
+                                    val startOffset = timelineListState.firstVisibleItemScrollOffset
+                                    userScrollIntent()
+                                    waitForUpOrCancellation(
+                                        pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial,
+                                    )
+                                    val moved = timelineListState.firstVisibleItemIndex != startIndex ||
+                                        timelineListState.firstVisibleItemScrollOffset != startOffset ||
+                                        timelineListState.isScrollInProgress
+                                    if (!moved && nearBottomDp(24)) {
+                                        // 只是点了一下、且仍在底部 → 立刻恢复跟随
+                                        // （_onScrollControllerChanged 346-362）。
+                                        userScrolling = false
+                                        if (autoScrollEnabled || autoStick) autoStick = true
+                                    } else {
+                                        armIdleStickTimer()
+                                    }
+                                    armNavHideTimer()
+                                }
+                            }
+                        },
                     // MLV:1684-1690 —— 列表自身只留 top 8 / bottom 16；水平与
                     // 消息间垂直间距由每条消息的 Padding 承担（CMW:1768/2780）。
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(

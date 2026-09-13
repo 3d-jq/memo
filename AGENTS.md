@@ -75,7 +75,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - **悬浮语音播放器（用户点名「语音播放这个样式」）**：`TtsEngine`/`TtsPlaybackController`（分块朗读、暂停=停+重起当前块、±15s 定位、0.8–2.0 变速、200ms/字符估算的时间轴）+ 悬浮胶囊 1:1（双弧进度环/展开控制条/可拖动/自动收起），`TtsPlayer.init` 在 `MemoApplication.onCreate`
 - 聊天周边：Select&Copy/WebView 预览/分享/BoundedLargeTextView、助手壁纸、推理预算全链路、清空/压缩上下文、记忆关于+种子、建议气泡、消息多选+导出（文本）
 - 抽屉全局搜索模式、临时聊天三态、长按会话 sheet + 多选栏、流式扫光文字（用户点名，替代原版三点）、iOS 风格控件 + 触觉反馈 + Haptics
-- **思考卡展开态 + 流式自动跟随（2026-09-13 用户实测两处：思考中点击卡片展不开「会打架」／上滑被自己拉回底部）**：展开态以 `ChatViewModel.segmentExpanded` 为**权威态**（`ReasoningSegmentCodec.resolveExpanded`：新段 `!autoCollapse`、只有「结束转变」那一次采信流式侧的值）——**勿退回「按 handler 重建的 expanded 编码」**（§4.41）；自动跟随用 `snapshotFlow { isScrollInProgress }` 判定用户滚动让位 + `requestScrollToItem` 贴底 + 24dp 内立刻恢复／8s 空闲重判——**勿用 `interactionSource` 的 DragInteraction，也勿用 `animateScrollToItem` 做跟随**（§4.42）
+- **思考卡展开态 + 流式自动跟随（2026-09-13 用户实测两处：思考中点击卡片展不开「会打架」／大模型输出时上滑被自己拉回底部）**：展开态以 `ChatViewModel.segmentExpanded` 为**权威态**（`ReasoningSegmentCodec.resolveExpanded`：新段 `!autoCollapse`、只有「结束转变」那一次采信流式侧的值）——**勿退回「按 handler 重建的 expanded 编码」**（§4.41）；自动跟随的**让位信号必须挂在指针按下**上（`Modifier.pointerInput` + `awaitFirstDown`，照原版 `Listener.onPointerDown` → `handleUserScrollIntent`）——**勿只靠 `interactionSource` 的 DragInteraction 或 `snapshotFlow { isScrollInProgress }`**（拖动/惯性期间不保证更新，跟随会抢手势），贴底用 `requestScrollToItem`、**勿用 `animateScrollToItem`** 做跟随（§4.42）
 
 设置、系统与服务壳
 - provider 管理页、语音服务/备份/赞助 UI 壳（BackupScreen/LocalSnapshotsScreen/SponsorScreen）+ TTS/ASR 编辑器全屏化
