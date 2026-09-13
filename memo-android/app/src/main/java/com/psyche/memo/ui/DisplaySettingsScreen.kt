@@ -149,6 +149,9 @@ fun DisplaySettingsScreen(
         maskStrength = container.preferenceRepository.readJson("display_chat_background_mask_strength_v1")?.toDoubleOrNull() ?: 1.0
         inputOpacityLight = container.preferenceRepository.readJson("display_chat_input_background_opacity_light_v1")?.toDoubleOrNull() ?: 0.8236
         inputOpacityDark = container.preferenceRepository.readJson("display_chat_input_background_opacity_dark_v1")?.toDoubleOrNull() ?: 0.7396
+        // 字体键不走本页的 state —— 交给 ThemeState 重新解析，否则要等下次冷启动
+        // （根 composable 观察 ThemeState，改完立即生效）。
+        ThemeState.loadFonts(container)
     }
     LaunchedEffect(Unit) { reloadAll() }
 

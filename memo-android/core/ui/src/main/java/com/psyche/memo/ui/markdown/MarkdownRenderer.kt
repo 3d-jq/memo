@@ -45,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1193,6 +1194,13 @@ data class CodeBlockActions(
     val onPreviewHtml: ((code: String) -> Unit)? = null,
 )
 
+/**
+ * 代码块的字体族。原版由 `settings.codeFontFamily` 决定（默认 `'monospace'`，
+ * markdown_with_highlight.dart:299-305），core:ui 不认识偏好存储，所以由宿主
+ * （app）读设置后 provide。内联 code 与围栏块共用同一个族。
+ */
+val LocalMarkdownCodeFont = staticCompositionLocalOf<FontFamily> { FontFamily.Monospace }
+
 /** 折叠状态跨重组记忆（原版 `_manualExpansionByCodeKey`，LRU 80 条）。 */
 private val codeBlockExpansion = android.util.LruCache<String, Boolean>(80)
 
@@ -1349,7 +1357,7 @@ private fun CodeBlockView(
                         text = visible,
                         fontSize = 13.sp,
                         lineHeight = 19.5.sp,
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = LocalMarkdownCodeFont.current,
                         color = cs.onSurface,
                         softWrap = config.wrap,
                         modifier = textModifier,
@@ -1441,7 +1449,7 @@ private fun AnnotatedString.Builder.appendInlineStyled(
         is Strikethrough -> withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
             appendInlineChildren(node, plainTexts, codeBackground, linkColor, citation, inlineContent)
         }
-        is Code -> withStyle(SpanStyle(background = codeBackground, fontFamily = FontFamily.Monospace)) {
+        is Code -> withStyle(SpanStyle(background = codeBackground, fontFamily = LocalMarkdownCodeFont.current)) {
             append(node.literal ?: "")
         }
         is Link -> {

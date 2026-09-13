@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.font.FontFamily
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.theme.Palette
 import com.psyche.memo.ui.theme.buildCustomThemePalette
@@ -59,6 +60,12 @@ object ThemeState {
         private set
     var selectedCustomThemeId by mutableStateOf<String?>(null)
         private set
+    /** `display_app_font_*`：App 字体（null = 跟随主题默认）。 */
+    var appFontFamily by mutableStateOf<FontFamily?>(null)
+        private set
+    /** `display_code_font_*`：代码块字体（默认 Monospace）。 */
+    var codeFontFamily: FontFamily by mutableStateOf<FontFamily>(FontFamily.Monospace)
+        private set
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -82,6 +89,18 @@ object ThemeState {
         }.getOrNull() ?: emptyList()
         selectedCustomThemeId = prefs.readJson(CUSTOM_THEME_SELECTED_KEY)
             ?.removeSurrounding("\"")?.takeIf { it.isNotEmpty() }
+        loadFonts(container)
+    }
+
+    /**
+     * 重新解析 App / 代码字体。字体的写入点在显示设置页（不经过本对象），
+     * 所以那里改完要显式调一次，否则要等下次冷启动（与 ThemeState 解决
+     * 「theme_mode_v1 需要重启」的旧问题同一手法）。
+     */
+    fun loadFonts(container: AppContainerImpl) {
+        val read: (String) -> String? = { container.preferenceRepository.readJson(it) }
+        appFontFamily = AppFonts.appFontFamily(read)
+        codeFontFamily = AppFonts.codeFontFamily(read)
     }
 
     private fun readBool(

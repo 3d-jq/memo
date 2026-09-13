@@ -101,6 +101,7 @@ import com.psyche.memo.ui.TtsSettingsScreen
 import com.psyche.memo.ui.locale.withAppLocale
 import com.psyche.memo.ui.theme.MemoTheme
 import com.psyche.memo.ui.theme.ProvideSemanticColors
+import com.psyche.memo.ui.theme.withFontFamily
 
 class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -248,8 +249,20 @@ private fun AppThemeAndContent(
             ThemeState.useLayeredSurfaces,
         )
     }
+    // 显示设置 → 字体：App 字体刷到 Typography 的 15 个槽位（原版 main.dart `applyAppFont`），
+    // 代码字体通过 core:ui 的 CompositionLocal 传给代码块/内联 code。
+    val appTypography = remember(ThemeState.appFontFamily) {
+        val family = ThemeState.appFontFamily
+        if (family == null) {
+            androidx.compose.material3.Typography()
+        } else {
+            androidx.compose.material3.Typography()
+                .withFontFamily(family)
+        }
+    }
     MaterialTheme(
         colorScheme = colorScheme,
+        typography = appTypography,
     ) {
         // Material3's LocalContentColor default is black; without this every
         // Text that relies on the inherited content color renders black (fine
@@ -257,6 +270,7 @@ private fun AppThemeAndContent(
         CompositionLocalProvider(
             LocalRippleConfiguration provides null,
             LocalContentColor provides colorScheme.onSurface,
+            com.psyche.memo.ui.markdown.LocalMarkdownCodeFont provides ThemeState.codeFontFamily,
         ) {
         // Memo paints through semantic tokens (surfaceCard / hairline), not
         // raw Material roles — see lib/theme/app_semantic_colors.dart.
