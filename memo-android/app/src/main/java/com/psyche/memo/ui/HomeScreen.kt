@@ -897,9 +897,11 @@ fun ChatContent(
     }
     /**
      * scroll_controller.dart:374-425 handleUserScrollIntent —— 记录「用户滚动意图」并
-     * 立刻让位；**程序化滚动绝不触发**。原版挂在指针按下（`Listener.onPointerDown`）与
-     * 滚轮/键盘上，而不是「滚动状态变了」上：拖动/惯性期间那些状态观察不一定更新，
-     * 跟随就抢不走手势（用户实测「大模型输出时上滑，他自己往下跑」）。
+     * 立刻让位；**程序化滚动绝不触发**（原版注释：Programmatic position changes must
+     * never call this method）。触发源是 `message_list_view` 的 `Listener.onPointerDown`
+     * （1711-1721），也就是**指针按下**，而不是「滚动状态变了」—— 拖动/惯性期间
+     * `isScrollInProgress` / `interactionSource` 这类状态观察不保证更新（我们两版都
+     * 栽在这上面：`autoStick` 一直是 true，手指一离屏就被拉回底部）。
      */
     fun userScrollIntent() {
         userScrolling = true
@@ -908,19 +910,11 @@ fun ChatContent(
         navHideJob?.cancel()
         idleStickJob?.cancel()
     }
-    // 手指按下 → 立即让位；抬起 → 空闲计时（中途没位移＝只是点一下，仍在底部就直接恢复）。
-    androidx.compose.runtime.LaunchedEffect(timelineListState) {
-        snapshotFlow { timelineListState.isScrollInProgress }
-            .distinctUntilChanged()
-            .collect { scrolling ->
-                if (scrolling) userScrollIntent() else armIdleStickTimer()
-            }
-    }
     // scroll_controller.dart:346-362 _onScrollControllerChanged —— 用户自己滚回底部
     // （24 容差）就**立刻**恢复跟随，不必等空闲计时结束。
     // 注意：这里只负责「恢复」，不在离开底部时取消跟随 —— 流式增量本身会让
     // maxScrollExtent 变大，若按实时距离取消，跟随会在流式期间被自己关掉；取消跟随的
-    // 时机只有两个：用户滚动（isScrollInProgress）与空闲计时到点。
+    // 时机只有两个：用户滚动（指针意图）与空闲计时到点。
     androidx.compose.runtime.LaunchedEffect(timelineListState, autoScrollEnabled) {
         snapshotFlow { bottomGapPx() }
             .distinctUntilChanged()
@@ -989,7 +983,7 @@ fun ChatContent(
         val justFinished = wasStreaming && !streaming
         wasStreaming = streaming
         if (justFinished && autoStick && !userScrolling && autoScrollEnabled &&
-            messages.isNotEmpty()
+            !timelineListState.isScrollInProgress && messages.isNotEmpty()
         ) {
             scrollTimelineToBottom()
             kotlinx.coroutines.delay(450)
