@@ -63,6 +63,8 @@ import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.Zap
 import com.composables.icons.lucide.CheckCheck
 import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.Loader
+import com.composables.icons.lucide.SquareCheck
 import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.EyeOff
 import com.composables.icons.lucide.HeartPulse
@@ -126,6 +128,9 @@ fun ProviderDetailScreen(
     var showTest by remember { mutableStateOf(false) }
     // Model selection mode, hoisted so the AppBar can drive it (L208-233).
     var modelSelectMode by remember { mutableStateOf(false) }
+    // 批量检测进行中，同样提到这一层：原版 AppBar 靠它把多选钮换成 Loader 并禁用
+    // （provider_detail_page L219-232），否则检测途中点它会清掉正在测的选中集。
+    var detecting by remember { mutableStateOf(false) }
     var showShare by remember { mutableStateOf(false) }
     // 供应商头像编辑（provider_detail_page L346-452 的五选一 sheet + 三个子弹窗）。
     var showAvatarSheet by remember { mutableStateOf(false) }
@@ -203,17 +208,22 @@ fun ProviderDetailScreen(
                     showTest = true
                 }
             } else {
-                // Multi-select entry: CheckCheck to enter, X to leave
-                // (provider_detail_page L208-233).
+                // Multi-select entry: 检测进行中显示 Loader 且点了没反应，否则
+                // CheckSquare 进入 / X 退出（provider_detail_page L208-233）。
                 IconActionButton(
-                    if (modelSelectMode) Lucide.X else Lucide.CheckCheck,
+                    when {
+                        modelSelectMode -> Lucide.X
+                        detecting -> Lucide.Loader
+                        else -> Lucide.SquareCheck
+                    },
                     cs.onSurface,
-                    if (modelSelectMode) {
-                        stringResource(com.psyche.memo.ui.R.string.provider_detail_page_cancel_button)
-                    } else {
-                        stringResource(com.psyche.memo.ui.R.string.provider_detail_page_multi_select_button)
+                    when {
+                        modelSelectMode -> stringResource(com.psyche.memo.ui.R.string.provider_detail_page_cancel_button)
+                        detecting -> stringResource(com.psyche.memo.ui.R.string.provider_detail_page_batch_detecting)
+                        else -> stringResource(com.psyche.memo.ui.R.string.provider_detail_page_multi_select_button)
                     },
                 ) {
+                    if (detecting) return@IconActionButton
                     Haptics.light(view)
                     modelSelectMode = !modelSelectMode
                     if (!modelSelectMode) selectedModels.clear()
@@ -319,6 +329,8 @@ fun ProviderDetailScreen(
                     selectMode = modelSelectMode,
                     selected = selectedModels,
                     onSelectModeChange = { modelSelectMode = it },
+                    detecting = detecting,
+                    onDetectingChange = { detecting = it },
                     onReload = {
                         // Reload from provider_rows so a detail-sheet save
                         // (which writes the DB directly) is reflected here.
@@ -988,6 +1000,8 @@ private fun ModelsTab(
     selectMode: Boolean,
     selected: MutableList<String>,
     onSelectModeChange: (Boolean) -> Unit,
+    detecting: Boolean,
+    onDetectingChange: (Boolean) -> Unit,
     onReload: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -1002,7 +1016,7 @@ private fun ModelsTab(
     // Connection-check state per model id (_detectionResults / _pendingModels /
     // _currentDetectingModel collapsed into one map).
     val checks = remember { mutableStateMapOf<String, ModelCheckResult>() }
-    var detecting by remember { mutableStateOf(false) }
+    // detecting 由父层持有（AppBar 要按它换 Loader/禁用多选钮）。
     var deleteAllConfirm by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Pair<List<String>, DeleteKind>?>(null) }
 
@@ -1148,7 +1162,7 @@ private fun ModelsTab(
             },
             onDetect = {
                 scope.launch {
-                    detecting = true
+                    onDetectingChange(true)
                     val targets = selected.toList()
                     // 只清掉本轮要测的那些（原版 L3223 removeWhere；此前清空全部，
                     // 会把其它行已经测出来的绿勾/红叉一起抹掉）。
@@ -1165,7 +1179,7 @@ private fun ModelsTab(
                         }
                         kotlinx.coroutines.delay(500)
                     }
-                    detecting = false
+                    onDetectingChange(false)
                 }
             },
             onDeleteFailed = {
