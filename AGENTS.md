@@ -98,7 +98,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - **`applyContextLimit` 未实现**（用户 2026-09-11「先留着」）：`assistant.limitContextMessages`/`contextMessageSize` 的按条数裁剪在请求链路上缺失（`clearContextLabel` 会显示配置值但从不生效）——会改变发给模型的消息数，要做时单开一批 + 用户确认
 - **上下文压缩机制要换掉**（用户 2026-09-11「这个上下文压缩这个机制这个部分 我们要改 不用原项目这个」）：现有实现=原项目那套（LLM 折叠成摘要 + 新建会话），**等用户给新方案**；在此之前不要按原版修、也不要自行设计新机制（PORTING 批次表「待改」行）
 - 语音剩余：**只剩 qwenAudio TTS 的 DashScope WebSocket**（12 家网络 TTS 里唯一没接的；其余 11 家 HTTP + 合成缓存 + 播放引擎 + 悬浮播放器「保存音频」都已落地）。ASR 7 种全部通（system/mimo/step/openai_realtime/dashscope/volcengine/qwen_audio），sherpa_onnx 是桌面离线件不移植
-- 收尾-5：Toast 用 sonner 替换（严格保留现有 UI/UX，当前不接入，等移植完再启动）
+- ~~收尾-5：Toast 用 sonner 替换~~ **已关闭**（用户 2026-09-13「这个不用做了 已经弄好了toast这个部分」）：保留手撸 `MemoSnackbar`（core:ui/snackbar/），不引 sonner
 - UI-7i 图片导出（widget 截图引擎，文本导出已完成）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）
 - 图片查看器桌面专属件（复制钮/缩放三钮/拖拽关图/桌面翻页箭头——compact=手机端不含，低优先）
