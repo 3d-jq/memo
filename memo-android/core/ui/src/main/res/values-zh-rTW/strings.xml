@@ -650,10 +650,12 @@
     <string name="compress_context_auto_title">自動壓縮</string>
     <string name="compress_context_buffer_label">預留緩衝 tokens</string>
     <string name="compress_context_desc">把較早的上下文壓縮成鲍定摘要</string>
+    <string name="compress_context_done">上下文已壓縮</string>
     <string name="compress_context_empty_summary">壓縮返回了空摘要</string>
     <string name="compress_context_estimate_line">目前上下文 ≈ %1$s tokens，自動閾值 ≈ %2$s tokens</string>
     <string name="compress_context_estimate_preview">總結 %1$s 字元，原樣保留 %2$s 字元 → 壓縮後約 %3$s–%4$s tokens（原文約 %5$s tokens）</string>
     <string name="compress_context_failed">壓縮上下文失敗</string>
+    <string name="compress_context_in_progress">上下文壓縮中</string>
     <string name="compress_context_invalid_limit">請輸入大於 0 的字元數</string>
     <string name="compress_context_keep_all_messages">保留條數涵蓋全部訊息，無內容可壓縮</string>
     <string name="compress_context_keep_count_label">保留最近條數</string>
@@ -671,6 +673,9 @@
     <string name="compress_context_options_title">壓縮上下文</string>
     <string name="compress_context_start_button">開始壓縮</string>
     <string name="compress_context_unlimited">無限制</string>
+    <string name="compress_context_usage_detail">約 %1$s / %2$s tokens（距自動壓縮），視窗 %3$s</string>
+    <string name="compress_context_usage_semantics">上下文佔用約 %1$s / %2$s tokens，點擊查看詳情</string>
+    <string name="compress_context_usage_title">上下文佔用</string>
     <string name="compress_context_window_description">模型編輯頁填了上下文長度時以它為準；留空則用這裡的預設值。</string>
     <string name="compress_context_window_from_model">用模型編輯頁為該模型設定的上下文長度：%1$s tokens。</string>
     <string name="compress_context_window_label">上下文視窗 tokens</string>

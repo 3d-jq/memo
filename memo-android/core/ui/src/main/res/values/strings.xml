@@ -650,10 +650,12 @@ Updating Memo first is the safer choice.</string>
     <string name="compress_context_auto_title">Auto compact</string>
     <string name="compress_context_buffer_label">Reserve buffer tokens</string>
     <string name="compress_context_desc">Compress earlier context into an anchored summary</string>
+    <string name="compress_context_done">Context compacted</string>
     <string name="compress_context_empty_summary">Compression returned an empty summary</string>
     <string name="compress_context_estimate_line">Current context ≈ %1$s tokens, auto threshold ≈ %2$s tokens</string>
     <string name="compress_context_estimate_preview">Summarize %1$s chars, keep %2$s chars verbatim → about %3$s–%4$s tokens (original about %5$s tokens)</string>
     <string name="compress_context_failed">Failed to compress context</string>
+    <string name="compress_context_in_progress">Compacting context</string>
     <string name="compress_context_invalid_limit">Enter a positive character count</string>
     <string name="compress_context_keep_all_messages">Keeping that many covers all messages — nothing to compress</string>
     <string name="compress_context_keep_count_label">Keep recent messages</string>
@@ -671,6 +673,9 @@ Updating Memo first is the safer choice.</string>
     <string name="compress_context_options_title">Compress Context</string>
     <string name="compress_context_start_button">Compress</string>
     <string name="compress_context_unlimited">Unlimited</string>
+    <string name="compress_context_usage_detail">About %1$s / %2$s tokens before auto compaction (window %3$s)</string>
+    <string name="compress_context_usage_semantics">Context usage about %1$s of %2$s tokens; tap for details</string>
+    <string name="compress_context_usage_title">Context usage</string>
     <string name="compress_context_window_description">Default window used when the model does not define one; the model editor overrides it.</string>
     <string name="compress_context_window_from_model">Using the context length set for this model in the model editor: %1$s tokens.</string>
     <string name="compress_context_window_label">Context window (tokens)</string>

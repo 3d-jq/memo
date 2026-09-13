@@ -140,6 +140,7 @@ import com.psyche.memo.ui.chat.AskUserInteractionService
 import com.psyche.memo.ui.chat.AskUserResult
 import com.psyche.memo.ui.chat.ToolApprovalService
 import com.psyche.memo.ui.chat.ToolUiPart
+import com.psyche.memo.ui.chat.checkpointPart
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -522,6 +523,10 @@ fun ChatContent(
     val suggestions by vm.suggestions.collectAsState()
     val input by vm.input.collectAsState()
     val streaming by vm.streaming.collectAsState()
+    // 上下文压缩：进行中 → 消息流末尾的扫光分隔线；占用 → 输入栏上方的 2dp 细条。
+    val compacting by vm.compacting.collectAsState()
+    val contextUsage by vm.contextUsage.collectAsState()
+    val streamingMessageId = messages.lastOrNull { it.isStreaming }?.id
     val providerId by vm.selectedProviderId.collectAsState()
     val modelId by vm.selectedModelId.collectAsState()
     val versionInfo by vm.versionInfo.collectAsState()
@@ -611,7 +616,6 @@ fun ChatContent(
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/plain"),
     ) { uri -> finishExport(uri) }
     var showCompressDialog by remember { mutableStateOf(false) }
-    var compressing by remember { mutableStateOf(false) }
     var worldBooksAvailable by remember { mutableStateOf(false) }
     var showOcrPrompt by remember { mutableStateOf(false) }
     var ocrSettings by remember {
@@ -1212,9 +1216,25 @@ fun ChatContent(
                     ),
                 ) {
                     // contentType 让 LazyColumn 按 user/assistant 复用两种布局。
-                    items(messages, key = { it.id }, contentType = { it.role }) { msg ->
+                    items(
+                        messages,
+                        key = { it.id },
+                        contentType = { if (it.checkpointPart() != null) "compaction" else it.role },
+                    ) { msg ->
+                        // 压缩检查点不画气泡：渲染成「上下文已压缩」分隔线（用户点名：
+                        // 摘要不进对话界面）。
+                        if (msg.checkpointPart() != null) {
+                            com.psyche.memo.ui.chat.CompactionDivider(inProgress = false)
+                            return@items
+                        }
+                        // 自动压缩进行中：分隔线排在流式骨架之前。
+                        if (compacting && msg.id == streamingMessageId) {
+                            com.psyche.memo.ui.chat.CompactionDivider(inProgress = true)
+                        }
                         val isLastAssistant = msg.id == lastAssistantId
-                        val canSelect = msg.role == "user" || msg.role == "assistant"
+                        // 压缩检查点不是真实发言：不参与多选/导出（用户点名摘要不进对话）。
+                        val canSelect = (msg.role == "user" || msg.role == "assistant") &&
+                            msg.checkpointPart() == null
                         Row(verticalAlignment = Alignment.Top) {
                             if (selecting && canSelect) {
                                 Box(modifier = Modifier.padding(start = 10.dp, top = 10.dp)) {
@@ -1320,6 +1340,12 @@ fun ChatContent(
                             }
                         }
                     }
+                    // 手动压缩（没有流式骨架）时，分隔线补在列表末尾。
+                    if (compacting && streamingMessageId == null) {
+                        item(key = "compaction-progress") {
+                            com.psyche.memo.ui.chat.CompactionDivider(inProgress = true)
+                        }
+                    }
                 }
                 // 滚动导航面板（scroll_nav_buttons.dart）：贴输入栏上方右侧。
                 // home_page.dart:1504-1516 移动端三态：always 常显 / scroll 跟随
@@ -1413,6 +1439,15 @@ fun ChatContent(
         }
         val searchSvcName = searchSvc?.let { stringResource(com.psyche.memo.ui.SearchServiceUi.nameRes(it)) }
         val searchIconAsset = searchSvcName?.let { BrandAssets.assetForName(it) }
+        // 输入栏上方的上下文占用条（用户 2026-09-13 定：常显 2dp 细条，点开上下文管理）。
+        contextUsage?.let { usage ->
+            com.psyche.memo.ui.chat.ContextUsageBar(
+                usedTokens = usage.usedTokens,
+                thresholdTokens = usage.thresholdTokens,
+                auto = usage.auto,
+                onClick = { showContextSheet = true },
+            )
+        }
         ChatInputBar(
             input = input,
             enterToSend = remember {
@@ -1578,6 +1613,7 @@ fun ChatContent(
     if (showContextSheet) {
         com.psyche.memo.ui.chat.ContextManagementSheet(
             clearLabel = vm.clearContextLabel(),
+            usage = contextUsage,
             onCompress = {
                 showContextSheet = false
                 showCompressDialog = true
@@ -1593,7 +1629,8 @@ fun ChatContent(
     if (showExportSheet) {
         val exportTitle = (container.conversationDao.get(conversationId)?.title ?: "")
             .ifBlank { container.appContext.getString(UiR.string.message_export_sheet_default_title) }
-        val selectedMessages = messages.filter { it.id in selectedIds }
+        val selectedMessages = messages
+            .filter { it.id in selectedIds && it.checkpointPart() == null }
             .map {
                 com.psyche.memo.ui.chat.MessageExport.ExportMessage(
                     role = it.role,
@@ -1662,12 +1699,11 @@ fun ChatContent(
             providerId = providerId,
             modelId = modelId,
             onDismiss = { showCompressDialog = false },
-            // opencode 阈值机制：压缩就地插入检查点，不再新建会话。
+            // opencode 阈值机制：压缩就地插入检查点，不再新建会话；进度由消息流里的
+            // 「上下文压缩中」扫光分隔线表达（用户点名：不要弹压缩对话框）。
             onConfirm = {
                 showCompressDialog = false
-                compressing = true
                 vm.compactContextNow { errorKey ->
-                    compressing = false
                     if (errorKey != null) {
                         val message = when (errorKey) {
                             "no_messages" -> container.appContext.getString(UiR.string.compress_context_no_messages)
@@ -1686,10 +1722,6 @@ fun ChatContent(
                 }
             },
         )
-    }
-
-    if (compressing) {
-        com.psyche.memo.ui.chat.CompressLoadingDialog()
     }
 
     if (showWorldBookSheet) {

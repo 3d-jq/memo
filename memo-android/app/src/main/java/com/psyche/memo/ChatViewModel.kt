@@ -207,8 +207,11 @@ class ChatViewModel(
      * isTemporary 语义）。
      */
     fun selectProvider(providerId: String, modelId: String) {
+        val changed = selectedProviderId.value != providerId || selectedModelId.value != modelId
         selectedProviderId.value = providerId
         selectedModelId.value = modelId
+        // 阈值基准（上下文窗口）跟着模型走 —— 换了模型就重算占用条。
+        if (changed) viewModelScope.launch { refreshContextUsage() }
         if (isTemporary) return
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
@@ -220,6 +223,8 @@ class ChatViewModel(
     fun refreshTail() {
         if (isTemporary) {
             _sendEnabled.value = true
+            // 临时会话不落库，但占用条一样要算（发给模型的还是同一套消息）。
+            viewModelScope.launch { refreshContextUsage() }
             return
         }
         viewModelScope.launch { reloadTail() }
@@ -308,6 +313,8 @@ class ChatViewModel(
             container.messageDao.count(conversationId) > loaded.size
         }
         _sendEnabled.value = true
+        // 占用进度条：加载/刷新后重算（含刚被压缩过的会话）。
+        refreshContextUsage()
     }
 
     /**
@@ -529,10 +536,82 @@ class ChatViewModel(
         val next = if (conv.truncateIndex == count) -1 else count
         container.conversationDao.setTruncateIndex(conversationId, next)
         _contextVersion.value = _contextVersion.value + 1
+        viewModelScope.launch { refreshContextUsage() }
     }
 
     /** compactWindow 的返回值：成功时 [message] 是新建的检查点，否则 [errorKey]。 */
     private data class CompactionResult(val message: UiMessage?, val errorKey: String?)
+
+    /**
+     * 上下文占用（输入栏上方那条细进度条的数据源，用户 2026-09-13 定：分母按自动压缩
+     * 阈值算，100% = 该压缩了）。
+     */
+    data class ContextUsage(
+        val usedTokens: Int,
+        val thresholdTokens: Int,
+        val windowTokens: Int,
+        val auto: Boolean,
+    )
+
+    private val _contextUsage = kotlinx.coroutines.flow.MutableStateFlow<ContextUsage?>(null)
+    val contextUsage: kotlinx.coroutines.flow.StateFlow<ContextUsage?> = _contextUsage
+
+    /** 压缩进行中 → 消息流末尾那条「上下文压缩中」分隔线（扫光）。 */
+    private val _compacting = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val compacting: kotlinx.coroutines.flow.StateFlow<Boolean> = _compacting
+
+    /**
+     * 重算上下文占用 —— 与发送链路的估算同源：`estimate(系统提示词 + 窗口消息 + 工具
+     * 定义)`，分母是自动压缩阈值（窗口 − max(输出预算, buffer)）。消息走「消息自身正文」
+     * （不重算 OCR/文档/记忆注入，那些要真的发请求才有意义），因此是近似值。
+     */
+    private suspend fun refreshContextUsage() {
+        runCatching {
+            val startOrder = contextStartOrder()
+            val settings = ContextCompactionPrefs.read(
+                container,
+                selectedProviderId.value,
+                selectedModelId.value,
+            )
+            val assistant = container.currentAssistant()
+            val base = _messages.value
+                .filter { !it.isStreaming }
+                .filter { startOrder == null || it.messageOrder >= startOrder }
+            val window = compactionWindow(base).mapNotNull { msg ->
+                val checkpoint = msg.checkpointPart()
+                if (checkpoint != null) {
+                    "user" to com.psyche.memo.common.SessionCompaction
+                        .checkpointText(checkpoint.summary, checkpoint.recent)
+                } else {
+                    compactionEntry(msg)
+                        ?.let { it.role to com.psyche.memo.common.SessionCompaction.serialize(it) }
+                        ?.takeIf { (_, text) -> text.isNotEmpty() }
+                }
+            }
+            val tools = offeredTools()
+            val systemParts = buildSystemPromptParts(assistant)
+            val used = com.psyche.memo.common.SessionCompaction.estimateRequest(
+                system = systemParts.joinToString("\n\n") { it.second },
+                messages = window,
+                toolsJson = toolsJsonForEstimate(tools),
+            )
+            _contextUsage.value = ContextUsage(
+                usedTokens = used,
+                thresholdTokens = com.psyche.memo.common.SessionCompaction.thresholdTokens(
+                    settings.contextWindow,
+                    assistant?.maxTokens ?: 0,
+                    settings.buffer,
+                ),
+                windowTokens = settings.contextWindow,
+                auto = settings.auto,
+            )
+        }.onFailure { e ->
+            com.psyche.memo.common.logging.FlutterLogger.log(
+                "[CompressContext] usage estimate failed: $e",
+                tag = "HomePage",
+            )
+        }
+    }
 
     /**
      * 手动「立即压缩」（opencode `SessionCompaction.create` + `process`，不看阈值）：
@@ -545,6 +624,7 @@ class ChatViewModel(
             return
         }
         viewModelScope.launch {
+            _compacting.value = true
             try {
                 val window = compactionWindow(_messages.value)
                 if (window.isEmpty()) {
@@ -573,6 +653,9 @@ class ChatViewModel(
                     tag = "HomePage",
                 )
                 onResult("failed")
+            } finally {
+                _compacting.value = false
+                refreshContextUsage()
             }
         }
     }
@@ -1329,26 +1412,31 @@ class ChatViewModel(
                             compactionSettings.buffer,
                         )
                     ) {
-                        val result = compactWindow(
-                            window = compactionWindow(rawMessages),
-                            anchorOrder = userMessage.messageOrder,
-                            settings = compactionSettings,
-                            entryOf = { msg, _ ->
-                                val entry = compactionEntry(msg)
-                                if (entry == null || msg.role != "user") {
-                                    entry
-                                } else {
-                                    entry.copy(
-                                        parts = listOf(
-                                            com.psyche.memo.common.SessionCompaction.Part.Text(
-                                                assembledBody(msg, msg.id == lastUserMessageId && memoryPrefix.isNotEmpty()),
+                        _compacting.value = true
+                        val result = try {
+                            compactWindow(
+                                window = compactionWindow(rawMessages),
+                                anchorOrder = userMessage.messageOrder,
+                                settings = compactionSettings,
+                                entryOf = { msg, _ ->
+                                    val entry = compactionEntry(msg)
+                                    if (entry == null || msg.role != "user") {
+                                        entry
+                                    } else {
+                                        entry.copy(
+                                            parts = listOf(
+                                                com.psyche.memo.common.SessionCompaction.Part.Text(
+                                                    assembledBody(msg, msg.id == lastUserMessageId && memoryPrefix.isNotEmpty()),
+                                                ),
                                             ),
-                                        ),
-                                    )
-                                }
-                            },
-                            beforeSkeletonId = assistantId,
-                        )
+                                        )
+                                    }
+                                },
+                                beforeSkeletonId = assistantId,
+                            )
+                        } finally {
+                            _compacting.value = false
+                        }
                         val checkpoint = result.message
                         if (checkpoint != null) {
                             val boundary = checkpoint.checkpointPart()?.boundaryOrder ?: -1
@@ -1545,6 +1633,8 @@ class ChatViewModel(
                 maybeGenerateSummary()
                 // §12.1 —— 回复完成后按助手的自动整理开关/轮数阈值排队后台整理。
                 maybeOrganizeMemory()
+                // 顶栏下方那条占用进度条：一轮结束后重算（也覆盖本轮刚发生的自动压缩）。
+                refreshContextUsage()
             }
         }
     }
@@ -1562,6 +1652,7 @@ class ChatViewModel(
         if (providerId.isEmpty() || modelId.isEmpty()) return
         val startOrder = contextStartOrder()
         val pairs = _messages.value
+            .filter { it.checkpointPart() == null }
             .filter { startOrder == null || it.messageOrder >= startOrder }
             .map { it.role to it.content }
         val content = com.psyche.memo.common.SuggestionText.buildContent(pairs)
@@ -2004,11 +2095,17 @@ class ChatViewModel(
             try {
                 // 历史 = 目标之前的消息正文 + assistant tool_calls 记录 + 工具回答
                 // （chat_completions_api.dart _buildAssistantToolCallMessage 形状）。
-                val history = _messages.value
-                    .takeWhile { it.id != messageId }
+                // 压缩检查点按发送链路同样的语义展开（检查点置前、boundary 之前的
+                // 消息不再发送），避免把摘要正文当成一条普通 user 发言。
+                val history = compactionWindow(_messages.value.takeWhile { it.id != messageId })
                     .mapNotNull { msg ->
-                        val content = msg.parts.filterIsInstance<TextPart>()
-                            .joinToString("") { it.text }
+                        val checkpoint = msg.checkpointPart()
+                        val content = if (checkpoint != null) {
+                            com.psyche.memo.common.SessionCompaction
+                                .checkpointText(checkpoint.summary, checkpoint.recent)
+                        } else {
+                            msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+                        }
                         if (content.isEmpty()) null
                         else LlmMessage(role = msg.role, content = content)
                     }

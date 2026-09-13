@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.data.model.CompactionPart
 import com.psyche.memo.data.model.FilePart
 import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.data.model.ReasoningPart
@@ -81,5 +82,31 @@ class MessageExportTest {
         )
         assertEquals(true, export(msg).contains("![image](file:///a.png)"))
         assertEquals(true, export(msg, markdown = false).contains("![image](file:///a.png)"))
+    }
+
+    @Test
+    fun `compaction checkpoints never reach the export`() {
+        // 摘要只给模型看（用户 2026-09-13）：导出里既没有它的小节结构，也没有落款行。
+        val checkpoint = message(
+            "user",
+            listOf(
+                TextPart("## Goal\n- secret summary"),
+                CompactionPart("## Goal\n- secret summary", "recent", 3),
+            ),
+        )
+        val text = MessageExport.export(
+            title = "T",
+            messages = listOf(message("user", listOf(TextPart("hello"))), checkpoint),
+            roleNameOf = { if (it.role == "user") "Me" else "AI" },
+            timeOf = { "12:00:00" },
+            thinkingLabel = "Thinking",
+            includeThinking = true,
+            includeTools = true,
+            markdown = true,
+            imageLine = { "![image]($it)" },
+        )
+        assertTrue(text.contains("hello"))
+        assertTrue(!text.contains("secret summary"))
+        assertTrue(!text.contains("## Goal"))
     }
 }

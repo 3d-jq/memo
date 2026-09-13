@@ -31,7 +31,7 @@ fills in native-side details and shared feature implementations.
 - **语音播放图标按消息归属**：原版 `chat_message_widget.dart:3253-3291` 用全局 `isActive`，读一条消息会让**所有**消息显示停止、且暂停不可见；我们按 `ownerId` 只让被朗读的那条响应（暂停显示"继续"）——用户实测后要求
 - **搜索引用胶囊尺寸**：原版 20dp/12sp/20% 底，用户要求缩小一档（16dp/10sp/16%，全圆）
 - **输入栏样式**：保持 kelivo 原样，但最小高改为 64dp（用户要求）；其余参数勿动
-- **上下文压缩＝opencode 阈值机制**（用户 2026-09-13「改成 opencode 那个压缩阈值来压缩」）：算 `estimate(system+messages+tools)`，超过「上下文窗口 − max(输出预算, buffer)」时在**同一会话**里插入锚定摘要检查点（`CompactionPart` + `<conversation-checkpoint>`），不再「新建会话 + 摘要作首条消息」——**勿改回原版**；详见下面「上下文压缩机制＝opencode 阈值机制」条
+- **上下文压缩＝opencode 阈值机制**（用户 2026-09-13「改成 opencode 那个压缩阈值来压缩」）：算 `estimate(system+messages+tools)`，超过「上下文窗口 − max(输出预算, buffer)」时在**同一会话**里插入锚定摘要检查点（`CompactionPart` + `<conversation-checkpoint>`），不再「新建会话 + 摘要作首条消息」——**勿改回原版**；详见下面「上下文压缩机制＝opencode 阈值机制」条。**呈现**（同日用户点名）：压缩只在对话里显示一条分隔线（压缩中＝扫光文字、完成＝静态），不弹对话框；**摘要不显示在对话界面**（不画气泡/不进导出/多选/标题/总结/记忆）；输入栏上方有一条常显的 2dp 上下文占用细条（分母＝自动压缩阈值，点开上下文管理 sheet 看详情）
 - **品牌化**：无 kelivo 字样/链接/端点；归档建议名 `memo_backup_<stamp>.zip`、本机副本 `memo-snapshot-<nanos>.zip`
 - ⚠️ **品牌残留（用户 2026-09-11：他自己后续替换，暂不处理）**：`AboutScreen.kt` 的社区链接三行仍指向上游（`kelivo.psycheas.top` / `Chevey339/kelivo`）——**勿代改、勿当待办追问**，等用户给新 URL 或说删行；见 PORTING.md §5.11
 

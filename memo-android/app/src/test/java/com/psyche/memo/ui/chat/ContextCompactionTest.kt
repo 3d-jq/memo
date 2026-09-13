@@ -14,7 +14,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-
 /**
  * 上下文压缩（opencode 机制）在 UI 侧的映射：检查点窗口 + 消息序列化。
  */
@@ -125,5 +124,16 @@ class ContextCompactionTest {
         )!!
         assertEquals("", imageOnly.text)
         assertEquals(listOf("image/png: file:///a.png"), imageOnly.attachments)
+    }
+
+    @Test
+    fun `usage bar colours grade by occupancy`() {
+        val cs = androidx.compose.material3.lightColorScheme()
+        assertEquals(cs.primary, contextUsageColor(0f, cs, auto = true))
+        assertEquals(cs.primary, contextUsageColor(0.69f, cs, auto = true))
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFE0A02A), contextUsageColor(0.7f, cs, auto = true))
+        assertEquals(cs.error, contextUsageColor(0.91f, cs, auto = true))
+        // 自动压缩关掉时是灰的（不误导成"快满了"）。
+        assertEquals(cs.onSurfaceVariant.copy(alpha = 0.4f), contextUsageColor(1f, cs, auto = false))
     }
 }

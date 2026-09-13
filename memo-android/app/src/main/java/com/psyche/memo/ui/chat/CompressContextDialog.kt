@@ -15,8 +15,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -306,26 +304,6 @@ private fun NumberField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth(),
-    )
-}
-
-/** LoadingDialogCard — modal spinner with a label. */
-@Composable
-fun CompressLoadingDialog() {
-    val cs = MaterialTheme.colorScheme
-    AlertDialog(
-        onDismissRequest = {},
-        confirmButton = {},
-        text = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = cs.primary)
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = stringResource(UiR.string.compressing_context),
-                    style = TextStyle(fontSize = 14.sp, color = cs.onSurface),
-                )
-            }
-        },
     )
 }
 

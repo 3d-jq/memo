@@ -34,6 +34,14 @@ class ChatMessage(
     val content: String
         get() = parts.filterIsInstance<TextPart>().joinToString("") { it.text }
 
+    /**
+     * 上下文压缩检查点（parts 里带 [CompactionPart]）。**不是**用户/助手的真实发言：
+     * 界面按分隔线渲染、导出/标题/总结/记忆抽取一律跳过；只有聊天请求组装会用到它
+     * （整条替换成 `<conversation-checkpoint>` 轮次）。
+     */
+    val isCompaction: Boolean
+        get() = parts.any { it is CompactionPart }
+
     companion object {
         fun newId(): String = java.util.UUID.randomUUID().toString()
 

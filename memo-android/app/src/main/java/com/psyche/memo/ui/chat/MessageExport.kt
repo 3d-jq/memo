@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.data.model.CompactionPart
 import com.psyche.memo.data.model.FilePart
 import com.psyche.memo.data.model.ImagePart
 import com.psyche.memo.data.model.MessagePart
@@ -46,7 +47,8 @@ object MessageExport {
         val buf = StringBuilder()
         buf.append(if (markdown) "# $title" else title).append('\n')
         buf.append('\n')
-        for (msg in messages) {
+        // 压缩检查点不是真实发言（用户点名摘要不进对话/导出）：整条跳过。
+        for (msg in messages.filterNot { m -> m.parts.any { it is CompactionPart } }) {
             buf.append("${timeOf(msg.timestamp)} · ${roleNameOf(msg)}").append('\n')
             buf.append('\n')
             writeBlocks(

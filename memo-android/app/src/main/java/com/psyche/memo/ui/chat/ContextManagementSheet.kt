@@ -30,18 +30,21 @@ import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Eraser
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Package2
+import com.psyche.memo.ChatViewModel
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.R as UiR
 
 /**
- * Port of context_management_sheet.dart: "compress context" (summarize and
- * start a new chat) and "clear context" (truncateIndex toggle) rows.
+ * Port of context_management_sheet.dart: "compress context" and "clear context"
+ * (truncateIndex toggle) rows, plus the context-usage details (user 2026-09-13:
+ * the 2dp bar above the input bar opens this sheet for the numbers).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContextManagementSheet(
     clearLabel: String,
+    usage: ChatViewModel.ContextUsage?,
     onCompress: () -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
@@ -71,6 +74,10 @@ fun ContextManagementSheet(
                 )
             }
             Spacer(Modifier.height(16.dp))
+            usage?.let {
+                ContextUsageCard(usage = it)
+                Spacer(Modifier.height(12.dp))
+            }
             OptionRow(
                 icon = Lucide.Package2,
                 label = stringResource(UiR.string.compress_context),
@@ -93,6 +100,69 @@ fun ContextManagementSheet(
             Spacer(Modifier.height(8.dp))
         }
     }
+}
+
+/** 上下文占用详情：百分比 + 进度条 + 估算/阈值/窗口/保留/缓冲/自动开关。 */
+@Composable
+private fun ContextUsageCard(usage: ChatViewModel.ContextUsage) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    val fraction = if (usage.thresholdTokens <= 0) {
+        0f
+    } else {
+        (usage.usedTokens.toFloat() / usage.thresholdTokens).coerceIn(0f, 1f)
+    }
+    val barColor = com.psyche.memo.ui.chat.contextUsageColor(fraction, cs, usage.auto)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(semantic.surfaceCardFill, RoundedCornerShape(14.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(UiR.string.compress_context_usage_title),
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "${(fraction * 100).toInt()}%",
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = barColor),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .background(cs.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(999.dp)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .height(6.dp)
+                    .background(barColor, RoundedCornerShape(999.dp)),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(
+                UiR.string.compress_context_usage_detail,
+                formatTokens(usage.usedTokens),
+                formatTokens(usage.thresholdTokens),
+                formatTokens(usage.windowTokens),
+            ),
+            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.62f)),
+        )
+    }
+}
+
+/** 1200 → "1.2k"、128000 → "128k"（详情行用，避免一串数字）。 */
+internal fun formatTokens(tokens: Int): String = when {
+    tokens >= 1_000_000 -> String.format(java.util.Locale.US, "%.1fM", tokens / 1_000_000.0)
+    tokens >= 10_000 -> "${tokens / 1000}k"
+    tokens >= 1_000 -> String.format(java.util.Locale.US, "%.1fk", tokens / 1000.0)
+    else -> tokens.toString()
 }
 
 /** _OptionRow L85-142 — sheet tile with icon + label + description. */

@@ -202,6 +202,16 @@ class SessionCompactionTest {
         assertEquals(128_000, settings.contextWindow)
     }
 
+    @Test
+    fun `threshold uses the larger of output budget and buffer`() {
+        // 128000 − max(4096, 20000) = 108000
+        assertEquals(108_000, SessionCompaction.thresholdTokens(128_000, 4_096, 20_000))
+        // 输出预算更大时以它为准。
+        assertEquals(88_000, SessionCompaction.thresholdTokens(128_000, 40_000, 20_000))
+        // 兜底 ≥1（窗口比缓冲还小时进度条不能除以 0）。
+        assertEquals(1, SessionCompaction.thresholdTokens(10_000, 0, 20_000))
+    }
+
     // ---- checkpoint ----
 
     @Test

@@ -44,6 +44,7 @@ object TitleSummaryGenerator {
         val modelId = titleSel?.second ?: chatSel?.second ?: return@withContext null
 
         val msgs = container.messageDao.getAllForConversation(conversationId)
+            .filterNot { it.isCompaction }
         val content = TitleText.buildContent(msgs.map { it.role to it.content })
         if (content.isBlank()) return@withContext null
 
@@ -92,7 +93,9 @@ object TitleSummaryGenerator {
             return@withContext false
         }
 
+        // 压缩检查点不是用户发言：不计入消息数、也不进摘要输入。
         val msgs = container.messageDao.getAllForConversation(conversationId)
+            .filterNot { it.isCompaction }
         val total = msgs.size
         val lastN = conv.lastSummarizedMessageCount.coerceAtLeast(0)
         val trigger = assistant.recentChatsSummaryMessageCount.coerceAtLeast(1)

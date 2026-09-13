@@ -468,7 +468,10 @@ class MemoryPipelineService(
         val conversation = container.conversationDao.get(job.conversationId)
             ?: return MemoryOrganizeResult(advanced = false, error = "conversation_missing")
 
+        // 压缩检查点不是真实发言（摘要只给模型看）：记忆抽取不看它，否则锚定摘要会
+        // 被当成一条用户消息写进记忆。
         val messages = container.messageDao.getAllForConversation(job.conversationId)
+            .filterNot { it.isCompaction }
         if (messages.any { it.isStreaming }) {
             return MemoryOrganizeResult(advanced = false, error = "streaming")
         }
