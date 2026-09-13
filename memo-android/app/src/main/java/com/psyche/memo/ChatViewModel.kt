@@ -1560,6 +1560,14 @@ class ChatViewModel(
                         }
                     }
                 }
+                // 助手「限制上下文条数」（message_builder_service.applyContextLimit
+                // L2139-2166）：世界书注入之后、真正发请求之前裁剪，保留系统消息 +
+                // 最近 N 条，并丢掉裁点留下的悬空 tool 消息。
+                com.psyche.memo.llm.prompt.applyContextLimit(
+                    messages = history,
+                    enabled = assistant?.limitContextMessages == true,
+                    size = assistant?.contextMessageSize ?: 0,
+                )
                 // context_logger.logPrepared（message_generation_service L253-263）——
                 // 打标签 → stripInternalRevisionIds 之间写一条上下文快照。
                 // Android 的 strip 步骤不存在（标签不在 wire 载荷里）。

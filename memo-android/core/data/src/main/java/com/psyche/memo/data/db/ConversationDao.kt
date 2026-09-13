@@ -78,6 +78,31 @@ class ConversationDao(private val db: SQLiteDatabase) {
         )
     }
 
+    /**
+     * 有总结的会话（chat_service.getConversationsWithSummaryForAssistant）——
+     * 助手记忆 tab 的「管理总结」列表按 updated_at DESC 列出。
+     */
+    fun withSummaryForAssistant(assistantId: String): List<Conversation> {
+        db.query(
+            "conversation_rows", null,
+            "assistant_id = ? AND summary IS NOT NULL AND TRIM(summary) != ''",
+            arrayOf(assistantId), null, null, "updated_at DESC, id ASC",
+        ).use { cursor ->
+            val out = ArrayList<Conversation>(cursor.count)
+            while (cursor.moveToNext()) out.add(cursor.toConversation())
+            return out
+        }
+    }
+
+    /** 清掉一条会话总结（chat_service.clearConversationSummary）。 */
+    fun clearSummary(id: String, now: Long = System.currentTimeMillis()) {
+        db.execSQL(
+            "UPDATE conversation_rows SET summary = NULL, last_summarized_message_count = 0, " +
+                "updated_at = ? WHERE id = ?",
+            arrayOf<Any>(now, id),
+        )
+    }
+
     fun updatePinned(id: String, pinned: Boolean, now: Long = System.currentTimeMillis()) {
         db.execSQL(
             "UPDATE conversation_rows SET is_pinned = ?, updated_at = ? WHERE id = ?",

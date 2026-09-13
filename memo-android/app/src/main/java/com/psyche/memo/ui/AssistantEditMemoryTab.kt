@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -47,8 +48,10 @@ import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Sparkles
+import com.composables.icons.lucide.Trash2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.ui.theme.LocalSemanticColors
@@ -78,8 +81,25 @@ fun AssistantEditMemoryTab(
     var editorOpen by remember { mutableStateOf(false) }
     var editorEntry by remember { mutableStateOf<MemoryEntry?>(null) }
     var organizing by remember { mutableStateOf(false) }
+    // 「管理总结」：编辑/清除的目标 + 数据版本（改完立刻重查）。
+    var summaryEditor by remember { mutableStateOf<com.psyche.memo.data.model.Conversation?>(null) }
+    var summaryDelete by remember { mutableStateOf<com.psyche.memo.data.model.Conversation?>(null) }
+    var summariesRev by remember { mutableStateOf(0) }
     val organizeScope = rememberCoroutineScope()
     val pipeline = container.memoryPipeline
+    // 与原版同一个闸门：过往对话回忆 + 生成对话总结都开才出现。
+    val summaryGateOpen = assistant.allowPastConversationRecall && assistant.generateConversationSummary
+    val summaries = remember(summaryGateOpen, assistant.id, summariesRev) {
+        if (summaryGateOpen) {
+            runCatching { container.conversationDao.withSummaryForAssistant(assistant.id) }
+                .getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+    }
+    fun reloadSummaries() {
+        summariesRev++
+    }
 
     Column(
         modifier = Modifier
@@ -320,6 +340,36 @@ fun AssistantEditMemoryTab(
                 )
             }
         }
+
+        // 管理总结（assistant_settings_edit_memory_tab.dart L481-573）：过了「过往对话
+        // 回忆 + 生成对话总结」两个开关才出现；列出该助手名下**有总结**的会话，每条可
+        // 编辑（空内容 = 清掉）或清除。
+        if (summaryGateOpen) {
+            Text(
+                text = stringResource(R.string.assistant_edit_manage_summaries_title),
+                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 4.dp),
+            )
+            if (summaries.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.assistant_edit_summary_empty),
+                    style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            } else {
+                summaries.forEach { conv ->
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        SummaryCard(
+                            title = conv.title,
+                            summary = conv.summary.orEmpty(),
+                            onEdit = { summaryEditor = conv },
+                            onDelete = { summaryDelete = conv },
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(32.dp))
     }
 
     // Same editor the memory list page opens (_showAddEditSheet L49-64): the
@@ -476,6 +526,186 @@ fun AssistantEditMemoryTab(
                 onEdit { a -> a.copy(recentChatsSummaryMessageCount = value) }
             },
         )
+    }
+
+    // 编辑总结（_showEditSummarySheet L579-603）：空内容 = 清掉该会话的总结。
+    summaryEditor?.let { conv ->
+        SummaryEditSheet(
+            title = stringResource(R.string.assistant_edit_summary_dialog_title),
+            label = stringResource(R.string.assistant_edit_summary_dialog_title),
+            hint = stringResource(R.string.assistant_edit_summary_dialog_hint),
+            initial = conv.summary.orEmpty(),
+            onDismiss = { summaryEditor = null },
+            onSave = { text ->
+                summaryEditor = null
+                organizeScope.launch {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        if (text.isEmpty()) {
+                            container.conversationDao.clearSummary(conv.id)
+                        } else {
+                            container.conversationDao.updateSummary(
+                                conv.id,
+                                text,
+                                conv.lastSummarizedMessageCount,
+                            )
+                        }
+                    }
+                    reloadSummaries()
+                }
+            },
+        )
+    }
+
+    // 清除总结确认（_confirmDeleteSummary L605-634）。
+    summaryDelete?.let { conv ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { summaryDelete = null },
+            title = { Text(stringResource(R.string.assistant_edit_delete_summary_title)) },
+            text = { Text(stringResource(R.string.assistant_edit_delete_summary_content)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    summaryDelete = null
+                    organizeScope.launch {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            container.conversationDao.clearSummary(conv.id)
+                        }
+                        reloadSummaries()
+                    }
+                }) {
+                    Text(stringResource(R.string.assistant_edit_clear_button), color = cs.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { summaryDelete = null }) {
+                    Text(stringResource(R.string.home_page_cancel))
+                }
+            },
+        )
+    }
+}
+
+/**
+ * 「管理总结」的一张卡（assistant_settings_edit_memory_tab.dart L516-567）：
+ * r14 卡片、标题 12sp@0.6、总结 14sp 最多 3 行、右侧编辑/清除两枚 18dp 图标。
+ */
+@Composable
+private fun SummaryCard(
+    title: String,
+    summary: String,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    androidx.compose.material3.Surface(
+        color = semantic.surfaceCard,
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(0.6.dp, semantic.hairline),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = title,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = cs.onSurface.copy(alpha = 0.6f),
+                ),
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = summary,
+                    maxLines = 3,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    style = TextStyle(fontSize = 14.sp),
+                    modifier = Modifier.weight(1f),
+                )
+                SummaryIconAction(icon = Lucide.Pencil, tint = cs.primary, onTap = onEdit)
+                SummaryIconAction(icon = Lucide.Trash2, tint = cs.error, onTap = onDelete)
+            }
+        }
+    }
+}
+
+/** _TactileIconButton —— 18dp 图标、无背景、带触觉。 */
+@Composable
+private fun SummaryIconAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: androidx.compose.ui.graphics.Color,
+    onTap: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clickable(onClick = onTap),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+    }
+}
+
+/**
+ * 总结编辑 sheet —— 原版 `_MemoryTextInputForm`（L686-830）的手机形态：
+ * 拖柄 + 居中标题 + 一张卡里的多行输入（label 行上、hint 内嵌、autofocus）+
+ * 取消/保存页脚（保存按钮在 `allowEmpty` 时永远可点，空内容 = 清掉总结）。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SummaryEditSheet(
+    title: String,
+    label: String,
+    hint: String,
+    initial: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    var text by remember(initial) { mutableStateOf(initial) }
+    androidx.compose.material3.ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
+        onDismissRequest = onDismiss,
+        containerColor = semantic.overlaySurface(cs),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        dragHandle = null,
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+            MemoSheetHandle()
+            Text(
+                text = title,
+                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                SectionCard {
+                    Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        IosFormField(
+                            label = label,
+                            value = text,
+                            onValueChange = { text = it },
+                            inline = false,
+                            minLines = 3,
+                            maxLines = 10,
+                            autofocus = true,
+                            hint = hint,
+                        )
+                    }
+                }
+            }
+            Box(modifier = Modifier.padding(start = 16.dp, end = 16.dp)) {
+                MemorySheetActions(
+                    confirmLabel = stringResource(R.string.user_profile_save),
+                    confirmEnabled = true,
+                    onCancel = onDismiss,
+                    // 原版 pop 的是 `_controller.text.trim()`。
+                    onConfirm = { onSave(text.trim()) },
+                )
+            }
+        }
     }
 }
 
