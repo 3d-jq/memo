@@ -325,8 +325,26 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         GeminiClient(httpClient, { currentRetryOptions() }, cancellations),
     )
 
-    fun clientFor(providerId: String): LlmClient =
-        llmClients.firstOrNull { it.supports(providerId) } ?: llmClients.first()
+    fun clientFor(providerId: String): LlmClient {
+        val base = llmClients.firstOrNull { it.supports(providerId) } ?: llmClients.first()
+        // chat_api_helpers.dart:44-53 `apiModelId(cfg, modelId)`：模型覆盖里的
+        // apiModelId 才是**出网**的模型 id，而且厂商启发式（Claude thinking、
+        // Gemini 判定、GLM OCR…）也用它。包一层客户端在这里统一改写，覆盖聊天 /
+        // 标题 / 摘要 / 记忆 / 翻译 / OCR / 测试连接全部请求路径。
+        return WireModelIdClient(base) { modelId -> wireModelId(providerId, modelId) }
+    }
+
+    /**
+     * 逻辑模型 id → 上游模型 id（`model_overrides[modelId].apiModelId`，
+     * 没配就原样返回）。与列表页显示用的 `resolveModelIdentity(modelId, …).baseId`
+     * 同一个来源。
+     */
+    fun wireModelId(providerId: String, modelId: String): String {
+        val override = providerConfig(providerId)?.modelOverrides?.get(modelId)
+            as? kotlinx.serialization.json.JsonObject
+            ?: return modelId
+        return com.psyche.memo.ui.resolveModelIdentity(modelId, override).baseId
+    }
 
     /**
      * Provider API key from the provider_rows payload (multi-key aware).
