@@ -330,6 +330,43 @@ class ChatTimelineTest {
         assertEquals(false, s.showThinkingCards)
     }
 
+    // --- 气泡样式 / 贴合内容 / 按段拆分（message_style_settings_page） ---
+
+    @Test
+    fun settings_bubbleStyleDefaultsToDefaultWithNoOverrides() {
+        val s = ChatTimelineSettings.fromPrefs { null }
+        assertEquals(ChatBubbleStyle.DEFAULT, s.bubbleStyles.style)
+        assertEquals(BubbleOverrides.NONE, s.bubbleStyles.assistantOverrides)
+        assertEquals(BubbleOverrides.NONE, s.bubbleStyles.userOverrides)
+        assertEquals(false, s.assistantBubbleFitContent)
+        assertEquals(false, s.assistantBubbleSplitParagraphs)
+    }
+
+    @Test
+    fun settings_readsBubbleStyleOverridesAndToggles() {
+        val store = mapOf(
+            "display_chat_message_background_style_v1" to "frosted",
+            "chat_bubble_style_overrides_v1" to """{"cornerRadius":20.0,"solidOpacity":0.5}""",
+            "chat_bubble_style_overrides_user_v1" to """{"textArgbDark":255}""",
+            "display_assistant_bubble_fit_content_v1" to "1",
+            "display_assistant_bubble_split_paragraphs_v1" to "1",
+        )
+        val s = ChatTimelineSettings.fromPrefs { store[it] }
+        assertEquals(ChatBubbleStyle.FROSTED, s.bubbleStyles.style)
+        assertEquals(20.0, s.bubbleStyles.assistantOverrides.cornerRadius!!, 0.0)
+        assertEquals(0.5, s.bubbleStyles.assistantOverrides.solidOpacity!!, 0.0)
+        assertEquals(255, s.bubbleStyles.userOverrides.textArgbDark)
+        assertEquals(true, s.assistantBubbleFitContent)
+        assertEquals(true, s.assistantBubbleSplitParagraphs)
+    }
+
+    @Test
+    fun settings_bubbleStyleToleratesAJsonQuotedName() {
+        // 上游（Flutter 备份）写入的是 jsonEncode 过的字符串。
+        val s = ChatTimelineSettings.fromPrefs { "\"solid\"" }
+        assertEquals(ChatBubbleStyle.SOLID, s.bubbleStyles.style)
+    }
+
     // --- ReasoningSegmentCodec.toggleExpandedAt ---------------------------------
 
     @Test

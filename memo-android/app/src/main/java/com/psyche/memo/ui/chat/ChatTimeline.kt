@@ -108,6 +108,12 @@ data class ChatTimelineSettings(
     val autoCollapseCodeBlock: Boolean = false,
     val autoCollapseCodeBlockLines: Int = 2,
     val mobileCodeBlockWrap: Boolean = false,
+    // 气泡样式（message_style_settings_page）：样式键
+    // `display_chat_message_background_style_v1` + 助手/用户两份覆盖 JSON
+    // （settings_provider.dart:312-315），以及「贴合内容」「按段拆分」两个开关。
+    val bubbleStyles: ChatBubbleStyles = ChatBubbleStyles(),
+    val assistantBubbleFitContent: Boolean = false,
+    val assistantBubbleSplitParagraphs: Boolean = false,
     // 用户（user）消息侧 —— settings_provider.dart:1068-1085（三个默认都是 true），
     // 由 chat_message_widget.dart:1719-1735 的用户头消费。
     val showUserAvatar: Boolean = true,
@@ -133,6 +139,16 @@ data class ChatTimelineSettings(
                 autoCollapseCodeBlock = bool("display_auto_collapse_code_block_v1", false),
                 autoCollapseCodeBlockLines = int("display_auto_collapse_code_block_lines_v1", 2),
                 mobileCodeBlockWrap = bool("display_mobile_code_block_wrap_v1", false),
+                bubbleStyles = ChatBubbleStyles(
+                    style = ChatBubbleStyle.fromWire(
+                        read("display_chat_message_background_style_v1")
+                            ?.trim()?.trim('"')?.takeIf { it.isNotEmpty() },
+                    ),
+                    assistantOverrides = BubbleOverrides.fromJson(read("chat_bubble_style_overrides_v1")),
+                    userOverrides = BubbleOverrides.fromJson(read("chat_bubble_style_overrides_user_v1")),
+                ),
+                assistantBubbleFitContent = bool("display_assistant_bubble_fit_content_v1", false),
+                assistantBubbleSplitParagraphs = bool("display_assistant_bubble_split_paragraphs_v1", false),
                 showUserAvatar = bool("display_show_user_avatar_v1", true),
                 showUserName = bool("display_show_user_name_v1", true),
                 showUserTimestamp = bool("display_show_user_timestamp_v1", true),

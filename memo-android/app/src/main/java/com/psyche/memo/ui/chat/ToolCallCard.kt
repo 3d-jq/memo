@@ -313,7 +313,7 @@ fun ChainOfThoughtToolStep(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     val isAskUser = part.toolName == LocalToolNames.ASK_USER
     val loading = part.loading
     // CMW:5388-5398 —— 待审批时（loading 且命中请求）在轨道位显示工具图标、行尾加
@@ -633,7 +633,7 @@ fun ToolCallCard(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     var showDetail by remember { mutableStateOf(false) }
     var showDeny by remember { mutableStateOf(false) }
     var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }

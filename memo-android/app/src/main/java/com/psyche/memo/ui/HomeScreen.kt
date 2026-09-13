@@ -41,6 +41,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -1919,14 +1920,24 @@ private fun MessageRow(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
             ) {
-                com.psyche.memo.ui.chat.ToolCallCard(
-                    part = toolPart,
-                    hideToolResultImages = timelineSettings.hideToolResultImages,
-                    conversationId = conversationId,
-                    approval = approvalService,
-                    askUser = askUserService,
-                    onRecoveredAnswer = onRecoveredAnswer,
-                )
+                // CMW:3700-3713 —— role == tool 的消息同样套 _ChatSurfaceTheme，
+                // 工具卡的前景色板跟随当前气泡样式。
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.psyche.memo.ui.chat.LocalChatSurfaceFg provides
+                        com.psyche.memo.ui.chat.computeChatSurfaceFg(
+                            cs, isDark, false, timelineSettings.bubbleStyles,
+                        ),
+                    com.psyche.memo.ui.chat.LocalChatBubbleStyles provides timelineSettings.bubbleStyles,
+                ) {
+                    com.psyche.memo.ui.chat.ToolCallCard(
+                        part = toolPart,
+                        hideToolResultImages = timelineSettings.hideToolResultImages,
+                        conversationId = conversationId,
+                        approval = approvalService,
+                        askUser = askUserService,
+                        onRecoveredAnswer = onRecoveredAnswer,
+                    )
+                }
             }
         }
         return
@@ -2038,6 +2049,15 @@ private fun MessageRow(
         // 长按浮层锚定在气泡上（chat_message_widget.dart:1812-1846 mobile
         // long-press → _showUserContextMenu）。
         Box {
+            // CMW:3700-3713 —— 整条消息套一层 _ChatSurfaceTheme：卡片类子组件
+            // 通过继承拿到本角色的前景色板；气泡外壳再叠 LocalChatBubbleStyles。
+            val surfaceFg = remember(timelineSettings.bubbleStyles, isDark, isUser) {
+                com.psyche.memo.ui.chat.computeChatSurfaceFg(cs, isDark, isUser, timelineSettings.bubbleStyles)
+            }
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.psyche.memo.ui.chat.LocalChatSurfaceFg provides surfaceFg,
+                com.psyche.memo.ui.chat.LocalChatBubbleStyles provides timelineSettings.bubbleStyles,
+            ) {
             Column(
                 modifier = Modifier
                     .then(
@@ -2045,15 +2065,6 @@ private fun MessageRow(
                         // 助手块默认撑满整行（CMW:2478-2484
                         // _assistantBlockWidth，assistantBubbleFitContent 默认关）。
                         else Modifier.fillMaxWidth()
-                    )
-                    .background(
-                        // CMW:2394-2398 —— 用户 primary@0.15(dark)/0.08(light)，
-                        // 助手无底色（bareOnDefault）。
-                        color = if (isUser) cs.primary.copy(
-                            alpha = if (isDark) ChatStyleSpec.USER_BUBBLE_ALPHA_DARK
-                            else ChatStyleSpec.USER_BUBBLE_ALPHA_LIGHT,
-                        ) else Color.Transparent,
-                        shape = RoundedCornerShape(ChatStyleSpec.BUBBLE_CORNER_DP.dp),
                     )
                     .combinedClickable(
                         enabled = isUser,
@@ -2064,65 +2075,87 @@ private fun MessageRow(
                             }
                         },
                         onClick = {},
-                    )
-                    // CMW:2393 —— 气泡内边距 all 12；助手是 bareOnDefault，
-                    // _buildSharedChatSurface 直接返回无内边距的 child，只有用户
-                    // 气泡才留这 12（CMW:3824-3826），否则助手内容会窄一圈。
-                    .then(
-                        if (isUser) Modifier.padding(ChatStyleSpec.BUBBLE_PADDING_DP.dp)
-                        else Modifier
                     ),
             ) {
                 // 图片附件（chat_message_widget.dart _buildAttachmentPreview
-                // ImagePart 分支）：整组渲染，点击可跨图翻页查看。
+                // ImagePart 分支）：整组渲染，点击可跨图翻页查看。用户侧的附件
+                // 是文本气泡的**兄弟**（CMW:1835-1843，同一个 0.75w 列），助手侧
+                // 每块图片自带气泡（_buildAssistantImageBlock CMW:2545-2566，
+                // 恒定撑满整行，不受 assistantBubbleFitContent 影响）。
                 if (msg.parts.any { it is ImagePart }) {
-                    com.psyche.memo.ui.chat.MessageImageAttachments(
-                        parts = msg.parts,
-                        onOpenViewer = { uris, index -> viewerState = uris to index },
-                    )
+                    if (isUser) {
+                        com.psyche.memo.ui.chat.MessageImageAttachments(
+                            parts = msg.parts,
+                            onOpenViewer = { uris, index -> viewerState = uris to index },
+                        )
+                    } else {
+                        com.psyche.memo.ui.chat.ChatBubbleSurface(
+                            isUser = false,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            com.psyche.memo.ui.chat.MessageImageAttachments(
+                                parts = msg.parts,
+                                onOpenViewer = { uris, index -> viewerState = uris to index },
+                            )
+                        }
+                    }
                 }
                 if (isUser) {
-                    for (part in msg.parts) {
-                        when (part) {
-                            is TextPart -> {
-                                // visual 规则在显示层改写（chat_message_widget.dart L1291）。
-                                val visual = remember(part.text) {
-                                    com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
-                                        part.text,
-                                        assistantRegexRulesCache,
-                                        com.psyche.memo.data.model.AssistantRegexScope.USER,
-                                        com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
-                                    )
+                    // CMW:1752-1765 —— 只有正文非空才有文本气泡；纯图片的用户消息
+                    // 不该留一个空底色块（原版 textBubble == null）。
+                    val userHasText = msg.parts.any { it is TextPart && it.text.isNotEmpty() }
+                    val userContent: @Composable () -> Unit = {
+                        for (part in msg.parts) {
+                            when (part) {
+                                is TextPart -> {
+                                    // visual 规则在显示层改写（chat_message_widget.dart L1291）。
+                                    val visual = remember(part.text) {
+                                        com.psyche.memo.data.model.AssistantRegexApplier.applyAll(
+                                            part.text,
+                                            assistantRegexRulesCache,
+                                            com.psyche.memo.data.model.AssistantRegexScope.USER,
+                                            com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
+                                        )
+                                    }
+                                    if (timelineSettings.enableUserMarkdown) {
+                                        // CMW:2046-2054 —— 用户正文 15.5 / 行高 1.45×15.5。
+                                        com.psyche.memo.ui.markdown.MarkdownText(
+                                            markdown = visual,
+                                            baseFontSize = ChatStyleSpec.USER_TEXT_SP,
+                                            baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
+                                            onCitationTap = handleCitationTap,
+                                            citationInfoResolver = citationResolver,
+                                            codeBlock = codeBlockConfig,
+                                        )
+                                    } else {
+                                        // 关掉 Markdown：同字号/行高的纯文本（CMW:2055-2066）。
+                                        Text(
+                                            text = visual,
+                                            style = TextStyle(
+                                                fontSize = ChatStyleSpec.USER_TEXT_SP.sp,
+                                                lineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP.sp,
+                                                color = com.psyche.memo.ui.chat.chatSurfacePlainTextColor(isUser = true),
+                                            ),
+                                        )
+                                    }
                                 }
-                                if (timelineSettings.enableUserMarkdown) {
-                                    // CMW:2046-2054 —— 用户正文 15.5 / 行高 1.45×15.5。
-                                    com.psyche.memo.ui.markdown.MarkdownText(
-                                        markdown = visual,
-                                        baseFontSize = ChatStyleSpec.USER_TEXT_SP,
-                                        baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
-                                        onCitationTap = handleCitationTap,
-                                        citationInfoResolver = citationResolver,
-                                        codeBlock = codeBlockConfig,
-                                    )
-                                } else {
-                                    // 关掉 Markdown：同字号/行高的纯文本（CMW:2055-2066）。
-                                    Text(
-                                        text = visual,
-                                        style = TextStyle(
-                                            fontSize = ChatStyleSpec.USER_TEXT_SP.sp,
-                                            lineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP.sp,
-                                            color = cs.onSurface,
-                                        ),
-                                    )
-                                }
+                                is ImagePart -> Unit // 已整组渲染在气泡上方
+                                else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                             }
-                            is ImagePart -> Unit // 已整组渲染在气泡顶部
-                            else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                         }
+                    }
+                    // CMW:2382-2403 _buildBubbleContainer(isUser: true)：整条用户
+                    // 正文一个气泡（primary@0.15/0.08 + r16 + 内边距 12）。
+                    if (userHasText) {
+                        com.psyche.memo.ui.chat.ChatBubbleSurface(isUser = true) { userContent() }
+                    } else {
+                        userContent()
                     }
                 } else {
                     // CMW:2951-3009 —— 文本气泡与思考卡按 part 到达顺序交替出现，
-                    // addVisible 在相邻块之间插 8pt；助手正文 15.7 / 行高 1.5×15.7。
+                    // addVisible 在相邻块之间插 8pt；每段文本各自一个气泡
+                    // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs
+                    // 打开时按段落再拆）。助手正文 15.7 / 行高 1.5×15.7。
                     assistantBlocks.forEachIndexed { index, block ->
                         if (index > 0) Spacer(Modifier.height(8.dp))
                         when (block) {
@@ -2136,27 +2169,49 @@ private fun MessageRow(
                                         com.psyche.memo.data.model.AssistantRegexApplier.Target.VISUAL,
                                     )
                                 }
-                                if (timelineSettings.enableAssistantMarkdown) {
-                                    com.psyche.memo.ui.markdown.MarkdownText(
-                                        markdown = visual,
-                                        baseFontSize = 15.7f,
-                                        baseLineHeight = 23.55f,
-                                        onCitationTap = handleCitationTap,
-                                        citationInfoResolver = citationResolver,
-                                        tableActions = tableActions,
-                                        codeBlock = codeBlockConfig,
-                                        codeBlockActions = codeBlockActions,
-                                    )
-                                } else {
-                                    // 关掉 Markdown：同字号/行高纯文本（CMW:2432-2441）。
-                                    Text(
-                                        text = visual,
-                                        style = TextStyle(
-                                            fontSize = 15.7.sp,
-                                            lineHeight = 23.55.sp,
-                                            color = cs.onSurface,
-                                        ),
-                                    )
+                                // CMW:2505-2520 —— 拆段开关只在助手正文生效。
+                                val parts = remember(visual, timelineSettings.assistantBubbleSplitParagraphs) {
+                                    if (timelineSettings.assistantBubbleSplitParagraphs) {
+                                        com.psyche.memo.ui.chat.splitAssistantParagraphs(visual)
+                                    } else {
+                                        listOf(visual)
+                                    }
+                                }
+                                parts.forEachIndexed { partIndex, part ->
+                                    if (partIndex > 0) Spacer(Modifier.height(8.dp))
+                                    com.psyche.memo.ui.chat.ChatBubbleSurface(
+                                        isUser = false,
+                                        // CMW:2478-2484 _assistantBlockWidth：
+                                        // 贴合内容时不给宽度约束，气泡裹住文字。
+                                        modifier = if (timelineSettings.assistantBubbleFitContent) {
+                                            Modifier
+                                        } else {
+                                            Modifier.fillMaxWidth()
+                                        },
+                                    ) {
+                                        if (timelineSettings.enableAssistantMarkdown) {
+                                            com.psyche.memo.ui.markdown.MarkdownText(
+                                                markdown = part,
+                                                baseFontSize = 15.7f,
+                                                baseLineHeight = 23.55f,
+                                                onCitationTap = handleCitationTap,
+                                                citationInfoResolver = citationResolver,
+                                                tableActions = tableActions,
+                                                codeBlock = codeBlockConfig,
+                                                codeBlockActions = codeBlockActions,
+                                            )
+                                        } else {
+                                            // 关掉 Markdown：同字号/行高纯文本（CMW:2432-2441）。
+                                            Text(
+                                                text = part,
+                                                style = TextStyle(
+                                                    fontSize = 15.7.sp,
+                                                    lineHeight = 23.55.sp,
+                                                    color = com.psyche.memo.ui.chat.chatSurfacePlainTextColor(),
+                                                ),
+                                            )
+                                        }
+                                    }
                                 }
                             }
                             is com.psyche.memo.ui.chat.AssistantBlock.Thinking ->
@@ -2192,56 +2247,58 @@ private fun MessageRow(
                 // Languages 标题行 + 译文。
                 if (!isUser && !msg.translation.isNullOrEmpty()) {
                     Spacer(Modifier.height(12.dp))
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                cs.primaryContainer.copy(alpha = 0.28f),
-                                RoundedCornerShape(16.dp),
-                            )
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                    // CMW:3025-3038 —— 译文卡走同一个 _buildSharedChatSurface：
+                    // default 样式用 primaryContainer@0.25(dark)/0.30(light)，
+                    // 选了 frosted/solid 时一起换成气泡皮肤。
+                    com.psyche.memo.ui.chat.ChatBubbleSurface(
+                        isUser = false,
+                        modifier = Modifier.fillMaxWidth(),
+                        defaultColor = cs.primaryContainer.copy(alpha = if (isDark) 0.25f else 0.30f),
+                        padding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { translationExpanded = !translationExpanded }
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                        ) {
-                            Icon(
-                                Lucide.Languages,
-                                contentDescription = null,
-                                tint = cs.onSurface.copy(alpha = 0.88f),
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = stringResource(UiR.string.chat_message_widget_translation),
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = cs.onSurface.copy(alpha = 0.88f),
-                                ),
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Icon(
-                                if (translationExpanded) Lucide.ChevronDown else Lucide.ChevronRight,
-                                contentDescription = null,
-                                tint = cs.onSurface.copy(alpha = 0.88f),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                        if (translationExpanded) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = msg.translation,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontSize = 15.5.sp,
-                                    lineHeight = 21.7.sp,
-                                    color = cs.onSurface.copy(alpha = 0.85f),
-                                ),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            )
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { translationExpanded = !translationExpanded }
+                                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                            ) {
+                                Icon(
+                                    Lucide.Languages,
+                                    contentDescription = null,
+                                    tint = cs.onSurface.copy(alpha = 0.88f),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(UiR.string.chat_message_widget_translation),
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = cs.onSurface.copy(alpha = 0.88f),
+                                    ),
+                                )
+                                Spacer(Modifier.weight(1f))
+                                Icon(
+                                    if (translationExpanded) Lucide.ChevronDown else Lucide.ChevronRight,
+                                    contentDescription = null,
+                                    tint = cs.onSurface.copy(alpha = 0.88f),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            if (translationExpanded) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = msg.translation,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 15.5.sp,
+                                        lineHeight = 21.7.sp,
+                                        color = cs.onSurface.copy(alpha = 0.85f),
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -2253,6 +2310,7 @@ private fun MessageRow(
                         onTap = { showCitations = true },
                     )
                 }
+            }
             }
             if (showContextMenu) {
                 com.psyche.memo.ui.chat.UserContextMenu(

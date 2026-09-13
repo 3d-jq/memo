@@ -228,7 +228,7 @@ fun AskUserToolCard(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     var expanded by remember { mutableStateOf(true) }
     val answered = part.content?.trim()?.isNotEmpty() == true && !part.loading
     // didUpdateWidget：流式期间从未答转到已答时自动展开。
@@ -327,7 +327,7 @@ internal fun AskUserInlineBody(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     // ask_user_interaction_service.dart pendingRequests[part.id] —— 进行中的提问
     // 请求给出权威问题集；无请求时退回到参数的存储问题（Dart 6273-6277）。
     val pendingMap by remember(askUser) {
@@ -476,7 +476,7 @@ private fun AskUserQuestionView(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     val isMulti = question.kind == AskUserQuestionKind.Multi
 
     Column(horizontalAlignment = Alignment.Start) {
@@ -521,7 +521,7 @@ private fun AskUserQuestionView(
 private fun AskUserAnsweredQuestion(question: AskUserQuestion, answer: String) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     val displayAnswer = if (answer.trim().isEmpty()) {
         stringResource(UiR.string.ask_user_card_skipped)
     } else {
@@ -565,7 +565,7 @@ private fun AskUserOptionRow(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     val bg = if (selected) cs.primary.copy(alpha = 0.09f) else Color.Transparent
     CardPress(
         onTap = if (disabled) null else onTap,
@@ -622,7 +622,7 @@ private fun AskUserOtherRow(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     val bg = if (selected) cs.primary.copy(alpha = 0.09f) else Color.Transparent
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -678,7 +678,7 @@ private fun AskUserOtherRow(
 private fun AskUserIndexBadge(index: Int, selected: Boolean) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     Box(
         modifier = Modifier
             .size(24.dp)
@@ -717,7 +717,7 @@ private fun AskUserIndexBadge(index: Int, selected: Boolean) {
 private fun AskUserSkipPill(selected: Boolean, onTap: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     CardPress(onTap = onTap, isDark = isDark, radius = 7.dp) {
         Text(
             text = stringResource(UiR.string.ask_user_card_skip),

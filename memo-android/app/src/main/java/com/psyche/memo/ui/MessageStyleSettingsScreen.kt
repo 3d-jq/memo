@@ -70,9 +70,10 @@ import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.R as UiR
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import com.psyche.memo.ui.chat.BubbleOverrides
+import com.psyche.memo.ui.chat.ChatBubbleStyle
+import com.psyche.memo.ui.chat.ResolvedBubbleStyle
+import com.psyche.memo.ui.chat.resolveBubbleStyle
 
 /**
  * 1:1 port of message_style_settings_page.dart — style picker (Default /
@@ -90,73 +91,8 @@ import kotlinx.serialization.json.put
 
 // --------------------------------------------------------------- overrides
 
-private data class BubbleOverrides(
-    val backgroundArgbLight: Int? = null,
-    val backgroundArgbDark: Int? = null,
-    val borderArgbLight: Int? = null,
-    val borderArgbDark: Int? = null,
-    val textArgbLight: Int? = null,
-    val textArgbDark: Int? = null,
-    val borderWidth: Double? = null,
-    val borderOpacity: Double? = null,
-    val cornerRadius: Double? = null,
-    val blurSigma: Double? = null,
-    val frostedOpacity: Double? = null,
-    val solidOpacity: Double? = null,
-) {
-    fun toJson(): String {
-        val obj = buildJsonObject {
-            backgroundArgbLight?.let { put("backgroundArgbLight", it) }
-            backgroundArgbDark?.let { put("backgroundArgbDark", it) }
-            borderArgbLight?.let { put("borderArgbLight", it) }
-            borderArgbDark?.let { put("borderArgbDark", it) }
-            textArgbLight?.let { put("textArgbLight", it) }
-            textArgbDark?.let { put("textArgbDark", it) }
-            borderWidth?.let { put("borderWidth", it) }
-            borderOpacity?.let { put("borderOpacity", it) }
-            cornerRadius?.let { put("cornerRadius", it) }
-            blurSigma?.let { put("blurSigma", it) }
-            frostedOpacity?.let { put("frostedOpacity", it) }
-            solidOpacity?.let { put("solidOpacity", it) }
-        }
-        return obj.toString()
-    }
-
-    companion object {
-        fun fromJson(raw: String?): BubbleOverrides {
-            if (raw.isNullOrEmpty()) return BubbleOverrides()
-            return runCatching {
-                val obj = Json.parseToJsonElement(raw) as? kotlinx.serialization.json.JsonObject
-                    ?: return BubbleOverrides()
-                fun i(k: String) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt()
-                fun d(k: String) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
-                BubbleOverrides(
-                    backgroundArgbLight = i("backgroundArgbLight"),
-                    backgroundArgbDark = i("backgroundArgbDark"),
-                    borderArgbLight = i("borderArgbLight"),
-                    borderArgbDark = i("borderArgbDark"),
-                    textArgbLight = i("textArgbLight"),
-                    textArgbDark = i("textArgbDark"),
-                    borderWidth = d("borderWidth"),
-                    borderOpacity = d("borderOpacity"),
-                    cornerRadius = d("cornerRadius"),
-                    blurSigma = d("blurSigma"),
-                    frostedOpacity = d("frostedOpacity"),
-                    solidOpacity = d("solidOpacity"),
-                )
-            }.getOrDefault(BubbleOverrides())
-        }
-    }
-}
-
-private data class ResolvedStyle(
-    val background: Color,
-    val border: Color,
-    val text: Color,
-    val borderWidth: Double,
-    val radius: Double,
-    val blurSigma: Double,
-)
+// 样式 / 覆盖 / 解析三件套与聊天页共用 `ui.chat.ChatBubbleStyle`（唯一事实源），
+// 这里只保留设置页自己的预览配色包装。
 
 /** Base colors for the *editing* brightness (theme-following fallbacks). */
 private data class PreviewColors(
@@ -175,25 +111,20 @@ private fun resolveStyle(
     dark: Boolean,
     style: String,
     overrides: BubbleOverrides,
-): ResolvedStyle {
-    val opacity = when (style) {
-        "frosted" -> overrides.frostedOpacity ?: 0.66
-        else -> overrides.solidOpacity ?: 1.0
-    }
-    val borderOpacity = overrides.borderOpacity ?: if (style == "frosted") 0.14 else 0.16
-    return ResolvedStyle(
-        background = colors
-            .background(if (dark) overrides.backgroundArgbDark else overrides.backgroundArgbLight)
-            .copy(alpha = opacity.toFloat()),
-        border = colors
-            .border(if (dark) overrides.borderArgbDark else overrides.borderArgbLight)
-            .copy(alpha = borderOpacity.toFloat()),
-        text = colors.text(if (dark) overrides.textArgbDark else overrides.textArgbLight),
-        borderWidth = overrides.borderWidth ?: 0.8,
-        radius = overrides.cornerRadius ?: 16.0,
-        blurSigma = overrides.blurSigma ?: 14.0,
-    )
+): ResolvedBubbleStyle {
+    // 预览用的是「编辑中的亮度」的主题色，直接喂给共享解析器（ColorScheme 只
+    // 参与回退色，这里换成预览色）。
+    val cs = previewColorScheme(colors)
+    return resolveBubbleStyle(cs, dark, ChatBubbleStyle.fromWire(style), overrides)
 }
+
+/** 把预览用的三个基准色包成一个只读 [ColorScheme]，供共享解析器取回退值。 */
+private fun previewColorScheme(colors: PreviewColors): ColorScheme =
+    androidx.compose.material3.lightColorScheme(
+        surfaceContainerHigh = colors.bgBase,
+        outlineVariant = colors.borderBase,
+        onSurface = colors.textBase,
+    )
 
 // --------------------------------------------------------------- screen
 
@@ -210,8 +141,8 @@ fun MessageStyleSettingsScreen(
     var splitParagraphs by remember { mutableStateOf(false) }
     var editingDark by remember { mutableStateOf(systemDark) }
     var editingUser by remember { mutableStateOf(false) }
-    var assistantOverrides by remember { mutableStateOf(BubbleOverrides()) }
-    var userOverrides by remember { mutableStateOf(BubbleOverrides()) }
+    var assistantOverrides by remember { mutableStateOf(BubbleOverrides.NONE) }
+    var userOverrides by remember { mutableStateOf(BubbleOverrides.NONE) }
     var showResetConfirm by remember { mutableStateOf(false) }
     var colorPicker by remember { mutableStateOf<String?>(null) } // "bg" | "border" | "text"
 
@@ -247,8 +178,8 @@ fun MessageStyleSettingsScreen(
     }
     // settings_provider.dart:2844-2860 — reset clears both roles.
     fun resetOverrides() {
-        assistantOverrides = BubbleOverrides()
-        userOverrides = BubbleOverrides()
+        assistantOverrides = BubbleOverrides.NONE
+        userOverrides = BubbleOverrides.NONE
         container.preferenceRepository.writeJson("chat_bubble_style_overrides_v1", "{}")
         container.preferenceRepository.remove("chat_bubble_style_overrides_user_v1")
     }
@@ -750,7 +681,7 @@ private fun PreviewPanel(
 }
 
 @Composable
-private fun Bubble(label: String, resolved: ResolvedStyle, isUser: Boolean) {
+private fun Bubble(label: String, resolved: ResolvedBubbleStyle, isUser: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,

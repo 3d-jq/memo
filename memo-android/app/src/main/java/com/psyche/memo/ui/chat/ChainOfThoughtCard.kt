@@ -113,7 +113,7 @@ fun ChainOfThoughtCard(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
 
     // _visibleChatTimelineSteps 4406-4443。审批态驱动可见性：未执行完的工具卡只在
     // 等待审批时保留（timeline_visibility.isTimelineToolVisible pendingApproval）。
@@ -457,7 +457,7 @@ fun ChainOfThoughtReasoningStep(
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg(cs, isDark)
+    val fg = chatSurfaceFg()
     val state = reasoningStepState(step.expanded, step.loading)
     val display = sanitizeReasoning(step.text)
     // RikkaHub ChatMessageReasoning.kt::rememberReasoningState 的计时逻辑移植：
