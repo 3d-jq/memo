@@ -75,7 +75,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - **悬浮语音播放器（用户点名「语音播放这个样式」）**：`TtsEngine`/`TtsPlaybackController`（分块朗读、暂停=停+重起当前块、±15s 定位、0.8–2.0 变速、200ms/字符估算的时间轴）+ 悬浮胶囊 1:1（双弧进度环/展开控制条/可拖动/自动收起），`TtsPlayer.init` 在 `MemoApplication.onCreate`
 - 聊天周边：Select&Copy/WebView 预览/分享/BoundedLargeTextView、助手壁纸、推理预算全链路、清空/压缩上下文、记忆关于+种子、建议气泡、消息多选+导出（文本）
 - 抽屉全局搜索模式、临时聊天三态、长按会话 sheet + 多选栏、流式扫光文字（用户点名，替代原版三点）、iOS 风格控件 + 触觉反馈 + Haptics
-- **思考卡展开态 + 流式自动跟随（2026-09-13 用户实测两处：思考中点击卡片展不开「会打架」／大模型输出时上滑被自己拉回底部）**：展开态以 `ChatViewModel.segmentExpanded` 为**权威态**（`ReasoningSegmentCodec.resolveExpanded`：新段 `!autoCollapse`、只有「结束转变」那一次采信流式侧的值）——**勿退回「按 handler 重建的 expanded 编码」**（§4.41）；自动跟随＝**按位置跟随 + 手指在屏上绝不程序化滚动**（位置判据照 RikkaHub `ChatList.kt:236-243/284`，旗标/容差/空闲计时照原版）——守卫必须同时有 `!pointerDown`（`Modifier.pointerInput` 的 `awaitFirstDown` 硬标志），**勿只靠 `interactionSource` 或 `snapshotFlow { isScrollInProgress }`**（前两版都因此失效），贴底用 `requestScrollToItem`、**勿用 `animateScrollToItem`** 做跟随（§4.42）
+- **思考卡展开态 + 流式自动跟随（2026-09-13 用户实测两处：思考中点击卡片展不开「会打架」／大模型输出时上滑被自己拉回底部）**：展开态以 `ChatViewModel.segmentExpanded` 为**权威态**（`ReasoningSegmentCodec.resolveExpanded`：新段 `!autoCollapse`、只有「结束转变」那一次采信流式侧的值）——**勿退回「按 handler 重建的 expanded 编码」**（§4.41）；自动跟随＝**按位置跟随 + 手指在屏上绝不程序化滚动**（位置判据照 RikkaHub `ChatList.kt:236-243/284`，旗标/容差/空闲计时照原版）——守卫必须同时有 `!pointerDown`（`Modifier.pointerInput` 的 `awaitFirstDown` 硬标志），**勿只靠 `interactionSource` 或 `snapshotFlow { isScrollInProgress }`**（前两版都因此失效），贴底用 `requestScrollToItem(messages.lastIndex, Int.MAX_VALUE)` —— **`scrollToItem(index)` 是把该条对齐到视口顶部，传末条下标≠到底**（长消息会跳到开头，看起来「视口往上跑」，2026-09-13 日志实证），**勿用 `animateScrollToItem`** 做跟随（§4.42）
 
 设置、系统与服务壳
 - provider 管理页、语音服务/备份/赞助 UI 壳（BackupScreen/LocalSnapshotsScreen/SponsorScreen）+ TTS/ASR 编辑器全屏化

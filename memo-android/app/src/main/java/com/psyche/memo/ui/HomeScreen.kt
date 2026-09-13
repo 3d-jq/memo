@@ -874,9 +874,18 @@ fun ChatContent(
     }
     fun tailAtBottom(withinDp: Int): Boolean =
         tailBottomGapPx() <= with(scrollDensity) { withinDp.dp.toPx() }
-    /** 到底：越界下标会被 LazyList 夹到 maxScrollExtent（RikkaHub ChatList.kt:284 同款）。 */
+    /**
+     * 到底。**坑（2026-09-13 日志实证）**：`requestScrollToItem(index)` 是把该 item 对齐
+     * 到**视口顶部**（Compose KDoc：正的 `scrollOffset` 表示 item 滚到视口上方），所以传
+     * 「末条下标」**不等于**到底 —— 长消息会跳到这条消息的开头，看起来就是「视口往上跑」
+     * （日志：`initialJump(lastIndex)` 之后 `firstIdx=16 firstOff=0 tailGap=1282px`）。
+     * 真到底必须把 `scrollOffset` 顶到 `Int.MAX_VALUE`，让 LazyList 自己夹到
+     * maxScrollExtent。RikkaHub 用「越界下标 + 0」绕开（`ChatList.kt:284`），但我们这里
+     * 用「末条 + MAX_VALUE」语义更明确，也不依赖越界下标的实现细节。
+     */
     fun scrollTimelineToBottom() {
-        timelineListState.requestScrollToItem(messages.size + 10)
+        if (messages.isEmpty()) return
+        timelineListState.requestScrollToItem(messages.lastIndex, Int.MAX_VALUE)
     }
     /** scroll_controller.dart `_navButtonsHideDelayMs = 2000`。 */
     fun armNavHideTimer() {
@@ -934,7 +943,8 @@ fun ChatContent(
     var listInitialized by remember(conversationId) { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(messages) {
         if (!listInitialized && messages.isNotEmpty()) {
-            timelineListState.requestScrollToItem(messages.lastIndex)
+            // 打开会话落到**真正的底部**（同样必须顶 offset，见 scrollTimelineToBottom）。
+            timelineListState.requestScrollToItem(messages.lastIndex, Int.MAX_VALUE)
             listInitialized = true
         }
     }
@@ -1458,6 +1468,7 @@ fun ChatContent(
                                 coroutineScope.launch {
                                     timelineListState.animateScrollToItem(
                                         (messages.size - 1).coerceAtLeast(0),
+                                        Int.MAX_VALUE,
                                     )
                                 }
                                 // scroll_controller.dart:488-496 forceScrollToBottom ——
