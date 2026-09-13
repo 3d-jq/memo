@@ -1259,8 +1259,8 @@ class ChatViewModel(
             // UI handler folds every round into one parts list).
             val allParts = mutableListOf<MessagePart>()
             val allSegments = mutableListOf<ReasoningSegment>()
-            // 新一轮生成：清空 segment 初始态跟踪（见 encodeSegments）。
-            seenSegmentIndices.clear()
+            // 新一轮生成：重置 segment 权威展开态（见 encodeSegments）。
+            resetReasoningExpandedState(emptyList())
             var persisted = false
             fun persistOnce(parts: List<MessagePart>, usage: UsageStats?, segmentsJson: String? = null) {
                 if (persisted) return
@@ -2075,9 +2075,8 @@ class ChatViewModel(
                 container.streamingConversationIds.value + conversationId
             val allParts = updatedParts.toMutableList()
             val allSegments = ReasoningSegmentCodec.decode(targetUi.reasoningSegmentsJson).toMutableList()
-            // 续写：已有 segment 视作「已存在」，保留其展开/折叠态（见 encodeSegments）。
-            seenSegmentIndices.clear()
-            seenSegmentIndices.addAll(allSegments.indices)
+            // 续写：已有 segment 视作「已存在」，用库里的展开/折叠态初始化权威态。
+            resetReasoningExpandedState(allSegments)
             var persisted = false
             fun persistFinal(parts: List<MessagePart>, segmentsJson: String? = null) {
                 if (persisted) return
@@ -2576,29 +2575,42 @@ class ChatViewModel(
     }
 
     /**
-     * 已在本轮生成中出现过的 segment 下标。新增 segment 才给初始展开态，已存在的
-     * 保留其当前 `expanded`（用户的展开/折叠点击）——对应 Flutter
-     * `stream_controller.dart:776`「Do not reset r.expanded here - preserve user's
-     * toggle state during streaming」。每次开新会话生成时清空。
+     * 逐下标的**权威展开态** —— 等价于 Dart 里被就地改写的
+     * `ReasoningSegmentData.expanded`（`stream_controller.dart` 94-97 的
+     * `_reasoningSegments` 映射）。流式期间的展开/折叠以它为准，语义见
+     * [ReasoningSegmentCodec.resolveExpanded]。每次开新会话生成 / 续写时重置。
      */
-    private val seenSegmentIndices = HashSet<Int>()
+    private val segmentExpanded = HashMap<Int, Boolean>()
+
+    /** 上一次编码出的 segment 列表（交给 [ReasoningSegmentCodec.resolveExpanded] 判新段/结束转变）。 */
+    private var lastEncodedSegments: List<ReasoningSegment> = emptyList()
 
     /**
-     * stream_controller.dart 771/776 —— 新 segment 的初始展开态 =
-     * `!autoCollapsePrompt`；已存在的 segment **不重置** expanded，从而保留用户在
-     * 流式过程中手动展开/折叠的点击。此前每次编码都把所有 segment 重算成
-     * `!autoCollapse`，导致手动折叠的思考卡在下次增量/落库时被改回展开（冷启动
-     * 后即为展开态）。
+     * 新一轮生成 / 续写开始：用当时的 segment 重置权威展开态（续写时库里读出的
+     * 展开/折叠态原样保留）。
+     */
+    private fun resetReasoningExpandedState(segments: List<ReasoningSegment>) {
+        segmentExpanded.clear()
+        segments.forEachIndexed { index, segment -> segmentExpanded[index] = segment.expanded }
+        lastEncodedSegments = segments
+    }
+
+    /**
+     * stream_controller.dart 771/776 —— 编码前的展开态以 [segmentExpanded] 为准：
+     * 只有**新段**与**结束转变**采用流式 handler 传来的值，其余（含用户点击）沿用
+     * 权威态。此前直接用 handler 重建出的 `expanded`，导致用户在思考中点击展开被
+     * 下一个增量打回（「点卡片展开会打架」）。
      */
     private fun encodeSegments(segments: List<ReasoningSegment>): String? {
         val initialExpanded = !readBool(AUTO_COLLAPSE_THINKING_KEY, true)
-        return ReasoningSegmentCodec.encode(
-            ReasoningSegmentCodec.applyInitialExpanded(
-                segments,
-                seenSegmentIndices,
-                initialExpanded,
-            ),
+        val resolved = ReasoningSegmentCodec.resolveExpanded(
+            segments,
+            lastEncodedSegments,
+            segmentExpanded,
+            initialExpanded,
         )
+        lastEncodedSegments = resolved
+        return ReasoningSegmentCodec.encode(resolved)
     }
 
     /**
@@ -2624,8 +2636,13 @@ class ChatViewModel(
         val msgs = _messages.value
         val idx = msgs.indexOfFirst { it.id == messageId }
         if (idx < 0) return
+        val displayed = ReasoningSegmentCodec.decode(msgs[idx].reasoningSegmentsJson)
+            .getOrNull(segmentIndex)?.expanded ?: true
         val json = ReasoningSegmentCodec.toggleExpandedAt(msgs[idx].reasoningSegmentsJson, segmentIndex)
             ?: msgs[idx].reasoningSegmentsJson
+        // 正在流式的这条消息：把翻转结果写进权威展开态，否则下一个增量编码会按
+        // handler 重建的 expanded 覆盖掉（Dart 里点的是同一个对象，天然保留）。
+        if (msgs[idx].isStreaming) segmentExpanded[segmentIndex] = !displayed
         _messages.value = msgs.map { if (it.id == messageId) it.copy(reasoningSegmentsJson = json) else it }
         if (isTemporary) return
         viewModelScope.launch {

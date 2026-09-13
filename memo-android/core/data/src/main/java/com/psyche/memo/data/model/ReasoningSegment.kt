@@ -88,17 +88,38 @@ object ReasoningSegmentCodec {
      * toggle always takes effect, flipping the displayed state.
      */
     /**
-     * stream_controller.dart 771/776 —— 决定一组 segment 在**编码前**的展开态：
-     * 下标不在 [seenIndices] 里的视为**新段**，赋予 [initialExpanded]；已存在的段
-     * 保留其当前 `expanded`（用户在流式过程中手动展开/折叠的点击）。[seenIndices]
-     * 会被就地更新（新出现的下标加入其中），返回处理后的列表。
+     * 决定一组 segment 在**编码前**的展开态（stream_controller.dart 771-806 /
+     * 1331-1369 的等价物）。
+     *
+     * Dart 里 segment 是**同一个可变对象**：流式增量只往 `text` 上追加，用户点击
+     * 就地翻转 `expanded`（home_page_controller.dart 2268-2284），只有「结束」转变
+     * （`finishedAt` 从 null 变为有值）才由流式代码写 `expanded = false`
+     * （自动折叠开启时）。所以编码前必须分三种情形：
+     *  - 下标首次出现（新段）→ 赋 `initialExpanded`（= `!autoCollapse`，Dart 800）；
+     *  - 该段发生**结束转变**（[previous] 里 `finishedAt == null`，现在有值）→
+     *    采用传入值（Dart 的 finish 折叠，L853/L1232/L1280）；
+     *  - 其余（普通增量重建、用户点击）→ 采用 [state] 里记录的当前值并**忽略**传入
+     *    值 —— 这就是 Dart 771 那句「Do not reset r.expanded here - preserve
+     *    user's toggle state during streaming」。
+     *
+     * 修的问题：此前只按下标「出现没出现过」赋初值，其余沿用**传入**的 `expanded`，
+     * 而传入值来自流式 handler 的重新构造（它不知道用户点过），于是思考中点击展开
+     * 会被下一个增量打回原状。
+     *
+     * @param previous 上一次编码的结果（用于识别新段与结束转变）
+     * @param state 逐下标的权威展开态，由调用方持有（新一轮生成/续写开始时用当时的
+     *   segment 初始化），本函数就地更新
      */
-    fun applyInitialExpanded(
+    fun resolveExpanded(
         segments: List<ReasoningSegment>,
-        seenIndices: MutableSet<Int>,
+        previous: List<ReasoningSegment>,
+        state: MutableMap<Int, Boolean>,
         initialExpanded: Boolean,
     ): List<ReasoningSegment> = segments.mapIndexed { index, segment ->
-        if (seenIndices.add(index)) segment.copy(expanded = initialExpanded) else segment
+        val prev = previous.getOrNull(index)
+        val justFinished = prev != null && prev.finishedAt == null && segment.finishedAt != null
+        if (justFinished) state[index] = segment.expanded
+        segment.copy(expanded = state.getOrPut(index) { initialExpanded })
     }
 
     /**

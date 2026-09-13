@@ -849,40 +849,81 @@ fun ChatContent(
 
     // ---- 滚动导航 + 流式跟随（scroll_nav_buttons.dart / scroll_controller.dart） ----
     var navVisible by remember { mutableStateOf(false) }
+    // _autoStickToBottom / _isUserScrolling（scroll_controller.dart:274-284）。
     var autoStick by remember { mutableStateOf(true) }
+    var userScrolling by remember { mutableStateOf(false) }
     var navHideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var idleStickJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val scrollDensity = LocalDensity.current
+    // scroll_controller.dart:306-310 isNearBottom —— 距底部还有多少像素（末条不在视口
+    // 里就是「远」）。列表底部 contentPadding 计入后正好等于 maxScrollExtent-pixels。
+    fun bottomGapPx(): Float {
+        val info = timelineListState.layoutInfo
+        val last = info.visibleItemsInfo.lastOrNull()
+        return if (last == null || last.index != info.totalItemsCount - 1) Float.MAX_VALUE
+        else (last.offset + last.size + info.afterContentPadding - info.viewportEndOffset).toFloat()
+    }
+    // 到底：请求一个越界下标，LazyList 会夹到 maxScrollExtent（真正的底部），不受列表
+    // 末尾额外 item（压缩分隔线）影响 —— RikkaHub ChatList.kt:284 同款。
+    fun scrollTimelineToBottom() {
+        timelineListState.requestScrollToItem(messages.size + 10)
+    }
+    // 用户滚动（拖动 / 惯性 / 滚轮 / 键盘）一发生就让位：停止跟随 + 显示导航条。
+    // Compose 的 isScrollInProgress 只反映**用户驱动**的滚动（我们的
+    // requestScrollToItem 不置位），因此可以像 scroll_controller.dart:374-425
+    // handleUserScrollIntent 那样当「真实滚动意图」用。此前用 interactionSource 的
+    // DragInteraction 判断，拖动/惯性期间拿不到稳定事件 ⇒ 跟随没让位，用户上滑会被
+    // 拉回底部（用户实测）。
     androidx.compose.runtime.LaunchedEffect(timelineListState) {
-        // 用户拖动 → 停止跟随并显示导航按钮；2s 无操作自动隐藏
-        // （源码 scroll_controller.dart:374-425 handleUserScrollIntent /
-        // _resetNavButtonsHideDelayMs=2000）。拖动停在底部则恢复跟随。
-        timelineListState.interactionSource.interactions.collect { interaction ->
-            when (interaction) {
-                is androidx.compose.foundation.interaction.DragInteraction.Start -> {
+        snapshotFlow { timelineListState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { scrolling ->
+                if (scrolling) {
+                    userScrolling = true
                     autoStick = false
                     navVisible = true
                     navHideJob?.cancel()
-                }
-                is androidx.compose.foundation.interaction.DragInteraction.Stop,
-                is androidx.compose.foundation.interaction.DragInteraction.Cancel,
-                -> {
-                    autoStick = !timelineListState.canScrollForward
-                    // scroll_controller.dart:384-392 handleUserScrollIntent 的空闲
-                    // 计时：拖动结束后等 `autoScrollIdleSeconds` 再判一次贴底
-                    // （惯性滑到底的情况，收手那一刻还不在底部）。
                     idleStickJob?.cancel()
-                    idleStickJob = coroutineScope.launch {
-                        kotlinx.coroutines.delay(autoScrollIdleSeconds.coerceAtLeast(1) * 1000L)
-                        autoStick = !timelineListState.canScrollForward
-                    }
+                } else {
+                    // 收手：导航条 2s 后隐藏（_navButtonsHideDelayMs=2000）；跟随要等
+                    // `autoScrollIdleSeconds` 再判一次贴底（scroll_controller.dart:384-392
+                    // —— 惯性滑到底的情况，收手那一刻还不在底部）。
                     navHideJob?.cancel()
                     navHideJob = coroutineScope.launch {
                         kotlinx.coroutines.delay(2000)
                         navVisible = false
                     }
+                    idleStickJob?.cancel()
+                    idleStickJob = coroutineScope.launch {
+                        kotlinx.coroutines.delay(autoScrollIdleSeconds.coerceAtLeast(1) * 1000L)
+                        userScrolling = false
+                        // refreshAutoStickToBottom（scroll_controller.dart:332-344）：
+                        // 空闲计时到点后按**当时的位置**定论 —— 惯性停在中途就不再跟随，
+                        // 停在底部则恢复跟随。
+                        if (bottomGapPx() <= with(scrollDensity) { 56.dp.toPx() }) {
+                            if (autoScrollEnabled || autoStick) autoStick = true
+                        } else {
+                            autoStick = false
+                        }
+                    }
                 }
             }
-        }
+    }
+    // scroll_controller.dart:346-362 _onScrollControllerChanged —— 用户自己滚回底部
+    // （24 容差）就**立刻**恢复跟随，不必等空闲计时结束。
+    // 注意：这里只负责「恢复」，不在离开底部时取消跟随 —— 流式增量本身会让
+    // maxScrollExtent 变大，若按实时距离取消，跟随会在流式期间被自己关掉；取消跟随的
+    // 时机只有两个：用户滚动（isScrollInProgress）与空闲计时到点。
+    androidx.compose.runtime.LaunchedEffect(timelineListState, autoScrollEnabled) {
+        snapshotFlow { bottomGapPx() }
+            .distinctUntilChanged()
+            .collect { gap ->
+                if (gap != Float.MAX_VALUE && gap <= with(scrollDensity) { 24.dp.toPx() }) {
+                    userScrolling = false
+                    idleStickJob?.cancel()
+                    if (autoScrollEnabled || autoStick) autoStick = true
+                }
+            }
     }
     // 后台预热 Markdown 解析缓存（列表稳定 / 非流式时）：滚动到任意一条都命中
     // 缓存，不会再有"首帧在主线程同步解析 CommonMark"的那一下卡顿。放在 Default
@@ -909,23 +950,46 @@ fun ChatContent(
             listInitialized = true
         }
     }
-    // 流式期间贴底跟随；用户上滑（autoStick=false）后停止。
-    // scroll_controller.dart:520-527 autoScrollToBottomIfNeeded —— 关掉
-    // `display_auto_scroll_enabled_v1` 后流式内容不再把视口拽到底。
-    androidx.compose.runtime.LaunchedEffect(messages, streaming, autoStick, autoScrollEnabled) {
-        if (streaming && autoStick && autoScrollEnabled && messages.isNotEmpty()) {
-            timelineListState.animateScrollToItem(messages.lastIndex)
+    // 流式期间贴底跟随（scroll_controller.dart:116-155 —— 布局期贴底，不做动画）。
+    // 只在「没在滚动、没被用户接管」时补一次到底请求：用 requestScrollToItem 而不是
+    // animateScrollToItem —— 后者每个增量都重启一次动画，会打断用户正在进行的拖动/
+    // 惯性，而 requestScrollToItem 只排一个待应用的滚动位置。
+    androidx.compose.runtime.LaunchedEffect(
+        messages,
+        streaming,
+        autoStick,
+        userScrolling,
+        autoScrollEnabled,
+        timelineListState.isScrollInProgress,
+    ) {
+        if (streaming && autoStick && !userScrolling && autoScrollEnabled &&
+            !timelineListState.isScrollInProgress && messages.isNotEmpty()
+        ) {
+            scrollTimelineToBottom()
         }
     }
-    // scroll_controller.dart:513-533 stickToBottomAfterGeneration：生成结束那一刻
-    // 尾部还会长高（操作行/Token 统计出现、思考卡收起），跟随条件里的 streaming 已经
-    // 翻假，需要在同一个窗口里再贴一次底。
+    // scroll_controller.dart:518-564 stickToBottomAfterGeneration：生成结束那一刻尾部
+    // 还会长高（操作行/Token 统计出现、思考卡收起），跟随条件里的 streaming 已经翻假，
+    // 需要在同一个窗口（450ms）里再贴一次底。用户接管过（autoStick=false）就不抢。
     var wasStreaming by remember { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(streaming, autoStick, autoScrollEnabled, messages.size) {
-        if (wasStreaming && !streaming && autoStick && autoScrollEnabled && messages.isNotEmpty()) {
-            timelineListState.animateScrollToItem(messages.lastIndex)
-        }
+    androidx.compose.runtime.LaunchedEffect(
+        streaming,
+        autoStick,
+        userScrolling,
+        autoScrollEnabled,
+        messages.size,
+    ) {
+        val justFinished = wasStreaming && !streaming
         wasStreaming = streaming
+        if (justFinished && autoStick && !userScrolling && autoScrollEnabled &&
+            messages.isNotEmpty()
+        ) {
+            scrollTimelineToBottom()
+            kotlinx.coroutines.delay(450)
+            if (autoStick && !userScrolling && !timelineListState.isScrollInProgress) {
+                scrollTimelineToBottom()
+            }
+        }
     }
     // 滚到顶部附近自动加载更早的历史 —— message_list_view.dart:1816-1830
     // （isNearTop = 距顶 <= 96 逻辑像素，120ms 节流；Compose 侧用
@@ -1369,6 +1433,10 @@ fun ChatContent(
                                         (messages.size - 1).coerceAtLeast(0),
                                     )
                                 }
+                                // scroll_controller.dart:488-496 forceScrollToBottom ——
+                                // 主动到底：清掉「用户在滚动」并恢复跟随。
+                                userScrolling = false
+                                idleStickJob?.cancel()
                                 autoStick = true
                             },
                         )
@@ -1452,6 +1520,12 @@ fun ChatContent(
                 // light tick when "haptics on generate" is enabled.
                 if (chatHaptics.onGenerate) Haptics.light(chatView)
                 vm.send()
+                // home_page_controller.dart L526-531 发送路径：resetUserScrolling() +
+                // scrollToBottom —— 自己发消息一律回到最新，即便此前上滑过。
+                userScrolling = false
+                idleStickJob?.cancel()
+                autoStick = true
+                scrollTimelineToBottom()
             },
             onStop = vm::stop,
             onSelectModel = { showModelSheet = true },
