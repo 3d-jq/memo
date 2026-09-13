@@ -1004,11 +1004,21 @@ private fun BasicSettingsTab(
         )
     }
     if (reasoningSheetVisible) {
+        // 上游移动端（assistant_settings_edit_basic_tab.dart L200-220）：sheet 不再
+        // 选中即关，onChanged 只暂存 chosen，关闭时若与助手当前值不同才写回 ——
+        // 拖动滑杆的每一步都不该各写一次库。
+        var chosenBudget by remember { mutableStateOf<Int?>(null) }
         com.psyche.memo.ui.chat.ReasoningBudgetSheet(
             initialBudget = assistant.thinkingBudget,
-            onSelect = { v -> onEdit { it.copy(thinkingBudget = v) } },
+            onSelect = { v -> chosenBudget = v },
             modelId = assistant.chatModelId.orEmpty(),
-            onDismiss = { reasoningSheetVisible = false },
+            onDismiss = {
+                reasoningSheetVisible = false
+                val chosen = chosenBudget
+                if (chosen != null && chosen != assistant.thinkingBudget) {
+                    onEdit { it.copy(thinkingBudget = chosen) }
+                }
+            },
         )
     }
     if (qqDialog) {

@@ -31,11 +31,18 @@ class ReasoningBudgetTest {
     @Test
     fun `openAI effort escalates high to xhigh and max`() {
         assertEquals("high", ReasoningBudget.openAiEffortForBudget(32000, "gpt-5"))
-        assertEquals("xhigh", ReasoningBudget.openAiEffortForBudget(64000, "gpt-5"))
+        // gpt-5 has no xhigh tier: the request is normalized back to high.
+        assertEquals("high", ReasoningBudget.openAiEffortForBudget(64000, "gpt-5"))
         assertEquals("max", ReasoningBudget.openAiEffortForBudget(128000, "claude-opus-4-8"))
-        assertEquals("xhigh", ReasoningBudget.openAiEffortForBudget(128000, "gpt-5"))
+        // gpt-5.6 carries a max tier: 128k escalates straight to max.
+        assertEquals("max", ReasoningBudget.openAiEffortForBudget(128000, "gpt-5.6"))
+        // 64k on gpt-5.6 requests xhigh, which the table supports.
+        assertEquals("xhigh", ReasoningBudget.openAiEffortForBudget(64000, "gpt-5.6"))
         assertEquals("auto", ReasoningBudget.openAiEffortForBudget(-1, "gpt-5"))
+        // off with no offFallback stays off.
         assertEquals("off", ReasoningBudget.openAiEffortForBudget(0, "gpt-5"))
+        // gpt-5.1 falls back to low when off is unsupported.
+        assertEquals("low", ReasoningBudget.openAiEffortForBudget(0, "gpt-5.1-codex"))
     }
 
     @Test
@@ -140,5 +147,64 @@ class ReasoningBudgetTest {
             reasoning = false,
         )
         assertEquals(true, fields.isEmpty())
+    }
+
+    @Test
+    fun `glm 5_3 supports max but not xhigh per the model table`() {
+        // openai_model_compat.dart _glm53Support: ['low','high','max'].
+        assertTrue(ReasoningBudget.supportsMaxReasoning("glm-5.3"))
+        assertTrue(ReasoningBudget.supportsMaxReasoning("glm-5.3-flash"))
+        assertTrue(ReasoningBudget.supportsMaxReasoning("openai/glm-5.3"))
+        assertFalse(ReasoningBudget.supportsXhighReasoning("glm-5.3"))
+        // 5.2 keeps xhigh; unrelated models keep neither.
+        assertTrue(ReasoningBudget.supportsXhighReasoning("glm-5.2"))
+        assertTrue(ReasoningBudget.supportsMaxReasoning("glm-5.2"))
+        assertFalse(ReasoningBudget.supportsMaxReasoning("glm-4.5"))
+        assertFalse(ReasoningBudget.supportsXhighReasoning("glm-4.5"))
+    }
+
+    @Test
+    fun `openai model table gates xhigh and max per family`() {
+        // deepseek/kimi/kimi: max without xhigh.
+        assertTrue(ReasoningBudget.supportsMaxReasoning("deepseek-reasoner"))
+        assertTrue(ReasoningBudget.supportsMaxReasoning("kimi-k3"))
+        assertFalse(ReasoningBudget.supportsXhighReasoning("deepseek-reasoner"))
+        // grok-4.6 has xhigh but no max.
+        assertTrue(ReasoningBudget.supportsXhighReasoning("grok-4.6"))
+        assertFalse(ReasoningBudget.supportsMaxReasoning("grok-4.6"))
+        // gpt-5.6 carries both; plain gpt-5 carries neither; unlisted → neither.
+        assertTrue(ReasoningBudget.supportsMaxReasoning("gpt-5.6"))
+        assertTrue(ReasoningBudget.supportsXhighReasoning("gpt-5.6"))
+        assertFalse(ReasoningBudget.supportsMaxReasoning("gpt-5"))
+        assertFalse(ReasoningBudget.supportsXhighReasoning("gpt-5"))
+        assertFalse(ReasoningBudget.supportsMaxReasoning("some-random-model"))
+        // gpt-5.1-codex-max: xhigh only.
+        assertTrue(ReasoningBudget.supportsXhighReasoning("gpt-5.1-codex-max"))
+        assertFalse(ReasoningBudget.supportsMaxReasoning("gpt-5.1-codex-max"))
+    }
+
+    @Test
+    fun `claude capability gates follow the upstream ladders`() {
+        // opus/sonnet 5 family: xhigh + max.
+        assertTrue(ReasoningBudget.supportsXhighReasoning("claude-opus-5"))
+        assertTrue(ReasoningBudget.supportsMaxReasoning("claude-sonnet-5-20260101"))
+        // opus 4.7/4.8: xhigh + max; sonnet 4.6: max only; sonnet 4.5: neither.
+        assertTrue(ReasoningBudget.supportsXhighReasoning("claude-opus-4.7"))
+        assertTrue(ReasoningBudget.supportsMaxReasoning("claude-opus-4-8"))
+        assertFalse(ReasoningBudget.supportsXhighReasoning("claude-sonnet-4.6"))
+        assertTrue(ReasoningBudget.supportsMaxReasoning("claude-sonnet-4-6"))
+        assertFalse(ReasoningBudget.supportsXhighReasoning("claude-sonnet-4-5"))
+        assertFalse(ReasoningBudget.supportsMaxReasoning("claude-sonnet-4-5"))
+        // fable/mythos always top-tier.
+        assertTrue(ReasoningBudget.supportsMaxReasoning("claude-mythos-1"))
+        // max implies xhigh in openAiEffortForBudget escalation (128k budget).
+        assertEquals("max", ReasoningBudget.openAiEffortForBudget(128000, "glm-5.3"))
+        // 64k requests xhigh; glm-5.3 lacks it, normalization picks max (next
+        // in the xhigh preference order: xhigh → max → high …).
+        assertEquals("max", ReasoningBudget.openAiEffortForBudget(64000, "glm-5.3"))
+        // grok-4.6 has xhigh but no max.
+        assertEquals("xhigh", ReasoningBudget.openAiEffortForBudget(64000, "grok-4.6"))
+        // A plain model keeps high (no xhigh/max anywhere).
+        assertEquals("high", ReasoningBudget.openAiEffortForBudget(64000, "mimo-v2"))
     }
 }

@@ -2062,6 +2062,11 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="reasoning_budget_sheet_title">Reasoning Chain Strength</string>
     <string name="reasoning_budget_sheet_xhigh">Extreme Reasoning</string>
     <string name="reasoning_budget_sheet_xhigh_subtitle">Use maximum reasoning depth for the toughest problems</string>
+    <string name="reasoning_budget_slider_high">High</string>
+    <string name="reasoning_budget_slider_low">Low</string>
+    <string name="reasoning_budget_slider_max">Max</string>
+    <string name="reasoning_budget_slider_medium">Medium</string>
+    <string name="reasoning_budget_slider_xhigh">XHigh</string>
     <string name="request_log_setting_subtitle">When enabled, request/response details are written to logs/logs.txt (rotated daily).</string>
     <string name="request_log_setting_title">Request Logging</string>
     <string name="restart_app_failed_message">Memo could not restart automatically. Fully close it, then open it again.</string>

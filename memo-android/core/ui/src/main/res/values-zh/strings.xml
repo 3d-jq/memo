@@ -2062,6 +2062,11 @@
     <string name="reasoning_budget_sheet_title">思维链强度</string>
     <string name="reasoning_budget_sheet_xhigh">极限推理</string>
     <string name="reasoning_budget_sheet_xhigh_subtitle">使用最大推理深度，适合最复杂的问题</string>
+    <string name="reasoning_budget_slider_high">High</string>
+    <string name="reasoning_budget_slider_low">Low</string>
+    <string name="reasoning_budget_slider_max">Max</string>
+    <string name="reasoning_budget_slider_medium">Medium</string>
+    <string name="reasoning_budget_slider_xhigh">XHigh</string>
     <string name="request_log_setting_subtitle">开启后会将请求/响应详情写入 logs/logs.txt</string>
     <string name="request_log_setting_title">请求日志打印</string>
     <string name="restart_app_failed_message">Memo 无法自动重启，请完全关闭后重新打开。</string>

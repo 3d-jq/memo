@@ -140,13 +140,12 @@ import com.psyche.memo.ui.chat.AskUserInteractionService
 import com.psyche.memo.ui.chat.AskUserResult
 import com.psyche.memo.ui.chat.ToolApprovalService
 import com.psyche.memo.ui.chat.ToolUiPart
+import com.psyche.memo.ui.chat.ImePinTracker
 import com.psyche.memo.ui.chat.checkpointPart
 import com.psyche.memo.ui.chat.shouldPinTimelineOnImeRise
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -998,17 +997,35 @@ fun ChatContent(
     // 就变大，不钉的话用户正在看的最新一条会被压到输入栏后面。
     // 收起键盘不用管：视口长回去后 LazyList 自己把 pixels 夹回新的
     // maxScrollExtent，仍然是贴底的。
+    //
+    // **判据必须在「新视口布局之前」取**（原版 didChangeMetrics 就是那个时机：
+    // `isNearBottom(24)`）。组合期读 layoutInfo 拿到的还是上一帧（键盘抬起前）
+    // 的几何，正好是原版的语义；放进 effect 里读就晚了——那时可能已按新几何
+    // 布局，判据恒假、功能静默失效。所以用 derivedStateOf 缓存「上一帧布局的贴底
+    // 判定」（它只在布尔结果翻转时才让调用方重组，不会每帧都带动 ChatContent）。
+    // 早先版本图省事用流式跟随的 `following` 当判据：它**不会被程序化跳转清掉**
+    // （点引用跳转 / 上一条下一条 / 切会话），于是用户在历史里翻看时开键盘也会被
+    // 拽到底——用户 2026-09-13 实测指出「判定太多了，应该是只有在最新一条才抬起」。
+    val tailNearBottomForIme = remember(timelineListState, scrollDensity) {
+        androidx.compose.runtime.derivedStateOf {
+            tailBottomGapPx() <= with(scrollDensity) { 24.dp.toPx() }
+        }
+    }
     val imeBottomPx = WindowInsets.ime.getBottom(scrollDensity)
     // 初值取当前 inset（对齐 home_page.dart:739-742 的 post-frame 播种）：否则「启动时
     // 键盘已经开着」会被当成一次抬起。
-    val lastImeBottomPx = remember { androidx.compose.runtime.mutableIntStateOf(imeBottomPx) }
+    val imePin = remember { ImePinTracker(imeBottomPx) }
+    imePin.record(
+        imeBottomPx = imeBottomPx,
+        shouldPin = shouldPinTimelineOnImeRise(
+            previousImeBottomPx = imePin.previousImeBottomPx,
+            nextImeBottomPx = imeBottomPx,
+            pointerDown = pointerDown,
+            tailNearBottom = tailNearBottomForIme.value,
+        ),
+    )
     androidx.compose.runtime.LaunchedEffect(imeBottomPx) {
-        val previous = lastImeBottomPx.intValue
-        lastImeBottomPx.intValue = imeBottomPx
-        if (!shouldPinTimelineOnImeRise(previous, imeBottomPx, pointerDown, following)) {
-            return@LaunchedEffect
-        }
-        scrollTimelineToBottom()
+        if (imePin.consume(imeBottomPx)) scrollTimelineToBottom()
     }
     // 滚到顶部附近自动加载更早的历史 —— message_list_view.dart:1816-1830
     // （isNearTop = 距顶 <= 96 逻辑像素，120ms 节流；Compose 侧用
@@ -1626,9 +1643,16 @@ fun ChatContent(
     }
 
     if (showReasoningSheet) {
+        // home_page.dart:1571-1602 —— 输入栏的思考强度选择在移动端**种入当前助手的
+        // thinkingBudget**（不是全局），sheet 关闭时才写回助手；sheet 自己会把全局
+        // thinking_budget_v1 一并写掉（我们由 onSelect 承担）。seed 用 initialBudget
+        // 而不是先写全局，是因为同步 notify 会在 sheet 入场动画期间重建整个首页。
+        var chosenBudget by remember { mutableStateOf<Int?>(null) }
+        val reasoningAssistant = remember { container.currentAssistant() }
         com.psyche.memo.ui.chat.ReasoningBudgetSheet(
-            initialBudget = com.psyche.memo.ui.chat.readBudget(container),
+            initialBudget = reasoningAssistant?.thinkingBudget,
             onSelect = { v ->
+                chosenBudget = v
                 container.preferenceRepository.writeJson(
                     "thinking_budget_v1",
                     kotlinx.serialization.json.JsonPrimitive(v).toString(),
@@ -1637,6 +1661,12 @@ fun ChatContent(
             modelId = modelId,
             onDismiss = {
                 showReasoningSheet = false
+                val chosen = chosenBudget
+                if (chosen != null && chosen != reasoningAssistant?.thinkingBudget) {
+                    reasoningAssistant?.let {
+                        container.assistantStore.update(it.copy(thinkingBudget = chosen))
+                    }
+                }
                 reasoningBudget = com.psyche.memo.ui.chat.readBudget(container)
             },
         )
@@ -1776,10 +1806,7 @@ fun ChatContent(
                 }
             }
         }
-        val timeOf: (Long) -> String = { millis ->
-            java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-                .format(java.util.Date(millis))
-        }
+        val timeOf: (Long) -> String = { millis -> timeStr(millis) }
         fun buildExport(markdown: Boolean): String = com.psyche.memo.ui.chat.MessageExport.export(
             title = exportTitle,
             messages = selectedMessages,
@@ -3232,7 +3259,8 @@ private fun ChatInputBar(
                         // 路径上；Compose 的等价入口是 TextToolbar：包一层平台工具栏，
                         // 只替换 paste 回调，其余（复制/剪切/全选）原样透传。
                         val baseToolbar = androidx.compose.ui.platform.LocalTextToolbar.current
-                        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                        val clipboard = androidx.compose.ui.platform.LocalClipboard.current
+                        val clipboardScope = rememberCoroutineScope()
                         val pasteToolbar = remember(baseToolbar, clipboard, longPaste, onPasteText) {
                             object : androidx.compose.ui.platform.TextToolbar {
                                 override val status: androidx.compose.ui.platform.TextToolbarStatus
@@ -3249,11 +3277,16 @@ private fun ChatInputBar(
                                         rect,
                                         onCopyRequested,
                                         {
-                                            val text = clipboard.getText()?.text.orEmpty()
-                                            if (text.isEmpty() || !longPaste.isLongPaste(text)) {
-                                                onPasteRequested?.invoke()
-                                            } else {
-                                                onPasteText(text)
+                                            // 新 Clipboard API 的读取是 suspend，转协程；
+                                            // 语义与旧 getText() 一致（无文本走系统默认粘贴）。
+                                            clipboardScope.launch {
+                                                val text = clipboard.getClipEntry()
+                                                    ?.clipData?.getItemAt(0)?.text?.toString().orEmpty()
+                                                if (text.isEmpty() || !longPaste.isLongPaste(text)) {
+                                                    onPasteRequested?.invoke()
+                                                } else {
+                                                    onPasteText(text)
+                                                }
                                             }
                                         },
                                         onCutRequested,
@@ -3739,10 +3772,9 @@ private fun InputIconAsset(
 }
 
 /**
- * Shared formatter: constructing a SimpleDateFormat per call is one of the
- * heavier allocations in a list row, and this runs for every message header on
- * every recomposition while scrolling. SimpleDateFormat is not thread-safe, but
- * this is only touched from composition on the UI thread.
+ * Shared formatter: formatting per call is one of the heavier allocations in a
+ * list row, and this runs for every message header on every recomposition while
+ * scrolling. DateTimeFormatter is immutable and thread-safe.
  */
 /** 预热 Markdown 解析缓存时最多处理的最近消息条数。 */
 private const val MARKDOWN_PRELOAD_MESSAGES = 60
@@ -3769,9 +3801,14 @@ private const val MOBILE_NAV_ALWAYS = "always"
 private const val MOBILE_NAV_SCROLL = "scroll"
 private const val MOBILE_NAV_NEVER = "never"
 
-private val TIME_FORMATTER = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+// 线程安全的 java.time formatter（lint ConstantLocale：SimpleDateFormat 静态持有
+// Locale.getDefault() 在运行时切语言后行为不正确）。
+private val TIME_FORMATTER: java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+        .withLocale(java.util.Locale.getDefault())
 
-private fun timeStr(millis: Long): String = TIME_FORMATTER.format(Date(millis))
+private fun timeStr(millis: Long): String =
+    TIME_FORMATTER.format(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()))
 
 
 /**
