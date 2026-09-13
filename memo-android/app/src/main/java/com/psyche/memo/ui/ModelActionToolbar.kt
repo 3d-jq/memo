@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.AudioWaveform
@@ -33,6 +35,7 @@ import com.composables.icons.lucide.Boxes
 import com.composables.icons.lucide.CheckCheck
 import com.composables.icons.lucide.CircleX
 import com.composables.icons.lucide.HeartPulse
+import com.composables.icons.lucide.Loader
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Square
@@ -95,6 +98,7 @@ internal fun ModelActionToolbar(
                     icon = Lucide.Boxes,
                     showLabel = !compact,
                     compact = compact,
+                    style = ToolbarStyle.OUTLINED,
                     onClick = onFetch,
                 )
                 Spacer(Modifier.width(itemGap))
@@ -103,7 +107,7 @@ internal fun ModelActionToolbar(
                     icon = Lucide.Plus,
                     showLabel = !compact,
                     compact = compact,
-                    primary = true,
+                    style = ToolbarStyle.FILLED,
                     onClick = onAddNew,
                 )
                 if (hasModels) {
@@ -113,7 +117,11 @@ internal fun ModelActionToolbar(
                         icon = Lucide.Trash2,
                         showLabel = false,
                         compact = compact,
-                        destructive = true,
+                        style = ToolbarStyle.DESTRUCTIVE,
+                        // 默认工具条的删除全部：图标 18、底 error@10%（原版
+                        // `_buildActionToolbarButton(destructive: true)`）。
+                        iconSize = 18.dp,
+                        errorAlpha = 0.10f,
                         onClick = onDeleteAll,
                     )
                 }
@@ -126,6 +134,7 @@ internal fun ModelActionToolbar(
                     icon = if (allSelected) Lucide.CheckCheck else Lucide.Square,
                     showLabel = !compact,
                     compact = compact,
+                    style = ToolbarStyle.NEUTRAL,
                     onClick = onToggleSelectAll,
                 )
                 Spacer(Modifier.width(itemGap))
@@ -144,10 +153,13 @@ internal fun ModelActionToolbar(
                         if (detecting) com.psyche.memo.ui.R.string.provider_detail_page_batch_detecting
                         else com.psyche.memo.ui.R.string.provider_detail_page_batch_detect_button,
                     ),
-                    icon = Lucide.HeartPulse,
+                    icon = if (detecting) Lucide.Loader else Lucide.HeartPulse,
                     showLabel = !compact,
                     compact = compact,
-                    loading = detecting,
+                    style = ToolbarStyle.FILLED,
+                    // 原版检测钮与其它不同：忙碌时换 Loader 图标（不是转圈 spinner），
+                    // 禁用时底 onSurface@10%、前景 onSurface@50%。
+                    loading = false,
                     enabled = selectionCount > 0 && !detecting,
                     onClick = onDetect,
                 )
@@ -158,7 +170,7 @@ internal fun ModelActionToolbar(
                         icon = Lucide.CircleX,
                         showLabel = false,
                         compact = compact,
-                        destructive = true,
+                        style = ToolbarStyle.DESTRUCTIVE,
                         onClick = onDeleteFailed,
                     )
                 }
@@ -168,7 +180,7 @@ internal fun ModelActionToolbar(
                     icon = Lucide.Trash2,
                     showLabel = !compact,
                     compact = compact,
-                    destructive = true,
+                    style = ToolbarStyle.DESTRUCTIVE,
                     enabled = hasSelection,
                     onClick = onDeleteSelected,
                 )
@@ -212,14 +224,31 @@ private fun StreamingToggleButton(
 }
 
 /**
+ * 工具条上的一种按钮样式（原版三个 builder 各自的配色）。
+ */
+private enum class ToolbarStyle {
+    /** 拉取模型：透明底 + `primary@35%` 描边 + primary 前景，14sp semibold。 */
+    OUTLINED,
+
+    /** 新增模型 / 批量检测：`primary@12%` 底、无描边、primary 前景，14sp medium。 */
+    FILLED,
+
+    /** 删除类：`error@10~12%` 底、无描边、error 前景，14sp semibold。 */
+    DESTRUCTIVE,
+
+    /** 全选/清空：透明底 + `onSurface@20%` 描边、onSurface 前景，14sp semibold。 */
+    NEUTRAL,
+}
+
+/**
  * One capsule button inside [ModelActionToolbar] — port of
- * `_buildActionToolbarButton` (L2520-2586).
+ * `_buildActionToolbarButton` (L2520-2586) + `_buildSelectionToolbarDetectButton`
+ * (L2917-2973) + `_buildSelectionToolbarDestructiveButton` (L2960+) +
+ * `_buildSelectionToolbarSelectButton` (L2794-2861).
  *
- * Four mutually exclusive stylings: [primary] fills with `cs.primary` and swaps
- * the label to `onPrimary`; [destructive] tints icon and label with `cs.error`;
- * otherwise the button is outlined with the surface-strong hairline and uses
- * `onSurface`. A spinner replaces neither — it sits *in place of* the icon while
- * [loading], keeping the button width stable.
+ * 四种配色见 [ToolbarStyle]；最小 44×44、胶囊全圆、图标 20dp（默认工具条的
+ * 删除全部是 18dp）、标签 14sp。禁用态统一换成 `onSurface@10%` 底 +
+ * `onSurface@50%` 前景（原版三个 builder 都这么写）。
  */
 @Composable
 private fun ToolbarButton(
@@ -227,36 +256,45 @@ private fun ToolbarButton(
     icon: ImageVector,
     showLabel: Boolean,
     compact: Boolean,
+    style: ToolbarStyle,
     onClick: () -> Unit,
     enabled: Boolean = true,
     loading: Boolean = false,
-    primary: Boolean = false,
-    destructive: Boolean = false,
+    iconSize: Dp = 20.dp,
+    errorAlpha: Float = 0.12f,
 ) {
     val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
     val contentColor = when {
-        !enabled -> cs.onSurface.copy(alpha = 0.38f)
-        primary -> cs.onPrimary
-        destructive -> cs.error
-        else -> cs.onSurface
+        !enabled -> cs.onSurface.copy(alpha = 0.5f)
+        style == ToolbarStyle.DESTRUCTIVE -> cs.error
+        style == ToolbarStyle.NEUTRAL -> cs.onSurface
+        else -> cs.primary
     }
-    val background = if (primary) cs.primary.copy(alpha = if (enabled) 1f else 0.4f) else Color.Transparent
-    val borderColor = when {
-        primary -> Color.Transparent
-        destructive -> cs.error.copy(alpha = 0.35f)
-        else -> semantic.hairlineStrong
+    val background = when {
+        !enabled -> cs.onSurface.copy(alpha = 0.10f)
+        style == ToolbarStyle.FILLED -> cs.primary.copy(alpha = 0.12f)
+        style == ToolbarStyle.DESTRUCTIVE -> cs.error.copy(alpha = errorAlpha)
+        else -> Color.Transparent
     }
-    val horizontal = when {
-        !showLabel -> if (compact) 12.dp else 12.dp
-        compact -> 12.dp
-        else -> 18.dp
+    val bordered = when (style) {
+        ToolbarStyle.OUTLINED -> cs.primary.copy(alpha = 0.35f)
+        ToolbarStyle.NEUTRAL -> cs.onSurface.copy(alpha = 0.2f)
+        else -> null
     }
+    // 文字钮左右 14/18、图标钮 12/18（原版 textButtonPadding / iconButtonPadding）。
+    val horizontal = if (showLabel) (if (compact) 14.dp else 18.dp) else (if (compact) 12.dp else 18.dp)
 
     Row(
         modifier = Modifier
+            .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
             .background(background, RoundedCornerShape(999.dp))
-            .border(0.5.dp, borderColor, RoundedCornerShape(999.dp))
+            .then(
+                if (bordered != null) {
+                    Modifier.border(1.dp, bordered, RoundedCornerShape(999.dp))
+                } else {
+                    Modifier
+                },
+            )
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = horizontal, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -264,7 +302,7 @@ private fun ToolbarButton(
     ) {
         if (loading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(iconSize),
                 strokeWidth = 2.dp,
                 color = contentColor,
             )
@@ -273,16 +311,21 @@ private fun ToolbarButton(
                 imageVector = icon,
                 contentDescription = label,
                 tint = contentColor,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(iconSize),
             )
         }
         if (showLabel) {
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(8.dp))
             Text(
                 text = label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium, color = contentColor),
+                style = TextStyle(
+                    fontSize = 14.sp,
+                    // 只有 FILLED（新增/检测）用 medium，其余三档 semibold。
+                    fontWeight = if (style == ToolbarStyle.FILLED) FontWeight.Medium else FontWeight.SemiBold,
+                    color = contentColor,
+                ),
             )
         }
     }

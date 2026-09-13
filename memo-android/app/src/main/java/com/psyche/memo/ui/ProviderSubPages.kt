@@ -1,9 +1,12 @@
 package com.psyche.memo.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,10 +45,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Plus
+import com.composables.icons.lucide.Trash2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.ProviderConfig
 import com.psyche.memo.ui.theme.LocalSemanticColors
@@ -92,11 +98,22 @@ internal fun SubPageScaffold(
     }
 }
 
+/**
+ * 供应商子页的标签输入行 —— 原版 `provider_network_page._inputRow` +
+ * `_proxyInputDecoration`（L158-233）：13sp 标签 + 6dp + 字段（surfaceFill 底、
+ * r10、hairline `outlineVariant@12%`、聚焦 `primary@35%`、内边距 12/10、
+ * `isDense`、14sp 文本、提示 14sp@50%）。
+ *
+ * [obscure] 用于代理密码（原版 `obscureText: true`），[placeholder] 对应原版
+ * 各字段的 hint（127.0.0.1 / 8080）。
+ */
 @Composable
 internal fun SubPageInput(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
+    placeholder: String? = null,
+    obscure: Boolean = false,
     singleLine: Boolean = true,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -114,14 +131,70 @@ internal fun SubPageInput(
             value = value,
             onValueChange = onValueChange,
             singleLine = singleLine,
-            shape = RoundedCornerShape(12.dp),
+            minLines = if (singleLine) 1 else 2,
+            maxLines = if (singleLine) 1 else 5,
+            visualTransformation = if (obscure) {
+                androidx.compose.ui.text.input.PasswordVisualTransformation()
+            } else {
+                androidx.compose.ui.text.input.VisualTransformation.None
+            },
+            textStyle = TextStyle(fontSize = 14.sp, color = cs.onSurface),
+            placeholder = placeholder?.let {
+                {
+                    Text(
+                        text = it,
+                        style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.5f)),
+                    )
+                }
+            },
+            shape = RoundedCornerShape(10.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = semantic.surfaceCard,
-                unfocusedContainerColor = semantic.surfaceCard,
-                focusedBorderColor = cs.primary.copy(alpha = 0.5f),
-                unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
+                focusedContainerColor = semantic.surfaceFill,
+                unfocusedContainerColor = semantic.surfaceFill,
+                focusedBorderColor = cs.primary.copy(alpha = 0.35f),
+                unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.12f),
             ),
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
+ * 代理类型选择字段 —— 原版 `_ProxyTypeSheetField`（L235-328）：r10 卡片式选择框
+ * （内边距 12/12、surfaceFill 底、hairline 边框、14sp@88% 文本、18dp 下拉箭头），
+ * 点开还是我们统一过的那套卡片选项 sheet。
+ */
+@Composable
+private fun ProxyTypeField(
+    value: String,
+    onOpenSheet: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(semantic.surfaceFill, RoundedCornerShape(10.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .clickable(onClick = onOpenSheet)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(
+                if (value == "socks5") com.psyche.memo.ui.R.string.network_proxy_type_socks5
+                else com.psyche.memo.ui.R.string.network_proxy_type_http,
+            ),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.88f)),
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Lucide.ChevronDown,
+            contentDescription = null,
+            tint = cs.onSurface.copy(alpha = 0.55f),
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -180,44 +253,31 @@ fun ProviderNetworkPage(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
-            SettingsSectionCard {
-                SettingsSwitchRow(
-                    icon = Lucide.Globe,
-                    // provider_network_page.dart:72 — enable proxy label.
-                    label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_enable_proxy_title),
-                    value = proxyEnabled,
-                    onToggle = { proxyEnabled = it },
+            // 原版是**裸的开关行**（`_switchRow` L145-156）：没有卡片、没有前置
+            // 图标；15sp 标签 + 行尾 IosSwitch。
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_enable_proxy_title),
+                    style = TextStyle(fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface),
+                    modifier = Modifier.weight(1f),
                 )
-                if (proxyEnabled) {
-                    // 原版网络页的卡片同样不带分隔线（SectionCard dividers 默认 false）。
-                    // provider_network_page.dart:81-91 — type picker row.
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { proxyTypeSheetVisible = true }
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(com.psyche.memo.ui.R.string.network_proxy_type),
-                            modifier = Modifier.weight(1f),
-                            style = TextStyle(fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface),
-                        )
-                        Text(
-                            text = stringResource(
-                                if (proxyType == "socks5") com.psyche.memo.ui.R.string.network_proxy_type_socks5
-                                else com.psyche.memo.ui.R.string.network_proxy_type_http,
-                            ),
-                            style = TextStyle(fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)),
-                        )
-                        Icon(
-                            Lucide.ChevronRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                }
+                IosSwitch(value = proxyEnabled, onValueChanged = { proxyEnabled = it })
+            }
+            if (proxyEnabled) {
+                Spacer(Modifier.height(12.dp))
+                // 原版：代理类型是**带标签的选择框**（不是 chevron 导航行）。
+                Text(
+                    text = stringResource(com.psyche.memo.ui.R.string.network_proxy_type),
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    ),
+                )
+                Spacer(Modifier.height(6.dp))
+                ProxyTypeField(value = proxyType, onOpenSheet = { proxyTypeSheetVisible = true })
             }
             if (proxyEnabled) {
                 Spacer(Modifier.height(12.dp))
@@ -225,12 +285,14 @@ fun ProviderNetworkPage(
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_host_label),
                     value = proxyHost,
                     onValueChange = { proxyHost = it },
+                    placeholder = "127.0.0.1",
                 )
                 Spacer(Modifier.height(12.dp))
                 SubPageInput(
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_port_label),
                     value = proxyPort,
-                    onValueChange = { proxyPort = it },
+                    onValueChange = { proxyPort = it.filter { ch -> ch.isDigit() } },
+                    placeholder = "8080",
                 )
                 Spacer(Modifier.height(12.dp))
                 // C12 — labels from ARB (provider_network_page.dart:121-136).
@@ -240,10 +302,12 @@ fun ProviderNetworkPage(
                     onValueChange = { proxyUsername = it },
                 )
                 Spacer(Modifier.height(12.dp))
+                // 原版 `obscureText: true` —— 密码不要明文摆着。
                 SubPageInput(
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_password_optional_label),
                     value = proxyPassword,
                     onValueChange = { proxyPassword = it },
+                    obscure = true,
                 )
             }
         }
@@ -310,100 +374,225 @@ fun ProviderCustomRequestPage(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),
         ) {
             Text(
                 text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_custom_request_description),
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontSize = 13.sp,
+                    lineHeight = 18.85.sp, // 原版 height: 1.45 × 13
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
                 ),
             )
             Spacer(Modifier.height(18.dp))
-            // Headers section — ARB labels (provider_custom_request_editor.dart:99-113).
-            Text(
-                text = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_custom_headers_title),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Spacer(Modifier.height(6.dp))
-            headers.forEachIndexed { i, row ->
-                RequestRow(
-                    name = row["name"] ?: "",
-                    value = row["value"] ?: "",
-                    nameHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_header_key_hint),
-                    valueHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_header_value_hint),
-                    onChange = { n, v ->
-                        headers = headers.toMutableList().also { it[i] = mapOf("name" to n, "value" to v) }
-                    },
-                    onDelete = { headers = headers.toMutableList().also { it.removeAt(i) } },
-                )
+            // Headers section — 标题 13sp emphasis@80%（editor L166-176），
+            // 添加钮是 IosTileButton（Plus + 13sp 标签，L177-184）。
+            CustomRequestSection(
+                title = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_custom_headers_title),
+                addLabel = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_add_header),
+                onAdd = { headers = headers + mapOf("name" to "", "value" to "") },
+                rows = headers.size,
+            ) {
+                headers.forEachIndexed { i, row ->
+                    RequestRow(
+                        name = row["name"] ?: "",
+                        value = row["value"] ?: "",
+                        nameHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_header_key_hint),
+                        valueHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_header_value_hint),
+                        multilineValue = false,
+                        onChange = { n, v ->
+                            headers = headers.toMutableList().also { it[i] = mapOf("name" to n, "value" to v) }
+                        },
+                        onDelete = { headers = headers.toMutableList().also { it.removeAt(i) } },
+                    )
+                }
             }
-            Text(
-                text = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_add_header),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier
-                    .clickable { headers = headers + mapOf("name" to "", "value" to "") }
-                    .padding(8.dp),
-            )
             Spacer(Modifier.height(18.dp))
-            // Body overrides section.
-            Text(
-                text = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_custom_body_title),
-                style = MaterialTheme.typography.titleSmall,
-            )
-            Spacer(Modifier.height(6.dp))
-            body.forEachIndexed { i, row ->
-                RequestRow(
-                    name = row["key"] ?: "",
-                    value = row["value"] ?: "",
-                    nameHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_body_key_hint),
-                    valueHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_body_json_hint),
-                    onChange = { n, v ->
-                        body = body.toMutableList().also { it[i] = mapOf("key" to n, "value" to v) }
-                    },
-                    onDelete = { body = body.toMutableList().also { it.removeAt(i) } },
-                )
+            // Body overrides section（值是多行 JSON，原版 2..5 行）。
+            CustomRequestSection(
+                title = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_custom_body_title),
+                addLabel = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_add_body),
+                onAdd = { body = body + mapOf("key" to "", "value" to "") },
+                rows = body.size,
+            ) {
+                body.forEachIndexed { i, row ->
+                    RequestRow(
+                        name = row["key"] ?: "",
+                        value = row["value"] ?: "",
+                        nameHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_body_key_hint),
+                        valueHint = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_body_json_hint),
+                        multilineValue = true,
+                        onChange = { n, v ->
+                            body = body.toMutableList().also { it[i] = mapOf("key" to n, "value" to v) }
+                        },
+                        onDelete = { body = body.toMutableList().also { it.removeAt(i) } },
+                    )
+                }
             }
-            Text(
-                text = stringResource(com.psyche.memo.ui.R.string.model_detail_sheet_add_body),
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier
-                    .clickable { body = body + mapOf("key" to "", "value" to "") }
-                    .padding(8.dp),
-            )
         }
     }
 }
 
+/**
+ * 一个「键值对」编辑区 —— 原版 `provider_custom_request_editor` L160-200：
+ * 标题 13sp emphasis@80% + 添加钮（IosTileButton：Plus + 13sp、内边距 12/9）；
+ * 宽屏（≥440dp）时添加钮与标题同行，否则另起一行。
+ */
+@Composable
+private fun CustomRequestSection(
+    title: String,
+    addLabel: String,
+    onAdd: () -> Unit,
+    rows: Int,
+    content: @Composable () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val wide = maxWidth >= 440.dp
+        Column {
+            if (wide) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = title,
+                        style = TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = cs.onSurface.copy(alpha = 0.8f),
+                        ),
+                        modifier = Modifier.weight(1f).padding(start = 2.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    AddRowButton(label = addLabel, onClick = onAdd)
+                }
+            } else {
+                Text(
+                    text = title,
+                    style = TextStyle(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cs.onSurface.copy(alpha = 0.8f),
+                    ),
+                    modifier = Modifier.padding(start = 2.dp),
+                )
+                Spacer(Modifier.height(6.dp))
+                AddRowButton(label = addLabel, onClick = onAdd)
+            }
+            if (rows > 0) {
+                Spacer(Modifier.height(10.dp))
+                content()
+            }
+        }
+    }
+}
+
+/** 「添加 Header/Body」—— 原版 `IosTileButton(label, Lucide.Plus, 13sp, 12/9)`。 */
+@Composable
+private fun AddRowButton(label: String, onClick: () -> Unit) {
+    IosTileButton(
+        label = label,
+        icon = Lucide.Plus,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+        fontSize = 13.sp,
+        onClick = onClick,
+    )
+}
+
+/**
+ * 一行键值对 —— 原版 `_CustomRequestField`（L280-395）：两个**裸字段**（hint 即
+ * 占位、r10 hairline 底、14sp）+ 行尾 `Trash2` 图标钮（18dp、44dp 命中）；
+ * ≥440dp 时名称/值按 4:6 并排，否则名称与删除钮一行、值另起一行；值可多行。
+ */
 @Composable
 private fun RequestRow(
     name: String,
     value: String,
     nameHint: String,
     valueHint: String,
+    multilineValue: Boolean,
     onChange: (String, String) -> Unit,
     onDelete: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .background(LocalSemanticColors.current.surfaceCard, RoundedCornerShape(12.dp))
-            .padding(8.dp),
-    ) {
-        SubPageInput(label = nameHint, value = name, onValueChange = { onChange(it, value) })
-        Spacer(Modifier.height(6.dp))
-        SubPageInput(label = valueHint, value = value, onValueChange = { onChange(name, it) })
-        Text(
-            text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_button),
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier
-                .align(Alignment.End)
-                .clickable(onClick = onDelete)
-                .padding(6.dp),
-        )
+    val cs = MaterialTheme.colorScheme
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val wide = maxWidth >= 440.dp
+            val deleteButton: @Composable () -> Unit = {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clickable(onClick = onDelete),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Lucide.Trash2,
+                        contentDescription = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_button),
+                        tint = cs.onSurface.copy(alpha = 0.62f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+            if (wide) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(modifier = Modifier.weight(4f)) {
+                        BareField(value = name, hint = nameHint, singleLine = true) { onChange(it, value) }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Box(modifier = Modifier.weight(6f)) {
+                        BareField(value = value, hint = valueHint, singleLine = !multilineValue) { onChange(name, it) }
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    deleteButton()
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        BareField(value = name, hint = nameHint, singleLine = true) { onChange(it, value) }
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    deleteButton()
+                }
+                Spacer(Modifier.height(8.dp))
+                BareField(value = value, hint = valueHint, singleLine = !multilineValue) { onChange(name, it) }
+            }
+        }
     }
+}
+
+/** 裸字段（原版 `_decoration`）：r10、surfaceFill、hairline、聚焦 primary@35%。 */
+@Composable
+private fun BareField(
+    value: String,
+    hint: String,
+    singleLine: Boolean,
+    onValueChange: (String) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = singleLine,
+        minLines = if (singleLine) 1 else 2,
+        maxLines = if (singleLine) 1 else 5,
+        textStyle = TextStyle(fontSize = 14.sp, color = cs.onSurface),
+        placeholder = {
+            Text(
+                text = hint,
+                style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.5f)),
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        },
+        shape = RoundedCornerShape(10.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = semantic.surfaceFill,
+            unfocusedContainerColor = semantic.surfaceFill,
+            focusedBorderColor = cs.primary.copy(alpha = 0.35f),
+            unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.12f),
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
