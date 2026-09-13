@@ -541,6 +541,12 @@ fun ChatContent(
         container.preferenceRepository.readJson("display_auto_scroll_idle_seconds_v1")
             ?.toIntOrNull() ?: 8
     }
+    // 长粘贴转文件（display_long_paste_as_file_v1 + 阈值，默认开 / 5000 字素）。
+    val longPaste = remember {
+        com.psyche.memo.ui.chat.LongPasteSettings.fromPrefs { key ->
+            container.preferenceRepository.readJson(key)
+        }
+    }
     val chatHaptics = LocalHapticsSettings.current
     val chatView = LocalView.current
 
@@ -593,14 +599,20 @@ fun ChatContent(
     val coroutineScope = rememberCoroutineScope()
 
     // 附件选取（bottom_tools_sheet → file_upload_service）：URI 先拷进 upload
-    // 目录再进待发列表，发送后并入用户消息 parts。
+    // 目录再进待发列表，发送后并入用户消息 parts。图片同时过画质管线
+    // （image_upload_quality_v1 五档 → quality / maxLongEdge / 透明闸门）。
+    val imageCompress = remember {
+        com.psyche.memo.provider.ImageCompressConfig.fromPrefs { key ->
+            container.preferenceRepository.readJson(key)
+        }
+    }
     val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.PickMultipleVisualMedia(10),
     ) { uris ->
         if (uris.isNotEmpty()) {
             coroutineScope.launch {
                 val imported = uris.mapNotNull {
-                    com.psyche.memo.provider.AttachmentStore.import(context, it)
+                    com.psyche.memo.provider.AttachmentStore.import(context, it, imageCompress)
                 }
                 vm.addAttachments(imported)
             }
@@ -614,7 +626,12 @@ fun ChatContent(
         val file = cameraFile
         cameraFile = null
         if (ok && file != null && file.length() > 0) {
-            vm.addAttachments(listOf(com.psyche.memo.provider.AttachmentStore.fromCapturedFile(file)))
+            coroutineScope.launch {
+                val attachment = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    com.psyche.memo.provider.AttachmentStore.fromCapturedFile(file, imageCompress)
+                }
+                vm.addAttachments(listOf(attachment))
+            }
         }
     }
     val filePicker = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -623,7 +640,7 @@ fun ChatContent(
         if (uris.isNotEmpty()) {
             coroutineScope.launch {
                 val imported = uris.mapNotNull {
-                    com.psyche.memo.provider.AttachmentStore.import(context, it)
+                    com.psyche.memo.provider.AttachmentStore.import(context, it, imageCompress)
                 }
                 vm.addAttachments(imported)
             }
@@ -1349,6 +1366,13 @@ fun ChatContent(
             backgroundImageActive = backgroundImageActive,
             inputOpacityLight = inputOpacityLight,
             inputOpacityDark = inputOpacityDark,
+            longPaste = longPaste,
+            onPasteText = { text ->
+                // 写失败（IO 异常）时退回「直接插入」，与原版一致。
+                val attachment = com.psyche.memo.provider.AttachmentStore
+                    .importPastedText(context, text)
+                if (attachment != null) vm.addAttachments(listOf(attachment)) else vm.updateInput(text)
+            },
         )
         }
     }
@@ -2208,6 +2232,8 @@ private fun MessageRow(
                                     }
                                 }
                                 is ImagePart -> Unit // 已整组渲染在气泡上方
+                                is com.psyche.memo.data.model.FilePart ->
+                                    com.psyche.memo.ui.chat.MessageDocCard(part)
                                 else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -2735,6 +2761,10 @@ private fun ChatInputBar(
     backgroundImageActive: Boolean = false,
     inputOpacityLight: Float = DEFAULT_INPUT_BG_OPACITY_LIGHT,
     inputOpacityDark: Float = DEFAULT_INPUT_BG_OPACITY_DARK,
+    /** 长粘贴转文件（settings_provider.dart:252-255 两键）。 */
+    longPaste: com.psyche.memo.ui.chat.LongPasteSettings = com.psyche.memo.ui.chat.LongPasteSettings(),
+    /** 判定为长粘贴时把文本交出去（写文件 + 变成附件，不插入输入框）。 */
+    onPasteText: (String) -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     // 源码 chat_input_bar.dart:2547 —— theme.brightness == Brightness.dark。
@@ -2908,6 +2938,47 @@ private fun ChatInputBar(
                             .heightIn(min = 64.dp),
                         contentAlignment = Alignment.CenterStart,
                     ) {
+                        // chat_input_bar.dart:1602-1665 `_handlePastedText` —— 剪贴板
+                        // 文本超过阈值（按字素簇算）且开关打开时，**不插入输入框**，
+                        // 而是写成一个 .txt 附件。原版把自定义 Paste 菜单项接到这条
+                        // 路径上；Compose 的等价入口是 TextToolbar：包一层平台工具栏，
+                        // 只替换 paste 回调，其余（复制/剪切/全选）原样透传。
+                        val baseToolbar = androidx.compose.ui.platform.LocalTextToolbar.current
+                        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+                        val pasteToolbar = remember(baseToolbar, clipboard, longPaste, onPasteText) {
+                            object : androidx.compose.ui.platform.TextToolbar {
+                                override val status: androidx.compose.ui.platform.TextToolbarStatus
+                                    get() = baseToolbar.status
+
+                                override fun showMenu(
+                                    rect: androidx.compose.ui.geometry.Rect,
+                                    onCopyRequested: (() -> Unit)?,
+                                    onPasteRequested: (() -> Unit)?,
+                                    onCutRequested: (() -> Unit)?,
+                                    onSelectAllRequested: (() -> Unit)?,
+                                ) {
+                                    baseToolbar.showMenu(
+                                        rect,
+                                        onCopyRequested,
+                                        {
+                                            val text = clipboard.getText()?.text.orEmpty()
+                                            if (text.isEmpty() || !longPaste.isLongPaste(text)) {
+                                                onPasteRequested?.invoke()
+                                            } else {
+                                                onPasteText(text)
+                                            }
+                                        },
+                                        onCutRequested,
+                                        onSelectAllRequested,
+                                    )
+                                }
+
+                                override fun hide() = baseToolbar.hide()
+                            }
+                        }
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            androidx.compose.ui.platform.LocalTextToolbar provides pasteToolbar,
+                        ) {
                         BasicTextField(
                             value = input,
                             onValueChange = onInputChange,
@@ -2947,6 +3018,7 @@ private fun ChatInputBar(
                                 }
                             },
                         )
+                        }
                     }
                 }
 
@@ -3112,7 +3184,10 @@ private fun ChatInputBar(
                                     // 流式时图标换成原项目 assets/icons/stop.svg 的实心
                                     // 圆角方块（24 viewBox 内 14×14、rx2），并用
                                     // AnimatedSwitcher 等价的 Scale+Fade 做 200ms 形变。
-                                    val canSend = input.isNotBlank()
+                                    // CIB:2929-2942 _CompactSendButton enabled：
+                                    // hasText || hasImages || hasDocs（只有附件的消息
+                                    // 也能发，长粘贴转文件后输入框本来就是空的）。
+                                    val canSend = input.isNotBlank() || attachments.isNotEmpty()
                                     val sendBg = if (canSend || streaming) cs.primary
                                     else cs.onSurface.copy(alpha = ChatStyleSpec.SEND_DISABLED_BG_ALPHA)
                                     val sendFg = if (canSend || streaming) cs.onPrimary
