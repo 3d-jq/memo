@@ -2275,6 +2275,9 @@ private fun MessageRow(
                 com.psyche.memo.ui.chat.LocalChatBubbleStyles provides timelineSettings.bubbleStyles,
             ) {
             Column(
+                // 用户侧整体靠右（CMW:1769-1771 `crossAxisAlignment: end`）：附件预览与
+                // 正文气泡同列，窄的那个不能因为兄弟更宽就被推到左边去。
+                horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
                 modifier = Modifier
                     .then(
                         if (isUser) Modifier.widthIn(max = maxBubbleWidth)
