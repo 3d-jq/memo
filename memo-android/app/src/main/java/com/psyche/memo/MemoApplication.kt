@@ -47,8 +47,14 @@ class MemoApplication : Application(), ImageLoaderFactory {
         container.maybeRunLocalSnapshot()
         // 备份提醒：读五键调度 + 启动分钟计时（到期驱动抽屉横幅）。
         container.backupReminder.initialize()
-        // 系统 TTS 播放器：用 application context 建一次，UI 收的 flow 身份保持稳定。
-        com.psyche.memo.ui.chat.TtsPlayer.init(this)
+        // TTS 播放器：用 application context 建一次，UI 收的 flow 身份保持稳定。
+        // 传入 OkHttp 与 TTS 服务仓库后，选中网络服务时会走网络合成（悬浮播放器
+        // 同时解锁「保存音频」）；两者为 null 时退化为纯系统引擎。
+        com.psyche.memo.ui.chat.TtsPlayer.init(
+            this,
+            container.httpClient,
+            container.ttsServicesStore,
+        )
     }
 
     /**

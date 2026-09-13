@@ -28,16 +28,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * System-engine TTS playback for the chat (chat_message_widget.dart
- * `_replayTextToSpeech` + `tts_provider.dart` system path).
+ * TTS playback for the chat (chat_message_widget.dart `_replayTextToSpeech` +
+ * `tts_provider.dart`).
  *
  * Long text is split into chunks and spoken one at a time, which is what makes
  * pause/resume and ±15 s seeking possible on an engine that cannot pause an
  * utterance: "pause" stops the engine, "resume" restarts at the current chunk,
  * and a seek moves the chunk cursor. Positions are estimated from the played
- * character offsets (see [TtsPlaybackTimeline]); network TTS voices are a later
- * batch, so [TtsPlaybackState.usingNetwork] stays false and the player hides its
- * save button exactly as upstream does when no network audio is available.
+ * character offsets (see [TtsPlaybackTimeline]).
+ *
+ * The engine is a [SwitchableTtsEngine]: when the selected TTS service is a
+ * network one it synthesizes audio (see [NetworkTtsEngine]) and the floating
+ * player shows its save button, exactly like `tts.canSaveNetworkAudio`
+ * upstream; with the system engine there is no byte stream to save, so the
+ * button stays hidden.
  */
 object TtsPlayer {
 
@@ -48,15 +52,60 @@ object TtsPlayer {
      */
     @Volatile private var controllerRef: TtsPlaybackController? = null
 
+    @Volatile private var switchableRef: SwitchableTtsEngine? = null
+
     /** Called from `MemoApplication.onCreate`. */
-    fun init(context: Context) {
+    fun init(
+        context: Context,
+        client: okhttp3.OkHttpClient? = null,
+        store: com.psyche.memo.ui.TtsServicesStore? = null,
+    ) {
         if (controllerRef != null) return
         synchronized(this) {
             if (controllerRef == null) {
-                controllerRef = TtsPlaybackController(SystemTtsEngine(context.applicationContext))
+                val engine = if (client != null && store != null) {
+                    SwitchableTtsEngine(context.applicationContext, client, store)
+                        .also { switchableRef = it }
+                } else {
+                    SystemTtsEngine(context.applicationContext)
+                }
+                controllerRef = TtsPlaybackController(engine)
             }
         }
     }
+
+    /** 当前是否在用网络语音（悬浮播放器的保存钮据此显示）。 */
+    val canSaveNetworkAudio: Boolean get() = state.value.usingNetwork
+
+    /** 当前会话被朗读的整段文本（保存音频要重合成整段）。 */
+    @Volatile private var lastText: String = ""
+
+    /** 当前/最近一次朗读的整段文本。 */
+    fun currentText(): String = lastText
+
+    /**
+     * 整段重新合成并交给 [onResult]（原版 `synthesizeAllAndCollect()`）——
+     * 悬浮播放器的「保存音频」用它拿字节，而不是把当前这一块的缓存拼起来。
+     * 未使用网络语音 / 合成失败 → null。
+     */
+    fun collectNetworkAudio(text: String, onResult: (com.psyche.memo.provider.NetworkTtsResult?) -> Unit) {
+        val engine = switchableRef
+        if (engine == null) {
+            onResult(null)
+            return
+        }
+        Thread {
+            val result = engine.collectNetworkAudio(text)
+            // 合成在后台线程，但回调要落在主线程（调用方要动 Compose 状态 / 起 SAF）。
+            android.os.Handler(android.os.Looper.getMainLooper()).post { onResult(result) }
+        }.start()
+    }
+
+    /** 「保存音频」：重合成**整段**文本再写文件（原版 `synthesizeAllAndCollect`）。 */
+    fun saveAudio(
+        text: String,
+        onResult: (com.psyche.memo.provider.NetworkTtsResult?) -> Unit,
+    ) = collectNetworkAudio(text.ifEmpty { lastText }, onResult)
 
     private fun controller(context: Context?): TtsPlaybackController? {
         controllerRef?.let { return it }
@@ -74,11 +123,13 @@ object TtsPlayer {
 
     /** [ownerId] is the chat message the playback belongs to, when there is one. */
     fun speak(context: Context, text: String, ownerId: String? = null) {
+        lastText = text
         controller(context)?.speak(text, ownerId)
     }
 
     /** 已初始化后的免 Context 重载（ViewModel 等无 UI 的调用方，如自动播放）。 */
     fun speak(text: String, ownerId: String? = null) {
+        lastText = text
         controllerRef?.speak(text, ownerId)
     }
 

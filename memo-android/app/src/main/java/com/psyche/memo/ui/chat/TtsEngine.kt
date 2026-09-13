@@ -29,6 +29,12 @@ interface TtsEngine {
 
     var listener: Listener?
 
+    /**
+     * 当前引擎产出的音频是不是**网络合成**的。悬浮播放器据此显示「保存音频」
+     * （原版 `tts.canSaveNetworkAudio`：系统 TTS 拿不到音频字节，所以没有保存钮）。
+     */
+    val isNetwork: Boolean get() = false
+
     /** Creates the engine; [onReady] reports whether it can speak. */
     fun prepare(onReady: (Boolean) -> Unit)
 
@@ -350,6 +356,7 @@ class TtsPlaybackController(
                 currentChunkIndex = chunkIndex,
                 totalChunks = chunks.size,
                 ownerId = lastOwnerId,
+                usingNetwork = engine.isNetwork,
             ),
         )
     }
@@ -363,6 +370,7 @@ class TtsPlaybackController(
                 durationMs = timeline?.estimatedDurationMs ?: 0L,
                 totalChunks = chunks.size,
                 errorMessage = error,
+                usingNetwork = engine.isNetwork,
             ),
         )
     }

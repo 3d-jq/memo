@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.FastForward
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Pause
@@ -95,6 +97,9 @@ private val SURFACE_PADDING = 3.dp
 private val EXPANDED_CONTROLS_WIDTH = 112.dp
 private const val SURFACE_ANIMATION_MS = 220
 private const val FADE_MS = 160
+
+/** `tts_floating_player.dart:37 _saveButtonDelta` —— 保存钮带来的额外宽度。 */
+private val SAVE_BUTTON_DELTA = 34.dp
 private val BOTTOM_CLEARANCE = 64.dp
 
 /** What the pill's buttons do; swapped out in tests. */
@@ -142,12 +147,48 @@ fun TtsFloatingPlayer(
     if (!visible && fade == 0f) return
 
     val density = LocalDensity.current
-    val targetWidth = if (expanded) EXPANDED_WIDTH else COLLAPSED_WIDTH
+    // 网络语音才有的「保存音频」钮（原版 `tts.canSaveNetworkAudio` 决定宽度 +34）。
+    val canSave = TtsPlayer.canSaveNetworkAudio
+    val saveDelta = if (canSave) SAVE_BUTTON_DELTA else 0.dp
+    val targetWidth = (if (expanded) EXPANDED_WIDTH else COLLAPSED_WIDTH) + saveDelta
     val animatedWidth by animateFloatAsState(
         targetValue = targetWidth.value,
         animationSpec = tween(SURFACE_ANIMATION_MS, easing = EaseOutCubic),
         label = "ttsPlayerWidth",
     )
+
+    // 保存音频：先整段重合成，再让用户选落点（SAF CreateDocument），与
+    // `tts_floating_player.dart:373-421` 的 `_save()` 一致。
+    val saveContext = LocalContext.current
+    var pendingAudio by remember { mutableStateOf<com.psyche.memo.provider.NetworkTtsResult?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val saveLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("audio/mpeg"),
+    ) { uri ->
+        val audio = pendingAudio
+        pendingAudio = null
+        if (uri != null && audio != null) {
+            runCatching {
+                saveContext.contentResolver.openOutputStream(uri)?.use { it.write(audio.bytes) }
+            }
+        }
+        saving = false
+    }
+    val onSave: () -> Unit = {
+        if (!saving) {
+            saving = true
+            TtsPlayer.saveAudio(TtsPlayer.currentText()) { audio ->
+                if (audio == null) {
+                    saving = false
+                } else {
+                    pendingAudio = audio
+                    saveLauncher.launch(
+                        "memo_tts_${System.currentTimeMillis()}.${audio.extension}",
+                    )
+                }
+            }
+        }
+    }
 
     BoxWithConstraints(
         modifier = modifier
@@ -199,6 +240,9 @@ fun TtsFloatingPlayer(
                 state = state,
                 expanded = expanded,
                 actions = actions,
+                canSave = canSave,
+                saving = saving,
+                onSave = onSave,
                 onToggleExpanded = { expanded = !expanded },
             )
         }
@@ -234,6 +278,9 @@ private fun PlayerSurface(
     state: TtsPlaybackState,
     expanded: Boolean,
     actions: TtsPlayerActions,
+    canSave: Boolean,
+    saving: Boolean,
+    onSave: () -> Unit,
     onToggleExpanded: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -299,6 +346,16 @@ private fun PlayerSurface(
                     icon = Lucide.FastForward,
                     onClick = { actions.seekForward() },
                 )
+                // 保存音频（`tts_floating_player.dart:301-303`）：只有网络语音才有
+                // 音频字节可存，系统 TTS 时整钮不渲染。
+                if (canSave) {
+                    Spacer(Modifier.width(2.dp))
+                    PlayerToolIcon(
+                        tooltip = stringResource(UiR.string.tts_floating_save_tooltip),
+                        icon = Lucide.Download,
+                        onClick = onSave,
+                    )
+                }
             }
         }
         Spacer(Modifier.width(2.dp))
