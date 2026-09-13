@@ -141,6 +141,7 @@ import com.psyche.memo.ui.chat.AskUserResult
 import com.psyche.memo.ui.chat.ToolApprovalService
 import com.psyche.memo.ui.chat.ToolUiPart
 import com.psyche.memo.ui.chat.checkpointPart
+import com.psyche.memo.ui.chat.shouldPinTimelineOnImeRise
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -988,6 +989,26 @@ fun ChatContent(
                 scrollTimelineToBottom()
             }
         }
+    }
+    // home_page.dart:763-771 didChangeMetrics →
+    // scroll_controller.dart:312-321 pinBottomDuringViewportResizeIfNeeded ——
+    // **软件键盘抬起时把对话内容一起顶上去**。输入栏吃 IME inset
+    // （ChatInputBar 的 windowInsetsPadding）+ 列表吃剩余高度（weight(1f)），
+    // 所以视口会随键盘缩小；但滚动位置是按像素记的，视口一矮 maxScrollExtent
+    // 就变大，不钉的话用户正在看的最新一条会被压到输入栏后面。
+    // 收起键盘不用管：视口长回去后 LazyList 自己把 pixels 夹回新的
+    // maxScrollExtent，仍然是贴底的。
+    val imeBottomPx = WindowInsets.ime.getBottom(scrollDensity)
+    // 初值取当前 inset（对齐 home_page.dart:739-742 的 post-frame 播种）：否则「启动时
+    // 键盘已经开着」会被当成一次抬起。
+    val lastImeBottomPx = remember { androidx.compose.runtime.mutableIntStateOf(imeBottomPx) }
+    androidx.compose.runtime.LaunchedEffect(imeBottomPx) {
+        val previous = lastImeBottomPx.intValue
+        lastImeBottomPx.intValue = imeBottomPx
+        if (!shouldPinTimelineOnImeRise(previous, imeBottomPx, pointerDown, following)) {
+            return@LaunchedEffect
+        }
+        scrollTimelineToBottom()
     }
     // 滚到顶部附近自动加载更早的历史 —— message_list_view.dart:1816-1830
     // （isNearTop = 距顶 <= 96 逻辑像素，120ms 节流；Compose 侧用
