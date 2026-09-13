@@ -40,6 +40,10 @@ dependencies {
     implementation(libs.commonmark)
     implementation(libs.commonmark.gfm.tables)
     implementation(libs.commonmark.gfm.strikethrough)
+    // 数学公式（RikkaHub 的 jlatexmath-android fork）；字体模块随基础包一起进包。
+    implementation(libs.jlatexmath)
+    implementation(libs.jlatexmath.font.greek)
+    implementation(libs.jlatexmath.font.cyrillic)
     debugImplementation(libs.compose.ui.tooling)
     testImplementation(libs.junit)
 }

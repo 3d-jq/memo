@@ -218,6 +218,10 @@ fun ChainOfThoughtCard(
                         isLast = isLast,
                         enableReasoningMarkdown = settings.enableReasoningMarkdown,
                         onToggleReasoning = onToggleReasoning,
+                        math = com.psyche.memo.ui.markdown.MathConfig(
+                            enabled = settings.mathRendering,
+                            dollarLatex = settings.dollarLatex,
+                        ),
                     )
                     is TimelineStep.Tool -> ChainOfThoughtToolStep(
                         part = step.part,
@@ -454,6 +458,8 @@ fun ChainOfThoughtReasoningStep(
     isLast: Boolean,
     enableReasoningMarkdown: Boolean,
     onToggleReasoning: (segmentIndex: Int) -> Unit,
+    /** 数学公式两开关（渲染页），思考正文里的公式同样要渲染。 */
+    math: com.psyche.memo.ui.markdown.MathConfig = com.psyche.memo.ui.markdown.MathConfig(),
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
@@ -521,6 +527,7 @@ fun ChainOfThoughtReasoningStep(
                 loading = step.loading,
                 preview = state == ReasoningStepState.Preview,
                 enableMarkdown = enableReasoningMarkdown,
+                math = math,
             )
         }
     }
@@ -582,9 +589,10 @@ private fun ReasoningPreviewBody(
     loading: Boolean,
     preview: Boolean,
     enableMarkdown: Boolean,
+    math: com.psyche.memo.ui.markdown.MathConfig,
 ) {
     val content = @Composable {
-        ReasoningContent(text, enableMarkdown, loading)
+        ReasoningContent(text, enableMarkdown, loading, math)
     }
     if (!preview) {
         SelectionContainer { content() }
@@ -622,13 +630,19 @@ private fun ReasoningPreviewBody(
 
 /** CMW:5148-5162 —— markdown 开关决定渲染器，字号 12.5 / 行高 1.32，空文本用 '…'。 */
 @Composable
-private fun ReasoningContent(text: String, enableMarkdown: Boolean, loading: Boolean) {
+private fun ReasoningContent(
+    text: String,
+    enableMarkdown: Boolean,
+    loading: Boolean,
+    math: com.psyche.memo.ui.markdown.MathConfig,
+) {
     val shown = text.ifEmpty { "…" }
     if (enableMarkdown) {
         MarkdownText(
             markdown = shown,
             baseFontSize = ChatStyleSpec.TIMELINE_BODY_SP,
             baseLineHeight = ChatStyleSpec.TIMELINE_BODY_LINE_HEIGHT_SP,
+            math = math,
         )
     } else {
         Text(

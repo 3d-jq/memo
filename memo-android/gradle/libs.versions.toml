@@ -19,6 +19,7 @@ exp4j = "0.4.8"
 kotlinxSerializationJson = "1.9.0"
 kotlinxCoroutines = "1.10.2"
 commonmark = "0.26.0"
+jlatexmath = "1.5"
 junit = "4.13.2"
 
 [libraries]
@@ -60,6 +61,10 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
 commonmark-gfm-tables = { group = "org.commonmark", name = "commonmark-ext-gfm-tables", version.ref = "commonmark" }
 commonmark-gfm-strikethrough = { group = "org.commonmark", name = "commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
+# RikkaHub 的 jlatexmath-android fork（JitPack）：原版 flutter_math_fork 的 Android 等价物。
+jlatexmath = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath", version.ref = "jlatexmath" }
+jlatexmath-font-greek = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath-font-greek", version.ref = "jlatexmath" }
+jlatexmath-font-cyrillic = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath-font-cyrillic", version.ref = "jlatexmath" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -121,6 +121,11 @@ data class ChatTimelineSettings(
      * 缩放后的 `LocalDensity.fontScale` 包住消息行。
      */
     val chatFontScale: Float = 1f,
+    // 数学公式（渲染页两键）：`display_enable_math_rendering_v1` 总开关、
+    // `display_enable_dollar_latex_v1` 是否把 `$…$` / `$$…$$` 当公式
+    // （settings_provider.dart，两个默认都是 true）。
+    val mathRendering: Boolean = true,
+    val dollarLatex: Boolean = true,
     // 用户（user）消息侧 —— settings_provider.dart:1068-1085（三个默认都是 true），
     // 由 chat_message_widget.dart:1719-1735 的用户头消费。
     val showUserAvatar: Boolean = true,
@@ -158,6 +163,8 @@ data class ChatTimelineSettings(
                 assistantBubbleSplitParagraphs = bool("display_assistant_bubble_split_paragraphs_v1", false),
                 chatFontScale = read("display_chat_font_scale_v1")
                     ?.trim()?.trim('"')?.toFloatOrNull() ?: 1f,
+                mathRendering = bool("display_enable_math_rendering_v1", true),
+                dollarLatex = bool("display_enable_dollar_latex_v1", true),
                 showUserAvatar = bool("display_show_user_avatar_v1", true),
                 showUserName = bool("display_show_user_name_v1", true),
                 showUserTimestamp = bool("display_show_user_timestamp_v1", true),

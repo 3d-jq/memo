@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +61,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -191,6 +194,8 @@ fun MarkdownText(
     tableActions: MarkdownTableActions? = null,
     codeBlock: CodeBlockConfig = CodeBlockConfig(),
     codeBlockActions: CodeBlockActions = CodeBlockActions(),
+    /** 数学公式：`display_enable_math_rendering_v1` / `display_enable_dollar_latex_v1`。 */
+    math: MathConfig = MathConfig(),
 ) {
     if (markdown.isEmpty()) return
     val citation = CitationRenderConfig(onCitationTap, citationInfoResolver)
@@ -208,18 +213,47 @@ fun MarkdownText(
             .flowOn(Dispatchers.Default)
             .collect { parsed = it }
     }
-    MarkdownBody(
-        node = parsed.root,
-        plainTexts = parsed.plainTexts,
-        modifier = modifier,
-        baseFontSize = baseFontSize,
-        baseLineHeight = baseLineHeight,
-        citation = citation,
-        tableActions = tableActions,
-        codeBlock = codeBlock,
-        codeBlockActions = codeBlockActions,
-    )
+    // 行内公式的尺寸/颜色只在这里算一次，`appendInlineStyled` 通过 CompositionLocal
+    // 取用（InlineTextContent 的占位符必须**提前**知道尺寸）。
+    val mathDensity = LocalDensity.current
+    val mathColorArgb = LocalContentColor.current.toArgb()
+    val inlineMath = remember(math, baseFontSize, mathColorArgb, mathDensity) {
+        InlineMathScope(
+            config = math,
+            fontPx = with(mathDensity) { baseFontSize.sp.toPx() },
+            colorArgb = mathColorArgb,
+            density = mathDensity,
+        )
+    }
+    CompositionLocalProvider(LocalInlineMath provides inlineMath) {
+        MarkdownBody(
+            node = parsed.root,
+            plainTexts = parsed.plainTexts,
+            modifier = modifier,
+            baseFontSize = baseFontSize,
+            baseLineHeight = baseLineHeight,
+            citation = citation,
+            tableActions = tableActions,
+            codeBlock = codeBlock,
+            codeBlockActions = codeBlockActions,
+            math = math,
+        )
+    }
 }
+
+/**
+ * 行内公式渲染上下文（MarkdownText 注入）：[config] 是两开关，[fontPx] 是正文字号
+ * （公式按这个尺寸渲染，RikkaHub 同款），[density] 用来把 drawable 的像素尺寸换成
+ * 占位符要的 sp。
+ */
+private data class InlineMathScope(
+    val config: MathConfig,
+    val fontPx: Float,
+    val colorArgb: Int,
+    val density: androidx.compose.ui.unit.Density,
+)
+
+private val LocalInlineMath = staticCompositionLocalOf<InlineMathScope?> { null }
 
 /**
  * 一次解析的产物：AST 根 + 每个节点的纯文本（渲染阶段查表，避免在组合里递归）。
@@ -304,6 +338,7 @@ private fun MarkdownBody(
     tableActions: MarkdownTableActions?,
     codeBlock: CodeBlockConfig,
     codeBlockActions: CodeBlockActions,
+    math: MathConfig,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         var child = node.firstChild
@@ -317,6 +352,7 @@ private fun MarkdownBody(
                 tableActions,
                 codeBlock,
                 codeBlockActions,
+                math,
             )
             child = child.next
         }
@@ -333,6 +369,7 @@ private fun MarkdownNode(
     tableActions: MarkdownTableActions?,
     codeBlock: CodeBlockConfig,
     codeBlockActions: CodeBlockActions,
+    math: MathConfig,
 ) {
     val cs = MaterialTheme.colorScheme
     when (node) {
@@ -353,16 +390,23 @@ private fun MarkdownNode(
             )
         }
         is Paragraph -> {
-            val inlineContent = mutableMapOf<String, InlineTextContent>()
-            val annotated = renderInline(node, plainTexts, citation, inlineContent)
-            Text(
-                text = annotated,
-                inlineContent = inlineContent,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = baseFontSize.sp,
-                    lineHeight = baseLineHeight.sp,
-                ),
-            )
+            // 块级公式：整段就是 `$$…$$` / `\[…\]` 时走 MathBlock（居中 + 横向滚动），
+            // 否则按行内公式切分后再排版。
+            val displayBody = displayMathBody(nodeText(node, plainTexts), math)
+            if (displayBody != null) {
+                MathBlock(latex = displayBody, fontSize = baseFontSize.sp)
+            } else {
+                val inlineContent = mutableMapOf<String, InlineTextContent>()
+                val annotated = renderInline(node, plainTexts, citation, inlineContent)
+                Text(
+                    text = annotated,
+                    inlineContent = inlineContent,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = baseFontSize.sp,
+                        lineHeight = baseLineHeight.sp,
+                    ),
+                )
+            }
         }
         is FencedCodeBlock -> CodeBlockView(
             code = node.literal,
@@ -387,6 +431,7 @@ private fun MarkdownNode(
                     tableActions = tableActions,
                     codeBlock = codeBlock,
                     codeBlockActions = codeBlockActions,
+                    math = math,
                 )
             }
         }
@@ -414,6 +459,7 @@ private fun MarkdownNode(
                             tableActions = tableActions,
                             codeBlock = codeBlock,
                             codeBlockActions = codeBlockActions,
+                            math = math,
                         )
                     }
                     index++
@@ -438,6 +484,7 @@ private fun MarkdownNode(
             tableActions,
             codeBlock,
             codeBlockActions,
+            math,
         )
     }
 }
@@ -1429,9 +1476,80 @@ private fun renderInline(
     }
 }
 
+/**
+ * 行内公式（RikkaHub `Markdown.kt:1160-1215` 的 INLINE_MATH 分支）：把一段文本按
+ * `$…$` / `\(…\)` 切开，公式登记成 [InlineTextContent]（占位符尺寸必须**提前**算），
+ * 过长的公式按顶层运算符拆段并插零宽空格提供换行点；解析失败或尺寸为 0 时回退原文，
+ * 保证内容不被吞掉。
+ */
 @Composable
-private fun AnnotatedString.Builder.appendInlineStyled(
-    node: Node,
+private fun AnnotatedString.Builder.appendTextWithInlineMath(
+    literal: String,
+    inlineContent: MutableMap<String, InlineTextContent>,
+) {
+    val scope = LocalInlineMath.current
+    if (scope == null || !scope.config.enabled || literal.isEmpty()) {
+        append(literal)
+        return
+    }
+    val segments = splitInlineMath(literal, scope.config)
+    if (segments.size == 1 && segments[0] is MathSegment.Plain) {
+        append(literal)
+        return
+    }
+    segments.forEachIndexed { index, segment ->
+        when (segment) {
+            is MathSegment.Plain -> append(segment.text)
+            is MathSegment.Formula -> {
+                val drawables = splitLatex(
+                    latex = segment.latex,
+                    maxWidthPx = scope.fontPx * 2,
+                    fontSizePx = scope.fontPx,
+                    color = scope.colorArgb,
+                )
+                if (drawables.isEmpty()) {
+                    val rect = assumeLatexSize(segment.latex, scope.fontPx)
+                    if (rect.width() <= 0 || rect.height() <= 0) {
+                        // 非法 LaTeX：原样显示，别丢内容。
+                        append(segment.latex)
+                    } else {
+                        val key = "math:$index:${segment.latex.hashCode()}"
+                        appendInlineContent(key, ZERO_WIDTH)
+                        val width = with(scope.density) { rect.width().toSp() }
+                        val height = with(scope.density) { rect.height().toSp() }
+                        inlineContent.putIfAbsent(
+                            key,
+                            InlineTextContent(
+                                Placeholder(width, height, PlaceholderVerticalAlign.TextCenter),
+                            ) { MathInline(latex = segment.latex) },
+                        )
+                    }
+                } else {
+                    drawables.forEachIndexed { partIndex, drawable ->
+                        // 段间零宽空格 = 可换行点（RikkaHub 同款）。
+                        if (partIndex > 0) append(ZERO_WIDTH)
+                        val key = "math:$index:$partIndex:${segment.latex.hashCode()}"
+                        appendInlineContent(key, ZERO_WIDTH)
+                        val width = with(scope.density) { drawable.bounds.width().toSp() }
+                        val height = with(scope.density) { drawable.bounds.height().toSp() }
+                        inlineContent.putIfAbsent(
+                            key,
+                            InlineTextContent(
+                                Placeholder(width, height, PlaceholderVerticalAlign.TextCenter),
+                            ) { LatexDrawable(drawable = drawable) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 行内占位符的替换文本：零宽空格，避免复制正文时混进标记。 */
+private const val ZERO_WIDTH = "\u200B"
+
+@Composable
+private fun AnnotatedString.Builder.appendInlineStyled(    node: Node,
     plainTexts: Map<Node, String>,
     codeBackground: Color,
     linkColor: Color,
@@ -1439,7 +1557,7 @@ private fun AnnotatedString.Builder.appendInlineStyled(
     inlineContent: MutableMap<String, InlineTextContent>,
 ) {
     when (node) {
-        is Text -> append(node.literal ?: "")
+        is Text -> appendTextWithInlineMath(node.literal ?: "", inlineContent)
         is StrongEmphasis -> withStyle(SpanStyle(fontWeight = FontWeight(600))) {
             appendInlineChildren(node, plainTexts, codeBackground, linkColor, citation, inlineContent)
         }

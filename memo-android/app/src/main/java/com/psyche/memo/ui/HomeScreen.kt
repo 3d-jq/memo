@@ -2041,6 +2041,13 @@ private fun MessageRow(
             onPreviewHtml = onOpenHtmlPreview,
         )
     }
+    // 数学公式两开关（渲染页）：总开关 + 是否把 `$…$` 当公式。
+    val mathConfig = remember(timelineSettings.mathRendering, timelineSettings.dollarLatex) {
+        com.psyche.memo.ui.markdown.MathConfig(
+            enabled = timelineSettings.mathRendering,
+            dollarLatex = timelineSettings.dollarLatex,
+        )
+    }
     // CMW:3707-3711 的第三分支 _buildToolMessage(1662-1706)：role == tool 的
     // 消息没有头像/气泡/操作行，正文本身就是 {tool, arguments, result, metadata}，
     // 渲染成 h16 v6 里的一张工具卡；按显示设置不可见时整条不占位。
@@ -2286,6 +2293,7 @@ private fun MessageRow(
                                             onCitationTap = handleCitationTap,
                                             citationInfoResolver = citationResolver,
                                             codeBlock = codeBlockConfig,
+                                            math = mathConfig,
                                         )
                                     } else {
                                         // 关掉 Markdown：同字号/行高的纯文本（CMW:2055-2066）。
@@ -2361,6 +2369,7 @@ private fun MessageRow(
                                                 tableActions = tableActions,
                                                 codeBlock = codeBlockConfig,
                                                 codeBlockActions = codeBlockActions,
+                                                math = mathConfig,
                                             )
                                         } else {
                                             // 关掉 Markdown：同字号/行高纯文本（CMW:2432-2441）。

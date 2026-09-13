@@ -11,6 +11,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // jlatexmath-android（RikkaHub fork）：数学公式渲染，见 PORTING.md §5.12 渲染批。
+        maven("https://jitpack.io")
     }
 }
 
