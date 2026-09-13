@@ -120,6 +120,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 
 39. **别在类体里再声明一个与构造参数同名的属性 —— 它会静默屏蔽那个参数**（2026-09-13 查出来的真 bug）：`ChatViewModel` 的构造参数 `injectPresets`（新会话标记，`HomeScreen.pendingPresetInject` 传进来）在类体里又被写成 `private val injectPresets: Boolean = false`，于是 `init` 里的 `if (injectPresets)` 读的是那个恒假的**属性** ⇒ **助手的「预设对话」从来没注入过**（用户问「提示词这个部分可以用吧」时才发现；系统提示词/消息模板/追加当前时间三项是好的）。修法：把构造参数直接声明成 `private val`，删掉类体里那份；`ChatPresetInjectionTest`（3 例）锁住「新会话按序落库 / 已存在消息的会话不重注 / 没标记就不注」，并且**验证过把门闸写死为假时它会失败**。排查同类问题：`grep -n "val <参数名>"`，看有没有第二处声明。
 
+40. **系统提示词的 12 个 `{...}` 变量必须真的替换**（2026-09-13 用户问「为什么不用那个可用变量呀 是没做吗？」——当时确实没做）：助手编辑页「可用变量」列的是**单花括号**变量（`{cur_date}`/`{cur_time}`/`{cur_datetime}`/`{model_id}`/`{model_name}`/`{locale}`/`{timezone}`/`{system_version}`/`{device_info}`/`{battery_level}`/`{nickname}`/`{assistant_name}`），原版在 `injectSystemPrompt`（message_builder_service L1569-1597）里用 `PromptTransformer.buildPlaceholders` + `replacePlaceholders` 逐 key 顺序替换；消息模板那套是**双花括号** `{{ role }}`，两套别混（`replacePlaceholders` 不碰 `{{ }}`，`applyMessageTemplate` 也不碰 `{ }`，测试锁住）。我们只搬了 UI 提示、没接替换，等于 12 个变量全是死文案。现在：`PromptTransformer.buildPlaceholders/replacePlaceholders`（纯逻辑，`PromptTransformerTest`）+ app 侧 `ChatViewModel.resolveSystemPromptVariables`（读时区/系统版本/设备/电量/昵称/当前模型）+ `SystemPromptVariablesTest`（3 例，接线级；同样验证过「不替换就失败」）。**注意**：变量里有时间的话会破坏 prompt cache —— 编辑页本来就对 `{cur_date}`/`{cur_time}`/`{cur_datetime}` 弹那条警告（`MemoryPrompts.detectTimeVariablesInSystemPrompt`）。
+
 ## 5. 批次进度（收工更新）
 
 | 批次 | 范围 | 状态 |
@@ -510,6 +512,7 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 - **SAF 无法按扩展名过滤**：导入的 16 种扩展名白名单只在读取处兜底。
 - **Compose `TextField` 无 `contentPadding`**：12dp 内边距用外层 `Box` border + padding 等价实现。
 - **图标**：lucide 同名图标；`androidsvg`（coil-svg 底层）不支持 `<mask>` 与带 `gradientTransform` 的 `url(#渐变)` ⇒ 品牌 svg 会渲染空白，改映射到 png（bing/linkup）。
+- **系统提示词变量的两个平台增强**：`{device_info}` 给「android 厂商 型号」（原版 `prompt_transformer.dart:23` 注释里就是 "Simple fallback; can be extended with device_info plugins"，只给 OS 名）、`{battery_level}` 给真实电量百分比（原版写死 `'unknown'`，同样标着待扩展）。**别"改回" unknown**；读不到电量时仍回落 `unknown`。
 - **`sh.calvin.reorderable` 的 `onMove` 给的是 LazyColumn 全局索引**：列表里若有 header/footer 占位 item 会整体错位（供应商拖拽重叠 bug 的根因）；`core:ui` 的 `ReorderableColumn` 用 `dataIndexOf()` 反查兜底。
 
 ### 已知品牌残留（**用户 2026-09-11 决定：他自己后续替换，暂不处理**）

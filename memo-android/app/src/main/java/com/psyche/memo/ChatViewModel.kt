@@ -2296,14 +2296,16 @@ class ChatViewModel(
      * 每一段带自己的 [ContextSource]，上下文日志按它切片（见
      * [com.psyche.memo.logging.ContextLogAssembler]）。
      */
-    private suspend fun buildSystemPromptParts(
+    internal suspend fun buildSystemPromptParts(
         assistant: com.psyche.memo.data.model.Assistant?,
-    ): List<Pair<ContextSource, String>> {
-        val parts = mutableListOf<Pair<ContextSource, String>>()
+    ): List<Pair<ContextSource, String>> {        val parts = mutableListOf<Pair<ContextSource, String>>()
         fun add(source: ContextSource, text: String?) {
             text?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(source to it) }
         }
-        add(ContextSource.systemPrompt, assistant?.systemPrompt)
+        // injectSystemPrompt（message_builder_service L1569-1597）：系统提示词里的
+        // `{cur_date}` / `{nickname}` / `{assistant_name}` … 12 个变量在这里替换
+        // （助手编辑页「可用变量」列的就是它们）。
+        add(ContextSource.systemPrompt, resolveSystemPromptVariables(assistant))
         // 记忆规则（message_builder.injectMemoryAndRecentChats L1610-1643）：
         // 长期记忆规则与过往回忆规则各自独立门控。
         if (assistant != null && (assistant.enableMemory || assistant.allowPastConversationRecall)) {
@@ -2334,6 +2336,51 @@ class ChatViewModel(
         add(ContextSource.instructionInjection, activeInstructionPrompts(assistant?.id))
         return parts
     }
+
+    /**
+     * `PromptTransformer.buildPlaceholders` 的 app 侧取值 —— 平台相关的几个值
+     * （时区/系统版本/设备/电量/昵称）在这里读，core:llm 只负责拼表与替换。
+     *
+     * 与原版的两处差异（原版这里是显式占位，见 PORTING §5.11 平台差异）：
+     * `{device_info}` 给「android 厂商 型号」（原版只有 OS 名）、`{battery_level}`
+     * 给真实电量百分比（原版写死 "unknown"）。
+     */
+    private fun resolveSystemPromptVariables(
+        assistant: com.psyche.memo.data.model.Assistant?,
+    ): String? {
+        val prompt = assistant?.systemPrompt ?: return null
+        if (!prompt.contains('{')) return prompt
+        val context = container.appContext
+        val nickname = DefaultModelPrefs.decodeStoredString(
+            container.preferenceRepository.readJson("user_name"),
+        ).orEmpty()
+        val vars = com.psyche.memo.llm.prompt.PromptTransformer.buildPlaceholders(
+            assistantName = assistant.name,
+            userNickname = nickname,
+            modelId = selectedModelId.value.takeIf { it.isNotEmpty() },
+            modelName = selectedModelId.value.takeIf { it.isNotEmpty() },
+            locale = java.util.Locale.getDefault().toLanguageTag(),
+            timezone = java.util.TimeZone.getDefault()
+                .getDisplayName(false, java.util.TimeZone.SHORT)
+                .orEmpty(),
+            systemVersion = "android ${android.os.Build.VERSION.RELEASE}",
+            deviceInfo = listOf(
+                "android",
+                android.os.Build.MANUFACTURER,
+                android.os.Build.MODEL,
+            ).filter { it.isNotBlank() }.joinToString(" "),
+            batteryLevel = batteryLevelLabel(context),
+        )
+        return com.psyche.memo.llm.prompt.PromptTransformer.replacePlaceholders(prompt, vars)
+    }
+
+    /** `{battery_level}` —— 读系统电量（读不到时沿用原版的 "unknown"）。 */
+    private fun batteryLevelLabel(context: android.content.Context): String = runCatching {
+        val manager = context.getSystemService(android.content.Context.BATTERY_SERVICE)
+            as? android.os.BatteryManager ?: return@runCatching "unknown"
+        val level = manager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        if (level in 0..100) "$level%" else "unknown"
+    }.getOrDefault("unknown")
 
     /**
      * `InstructionInjectionProvider.activesFor(assistantId)` —— 取该助手（或全局
