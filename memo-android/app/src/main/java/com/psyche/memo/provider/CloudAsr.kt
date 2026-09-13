@@ -4,6 +4,7 @@ import com.psyche.memo.ui.AsrServiceOptions
 import com.psyche.memo.ui.DashScopeAsrOptions
 import com.psyche.memo.ui.MimoAsrOptions
 import com.psyche.memo.ui.OpenAiRealtimeAsrOptions
+import com.psyche.memo.ui.QwenAudioAsrOptions
 import com.psyche.memo.ui.StepAsrOptions
 import com.psyche.memo.ui.VolcengineAsrOptions
 import java.nio.ByteBuffer
@@ -76,10 +77,13 @@ object CloudAsrService {
         client: OkHttpClient,
         options: AsrServiceOptions,
         isCancelled: () -> Boolean = { false },
+        /** 仅供测试：覆盖 Qwen Audio 的 endpoint（它的 URL 由 workspace/region 拼出来，没法指到 mock）。 */
+        endpointOverride: String? = null,
     ): CloudAsrSession = when (options) {
         is MimoAsrOptions -> MimoAsrSession(client, options, isCancelled)
         is StepAsrOptions -> StepAsrSession(client, options, isCancelled)
         is VolcengineAsrOptions -> VolcengineAsrSession(client, options, isCancelled)
+        is QwenAudioAsrOptions -> QwenAudioAsrSession(client, options, isCancelled, endpointOverride)
         is OpenAiRealtimeAsrOptions -> RealtimeAsrSession(            client = client,
             url = openAiEndpoint(options.websocketUrl),
             headers = mapOf("Authorization" to "Bearer ${options.apiKey}"),
@@ -212,6 +216,208 @@ object CloudAsrService {
             }
         })
     }
+
+    /**
+     * Qwen Audio ASR（原版 `_QwenAudioAsrSession` 1196-1400）：DashScope
+     * `/api-ws/v1/inference` 的 run-task / 二进制 PCM / result-generated / finish-task 协议。
+     * `result-generated` 只给**当前句**，所以按 `sentence_end` 累积已定稿句子 + 当前半句。
+     * （RikkaHub 的 speech 模块没有这一家，只能按 Flutter 侧照做。）
+     */
+    private class QwenAudioAsrSession(
+        client: OkHttpClient,
+        private val options: QwenAudioAsrOptions,
+        private val isCancelled: () -> Boolean,
+        endpointOverride: String? = null,
+    ) : CloudAsrSession, okhttp3.WebSocketListener() {
+
+        private val taskId = java.util.UUID.randomUUID().toString()
+        private val started = java.util.concurrent.CountDownLatch(1)
+        private val finished = java.util.concurrent.CountDownLatch(1)
+        @Volatile private var finalized = ""
+        @Volatile private var transcript = ""
+        @Volatile private var terminal: AsrException? = null
+        @Volatile private var cleanedUp = false
+        private var socket: okhttp3.WebSocket? = null
+        private var onPartial: ((String) -> Unit)? = null
+        private var onError: ((Exception) -> Unit)? = null
+
+        init {
+            val builder = Request.Builder().url(endpointOverride ?: options.websocketUrl)
+                .addHeader("Authorization", "Bearer ${options.apiKey}")
+            if (options.workspaceId.trim().isNotEmpty()) {
+                builder.addHeader("X-DashScope-WorkSpace", options.workspaceId.trim())
+            }
+            socket = client.newWebSocket(builder.build(), this)
+        }
+
+        override fun observePartials(onPartial: (String) -> Unit, onError: (Exception) -> Unit) {
+            this.onPartial = onPartial
+            this.onError = onError
+            terminal?.let(onError)
+        }
+
+        override fun addPcm16(chunk: ByteArray) {
+            if (chunk.isEmpty()) return
+            ensureActive()
+            // 服务端要先回 task-started 才能收音频。
+            if (started.count > 0) {
+                val ok = started.await(COMPLETION_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                if (!ok) throw AsrException("Qwen Audio ASR timed out waiting for task-started")
+            }
+            ensureActive()
+            val sent = runCatching { socket?.send(okio.ByteString.of(*chunk)) ?: false }.getOrDefault(false)
+            if (!sent) throw AsrException("Qwen Audio ASR WebSocket send failed")
+        }
+
+        override fun finish(): String {
+            ensureActive()
+            if (started.count > 0) {
+                started.await(COMPLETION_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            }
+            sendJson(
+                buildJsonObject {
+                    put("header", buildJsonObject {
+                        put("action", "finish-task")
+                        put("task_id", taskId)
+                        put("streaming", "duplex")
+                    })
+                    put("payload", buildJsonObject { put("input", buildJsonObject { }) })
+                },
+            )
+            val ok = finished.await(COMPLETION_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+            terminal?.let { cleanup(); throw it }
+            cleanup()
+            if (!ok) throw AsrException("Qwen Audio ASR timed out")
+            return transcript
+        }
+
+        override fun cancel() {
+            terminal = terminal ?: AsrException("Qwen Audio ASR session was cancelled")
+            started.countDown()
+            finished.countDown()
+            cleanup()
+        }
+
+        override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+            runCatching {
+                sendJson(
+                    buildJsonObject {
+                        put("header", buildJsonObject {
+                            put("action", "run-task")
+                            put("task_id", taskId)
+                            put("streaming", "duplex")
+                        })
+                        put("payload", buildJsonObject {
+                            put("task_group", "audio")
+                            put("task", "asr")
+                            put("function", "recognition")
+                            put("model", options.model)
+                            put("parameters", buildJsonObject {
+                                put("format", options.format)
+                                put("sample_rate", options.sampleRate)
+                            })
+                            put("input", buildJsonObject { })
+                        })
+                    },
+                )
+            }.onFailure { fail(AsrException("Qwen Audio ASR session setup failed")) }
+        }
+
+        override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+            if (cleanedUp) return
+            val json = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: return
+            val header = json["header"] as? JsonObject ?: return
+            when (header["event"]?.jsonPrimitive?.contentOrNull.orEmpty()) {
+                "task-started" -> started.countDown()
+                "result-generated" -> {
+                    val sentence = (((json["payload"] as? JsonObject)?.get("output") as? JsonObject)
+                        ?.get("sentence") as? JsonObject) ?: return
+                    val value = sentence["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    if (value.isEmpty()) return
+                    if (isQwenSentenceEnd(sentence)) {
+                        finalized = combineQwenAudioTranscript(finalized, value)
+                        transcript = finalized
+                    } else {
+                        transcript = combineQwenAudioTranscript(finalized, value)
+                    }
+                    onPartial?.invoke(transcript)
+                }
+                "task-finished" -> finished.countDown()
+                "task-failed" -> {
+                    val detail = header["error_message"]?.jsonPrimitive?.contentOrNull
+                        ?: header["error_code"]?.jsonPrimitive?.contentOrNull
+                        ?: "task-failed"
+                    fail(AsrException(redact("Qwen Audio ASR failed: $detail", options.apiKey)))
+                }
+            }
+        }
+
+        override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+            fail(AsrException("Qwen Audio ASR failed"))
+        }
+
+        override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
+            if (!cleanedUp && terminal == null) finished.countDown()
+        }
+
+        private fun sendJson(event: JsonObject) {
+            val sent = runCatching { socket?.send(event.toString()) ?: false }.getOrDefault(false)
+            if (!sent) throw AsrException("Qwen Audio ASR WebSocket send failed")
+        }
+
+        private fun ensureActive() {
+            terminal?.let { throw it }
+            if (isCancelled()) cancel()
+            terminal?.let { throw it }
+        }
+
+        private fun fail(error: AsrException) {
+            if (terminal != null) return
+            val safe = AsrException(redact(error.message ?: "Qwen Audio ASR failed", options.apiKey))
+            terminal = safe
+            started.countDown()
+            finished.countDown()
+            onError?.invoke(safe)
+            cleanup()
+        }
+
+        private fun cleanup() {
+            if (cleanedUp) return
+            cleanedUp = true
+            runCatching { socket?.close(1000, "finished") }
+            socket = null
+        }
+    }
+
+    /** 原版 `_isQwenAudioSentenceEnd`：布尔或 "true"/"1" 都算句子结束。 */
+    internal fun isQwenSentenceEnd(sentence: JsonObject): Boolean {
+        val flag = sentence["sentence_end"] ?: return false
+        val text = flag.jsonPrimitive.contentOrNull?.trim()?.lowercase()
+        return when (flag.jsonPrimitive.contentOrNull) {
+            null -> false
+            else -> text == "true" || text == "1"
+        }
+    }
+
+    /**
+     * 原版 `combineQwenAudioTranscript`（cloud_asr_service.dart:1420-1430）：拉丁词边界补空格，
+     * 中日韩直接相接。
+     */
+    internal fun combineQwenAudioTranscript(prefix: String, next: String): String {
+        if (prefix.isEmpty()) return next
+        if (next.isEmpty()) return prefix
+        if (next.first().isWhitespace()) return prefix + next
+        // 注意：原版用 `[A-Za-z0-9]`（**ASCII**），不能用 isLetterOrDigit ——
+        // 后者对汉字也返回 true，会把「你好」+「世界」拼成「你好 世界」。
+        val prefixEndsLatinWord = isAsciiAlnum(prefix.last())
+        val prefixEndsLatinPunct = prefix.last() in ".!?…,;:'\")]"
+        val nextStartsLatinWord = isAsciiAlnum(next.first())
+        val needsSpace = nextStartsLatinWord && (prefixEndsLatinWord || prefixEndsLatinPunct)
+        return if (needsSpace) "$prefix $next" else prefix + next
+    }
+
+    private fun isAsciiAlnum(c: Char): Boolean =
+        (c in 'a'..'z') || (c in 'A'..'Z') || (c in '0'..'9')
 
     /**
      * Volcengine ASR（RikkaHub `speech/.../VolcengineASRController.kt` 的协议移植；

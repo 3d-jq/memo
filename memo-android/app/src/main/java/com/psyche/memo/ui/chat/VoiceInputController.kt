@@ -93,7 +93,11 @@ class VoiceInputController(
         client: okhttp3.OkHttpClient,
     ) {
         val session = runCatching {
-            com.psyche.memo.provider.CloudAsrService.startSession(client, options) { !cloudRunning }
+            com.psyche.memo.provider.CloudAsrService.startSession(
+                client,
+                options,
+                isCancelled = { !cloudRunning },
+            )
         }.getOrNull()
         if (session == null) {
             destroy()
