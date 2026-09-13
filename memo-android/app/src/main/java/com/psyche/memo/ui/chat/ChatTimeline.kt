@@ -114,6 +114,13 @@ data class ChatTimelineSettings(
     val bubbleStyles: ChatBubbleStyles = ChatBubbleStyles(),
     val assistantBubbleFitContent: Boolean = false,
     val assistantBubbleSplitParagraphs: Boolean = false,
+    /**
+     * `display_chat_font_scale_v1`（settings_provider.dart:5041-5049，默认 1.0）。
+     * 原版在 message_list_view.dart:2018-2024 把整条消息包进
+     * `MediaQuery(textScaler: systemScale × chatFontScale)`，移植版等价地用
+     * 缩放后的 `LocalDensity.fontScale` 包住消息行。
+     */
+    val chatFontScale: Float = 1f,
     // 用户（user）消息侧 —— settings_provider.dart:1068-1085（三个默认都是 true），
     // 由 chat_message_widget.dart:1719-1735 的用户头消费。
     val showUserAvatar: Boolean = true,
@@ -149,6 +156,8 @@ data class ChatTimelineSettings(
                 ),
                 assistantBubbleFitContent = bool("display_assistant_bubble_fit_content_v1", false),
                 assistantBubbleSplitParagraphs = bool("display_assistant_bubble_split_paragraphs_v1", false),
+                chatFontScale = read("display_chat_font_scale_v1")
+                    ?.trim()?.trim('"')?.toFloatOrNull() ?: 1f,
                 showUserAvatar = bool("display_show_user_avatar_v1", true),
                 showUserName = bool("display_show_user_name_v1", true),
                 showUserTimestamp = bool("display_show_user_timestamp_v1", true),

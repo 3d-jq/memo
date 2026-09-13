@@ -531,6 +531,16 @@ fun ChatContent(
     // ask-user 卡与时间线可见性都从这里取状态。
     val approvalService = container.toolApprovalService
     val askUserService = container.askUserInteractionService
+    // 自动滚动（scroll_controller.dart）：总开关默认开；用户拖动后
+    // `autoScrollIdleSeconds` 秒内的跟随暂停（默认 8）。
+    val autoScrollEnabled = remember {
+        container.preferenceRepository.readJson("display_auto_scroll_enabled_v1")
+            ?.let { it == "1" } ?: true
+    }
+    val autoScrollIdleSeconds = remember {
+        container.preferenceRepository.readJson("display_auto_scroll_idle_seconds_v1")
+            ?.toIntOrNull() ?: 8
+    }
     val chatHaptics = LocalHapticsSettings.current
     val chatView = LocalView.current
 
@@ -741,6 +751,7 @@ fun ChatContent(
     var navVisible by remember { mutableStateOf(false) }
     var autoStick by remember { mutableStateOf(true) }
     var navHideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var idleStickJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     androidx.compose.runtime.LaunchedEffect(timelineListState) {
         // 用户拖动 → 停止跟随并显示导航按钮；2s 无操作自动隐藏
         // （源码 scroll_controller.dart:374-425 handleUserScrollIntent /
@@ -756,6 +767,14 @@ fun ChatContent(
                 is androidx.compose.foundation.interaction.DragInteraction.Cancel,
                 -> {
                     autoStick = !timelineListState.canScrollForward
+                    // scroll_controller.dart:384-392 handleUserScrollIntent 的空闲
+                    // 计时：拖动结束后等 `autoScrollIdleSeconds` 再判一次贴底
+                    // （惯性滑到底的情况，收手那一刻还不在底部）。
+                    idleStickJob?.cancel()
+                    idleStickJob = coroutineScope.launch {
+                        kotlinx.coroutines.delay(autoScrollIdleSeconds.coerceAtLeast(1) * 1000L)
+                        autoStick = !timelineListState.canScrollForward
+                    }
                     navHideJob?.cancel()
                     navHideJob = coroutineScope.launch {
                         kotlinx.coroutines.delay(2000)
@@ -791,10 +810,22 @@ fun ChatContent(
         }
     }
     // 流式期间贴底跟随；用户上滑（autoStick=false）后停止。
-    androidx.compose.runtime.LaunchedEffect(messages, streaming, autoStick) {
-        if (streaming && autoStick && messages.isNotEmpty()) {
+    // scroll_controller.dart:520-527 autoScrollToBottomIfNeeded —— 关掉
+    // `display_auto_scroll_enabled_v1` 后流式内容不再把视口拽到底。
+    androidx.compose.runtime.LaunchedEffect(messages, streaming, autoStick, autoScrollEnabled) {
+        if (streaming && autoStick && autoScrollEnabled && messages.isNotEmpty()) {
             timelineListState.animateScrollToItem(messages.lastIndex)
         }
+    }
+    // scroll_controller.dart:513-533 stickToBottomAfterGeneration：生成结束那一刻
+    // 尾部还会长高（操作行/Token 统计出现、思考卡收起），跟随条件里的 streaming 已经
+    // 翻假，需要在同一个窗口里再贴一次底。
+    var wasStreaming by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(streaming, autoStick, autoScrollEnabled, messages.size) {
+        if (wasStreaming && !streaming && autoStick && autoScrollEnabled && messages.isNotEmpty()) {
+            timelineListState.animateScrollToItem(messages.lastIndex)
+        }
+        wasStreaming = streaming
     }
     // 滚到顶部附近自动加载更早的历史 —— message_list_view.dart:1816-1830
     // （isNearTop = 距顶 <= 96 逻辑像素，120ms 节流；Compose 侧用
@@ -874,6 +905,22 @@ fun ChatContent(
     val chatMaskStrength = remember {
         container.preferenceRepository.readJson("display_chat_background_mask_strength_v1")
             ?.toFloatOrNull() ?: 1f
+    }
+    // 聊天背景（助手壁纸）是否真的在显示 —— chat_frosted_backdrop.dart:104-113
+    // `isBackgroundActive`：http(s) 或本地文件存在。输入栏底色按它再乘一个比例，
+    // 有壁纸时更透。
+    val backgroundImageActive = remember(chatBackground) {
+        com.psyche.memo.ui.chat.isBackgroundActive(chatBackground?.trim().orEmpty())
+    }
+    // 输入栏底色不透明度（display_settings_page.dart L382-404 两键，settings_provider
+    // 默认浅 0.8236 / 深 0.7396）。
+    val inputOpacityLight = remember {
+        container.preferenceRepository.readJson("display_chat_input_background_opacity_light_v1")
+            ?.toFloatOrNull() ?: 0.8236f
+    }
+    val inputOpacityDark = remember {
+        container.preferenceRepository.readJson("display_chat_input_background_opacity_dark_v1")
+            ?.toFloatOrNull() ?: 0.7396f
     }
     Box(modifier = modifier) {
         com.psyche.memo.ui.chat.ChatAssistantBackground(
@@ -1299,6 +1346,9 @@ fun ChatContent(
             attachments = attachments,
             onRemoveAttachment = { index -> vm.removeAttachment(index) },
             voice = voiceInput,
+            backgroundImageActive = backgroundImageActive,
+            inputOpacityLight = inputOpacityLight,
+            inputOpacityDark = inputOpacityDark,
         )
         }
     }
@@ -1955,6 +2005,24 @@ private fun MessageRow(
             )
         }
     }
+    // CMW 侧的等价物：message_list_view.dart:2018-2024 把整条消息包进
+    // `MediaQuery(textScaler: 系统缩放 × chatFontScale)`，所以消息头/正文/思考卡/
+    // 代码块的字号一起缩放，而 dp（头像、图标、内边距）不变。Compose 里 sp 的缩放
+    // 因子就是 LocalDensity.fontScale，照原样乘上去即可。
+    val baseDensity = androidx.compose.ui.platform.LocalDensity.current
+    val messageDensity = remember(baseDensity, timelineSettings.chatFontScale) {
+        if (timelineSettings.chatFontScale == 1f) {
+            baseDensity
+        } else {
+            androidx.compose.ui.unit.Density(
+                density = baseDensity.density,
+                fontScale = baseDensity.fontScale * timelineSettings.chatFontScale,
+            )
+        }
+    }
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalDensity provides messageDensity,
+    ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -2464,6 +2532,7 @@ private fun MessageRow(
             }
         }
     }
+    }
     if (showLanguageSheet) {
         com.psyche.memo.ui.chat.LanguageSelectSheet(
             onSelect = { lang ->
@@ -2661,6 +2730,11 @@ private fun ChatInputBar(
     // 语音输入执行器（chat_input_bar.dart asrProvider 的系统分支）；null =
     // 不可用，麦克风按钮按 CIB:2542-2546 showVoiceInput 条件隐藏。
     voice: com.psyche.memo.ui.chat.VoiceInputController? = null,
+    // chat_input_bar.dart:2548-2553 `_inputFillColor(...)` 的三个入参：当前助手有壁纸
+    // 时底色再乘一个比例，浅/深色不透明度来自显示设置（默认 0.8236 / 0.7396）。
+    backgroundImageActive: Boolean = false,
+    inputOpacityLight: Float = DEFAULT_INPUT_BG_OPACITY_LIGHT,
+    inputOpacityDark: Float = DEFAULT_INPUT_BG_OPACITY_DARK,
 ) {
     val cs = MaterialTheme.colorScheme
     // 源码 chat_input_bar.dart:2547 —— theme.brightness == Brightness.dark。
@@ -2772,7 +2846,16 @@ private fun ChatInputBar(
                     // Modifier.blur 只模糊**自身内容**，而本层内容就是这块纯色 —— 模糊
                     // 纯色在观感上没有任何变化，却每帧都要走一遍模糊渲染管线。去掉它，
                     // 视觉一致、省掉一笔常驻开销。
-                    .background(color = inputFillColor(cs, isDark), shape = InputContainerShape),
+                    .background(
+                        color = inputFillColor(
+                            cs = cs,
+                            isDark = isDark,
+                            backgroundImageActive = backgroundImageActive,
+                            lightOpacity = inputOpacityLight,
+                            darkOpacity = inputOpacityDark,
+                        ),
+                        shape = InputContainerShape,
+                    ),
             )
             // 源码 chat_input_bar.dart:2639-2655 / 2830-2949 —— 容器内 Column：
             // ① 附件预览区 ② 输入区 ③ 底部按钮行

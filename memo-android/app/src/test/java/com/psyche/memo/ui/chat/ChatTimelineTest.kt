@@ -367,6 +367,21 @@ class ChatTimelineTest {
         assertEquals(ChatBubbleStyle.SOLID, s.bubbleStyles.style)
     }
 
+    // --- 聊天字号缩放（display_settings_page 的「聊天字体大小」滑杆） ---
+
+    @Test
+    fun settings_chatFontScaleDefaultsToOne() {
+        assertEquals(1f, ChatTimelineSettings.fromPrefs { null }.chatFontScale)
+        // 写坏的值回退 1.0，不当成 0（否则聊天正文会消失）。
+        assertEquals(1f, ChatTimelineSettings.fromPrefs { "不是数字" }.chatFontScale)
+    }
+
+    @Test
+    fun settings_chatFontScaleReadsStoredScale() {
+        val s = ChatTimelineSettings.fromPrefs { "1.25" }
+        assertEquals(1.25f, s.chatFontScale)
+    }
+
     // --- ReasoningSegmentCodec.toggleExpandedAt ---------------------------------
 
     @Test
