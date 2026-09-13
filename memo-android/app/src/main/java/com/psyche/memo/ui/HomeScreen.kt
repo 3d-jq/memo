@@ -320,8 +320,17 @@ fun HomeScreen(
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         if (selectedConversationId == null) {
-            // 有历史就打开最近一条，否则开一个 draft（不入库，发首条消息才落库）。
-            val latest = container.conversationDao.getAll().firstOrNull()
+            // `display_new_chat_on_launch_v1`（默认**开**，home_page_controller.dart:782-786
+            // `initChat`）：开启时每次启动都新建会话；关闭时回到最近一条。两种情况下
+            // 都没有历史就开一个 draft（不入库，发首条消息才落库）。
+            val newChatOnLaunch = container.preferenceRepository
+                .readJson("display_new_chat_on_launch_v1")
+                ?.let { it == "1" || it == "true" } ?: true
+            val latest = if (newChatOnLaunch) {
+                null
+            } else {
+                container.conversationDao.getAll().firstOrNull()
+            }
             selectedConversationId = latest?.id
                 ?: Conversation.create(
                     title = newChatTitle,
