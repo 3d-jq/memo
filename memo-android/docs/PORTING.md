@@ -114,6 +114,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 
 36. **附件（图片 + 文档）是正文气泡的兄弟、排在气泡上方，别塞进气泡**（2026-09-13 用户报「文档发在对话界面渲染有问题」）：原版 `_buildAttachmentPreview` 把 ImagePart/FilePart 按 part 顺序放进一个 `Wrap(spacing 8, runSpacing 8)`（用户侧右对齐，CMW:1835-1843 与气泡之间 8pt；助手侧左对齐、只收 FilePart，CMW:2848-2851 在正文块之前）。移植版把**文档卡塞进了用户气泡**——卡自身是 `surface@92%` 的近不透明底，叠在半透明 primary 气泡上就是一块突兀的方块。现在统一走 `MessageAttachmentPreview(parts, alignEnd)`（`MessageImageAttachments` 保留给助手图片块，两者共用 `ImageAttachmentTile`）。
 
+37. **文件名不要"清洗"，中文会被吃掉**（2026-09-13 用户截图报「文档名字渲染有问题」：`Qt-C______.docx`）：`AttachmentStore` 里那句 `displayName.replace(Regex("[^A-Za-z0-9._-]"), "_")` 把**所有非 ASCII 字符**（也就是中文）逐字换成下划线——存储页、附件卡、发给模型的 `## user sent a file: <name>` 三处一起中招。原版 `FileImportHelper.copyXFile` **直接沿用 `xFile.name`**，一个字都不改。现在 `safeFileName()` 只做两件必要的事：路径分隔符/NUL → `_`（防目录穿越，正常 picker 不会给）、超长名按 **UTF-8 200 字节**截断且保留扩展名（ext4 单段 255 字节，超了 `createNewFile` 抛错 → 导入静默失败）。空格/`#`/`&`/emoji/全角括号一律保留，单测 `AttachmentStoreTest` 锁住。**注意**：已经发出去的消息里存的是被清洗过的名字，恢复不了，重新发一次才正常。
+
 ## 5. 批次进度（收工更新）
 
 | 批次 | 范围 | 状态 |

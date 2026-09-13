@@ -32,8 +32,7 @@ object AttachmentStore {
         val ext = displayName.substringAfterLast('.', "").lowercase()
         val isImage = (mime?.startsWith("image/") == true) || ext in imageExtensions
         val dir = File(context.filesDir, "upload").apply { mkdirs() }
-        val safeName = displayName.replace(Regex("[^A-Za-z0-9._-]"), "_").takeLast(80)
-            .ifEmpty { "attachment" }
+        val safeName = safeFileName(displayName)
 
         val bytes = runCatching {
             resolver.openInputStream(uri)?.use { it.readBytes() }
@@ -59,6 +58,32 @@ object AttachmentStore {
             isImage = isImage,
         )
     }
+
+    /**
+     * 落盘的展示名 —— **原样沿用文件名**（中文、空格、括号、`#` 等一律保留；原版
+     * `FileImportHelper.copyXFile` 直接用 `xFile.name`）。只做两件必要的事：
+     * 把路径分隔符/NUL 换成 `_`（防目录穿越），以及给超长名兜一个 200 字节上限
+     * （ext4 单段 255 字节，超了 `createNewFile` 抛错 → 导入会静默失败）。
+     */
+    internal fun safeFileName(rawName: String): String {
+        val cleaned = rawName
+            .replace('/', '_')
+            .replace('\\', '_')
+            .replace("\u0000", "")
+            .trim()
+            .ifEmpty { "attachment" }
+        if (cleaned.toByteArray(Charsets.UTF_8).size <= MAX_NAME_BYTES) return cleaned
+        val dot = cleaned.lastIndexOf('.')
+        val ext = if (dot > 0) cleaned.substring(dot).take(16) else ""
+        val base = if (dot > 0) cleaned.substring(0, dot) else cleaned
+        val budget = (MAX_NAME_BYTES - ext.toByteArray(Charsets.UTF_8).size).coerceAtLeast(1)
+        var out = base
+        while (out.isNotEmpty() && out.toByteArray(Charsets.UTF_8).size > budget) out = out.dropLast(1)
+        return out + ext
+    }
+
+    /** 单段文件名上限（ext4 是 255 字节；留点富余）。 */
+    private const val MAX_NAME_BYTES = 200
 
     /**
      * 落盘：同名字段族里有字节相同的旧文件就复用它，否则用 `name`、`name(1)`…

@@ -86,4 +86,31 @@ class AttachmentStoreTest {
         assertNotNull(saved)
         assertFalse(saved!!.readBytes().isNotEmpty())
     }
+
+    @Test
+    fun `non-ascii names survive intact`() {
+        // 用户实测：文档名里的中文被清洗成了下划线（Qt-C______.docx）。
+        val dir = dir()
+        val saved = AttachmentStore.store(dir, "x".toByteArray(), "Qt-C学习笔记（第1版）.docx")!!
+        assertEquals("Qt-C学习笔记（第1版）.docx", saved.name)
+        assertEquals("学习笔记", AttachmentStore.safeFileName("Qt-C学习笔记（第1版）.docx").substringAfter("Qt-C").substringBefore("（"))
+    }
+
+    @Test
+    fun `only path separators and control characters are neutralised`() {
+        assertEquals("a_b", AttachmentStore.safeFileName("a/b"))
+        assertEquals("a_b", AttachmentStore.safeFileName("a\\b"))
+        assertEquals("attachment", AttachmentStore.safeFileName("   "))
+        // 空格 / '#' / '&' / emoji 都保留（原版直接沿用文件名）。
+        assertEquals("我的 报告 #1 😀.pdf", AttachmentStore.safeFileName("我的 报告 #1 😀.pdf"))
+    }
+
+    @Test
+    fun `overlong names are truncated without losing the extension`() {
+        val name = "很长的名字".repeat(60) + ".txt"
+        val safe = AttachmentStore.safeFileName(name)
+        assertTrue(safe.endsWith(".txt"))
+        assertTrue(safe.toByteArray(Charsets.UTF_8).size <= 200)
+        assertTrue(safe.startsWith("很长的名字"))
+    }
 }
