@@ -1162,6 +1162,7 @@ fun ChatContent(
                                 vm.toggleReasoningSegment(msg.id, segmentIndex)
                             },
                             conversationId = conversationId,
+                            onOpenHtmlPreview = { code -> htmlPreviewFor = code },
                             approvalService = approvalService,
                             askUserService = askUserService,
                             onRecoveredAnswer = { part, result ->
@@ -1790,6 +1791,8 @@ private fun MessageRow(
     onToggleReasoning: (segmentIndex: Int) -> Unit,
     /** 当前会话 id（审批卡 / ask-user 卡按会话匹配 pending 请求）。 */
     conversationId: String?,
+    /** 代码块「预览」（HTML 块）→ 打开 WebView 预览页（core:ui 不认识该页面）。 */
+    onOpenHtmlPreview: ((String) -> Unit)? = null,
     /** 工具审批服务（tool_approval_service.dart）—— 审批卡与时间线可见性。 */
     approvalService: ToolApprovalService?,
     /** ask-user 交互服务（ask_user_interaction_service.dart）。 */
@@ -1878,6 +1881,23 @@ private fun MessageRow(
     // 表格工具栏（_MarkdownTableToolbar）：复制 / 存图 / 导出 CSV 的平台侧实现，
     // 由 app 注入给 core:ui（core:ui 拿不到剪贴板、MediaStore、SAF）。
     val tableActions = com.psyche.memo.ui.chat.rememberMarkdownTableActions()
+    // 代码块：折叠/换行三个设置 + 「预览」动作（另存为暂未接线，按钮自动隐藏）。
+    val codeBlockConfig = remember(
+        timelineSettings.autoCollapseCodeBlock,
+        timelineSettings.autoCollapseCodeBlockLines,
+        timelineSettings.mobileCodeBlockWrap,
+    ) {
+        com.psyche.memo.ui.markdown.CodeBlockConfig(
+            autoCollapse = timelineSettings.autoCollapseCodeBlock,
+            autoCollapseLines = timelineSettings.autoCollapseCodeBlockLines,
+            wrap = timelineSettings.mobileCodeBlockWrap,
+        )
+    }
+    val codeBlockActions = remember(onOpenHtmlPreview) {
+        com.psyche.memo.ui.markdown.CodeBlockActions(
+            onPreviewHtml = onOpenHtmlPreview,
+        )
+    }
     // CMW:3707-3711 的第三分支 _buildToolMessage(1662-1706)：role == tool 的
     // 消息没有头像/气泡/操作行，正文本身就是 {tool, arguments, result, metadata}，
     // 渲染成 h16 v6 里的一张工具卡；按显示设置不可见时整条不占位。
@@ -2082,6 +2102,7 @@ private fun MessageRow(
                                         baseLineHeight = ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP,
                                         onCitationTap = handleCitationTap,
                                         citationInfoResolver = citationResolver,
+                                        codeBlock = codeBlockConfig,
                                     )
                                 } else {
                                     // 关掉 Markdown：同字号/行高的纯文本（CMW:2055-2066）。
@@ -2123,6 +2144,8 @@ private fun MessageRow(
                                         onCitationTap = handleCitationTap,
                                         citationInfoResolver = citationResolver,
                                         tableActions = tableActions,
+                                        codeBlock = codeBlockConfig,
+                                        codeBlockActions = codeBlockActions,
                                     )
                                 } else {
                                     // 关掉 Markdown：同字号/行高纯文本（CMW:2432-2441）。

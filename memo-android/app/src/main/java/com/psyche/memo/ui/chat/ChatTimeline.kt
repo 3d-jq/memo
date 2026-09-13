@@ -104,6 +104,10 @@ data class ChatTimelineSettings(
     // L2049-2066 用户侧 / L2427-2441 助手侧）。
     val enableUserMarkdown: Boolean = true,
     val enableAssistantMarkdown: Boolean = true,
+    /** 代码块：`display_auto_collapse_code_block_v1` + 行数 + 移动端换行。 */
+    val autoCollapseCodeBlock: Boolean = false,
+    val autoCollapseCodeBlockLines: Int = 2,
+    val mobileCodeBlockWrap: Boolean = false,
     // 用户（user）消息侧 —— settings_provider.dart:1068-1085（三个默认都是 true），
     // 由 chat_message_widget.dart:1719-1735 的用户头消费。
     val showUserAvatar: Boolean = true,
@@ -114,6 +118,9 @@ data class ChatTimelineSettings(
         fun fromPrefs(read: (key: String) -> String?): ChatTimelineSettings {
             fun bool(key: String, default: Boolean): Boolean =
                 read(key)?.let { it == "1" } ?: default
+            // 数值键存的是 JSON 数字（settings 页写的是纯数字文本）。
+            fun int(key: String, default: Int): Int =
+                read(key)?.trim()?.trim('"')?.toIntOrNull() ?: default
             return ChatTimelineSettings(
                 showThinkingCards = bool("display_show_thinking_cards_v1", true),
                 showToolCards = bool("display_show_tool_cards_v1", true),
@@ -123,6 +130,9 @@ data class ChatTimelineSettings(
                 enableReasoningMarkdown = bool("display_enable_reasoning_markdown_v1", true),
                 enableUserMarkdown = bool("display_enable_user_markdown_v1", true),
                 enableAssistantMarkdown = bool("display_enable_assistant_markdown_v1", true),
+                autoCollapseCodeBlock = bool("display_auto_collapse_code_block_v1", false),
+                autoCollapseCodeBlockLines = int("display_auto_collapse_code_block_lines_v1", 2),
+                mobileCodeBlockWrap = bool("display_mobile_code_block_wrap_v1", false),
                 showUserAvatar = bool("display_show_user_avatar_v1", true),
                 showUserName = bool("display_show_user_name_v1", true),
                 showUserTimestamp = bool("display_show_user_timestamp_v1", true),

@@ -533,7 +533,7 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 
 | 批次 | 项 |
 |---|---|
-| **渲染批** | ⬜ 气泡风格整页（`display_chat_message_background_style_v1` + 助手/用户 override JSON + 自适应宽度 + 按段拆分）——需把 ChatStyleSpec 硬编码气泡改成可配置绘制；⬜ $LaTeX/数学渲染（Android 无数学渲染引擎，需先选库）；✅ **用户/助手 Markdown 开关已接线**（`ChatTimelineSettings.enableUserMarkdown/enableAssistantMarkdown`，关掉时同字号/行高纯文本）；⬜ 代码块自动折叠/行数/移动端换行（MarkdownRenderer） |
+| **渲染批** | ⬜ 气泡风格整页（`display_chat_message_background_style_v1` + 助手/用户 override JSON + 自适应宽度 + 按段拆分）——需把 ChatStyleSpec 硬编码气泡改成可配置绘制；⬜ $LaTeX/数学渲染（Android 无数学渲染引擎，需先选库）；✅ **用户/助手 Markdown 开关已接线**（`ChatTimelineSettings.enableUserMarkdown/enableAssistantMarkdown`，关掉时同字号/行高纯文本）；✅ **代码块 chrome 已接线**（`codeBlockAutoCollapse`/`codeBlockAutoCollapseLines`/`mobileCodeBlockWrap` → `CodeBlockConfig`；`MarkdownRenderer.CodeBlockView` 语言条+折叠/换行+Copy，底部 24dp 渐隐；`onOpenHtmlPreview` 走既有 WebView 预览；`onSaveAs` 仍为 null ⇒ Download 钮按既有约定隐藏，待接存储导出） |
 | **输入批** | 聊天字体大小滑杆；App/代码字体加载（filesDir/fonts → Typeface）；自动滚动开关+空闲秒数；输入框不透明度浅/深；长粘贴转文件+阈值；图片上传画质管线（裁剪器/画质/透明压缩） |
 | **聊天行为批** | 重新生成删除后续消息；Fork 保留消息版本；编辑助手消息保留思考/工具卡；显示应用更新（依赖上游更新端点，S5 类不移植则**删行需用户点头**）；消息导航按钮三态（需先做导航按钮 UI）；会话列表显示日期；点助手/话题不关侧栏 ×2；关侧栏保持助手列表展开；删除后新建会话；启动时新建会话 |
 | **语音批** | ASR 服务分派（asr_services_v1 / asr_selected_service_id_v1 → 网络识别）；TTS 语速/音调（网络 TTS 参数）；悬浮播放器「保存音频」 |
