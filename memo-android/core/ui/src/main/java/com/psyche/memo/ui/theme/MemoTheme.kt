@@ -73,6 +73,42 @@ object MemoTheme {
     }
 
     /**
+     * RikkaHub 预设主题的通道（`RikkaHubPresets.kt` 的 `authoredSurfacePaletteIds`）：
+     * **原样使用**预设声明的表面 —— 不 `applyPageSurface`、也不
+     * `withDerivedSurfaceContainers`。
+     *
+     * 用户 2026-09-13：「语义 token 226 处…我们要更 rikkhub 一样覆盖多 不然主题不好看」
+     * —— 我们的 SurfaceLadder 会把面板色压成「白/黑 alpha 混合」（light 下卡片≈96% 白），
+     * 于是换主题只换得到强调色、整块表面几乎不动。预设自带完整的中性阶梯
+     * （`surface`、`surfaceContainerLowest`…`surfaceContainerHighest`、`surfaceDim`、
+     * `surfaceBright`、`surfaceVariant`），
+     * 直接采信它们，主题才真的铺满整个界面（配合 [AppSemanticColors.authored]）。
+     * Memo 自己那 9 套调色板仍走 [colorScheme]（它们的容器曾被生成器压平，走原样会没有层次）。
+     */
+    fun authoredColorScheme(
+        palette: Palette,
+        dark: Boolean,
+        pureBackground: Boolean = false,
+    ): ColorScheme {
+        var scheme = if (dark) palette.dark else palette.light
+        if (pureBackground) {
+            scheme = if (dark) {
+                scheme.copy(
+                    surface = Color.Black,
+                    inverseSurface = Color.White,
+                    inverseOnSurface = Color.Black,
+                )
+            } else {
+                scheme.copy(
+                    inverseSurface = Color.Black,
+                    inverseOnSurface = Color.White,
+                )
+            }
+        }
+        return scheme
+    }
+
+    /**
      * `theme_factory.dart` `_applyPageSurface`: the palette-declared `surface`
      * is the card, so the page is that color sunk 4 tones (light + layered only,
      * skipped for a pure-white background).

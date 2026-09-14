@@ -7,7 +7,7 @@ import androidx.compose.ui.text.font.FontFamily
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.theme.Palette
 import com.psyche.memo.ui.theme.buildCustomThemePalette
-import com.psyche.memo.ui.theme.paletteById
+import com.psyche.memo.ui.theme.themePaletteById
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -216,7 +216,7 @@ object ThemeState {
                 )
             }
         }
-        return paletteById(paletteId)
+        return themePaletteById(paletteId)
     }
 }
 

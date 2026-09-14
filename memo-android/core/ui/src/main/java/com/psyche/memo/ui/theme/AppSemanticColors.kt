@@ -107,6 +107,29 @@ data class AppSemanticColors(
         fun of(cs: ColorScheme, dark: Boolean, layered: Boolean = false): AppSemanticColors =
             if (dark) dark(cs, layered) else light(cs, layered)
 
+        /**
+         * 「原样表面」通道（RikkaHub 预设，见 [MemoTheme.authoredColorScheme]）：
+         * 面板/填充色直接取预设声明的角色，不走 [SurfaceLadder] 的白/黑 alpha 混合。
+         *
+         * 用户 2026-09-13：「语义 token 226 处…我们要更 rikkhub 一样覆盖多，不然主题不好看」
+         * —— 卡片取 `surfaceContainer`、输入框/内嵌填充取 `surfaceContainerHigh`
+         * （RikkaHub 自己的卡片层就是 `surfaceContainer`，`Color.kt` 的 `CustomColors`），
+         * 边框取预设的 `outlineVariant`（预设的 outline 本身就是低对比中性色，不必再乘
+         * Memo 那套 6%/38% 的 alpha —— 那是给「纯黑/纯白 outlineVariant」的调色板用的）。
+         * `success/warning/chartSeries` 等派生色仍复用同一份实现。
+         */
+        fun authored(cs: ColorScheme, dark: Boolean): AppSemanticColors =
+            (if (dark) dark(cs) else light(cs)).copy(
+                surfaceFill = cs.surfaceContainerHigh,
+                surfaceCard = cs.surfaceContainer,
+                surfaceCardFill = cs.surfaceContainerHigh,
+                hairline = cs.outlineVariant.copy(alpha = if (dark) 0.35f else 0.55f),
+                hairlineStrong = cs.outlineVariant,
+                // 弹窗/面板底：预设的 surfaceContainer 与页面 surface 已经分得开。
+                layered = true,
+                isDark = dark,
+            )
+
         /** `dynamic_color`'s `Color.harmonizeWith`, i.e. HCT hue rotation toward [source]. */
         private fun harmonizeWith(design: Color, source: Color): Color =
             Color(Blend.harmonize(design.toArgb(), source.toArgb()))
@@ -122,10 +145,14 @@ fun ProvideSemanticColors(
     scheme: ColorScheme,
     dark: Boolean,
     layered: Boolean = false,
+    /** true = 走 [AppSemanticColors.authored]（RikkaHub 预设的「原样表面」通道）。 */
+    authored: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(
-        LocalSemanticColors provides AppSemanticColors.of(scheme, dark, layered),
+        LocalSemanticColors provides
+            if (authored) AppSemanticColors.authored(scheme, dark)
+            else AppSemanticColors.of(scheme, dark, layered),
         content = content,
     )
 }

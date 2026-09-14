@@ -241,6 +241,14 @@ private fun AppThemeAndContent(
             dark,
             ThemeState.useLayeredSurfaces,
         )
+    } else if (resolvedPalette.id in com.psyche.memo.ui.theme.authoredSurfacePaletteIds) {
+        // RikkaHub 预设：「原样表面」通道 —— 预设自带完整中性阶梯，主题才铺满整个界面
+        // （用户 2026-09-13「我们要更 rikkhub 一样覆盖多，不然主题不好看」，见 §4-44）。
+        MemoTheme.authoredColorScheme(
+            resolvedPalette,
+            dark,
+            ThemeState.usePureBackground,
+        )
     } else {
         MemoTheme.colorScheme(
             resolvedPalette,
@@ -249,6 +257,9 @@ private fun AppThemeAndContent(
             ThemeState.useLayeredSurfaces,
         )
     }
+    // 预设通道下语义 token 也按预设的角色取值（卡片=surfaceContainer 等）。
+    val authoredSurfaces = !ThemeState.useDynamicColor &&
+        resolvedPalette.id in com.psyche.memo.ui.theme.authoredSurfacePaletteIds
     // 显示设置 → 字体：App 字体刷到 Typography 的 15 个槽位（原版 main.dart `applyAppFont`），
     // 代码字体通过 core:ui 的 CompositionLocal 传给代码块/内联 code。
     val appTypography = remember(ThemeState.appFontFamily) {
@@ -274,7 +285,7 @@ private fun AppThemeAndContent(
         ) {
         // Memo paints through semantic tokens (surfaceCard / hairline), not
         // raw Material roles — see lib/theme/app_semantic_colors.dart.
-        ProvideSemanticColors(scheme = colorScheme, dark = dark) {
+        ProvideSemanticColors(scheme = colorScheme, dark = dark, authored = authoredSurfaces) {
         // settings_provider.dart L1120-1129: the haptics flags live in prefs and
         // the global one is pushed into the Haptics service on load.
         ProvideHapticsSettings(container = container) {

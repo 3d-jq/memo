@@ -33,6 +33,7 @@ fills in native-side details and shared feature implementations.
 - **输入栏样式**：保持 kelivo 原样，但最小高改为 64dp（用户要求）；其余参数勿动
 - **上下文压缩＝opencode 阈值机制**（用户 2026-09-13「改成 opencode 那个压缩阈值来压缩」）：算 `estimate(system+messages+tools)`，超过「上下文窗口 − max(输出预算, buffer)」时在**同一会话**里插入锚定摘要检查点（`CompactionPart` + `<conversation-checkpoint>`），不再「新建会话 + 摘要作首条消息」——**勿改回原版**；详见下面「上下文压缩机制＝opencode 阈值机制」条。**呈现**（同日用户点名）：压缩只在对话里显示一条分隔线（压缩中＝扫光文字、完成＝静态），不弹对话框；**摘要不显示在对话界面**（不画气泡/不进导出/多选/标题/总结/记忆）；上下文占用只在「上下文管理」sheet 里看（占用卡：占比 + `约 12k / 108k tokens`，分母＝自动压缩阈值）——**输入栏上方的常显细条用户当日已要求撤掉，别再加回来**
 - **品牌化**：无 kelivo 字样/链接/端点；归档建议名 `memo_backup_<stamp>.zip`、本机副本 `memo-snapshot-<nanos>.zip`
+- **内置主题集＝Memo 默认 + RikkaHub 7 套预设**（用户 2026-09-13「我们这个八个效果不好，用 RikkaHub 那个主题，他那个更全面；我们这个默认也要保留，主题按照我们这个 UI 和 UX 不改」）：列表在 `RikkaHubPresets.kt` 的 `themeChoices`（默认 + sakura/ocean/spring/autumn/black/minimal/claude），Memo 旧 8 套不再列出但 id 仍可解析；**预设只给配色身份，`surfaceContainer*` 面板层仍走 Memo 自己的 `SurfaceLadder`**——勿改成「原样表面」（会花：226 处语义 token vs 约 25 处直接读容器），详见 PORTING §4-44 与 §5.11
 - ⚠️ **品牌残留（用户 2026-09-11：他自己后续替换，暂不处理）**：`AboutScreen.kt` 的社区链接三行仍指向上游（`kelivo.psycheas.top` / `Chevey339/kelivo`）——**勿代改、勿当待办追问**，等用户给新 URL 或说删行；见 PORTING.md §5.11
 
 ## Native Android port (memo-android)

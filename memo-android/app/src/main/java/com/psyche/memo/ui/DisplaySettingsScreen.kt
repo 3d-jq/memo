@@ -68,7 +68,7 @@ import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.common.AppLocale
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.MemoTheme
-import com.psyche.memo.ui.theme.paletteById
+import com.psyche.memo.ui.theme.themePaletteById
 
 /**
  * Display settings ("Preferences" / 偏好) matching kelivo's
@@ -130,7 +130,8 @@ fun DisplaySettingsScreen(
 
     fun reloadPalette() {
         val raw = container.preferenceRepository.readJson(MemoTheme.PALETTE_KEY)
-        val palette = paletteById(raw?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "default")
+        // themePaletteById：RikkaHub 预设优先，其次 Memo 生成的调色板（见 RikkaHubPresets.kt）。
+        val palette = themePaletteById(raw?.replace("\"", "")?.takeIf { it.isNotEmpty() } ?: "default")
         paletteName = if (currentLanguage == "zh") palette.zhName else palette.enName
     }
     fun reloadAll() {

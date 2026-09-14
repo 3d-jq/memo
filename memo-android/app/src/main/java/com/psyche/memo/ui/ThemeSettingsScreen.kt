@@ -75,6 +75,7 @@ import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.Palette
 import com.psyche.memo.ui.theme.allPalettes
+import com.psyche.memo.ui.theme.themeChoices
 
 /**
  * 1:1 port of theme_settings_page.dart — dynamic color (Android), pure
@@ -155,18 +156,26 @@ fun ThemeSettingsScreen(
                 }
             }
 
-            // L124-138: palette list.
+            // L124-138: palette list — 用户 2026-09-13「我们这个八个效果不好，用 RikkaHub
+            // 那个主题」：列表内容换成「Memo 默认 + RikkaHub 7 套预设」（themeChoices），
+            // 布局/交互仍是 Memo 这套 SectionCard + PaletteRow。Memo 自己那 8 套不再列出，
+            // 但 id 仍能解析；万一当前选中的正是旧的一套，临时补一行，免得看不到选中项。
             item { Spacer(Modifier.height(12.dp)) }
             item {
+                val legacySelected = allPalettes
+                    .firstOrNull { it.id == ThemeState.paletteId }
+                    ?.takeIf { legacy -> themeChoices.none { it.id == legacy.id } }
+                val palettes =
+                    if (legacySelected != null) themeChoices + legacySelected else themeChoices
                 SectionCard {
-                    allPalettes.forEachIndexed { i, palette ->
+                    palettes.forEachIndexed { i, palette ->
                         PaletteRow(
                             palette = palette,
                             language = currentLanguage,
                             selected = ThemeState.paletteId == palette.id,
                             onTap = { ThemeState.setPalette(container, palette.id) },
                         )
-                        if (i != allPalettes.lastIndex) DividerRow()
+                        if (i != palettes.lastIndex) DividerRow()
                     }
                 }
             }
