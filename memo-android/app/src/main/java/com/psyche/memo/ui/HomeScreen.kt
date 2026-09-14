@@ -2662,16 +2662,27 @@ private fun MessageRow(
                         }
                     }
                 }
-                if (!isUser && msg.isStreaming) {
-                    // **用户 2026-09-12 点名**：原版三点脉动（CMW:2885-2925 /
-                    // 3011-3020）换成「扫光文字」，并且挪成列表末尾**单独一行靠左**。
-                    Spacer(Modifier.height(6.dp))
-                    com.psyche.memo.ui.chat.ThinkingShimmerText(
-                        modifier = Modifier.padding(start = 2.dp),
-                        phrases = timelineSettings.thinkingIndicator.phrases,
-                        fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
-                        colorArgb = timelineSettings.thinkingIndicator.colorArgb,
-                    )
+                // **用户 2026-09-12 点名**：原版三点脉动（CMW:2885-2925 /
+                // 3011-3020）换成「扫光文字」，并且挪成列表末尾**单独一行靠左**。
+                // 收起必须和下方操作行的展开同为 220ms——条件渲染瞬间移除会让
+                // 「扫光行 -30dp 跳变 + 操作行 220ms 展开」叠成可见抖动（用户 2026-09-14）。
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !isUser && msg.isStreaming,
+                    exit = androidx.compose.animation.shrinkVertically(
+                        animationSpec = androidx.compose.animation.core.tween(220),
+                    ) + androidx.compose.animation.fadeOut(
+                        animationSpec = androidx.compose.animation.core.tween(220),
+                    ),
+                ) {
+                    Column {
+                        Spacer(Modifier.height(6.dp))
+                        com.psyche.memo.ui.chat.ThinkingShimmerText(
+                            modifier = Modifier.padding(start = 2.dp),
+                            phrases = timelineSettings.thinkingIndicator.phrases,
+                            fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
+                            colorArgb = timelineSettings.thinkingIndicator.colorArgb,
+                        )
+                    }
                 }
                 if (msg.failed) {
                     Text(
