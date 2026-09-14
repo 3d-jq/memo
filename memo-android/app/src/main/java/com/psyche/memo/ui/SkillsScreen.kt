@@ -484,10 +484,18 @@ private fun AddSkillDialog(
         title = { Text(stringResource(R.string.skills_page_add_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 提示词不裸排 —— 走全站统一的 ⓘ 浮动气泡（SettingsTipIcon）。
+                // 只有**校验反馈**（缺 name / 解析出的技能名）才直接显示。
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.skills_page_skill_content_label),
+                        style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    SettingsTipIcon(stringResource(R.string.skills_page_paste_hint))
+                }
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
                     placeholder = {
                         Text(
                             text = "---\nname: my-skill\ndescription: \"...\"\n---\n\n指令内容...",
@@ -500,14 +508,20 @@ private fun AddSkillDialog(
                     textStyle = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text(
-                    text = when {
-                        nameError -> stringResource(R.string.skills_page_name_error)
-                        name.isNotBlank() -> stringResource(R.string.skills_page_skill_name, name)
-                        else -> stringResource(R.string.skills_page_paste_hint)
-                    },
-                    style = TextStyle(fontSize = 11.sp, color = if (nameError) cs.error else cs.onSurfaceVariant),
-                )
+                val feedback = when {
+                    nameError -> stringResource(R.string.skills_page_name_error)
+                    name.isNotBlank() -> stringResource(R.string.skills_page_skill_name, name)
+                    else -> null
+                }
+                if (feedback != null) {
+                    Text(
+                        text = feedback,
+                        style = TextStyle(
+                            fontSize = 11.sp,
+                            color = if (nameError) cs.error else cs.onSurfaceVariant,
+                        ),
+                    )
+                }
             }
         },
         confirmButton = {
