@@ -22,6 +22,9 @@ commonmark = "0.26.0"
 jlatexmath = "1.5"
 xz = "1.12"
 snakeyaml = "2.6"
+# 交互式终端页用（JitPack）：termux 的终端模拟器 + TerminalView。
+# 原生 libtermux.so 由 core:workspace 的 termux_pty.cpp 提供，AAR 里的同名库靠 pickFirsts 去重。
+termux = "0.118.0"
 junit = "4.13.2"
 
 [libraries]
@@ -70,6 +73,7 @@ commonmark-gfm-strikethrough = { group = "org.commonmark", name = "commonmark-ex
 jlatexmath = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath", version.ref = "jlatexmath" }
 jlatexmath-font-greek = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath-font-greek", version.ref = "jlatexmath" }
 jlatexmath-font-cyrillic = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath-font-cyrillic", version.ref = "jlatexmath" }
+termux-terminal-view = { module = "com.termux.termux-app:terminal-view", version.ref = "termux" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

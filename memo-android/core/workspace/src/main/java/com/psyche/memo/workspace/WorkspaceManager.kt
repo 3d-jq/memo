@@ -56,6 +56,14 @@ class WorkspaceManager(
 
     fun hasRootfs(root: String): Boolean = File(linuxDir(root), "bin/sh").isFile
 
+    /**
+     * 容器的 bind mount 表（app 侧传进来的 `/skills`、`/upload`）。
+     *
+     * 暴露出来是因为 **同一份挂载表要供两处用**：PRoot 命令的 `-b`（本类内部）与
+     * 交互式终端 PTY 的 argv（app 侧拼）。谁各自硬编码一份，谁就会漂移。
+     */
+    fun bindMounts(): List<WorkspaceBindMount> = bindMounts
+
     fun deleteWorkspace(root: String): Boolean = workspaceDir(root).deleteRecursively()
 
     fun listFiles(

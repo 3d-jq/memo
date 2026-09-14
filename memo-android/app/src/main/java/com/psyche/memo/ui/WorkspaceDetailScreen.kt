@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,7 +27,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -53,7 +51,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -72,7 +69,6 @@ import com.composables.icons.lucide.FileUp
 import com.composables.icons.lucide.Folder
 import com.composables.icons.lucide.FolderOpen
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.Play
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Share2
@@ -89,7 +85,6 @@ import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.theme.withAlpha
 import com.psyche.memo.workspace.RootfsInstallProgress
 import com.psyche.memo.workspace.RootfsInstallStage
-import com.psyche.memo.workspace.WorkspaceCommandResult
 import com.psyche.memo.workspace.WorkspaceFileEntry
 import com.psyche.memo.workspace.WorkspaceShellStatus
 import com.psyche.memo.workspace.WorkspaceStorageArea
@@ -108,9 +103,9 @@ import kotlinx.coroutines.withContext
  *    错误卡 / 空目录态 / 每个条目一张卡（两行内容 + 溢出菜单：导出·分享·删除）；
  *  - 底部两个 tab（基本 / 文件），照上游 `NavigationBar`；文件 tab 且路径非空时返回键上跳一级；
  *  - 点文件按扩展名分流：文本 → 应用内编辑 sheet（上游是独立页）、图片 → 全屏查看器、
- *    其它 → 导出到 cache 交给系统应用打开。
+ *    其它 → 导出到 cache 交给系统应用打开；
+ *  - 终端是**独立路由页**（`WorkspaceTerminalScreen`，1:1 上游的 `WorkspaceTerminalPage`）。
  *
- * 上游有而我们没有的：终端是独立路由页（这里是统一样式的 sheet，见 `TerminalSheet`）。
  * 见 PORTING §4-46。
  */
 @Composable
@@ -118,6 +113,7 @@ fun WorkspaceDetailScreen(
     container: AppContainerImpl,
     workspaceId: String,
     onBack: () -> Unit,
+    onOpenTerminal: (String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -128,7 +124,6 @@ fun WorkspaceDetailScreen(
     val workspace = remember(version, workspaceId) { repo.get(workspaceId) }
 
     var tab by remember { mutableIntStateOf(0) }
-    var showTerminal by remember { mutableStateOf(false) }
     var showInstallDialog by remember { mutableStateOf(false) }
     var installProgress by remember { mutableStateOf<RootfsInstallProgress?>(null) }
     var installError by remember { mutableStateOf<String?>(null) }
@@ -145,11 +140,6 @@ fun WorkspaceDetailScreen(
     var editing by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
     var editorText by remember { mutableStateOf("") }
     var reload by remember { mutableIntStateOf(0) }
-
-    // ---- 终端状态 ----
-    var command by remember { mutableStateOf("") }
-    var running by remember { mutableStateOf(false) }
-    var history by remember { mutableStateOf<List<TerminalEntry>>(emptyList()) }
 
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -237,25 +227,6 @@ fun WorkspaceDetailScreen(
     }
     LaunchedEffect(Unit) { runCatching { repo.touch(workspaceId) } }
 
-    fun runCommand() {
-        val trimmed = command.trim()
-        // 上游用一次判定同时「查 running + 置 true」，避免连点跑出两条并发命令。
-        if (trimmed.isEmpty() || running) return
-        running = true
-        command = ""
-        history = history + TerminalEntry.Command(trimmed)
-        scope.launch {
-            val outcome = runCatching {
-                withContext(Dispatchers.IO) { repo.executeCommand(workspaceId, trimmed) }
-            }
-            history = history + outcome.fold(
-                onSuccess = { TerminalEntry.Output(it) },
-                onFailure = { TerminalEntry.Error(it.message ?: "") },
-            )
-            running = false
-        }
-    }
-
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
         MemoTopBar(
             title = workspace?.name ?: stringResource(R.string.workspace_page_title),
@@ -276,7 +247,7 @@ fun WorkspaceDetailScreen(
                     Lucide.Terminal,
                     cs.onSurface,
                     stringResource(R.string.workspace_open_terminal),
-                ) { showTerminal = true }
+                ) { onOpenTerminal(workspaceId) }
             }
         }
 
@@ -385,18 +356,6 @@ fun WorkspaceDetailScreen(
         WorkspaceBottomTabs(tab = tab, onSelect = { tab = it })
     }
 
-    if (showTerminal) {
-        TerminalSheet(
-            history = history,
-            running = running,
-            command = command,
-            onCommandChange = { command = it },
-            onRun = { runCommand() },
-            onClear = { history = emptyList() },
-            onDismiss = { showTerminal = false },
-        )
-    }
-
     if (showInstallDialog) {
         InstallRootfsDialog(
             workspaceName = workspace?.name.orEmpty(),
@@ -406,6 +365,10 @@ fun WorkspaceDetailScreen(
                 installError = null
                 installProgress = RootfsInstallProgress(RootfsInstallStage.DOWNLOADING)
                 scope.launch {
+                    // 换 rootfs 之前先停掉这个工作区的所有终端会话（上游
+                    // WorkspaceDetailVM.installRootfs 同样先 closeWorkspace），
+                    // 否则交互式 shell 会在被替换的目录上继续跑。
+                    workspace?.root?.let { container.workspaceTerminalSessions.closeWorkspace(it) }
                     val outcome = runCatching {
                         repo.installRootfs(workspaceId, url) { progress -> installProgress = progress }
                     }
@@ -1040,167 +1003,6 @@ private fun WorkspaceBottomTabs(tab: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-/** 终端条目（上游 `WorkspaceTerminalEntry`）。 */
-internal sealed interface TerminalEntry {
-    data class Command(val command: String) : TerminalEntry
-    data class Output(val result: WorkspaceCommandResult) : TerminalEntry
-    data class Error(val message: String) : TerminalEntry
-}
-
-/** 终端 sheet：输出历史 + 命令输入（上游是独立页面，这里用等价的独立面）。 */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TerminalSheet(
-    history: List<TerminalEntry>,
-    running: Boolean,
-    command: String,
-    onCommandChange: (String) -> Unit,
-    onRun: () -> Unit,
-    onClear: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
-    ModalBottomSheet(
-        sheetState = rememberMemoSheetState(),
-        onDismissRequest = onDismiss,
-        dragHandle = null,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            MemoSheetHandle(trailingGap = 0.dp)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.workspace_terminal_title),
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onClear) {
-                    Text(stringResource(R.string.workspace_terminal_clear))
-                }
-            }
-            if (history.isEmpty() && !running) {
-                Text(
-                    text = stringResource(R.string.workspace_terminal_hint),
-                    style = TextStyle(fontSize = 12.sp, color = cs.onSurfaceVariant),
-                )
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 320.dp)
-                        .background(cs.surfaceContainerHighest, RoundedCornerShape(12.dp))
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    history.forEach { entry ->
-                        when (entry) {
-                            is TerminalEntry.Command -> Text(
-                                text = "$ ${entry.command}",
-                                style = TextStyle(
-                                    fontSize = 12.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = cs.primary,
-                                ),
-                            )
-
-                            is TerminalEntry.Output -> {
-                                val result = entry.result
-                                if (result.stdout.isNotBlank()) Text(
-                                    text = result.stdout.trimEnd(),
-                                    style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                                )
-                                if (result.stderr.isNotBlank()) Text(
-                                    text = result.stderr.trimEnd(),
-                                    style = TextStyle(
-                                        fontSize = 12.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = cs.error,
-                                    ),
-                                )
-                                if (result.timedOut) Text(
-                                    text = "timeout",
-                                    style = TextStyle(
-                                        fontSize = 12.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = semantic.warning,
-                                    ),
-                                )
-                                if (result.exitCode != 0 && !result.timedOut) Text(
-                                    text = "exit ${result.exitCode}",
-                                    style = TextStyle(
-                                        fontSize = 11.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = semantic.warning,
-                                    ),
-                                )
-                            }
-
-                            is TerminalEntry.Error -> Text(
-                                text = entry.message,
-                                style = TextStyle(
-                                    fontSize = 12.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = cs.error,
-                                ),
-                            )
-                        }
-                    }
-                    if (running) Text(
-                        text = stringResource(R.string.workspace_terminal_running),
-                        style = TextStyle(fontSize = 12.sp, color = cs.onSurfaceVariant),
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 44.dp)
-                        .background(cs.surfaceContainerHighest, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "$",
-                        style = TextStyle(
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = cs.primary,
-                        ),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    BasicTextField(
-                        value = command,
-                        onValueChange = onCommandChange,
-                        textStyle = TextStyle(
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = cs.onSurface,
-                        ),
-                        cursorBrush = SolidColor(cs.primary),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                IconButton(onClick = onRun, enabled = !running && command.isNotBlank()) {
-                    Icon(
-                        Lucide.Play,
-                        contentDescription = stringResource(R.string.workspace_terminal_title),
-                        tint = if (running || command.isBlank()) withAlpha(cs.onSurface, 0.3) else cs.primary,
-                    )
-                }
-            }
-        }
-    }
-}
 
 /** 文本编辑器（等宽、统一样式 sheet）。`editable=false` 时是只读预览（rootfs 区）。 */
 @OptIn(ExperimentalMaterial3Api::class)

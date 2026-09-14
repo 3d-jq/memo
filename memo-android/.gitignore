@@ -5,6 +5,9 @@ build/
 *.apk
 *.aab
 
+# NDK / CMake 中间产物（core:workspace 的 termux_pty.cpp 会生成）
+.cxx/
+
 # Local config
 local.properties
 keystore.properties

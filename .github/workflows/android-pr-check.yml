@@ -28,6 +28,14 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # core:workspace 的交互式终端 PTY（src/main/cpp/termux_pty.cpp）需要 NDK + CMake。
+      # runner 自带的 Android SDK 不含这两样，且版本必须与 core/workspace/build.gradle.kts
+      # 里的 ndkVersion 一致。
+      - name: Install NDK and CMake
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;28.2.13676358" "cmake;3.22.1"
+
       - name: Lint (all modules)
         working-directory: memo-android
         run: ./gradlew --console=plain --continue lintDebug

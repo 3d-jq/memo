@@ -3398,9 +3398,6 @@
   "workspaceAreaFiles": "文件",
   "workspaceAreaLinux": "Rootfs",
   "workspaceTerminalTitle": "终端",
-  "workspaceTerminalHint": "在工作区 rootfs 里执行命令",
-  "workspaceTerminalClear": "清空",
-  "workspaceTerminalRunning": "执行中…",
   "workspaceTabBasic": "基本",
   "workspaceToolApprovals": "工具审批",
   "workspaceRefresh": "刷新",
@@ -3430,5 +3427,15 @@
   "workspaceDownloading": "正在下载 {bytes}{total}",
   "workspaceExtracting": "正在解压 {count}{entry}",
   "workspaceInstallComplete": "安装完成",
-  "workspaceOpenFailed": "没有应用能打开这个文件"
+  "workspaceOpenFailed": "没有应用能打开这个文件",
+  "workspaceTerminalTitleWithName": "终端 · {name}",
+  "workspaceTerminalNewTab": "新建标签页",
+  "workspaceTerminalCloseTab": "关闭标签页 {number}",
+  "workspaceTerminalCloseConfirmTitle": "关闭标签页 {number}？",
+  "workspaceTerminalCloseConfirmMessage": "这个标签页里正在跑的 shell 会被结束。",
+  "workspaceTerminalClose": "关闭",
+  "workspaceTerminalLoading": "正在启动终端…",
+  "workspaceTerminalNotInstalled": "先去装 Rootfs —— 终端要用它。",
+  "workspaceTerminalNoTabs": "暂无终端会话",
+  "workspaceTerminalExited": "进程已退出"
 }

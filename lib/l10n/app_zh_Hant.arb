@@ -3398,9 +3398,6 @@
   "workspaceAreaFiles": "檔案",
   "workspaceAreaLinux": "Rootfs",
   "workspaceTerminalTitle": "終端",
-  "workspaceTerminalHint": "在工作區 rootfs 裡執行命令",
-  "workspaceTerminalClear": "清空",
-  "workspaceTerminalRunning": "執行中…",
   "workspaceTabBasic": "基本",
   "workspaceToolApprovals": "工具審批",
   "workspaceRefresh": "重新整理",
@@ -3430,5 +3427,15 @@
   "workspaceDownloading": "正在下載 {bytes}{total}",
   "workspaceExtracting": "正在解壓 {count}{entry}",
   "workspaceInstallComplete": "安裝完成",
-  "workspaceOpenFailed": "沒有應用程式能開啟這個檔案"
+  "workspaceOpenFailed": "沒有應用程式能開啟這個檔案",
+  "workspaceTerminalTitleWithName": "終端 · {name}",
+  "workspaceTerminalNewTab": "新增分頁",
+  "workspaceTerminalCloseTab": "關閉分頁 {number}",
+  "workspaceTerminalCloseConfirmTitle": "關閉分頁 {number}？",
+  "workspaceTerminalCloseConfirmMessage": "這個分頁裡正在執行的 shell 會被結束。",
+  "workspaceTerminalClose": "關閉",
+  "workspaceTerminalLoading": "正在啟動終端…",
+  "workspaceTerminalNotInstalled": "先去安裝 Rootfs —— 終端需要它。",
+  "workspaceTerminalNoTabs": "暫無終端工作階段",
+  "workspaceTerminalExited": "行程已結束"
 }

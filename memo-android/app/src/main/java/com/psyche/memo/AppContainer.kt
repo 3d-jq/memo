@@ -102,9 +102,7 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val workspaceManager: com.psyche.memo.workspace.WorkspaceManager by lazy {
         com.psyche.memo.workspace.WorkspaceManager(
             baseDir = java.io.File(appContext.filesDir, WORKSPACES_DIR),
-            shellRunner = com.psyche.memo.workspace.ProotShellRunner(
-                nativeLibraryDir = java.io.File(appContext.applicationInfo.nativeLibraryDir),
-            ),
+            shellRunner = prootShellRunner,
             bindMounts = listOf(
                 com.psyche.memo.workspace.WorkspaceBindMount(
                     source = java.io.File(appContext.filesDir, SKILLS_DIR).apply { mkdirs() },
@@ -118,12 +116,34 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         )
     }
 
+    /**
+     * PRoot 执行器。单独暴露是给**交互式终端页**用：它要拿同一份挂载表
+     * （`WorkspaceManager.bindMounts()`）拼 PTY 的 argv、以及同一个 loader 环境。
+     */
+    val prootShellRunner: com.psyche.memo.workspace.ProotShellRunner by lazy {
+        com.psyche.memo.workspace.ProotShellRunner(
+            nativeLibraryDir = java.io.File(appContext.applicationInfo.nativeLibraryDir),
+        )
+    }
+
     val workspaceRepository: com.psyche.memo.provider.workspace.WorkspaceRepository by lazy {
         com.psyche.memo.provider.workspace.WorkspaceRepository(
             store = com.psyche.memo.data.workspace.WorkspaceStore(database.writableDatabase),
             manager = workspaceManager,
             rootfsInstaller = com.psyche.memo.workspace.RootfsInstaller(workspaceManager),
             assistants = assistantStore,
+        )
+    }
+
+    /**
+     * 交互式终端的会话表（照上游 `WorkspaceTerminalSessionManager`）：容器级单例，
+     * 退出终端页不结束 shell —— 只有显式关 tab、shell 自己退出、或工作区被删/换 rootfs
+     * 时才结束。
+     */
+    val workspaceTerminalSessions: com.psyche.memo.provider.workspace.WorkspaceTerminalSessionManager by lazy {
+        com.psyche.memo.provider.workspace.WorkspaceTerminalSessionManager(
+            container = this,
+            appScope = appScope,
         )
     }
 
@@ -250,7 +270,7 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     }
 
     /** App-wide IO scope for one-shot persistence (assistant selection writes). */
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
      * 记忆流程追踪（memory_trace.dart）：内存环形缓冲（24 条，不落盘），

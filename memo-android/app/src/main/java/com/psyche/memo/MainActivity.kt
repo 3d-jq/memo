@@ -84,6 +84,7 @@ import com.psyche.memo.ui.SettingsScreen
 import com.psyche.memo.ui.SkillsScreen
 import com.psyche.memo.ui.WorkspaceScreen
 import com.psyche.memo.ui.WorkspaceDetailScreen
+import com.psyche.memo.ui.WorkspaceTerminalScreen
 import com.psyche.memo.ui.SkillDetailScreen
 import com.psyche.memo.ui.DebugScreen
 import com.psyche.memo.ui.BackupScreen
@@ -469,6 +470,14 @@ private fun AppThemeAndContent(
                     }
                     composable("workspace_detail/{id}") { entry ->
                         WorkspaceDetailScreen(
+                            container = container,
+                            workspaceId = entry.arguments?.getString("id").orEmpty(),
+                            onBack = { navController.popBackStack() },
+                            onOpenTerminal = { id -> navController.navigate("workspace_terminal/$id") },
+                        )
+                    }
+                    composable("workspace_terminal/{id}") { entry ->
+                        WorkspaceTerminalScreen(
                             container = container,
                             workspaceId = entry.arguments?.getString("id").orEmpty(),
                             onBack = { navController.popBackStack() },

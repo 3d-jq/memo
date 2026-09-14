@@ -17,6 +17,12 @@ android {
         targetSdk = 35
         versionCode = 2073
         versionName = "1.2.5"
+
+        ndk {
+            // 只有这两个 ABI 有 proot 二进制，工作区才有意义；顺带把 termux AAR 里
+            // 32 位的 libtermux.so 挡在外面（见下面 packaging 的 pickFirsts）。
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     buildFeatures {
@@ -32,9 +38,15 @@ android {
     // 打包 —— Android 10+ 只有 nativeLibraryDir 里的文件可执行，默认
     // extractNativeLibs=false 会把 .so 留在 APK 里、nativeLibraryDir 为空，
     // 于是每个 shell 命令都以 127「proot executable not found」失败（只在真机上看得出来）。
+    //
+    // pickFirsts：terminal-view AAR 自带一个 libtermux.so，core:workspace 的
+    // termux_pty.cpp 也产出一个同名库（JNI 符号绑在 com.termux.terminal.JNI 上，必须
+    // 用我们的那份，因为 AAR 里那个是给 Termux 自己的进程模型用的）。两份同名 .so
+    // 不 pick 就直接构建失败。照上游 app/build.gradle.kts:104。
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            pickFirsts += "lib/*/libtermux.so"
         }
     }
 
@@ -109,6 +121,8 @@ dependencies {
     implementation(libs.reorderable)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+    // 交互式终端页：termux 终端模拟器 + TerminalView（原生 PTY 在 core:workspace）
+    implementation(libs.termux.terminal.view)
     debugImplementation(libs.compose.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.okhttp.mockwebserver)

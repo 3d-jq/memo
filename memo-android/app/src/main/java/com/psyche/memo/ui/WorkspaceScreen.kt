@@ -233,6 +233,9 @@ fun WorkspaceScreen(
                 TextButton(onClick = {
                     deleteTarget = null
                     scope.launch {
+                        // 删工作区之前先停掉它的终端会话（上游 WorkspaceVM.delete 同样先
+                        // closeWorkspace）：否则交互式 shell 会在正被删掉的目录上继续跑。
+                        container.workspaceTerminalSessions.closeWorkspace(workspace.root)
                         repo.delete(workspace.id)
                         reload++
                     }

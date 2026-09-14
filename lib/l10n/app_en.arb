@@ -4072,9 +4072,6 @@
   "workspaceAreaFiles": "Files",
   "workspaceAreaLinux": "Linux",
   "workspaceTerminalTitle": "Terminal",
-  "workspaceTerminalHint": "Run a command in the workspace rootfs",
-  "workspaceTerminalClear": "Clear",
-  "workspaceTerminalRunning": "Running…",
   "workspaceTabBasic": "Basic",
   "workspaceToolApprovals": "Tool approvals",
   "workspaceRefresh": "Refresh",
@@ -4131,5 +4128,36 @@
     }
   },
   "workspaceInstallComplete": "Install complete",
-  "workspaceOpenFailed": "No app can open this file"
+  "workspaceOpenFailed": "No app can open this file",
+  "workspaceTerminalTitleWithName": "Terminal · {name}",
+  "@workspaceTerminalTitleWithName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceTerminalNewTab": "New tab",
+  "workspaceTerminalCloseTab": "Close tab {number}",
+  "@workspaceTerminalCloseTab": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceTerminalCloseConfirmTitle": "Close tab {number}?",
+  "@workspaceTerminalCloseConfirmTitle": {
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceTerminalCloseConfirmMessage": "The shell running in this tab is terminated.",
+  "workspaceTerminalClose": "Close",
+  "workspaceTerminalLoading": "Starting terminal…",
+  "workspaceTerminalNotInstalled": "Install the Rootfs first — the terminal needs it.",
+  "workspaceTerminalNoTabs": "No terminal sessions",
+  "workspaceTerminalExited": "Process exited"
 }

@@ -18,23 +18,39 @@ plugins {
  *     都会以 127「proot executable not found」失败，且**只在真机上才看得出来**。
  *  2. `src/main/cpp/termux_pty.cpp` —— 交互式终端页的 PTY 后端（JNI 符号名写死为
  *     `Java_com_termux_terminal_JNI_*`，绑定 `com.termux.termux-app:terminal-view`）。
- *     走 `externalNativeBuild`（需要 NDK + cmake 3.22.1），**只有终端页用得到**；
- *     文件工具/`workspace_shell` 走 `ProcessBuilder`，不需要它。
+ *     走 `externalNativeBuild`（需要 NDK + cmake 3.22.1）；文件工具/`workspace_shell`
+ *     走 `ProcessBuilder`，不需要它。
  *
  * Kotlin 侧是**纯 JVM 核心**（无 Android API，除日志外），从上游 `workspace` 模块的
  * 7 个文件 1:1 移植：`Workspace` / `WorkspaceFileSystem` / `WorkspaceManager` /
  * `RootfsPatcher` / `RootfsInstaller` / `WorkspaceShellRunner` / `ProotShellRunner`。
- * 交互式终端的 PTY 路径（`termux_pty.cpp` + termux AAR）不在本次移植范围。
  */
 android {
     namespace = "com.psyche.memo.workspace"
     compileSdk = 35
+    // 交互式终端的 PTY 要 NDK 编译。版本写死是为了让本机与 CI 用同一套工具链
+    // （CI 的 sdkmanager 装的就是这个）；不写的话 AGP 会按默认版本去找，
+    // 缺了它是 `[CXX1101] NDK at ... did not have a source.properties file`。
+    ndkVersion = "28.2.13676358"
     defaultConfig {
         minSdk = 26
         ndk {
             // 只有这两个 ABI 有 proot 二进制；armeabi-v7a 设备永远用不了工作区，
             // 与其打包一个空的 32 位目录不如直接不产。
             abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags += ""
+            }
+        }
+    }
+    // 交互式终端的 PTY：termux_pty.cpp 提供 com.termux.terminal.JNI 的四个符号，
+    // 产出 libtermux.so（AAR 里也有一份同名库，app 侧 pickFirsts 去重）。
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
     compileOptions {

@@ -58,45 +58,62 @@ class ProotShellRunner(
             .directory(context.filesDir)
             .redirectErrorStream(false)
             .apply {
-                environment()["PROOT_LOADER"] = loader.absolutePath
-                environment()["PROOT_TMP_DIR"] = context.tempDir.absolutePath
-                environment()["TMPDIR"] = context.tempDir.absolutePath
+                loaderEnvironment(context.tempDir).forEach { (key, value) ->
+                    environment()[key] = value
+                }
             }
             .start()
 
         return process.readResult(context.timeoutMillis, context.stdin)
     }
 
+    /**
+     * PTY 会话与 `ProcessBuilder` 都要设的三个环境变量 —— proot 靠 `PROOT_LOADER`
+     * 找 loader，`PROOT_TMP_DIR`/`TMPDIR` 放它的临时文件。**同一个来源**，否则
+     * 交互式终端与一次性命令会跑在两套环境里。
+     */
+    fun loaderEnvironment(tempDir: File): Map<String, String> = mapOf(
+        "PROOT_LOADER" to File(nativeLibraryDir, PROOT_LOADER).absolutePath,
+        "PROOT_TMP_DIR" to tempDir.absolutePath,
+        "TMPDIR" to tempDir.absolutePath,
+    )
+
+    /**
+     * 交互式终端的完整 argv（上游 `createWorkspaceTerminalSession`）。
+     *
+     * 与 [execute] 共用同一段前缀（proot 参数 + 工作区文件区 + bind mount + 内核伪文件系统），
+     * 区别只在结尾：不传 `-c`，直接起一个交互式登录 bash，也不带 `CI`/`NO_COLOR`/`PAGER`
+     * 那三个「非交互执行约定」变量。
+     */
+    fun buildInteractiveArgv(
+        linuxDir: File,
+        filesDir: File,
+        bindMounts: List<WorkspaceBindMount>,
+    ): List<String> {
+        val command = prootPrefix(
+            proot = File(nativeLibraryDir, PROOT_EXEC),
+            linuxDir = linuxDir,
+            filesDir = filesDir,
+            bindMounts = bindMounts,
+            cwd = WORKSPACE_DIR,
+        )
+        command += listOf("/usr/bin/env", "-i")
+        command += INTERACTIVE_ENV
+        command += "/bin/bash"
+        return command
+    }
+
     private fun buildCommand(
         context: WorkspaceShellContext,
         proot: File,
     ): List<String> {
-        val command = mutableListOf(
-            proot.absolutePath,
-            "--root-id",
-            "--link2symlink",
-            "--kill-on-exit",
-            "-r",
-            context.linuxDir.absolutePath,
-            "-w",
-            context.prootCwd(),
-            "-b",
-            "${context.filesDir.absolutePath}:$WORKSPACE_DIR",
+        val command = prootPrefix(
+            proot = proot,
+            linuxDir = context.linuxDir,
+            filesDir = context.filesDir,
+            bindMounts = context.bindMounts,
+            cwd = context.prootCwd(),
         )
-
-        context.bindMounts.forEach { mount ->
-            if (mount.source.exists()) {
-                command += "-b"
-                command += "${mount.source.absolutePath}:${mount.target.trimEnd('/')}"
-            }
-        }
-
-        WorkspaceManager.KERNEL_FS_MOUNTS.forEach { path ->
-            if (File(path).exists()) {
-                command += "-b"
-                command += path
-            }
-        }
 
         command += listOf(
             "/usr/bin/env",
@@ -122,6 +139,43 @@ class ProotShellRunner(
         return command
     }
 
+    /** proot 参数段：rootfs 根、工作目录、工作区文件区、bind mount 表、内核伪文件系统。 */
+    private fun prootPrefix(
+        proot: File,
+        linuxDir: File,
+        filesDir: File,
+        bindMounts: List<WorkspaceBindMount>,
+        cwd: String,
+    ): MutableList<String> {
+        val command = mutableListOf(
+            proot.absolutePath,
+            "--root-id",
+            "--link2symlink",
+            "--kill-on-exit",
+            "-r",
+            linuxDir.absolutePath,
+            "-w",
+            cwd,
+            "-b",
+            "${filesDir.absolutePath}:$WORKSPACE_DIR",
+        )
+
+        bindMounts.forEach { mount ->
+            if (mount.source.exists()) {
+                command += "-b"
+                command += "${mount.source.absolutePath}:${mount.target.trimEnd('/')}"
+            }
+        }
+
+        WorkspaceManager.KERNEL_FS_MOUNTS.forEach { path ->
+            if (File(path).exists()) {
+                command += "-b"
+                command += path
+            }
+        }
+        return command
+    }
+
     private fun WorkspaceShellContext.prootCwd(): String {
         val normalized = cwd.trim().trim('/')
         return if (normalized.isBlank()) {
@@ -138,5 +192,20 @@ class ProotShellRunner(
         private const val PROOT_EXEC = "libproot_exec.so"
         private const val PROOT_LOADER = "libproot_loader.so"
         private val WORKSPACE_DIR = WorkspaceManager.ROOTFS_WORKSPACE_DIR
+
+        /**
+         * 交互式登录 shell 的环境（上游 `createWorkspaceTerminalSession` 里那一段）。
+         * 与一次性命令的差别：有 `USER`/`SHELL`（登录 shell 与提示符要用），没有
+         * `CI`/`NO_COLOR`/`PAGER`（那三个是「非交互」约定，会让交互式程序行为异常）。
+         */
+        private val INTERACTIVE_ENV = listOf(
+            "HOME=/root",
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "TERM=xterm-256color",
+            "LANG=C.UTF-8",
+            "LC_ALL=C.UTF-8",
+            "USER=root",
+            "SHELL=/bin/bash",
+        )
     }
 }

@@ -12,7 +12,8 @@ Linux 命令（`workspace_shell` 工具 + 文件读写工具 + 交互式终端�
 | 路径 | 作用 |
 |---|---|
 | `src/main/jniLibs/{arm64-v8a,x86_64}/libproot_{exec,loader}.so` | 预编译 PRoot 二进制（来自 RikkaHub 的 `workspace/src/main/jniLibs/`，ABI 只有 arm64-v8a + x86_64）。**只读文件，勿改** |
-| `src/main/cpp/termux_pty.cpp`（后续加入） | 交互式终端的 PTY 后端；JNI 符号名写死 `Java_com_termux_terminal_JNI_*`，绑定 `com.termux.termux-app:terminal-view`；只有终端页需要它（要 NDK + cmake 3.22.1） |
+| `src/main/cpp/termux_pty.cpp` | 交互式终端的 PTY 后端；JNI 符号名写死 `Java_com_termux_terminal_JNI_*`，绑定 `com.termux.termux-app:terminal-view`；要 NDK（`ndkVersion = "28.2.13676358"`）+ cmake 3.22.1 |
+| `src/main/cpp/CMakeLists.txt` | 产 `libworkspace.so`（空壳，对齐上游模块结构）与 `libtermux.so`（真 PTY） |
 
 ## 三条硬性约束（少一条整个功能就是静默失败）
 
@@ -24,6 +25,12 @@ Linux 命令（`workspace_shell` 工具 + 文件读写工具 + 交互式终端�
 2. **只有 arm64-v8a / x86_64**：没有 32 位 proot 二进制；`abiFilters` 已限定，
    `armeabi-v7a` 设备（minSdk 26 合法）永远用不了工作区。
 3. **`abiFilters` + `ndk {}`** 放在本模块与 app 模块两处，避免产出空 ABI 目录。
+4. **`ndkVersion = "28.2.13676358"` 写死**：不写的话 AGP 按默认版本（27.0.12077973）去找，
+   缺了它是 `[CXX1101] NDK at … did not have a source.properties file`。CI 里
+   `.github/workflows/android-pr-check.yml` 用 `sdkmanager` 装同版本 + `cmake;3.22.1`。
+5. **PTY 的 `libtermux.so` 必须是我们这份**：terminal-view AAR 也带一个同名库，app 模块靠
+   `packaging.jniLibs.pickFirsts += "lib/*/libtermux.so"` 去重（我们的 `.so` 里有
+   `Java_com_termux_terminal_JNI_*` 四个符号）。
 
 ## 真机 spike 结论（2026-09-14，OPPO PKB110 / ColorOS / Android 16 / arm64-v8a）
 
