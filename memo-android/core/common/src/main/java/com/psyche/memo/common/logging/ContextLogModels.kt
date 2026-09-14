@@ -18,7 +18,7 @@ import kotlinx.serialization.json.jsonObject
  */
 
 enum class ContextSource {
-    systemPrompt, memoryRules, searchPrompt, instructionInjection,
+    systemPrompt, memoryRules, searchPrompt, instructionInjection, skillPrompt,
     worldBook, memorySnapshot, chatHistory, toolCall, toolResult;
 
     companion object {

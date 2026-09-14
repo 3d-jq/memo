@@ -3293,5 +3293,69 @@
   "toolSchemaSettingsDescriptionLabel": "描述",
   "toolSchemaSettingsToolName": "工具名",
   "toolSchemaEditorPageTitle": "編輯描述",
-  "toolSchemaSettingsCancel": "取消"
+  "toolSchemaSettingsCancel": "取消",
+  "skillsPageTitle": "代理技能",
+  "skillsPageEmptyTitle": "無技能",
+  "skillsPageEmptyHint": "點擊右下角的 + 按鈕新增技能",
+  "skillsPageAddTitle": "新增技能",
+  "skillsPageAddManually": "手動新增",
+  "skillsPageImportFromFile": "從檔案匯入",
+  "skillsPageDeleteTitle": "刪除技能",
+  "skillsPageDeleteMessage": "確定要刪除「{name}」嗎？此操作無法復原。",
+  "@skillsPageDeleteMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPageMoreActions": "更多操作",
+  "skillsPageSkillContentLabel": "SKILL.md 內容",
+  "skillsPagePasteHint": "貼上完整的 SKILL.md 檔案內容",
+  "skillsPageNameError": "找不到 name 欄位，請檢查 frontmatter 格式",
+  "skillsPageSkillName": "技能名稱：{name}",
+  "@skillsPageSkillName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPageSave": "儲存",
+  "skillsPageSaveFailed": "儲存失敗，請檢查技能格式",
+  "skillsPageImportSuccess": "技能已匯入：{name}",
+  "@skillsPageImportSuccess": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPageImportFailed": "匯入失敗：{message}",
+  "@skillsPageImportFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "skillDetailPageContent": "內容",
+  "skillDetailPageCreate": "建立",
+  "skillDetailPageDeleteConfirm": "確定要刪除檔案「{name}」嗎？",
+  "@skillDetailPageDeleteConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillDetailPageDeleteFailed": "刪除失敗",
+  "skillDetailPageDeleteFile": "刪除檔案",
+  "skillDetailPageFileName": "檔案名稱",
+  "skillDetailPageFileNameInvalid": "無效的檔案名稱",
+  "skillDetailPageNewFile": "新增檔案",
+  "skillDetailPageSave": "儲存",
+  "settingsPageSkills": "技能",
+  "assistantEditPageSkillsTab": "技能",
+  "contextLogSourceSkillPrompt": "技能"
 }

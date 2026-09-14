@@ -254,6 +254,11 @@ private fun AssistantEditTabContent(
             assistant = assistant,
             onEdit = onEdit,
         )
+        AssistantEditTab.SKILLS.id -> AssistantEditSkillsTab(
+            container = container,
+            assistant = assistant,
+            onEdit = onEdit,
+        )
         AssistantEditTab.MCP.id -> AssistantEditMcpTab(
             container = container,
             assistant = assistant,

@@ -3967,5 +3967,69 @@
   "toolSchemaSettingsDescriptionLabel": "Description",
   "toolSchemaSettingsToolName": "Tool name",
   "toolSchemaEditorPageTitle": "Edit description",
-  "toolSchemaSettingsCancel": "Cancel"
+  "toolSchemaSettingsCancel": "Cancel",
+  "skillsPageTitle": "Agent Skills",
+  "skillsPageEmptyTitle": "No skills",
+  "skillsPageEmptyHint": "Tap + in the corner to add a skill",
+  "skillsPageAddTitle": "Add skill",
+  "skillsPageAddManually": "Add manually",
+  "skillsPageImportFromFile": "Import from file",
+  "skillsPageDeleteTitle": "Delete skill",
+  "skillsPageDeleteMessage": "Delete \"{name}\"? This cannot be undone.",
+  "@skillsPageDeleteMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPageMoreActions": "More actions",
+  "skillsPageSkillContentLabel": "SKILL.md content",
+  "skillsPagePasteHint": "Paste the full SKILL.md content",
+  "skillsPageNameError": "No name field found — check the frontmatter format",
+  "skillsPageSkillName": "Skill name: {name}",
+  "@skillsPageSkillName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPageSave": "Save",
+  "skillsPageSaveFailed": "Save failed — check the skill format",
+  "skillsPageImportSuccess": "Skill imported: {name}",
+  "@skillsPageImportSuccess": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillsPageImportFailed": "Import failed: {message}",
+  "@skillsPageImportFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "skillDetailPageContent": "Content",
+  "skillDetailPageCreate": "Create",
+  "skillDetailPageDeleteConfirm": "Delete file \"{name}\"?",
+  "@skillDetailPageDeleteConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "skillDetailPageDeleteFailed": "Delete failed",
+  "skillDetailPageDeleteFile": "Delete file",
+  "skillDetailPageFileName": "File name",
+  "skillDetailPageFileNameInvalid": "Invalid file name",
+  "skillDetailPageNewFile": "New file",
+  "skillDetailPageSave": "Save",
+  "settingsPageSkills": "Skills",
+  "assistantEditPageSkillsTab": "Skills",
+  "contextLogSourceSkillPrompt": "Skills"
 }

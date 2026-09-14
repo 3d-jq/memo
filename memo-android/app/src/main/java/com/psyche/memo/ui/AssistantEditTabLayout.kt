@@ -47,6 +47,7 @@ import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.ListTree
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.RotateCcw
 import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Terminal
@@ -76,6 +77,7 @@ enum class AssistantEditTab(val id: String, val labelRes: Int, val icon: ImageVe
     PROMPTS("prompts", UiR.string.assistant_edit_page_prompts_tab, Lucide.FileText),
     MEMORY("memory", UiR.string.assistant_edit_page_memory_tab, Lucide.Brain),
     LOCAL_TOOLS("localTools", UiR.string.assistant_edit_page_local_tools_tab, Lucide.Wrench),
+    SKILLS("skills", UiR.string.assistant_edit_page_skills_tab, Lucide.Puzzle),
     MCP("mcp", UiR.string.assistant_edit_page_mcp_tab, Lucide.Terminal),
     QUICK_PHRASE("quickPhrase", UiR.string.assistant_edit_page_quick_phrase_tab, Lucide.Zap),
     CUSTOM("custom", UiR.string.assistant_edit_page_custom_tab, Lucide.EthernetPort),
@@ -88,7 +90,7 @@ enum class AssistantEditTab(val id: String, val labelRes: Int, val icon: ImageVe
 
 /** `defaultAssistantEditTabIds` — the display order when nothing is saved. */
 val DEFAULT_ASSISTANT_EDIT_TAB_ORDER: List<String> = listOf(
-    "basic", "prompts", "memory", "quickPhrase", "custom", "regex", "localTools", "mcp",
+    "basic", "prompts", "memory", "quickPhrase", "custom", "regex", "localTools", "skills", "mcp",
 )
 
 /**

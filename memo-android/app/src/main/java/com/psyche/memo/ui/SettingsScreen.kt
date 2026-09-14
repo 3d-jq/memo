@@ -53,6 +53,7 @@ import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Heart
 import com.composables.icons.lucide.Layers
+import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.Library
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircleWarning
@@ -101,6 +102,7 @@ fun SettingsScreen(
     onOpenNetworkProxy: () -> Unit,
     onOpenToolSchema: () -> Unit,
     onOpenMcp: () -> Unit,
+    onOpenSkills: () -> Unit,
     onOpenQuickPhrases: () -> Unit,
     onOpenInstructionInjection: () -> Unit,
     onOpenWorldBook: () -> Unit,
@@ -259,6 +261,8 @@ fun SettingsScreen(
                     SettingsRow(Lucide.Volume2, stringResource(UiR.string.settings_page_tts), onTap = onOpenTtsServices)
                     DividerRow()
                     SettingsRow(Lucide.Terminal, stringResource(UiR.string.settings_page_mcp), onTap = onOpenMcp)
+                    DividerRow()
+                    SettingsRow(Lucide.Puzzle, stringResource(UiR.string.settings_page_skills), onTap = onOpenSkills)
                     DividerRow()
                     SettingsRow(Lucide.BookOpen, stringResource(UiR.string.settings_page_world_book), onTap = onOpenWorldBook)
                     DividerRow()

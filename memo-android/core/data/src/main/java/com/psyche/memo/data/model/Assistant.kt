@@ -30,6 +30,8 @@ data class Assistant(
     val searchEnabled: Boolean = false,
     val mcpServerIds: List<String> = emptyList(),
     val localToolIds: List<String> = emptyList(),
+    /** Agent Skills：助手启用的技能名（技能本体在 filesDir/skills/<name>/SKILL.md）。 */
+    val enabledSkills: List<String> = emptyList(),
     val healthDataTypeIds: List<String> = emptyList(),
     val background: String? = null,
     val customHeaders: List<Map<String, String>> = emptyList(),

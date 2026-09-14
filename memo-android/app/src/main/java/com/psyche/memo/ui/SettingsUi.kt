@@ -190,9 +190,76 @@ internal fun DividerRow() {
     }
 }
 
+/** 底部操作面板的一项（图标 + 标签，可标红）。`onClick` 放最后以便尾随 lambda。 */
+internal data class SheetAction(
+    val icon: ImageVector,
+    val label: String,
+    val destructive: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+/**
+ * 长按 / 「更多」用的底部操作面板 —— 与搜索服务页同款（自绘拖柄 + 图标 + 15sp 标签），
+ * 抽成共享件给技能页等多个页面复用。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ActionSheet(
+    onDismiss: () -> Unit,
+    actions: List<SheetAction>,
+    title: String? = null,
+) {
+    val cs = MaterialTheme.colorScheme
+    ModalBottomSheet(
+        sheetState = rememberMemoSheetState(),
+        onDismissRequest = onDismiss,
+        containerColor = cs.surface,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        dragHandle = null,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        ) {
+            MemoSheetHandle(trailingGap = if (title == null) 0.dp else 12.dp)
+            title?.let {
+                Text(
+                    text = it,
+                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            actions.forEach { action ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { action.onClick() }
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        action.icon,
+                        contentDescription = null,
+                        tint = if (action.destructive) cs.error else cs.onSurface,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = action.label,
+                        style = TextStyle(
+                            fontSize = 15.sp,
+                            color = if (action.destructive) cs.error else cs.onSurface,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** The label shown next to the language row, matching Kelivo's own wording. */
-internal fun languageLabelRes(locale: AppLocale): Int = when (locale) {
-    AppLocale.SYSTEM -> UiR.string.settings_page_system_mode
+internal fun languageLabelRes(locale: AppLocale): Int = when (locale) {    AppLocale.SYSTEM -> UiR.string.settings_page_system_mode
     AppLocale.ZH_CN -> UiR.string.display_settings_page_language_chinese_label
     AppLocale.ZH_HANT -> UiR.string.language_display_traditional_chinese
     AppLocale.EN_US -> UiR.string.display_settings_page_language_english_label

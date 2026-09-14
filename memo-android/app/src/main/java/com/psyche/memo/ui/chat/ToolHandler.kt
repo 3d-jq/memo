@@ -123,6 +123,33 @@ class ToolHandler(
                 )?.let { return it }
             }
 
+            // Agent Skills（SkillsTools.execute）：只有助手启用、且磁盘上存在的技能
+            // 才允许加载；模型编出来的名字或目录外路径都如实报错让它自己纠正。
+            if (name == com.psyche.memo.provider.SkillTools.USE_SKILL &&
+                container != null &&
+                assistant != null
+            ) {
+                val skillName = (args["name"] as? JsonPrimitive)?.contentOrNull
+                    ?: return toolError("invalid_use_skill_request", "name is required", name)
+                val available = com.psyche.memo.provider.SkillTools.availableSkills(
+                    enabledSkills = assistant.enabledSkills,
+                    allSkills = container.skillStore.listSkills(),
+                )
+                val skill = available.firstOrNull { it.name == skillName }
+                    ?: return toolError(
+                        error = "skill_not_available",
+                        message = "Skill '$skillName' is not available. " +
+                            "Available skills: ${available.joinToString { it.name }}",
+                        tool = name,
+                    )
+                val path = (args["path"] as? JsonPrimitive)?.contentOrNull
+                return when (val outcome = com.psyche.memo.provider.SkillTools.execute(skill, path)) {
+                    is com.psyche.memo.provider.SkillTools.Outcome.Success -> outcome.content
+                    is com.psyche.memo.provider.SkillTools.Outcome.Failure ->
+                        toolError(outcome.error, outcome.message, name)
+                }
+            }
+
             // Local tools (local_tools_service.dart tryHandleToolCall 451-529):
             // time_info + the executor subset in LocalToolExecutors.
             if (name == LocalToolNames.TIME_INFO &&

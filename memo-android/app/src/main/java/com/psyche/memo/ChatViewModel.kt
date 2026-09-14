@@ -2285,11 +2285,20 @@ class ChatViewModel(
                 allowMemoryWrites = !isTemporary,
             ),
         )
+        // Agent Skills（SkillsTools）：助手启用、且磁盘上确实存在的技能才暴露
+        // `use_skill`；一个都没有就整颗不提供（照上游 createSkillTools）。
+        out.addAll(
+            com.psyche.memo.provider.SkillTools.buildDefinitions(
+                enabledSkills = assistant.enabledSkills,
+                allSkills = container.skillStore.listSkills(),
+            ),
+        )
         // MCP 工具（mcp_tool_service）：助手绑定且已连接的服务器，仅启用的工具；
         // 与内置工具同名的条目按原版保留名规则剔除。
         val reserved = com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all.toSet() + setOf(
             com.psyche.memo.provider.search.SearchToolService.TOOL_NAME,
-        ) + com.psyche.memo.provider.MemoryTools.ALL_TOOL_NAMES
+        ) + com.psyche.memo.provider.MemoryTools.ALL_TOOL_NAMES +
+            com.psyche.memo.provider.SkillTools.ALL_TOOL_NAMES
         for (serverId in assistant.mcpServerIds) {
             if (!container.mcpConnections.isConnected(serverId)) continue
             val config = container.mcpRepository.server(serverId) ?: continue
@@ -2376,6 +2385,16 @@ class ChatViewModel(
             add(
                 ContextSource.searchPrompt,
                 com.psyche.memo.provider.search.SearchToolService.SYSTEM_PROMPT,
+            )
+        }
+        // Agent Skills：可用技能清单（上游 `Tool.systemPrompt` 的等价物，见 SkillTools）。
+        if (assistant != null && assistant.enabledSkills.isNotEmpty()) {
+            add(
+                ContextSource.skillPrompt,
+                com.psyche.memo.provider.SkillTools.systemPromptBlock(
+                    enabledSkills = assistant.enabledSkills,
+                    allSkills = container.skillStore.listSkills(),
+                ),
             )
         }
         // injectInstructionPrompts L1748-1772 —— 助手启用中的注入项按顺序合并。

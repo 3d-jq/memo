@@ -27,5 +27,7 @@ kotlin {
 dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
+    // Agent Skills：SKILL.md 的 frontmatter 走真正的 YAML 解析（见 skill/ 包）。
+    implementation(libs.snakeyaml)
     testImplementation(libs.junit)
 }

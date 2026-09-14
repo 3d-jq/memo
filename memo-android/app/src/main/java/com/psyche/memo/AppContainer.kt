@@ -83,6 +83,14 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
 
     val assistantStore: AssistantStore by lazy { AssistantStore(database.writableDatabase) }
 
+    /**
+     * Agent Skills 仓库 —— 技能本体放 `<filesDir>/skills/<技能名>/SKILL.md`
+     * （照 RikkaHub 的 `FileFolders.SKILLS`）。纯文件操作，实现在 core:common。
+     */
+    val skillStore: com.psyche.memo.common.skill.SkillStore by lazy {
+        com.psyche.memo.common.skill.SkillStore(java.io.File(appContext.filesDir, SKILLS_DIR))
+    }
+
     /** 长期记忆数据层（memory_entry_rows 表 + payload 投影，见 MemoryEntryRowDao）。 */
     val memoryProviderV2: com.psyche.memo.ui.MemoryProviderV2 by lazy {
         com.psyche.memo.ui.MemoryProviderV2(database.writableDatabase)
@@ -467,6 +475,11 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
             }.toSet()
             if (kept.size != pinned.size) com.psyche.memo.ui.writePinnedModels(this, kept)
         }
+    }
+
+    companion object {
+        /** Agent Skills 的技能目录名（`<filesDir>/skills/`，照 RikkaHub）。 */
+        const val SKILLS_DIR = "skills"
     }
 }
 

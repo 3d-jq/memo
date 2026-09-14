@@ -81,6 +81,8 @@ import com.psyche.memo.ui.ThemeState
 import com.psyche.memo.ui.ThemeSettingsScreen
 import com.psyche.memo.ui.UserProfileScreen
 import com.psyche.memo.ui.SettingsScreen
+import com.psyche.memo.ui.SkillsScreen
+import com.psyche.memo.ui.SkillDetailScreen
 import com.psyche.memo.ui.DebugScreen
 import com.psyche.memo.ui.BackupScreen
 import com.psyche.memo.ui.WebDavSettingsScreen
@@ -406,6 +408,7 @@ private fun AppThemeAndContent(
                             onOpenNetworkProxy = { navController.navigate("network_proxy") },
                             onOpenToolSchema = { navController.navigate("tool_schema_settings") },
                             onOpenMcp = { navController.navigate("mcp") },
+                            onOpenSkills = { navController.navigate("skills") },
                             onOpenQuickPhrases = { navController.navigate("quick_phrases") },
                             onOpenInstructionInjection = { navController.navigate("instruction_injection") },
                             onOpenWorldBook = { navController.navigate("world_book") },
@@ -453,8 +456,23 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
-                    composable("theme_settings") {
-                        ThemeSettingsScreen(
+                    composable("skills") {
+                        SkillsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenDetail = { name ->
+                                navController.navigate("skill_detail/" + android.net.Uri.encode(name))
+                            },
+                        )
+                    }
+                    composable("skill_detail/{name}") { entry ->
+                        SkillDetailScreen(
+                            container = container,
+                            skillName = android.net.Uri.decode(entry.arguments?.getString("name").orEmpty()),
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("theme_settings") {                        ThemeSettingsScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
                             onOpenAdvanced = { navController.navigate("theme_advanced") },
