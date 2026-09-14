@@ -3363,5 +3363,33 @@
   "skillsPageRepoUrlLabel": "程式庫網址",
   "skillsPageRepoUrlHint": "支援 /tree/branch 或子目錄路徑",
   "skillsPageDownloading": "正在下載...",
-  "skillsPageImportConfirm": "匯入"
+  "skillsPageImportConfirm": "匯入",
+  "workspacePageTitle": "工作區",
+  "workspaceNew": "新增工作區",
+  "workspaceNameLabel": "名稱",
+  "workspaceEmpty": "暫無工作區",
+  "workspaceInstallRootfs": "安裝 Rootfs",
+  "workspaceDeleteTitle": "刪除工作區",
+  "workspaceDeleteMessage": "確定要刪除「{name}」嗎？此操作無法復原。",
+  "@workspaceDeleteMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceBindCurrent": "綁定到目前助手",
+  "workspaceUnbindCurrent": "解除目前助手綁定",
+  "workspaceStatusDisabled": "未安裝",
+  "workspaceStatusInstalling": "安裝中…",
+  "workspaceStatusReady": "就緒",
+  "workspaceStatusBroken": "已損毀",
+  "workspaceInstallFailed": "安裝失敗：{message}",
+  "@workspaceInstallFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  }
 }

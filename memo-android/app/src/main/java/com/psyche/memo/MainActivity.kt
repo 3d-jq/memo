@@ -82,6 +82,7 @@ import com.psyche.memo.ui.ThemeSettingsScreen
 import com.psyche.memo.ui.UserProfileScreen
 import com.psyche.memo.ui.SettingsScreen
 import com.psyche.memo.ui.SkillsScreen
+import com.psyche.memo.ui.WorkspaceScreen
 import com.psyche.memo.ui.SkillDetailScreen
 import com.psyche.memo.ui.DebugScreen
 import com.psyche.memo.ui.BackupScreen
@@ -410,6 +411,7 @@ private fun AppThemeAndContent(
                             onOpenToolSchema = { navController.navigate("tool_schema_settings") },
                             onOpenMcp = { navController.navigate("mcp") },
                             onOpenSkills = { navController.navigate("skills") },
+                            onOpenWorkspaces = { navController.navigate("workspaces") },
                             onOpenQuickPhrases = { navController.navigate("quick_phrases") },
                             onOpenInstructionInjection = { navController.navigate("instruction_injection") },
                             onOpenWorldBook = { navController.navigate("world_book") },
@@ -457,8 +459,13 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
-                    composable("skills") {
-                        SkillsScreen(
+                    composable("workspaces") {
+                        WorkspaceScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("skills") {                        SkillsScreen(
                             container = container,
                             onBack = { navController.popBackStack() },
                             onOpenDetail = { name ->

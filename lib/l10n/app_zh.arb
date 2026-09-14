@@ -3363,5 +3363,33 @@
   "skillsPageRepoUrlLabel": "代码库网址",
   "skillsPageRepoUrlHint": "支持 /tree/branch 或子目录路径",
   "skillsPageDownloading": "正在下载...",
-  "skillsPageImportConfirm": "导入"
+  "skillsPageImportConfirm": "导入",
+  "workspacePageTitle": "工作区",
+  "workspaceNew": "新建工作区",
+  "workspaceNameLabel": "名称",
+  "workspaceEmpty": "暂无工作区",
+  "workspaceInstallRootfs": "安装 Rootfs",
+  "workspaceDeleteTitle": "删除工作区",
+  "workspaceDeleteMessage": "确定要删除“{name}”吗？此操作无法撤销。",
+  "@workspaceDeleteMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceBindCurrent": "绑定到当前助手",
+  "workspaceUnbindCurrent": "解除当前助手绑定",
+  "workspaceStatusDisabled": "未安装",
+  "workspaceStatusInstalling": "安装中…",
+  "workspaceStatusReady": "就绪",
+  "workspaceStatusBroken": "已损坏",
+  "workspaceInstallFailed": "安装失败：{message}",
+  "@workspaceInstallFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  }
 }

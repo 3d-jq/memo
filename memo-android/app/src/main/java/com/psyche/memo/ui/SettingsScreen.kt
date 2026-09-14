@@ -103,6 +103,7 @@ fun SettingsScreen(
     onOpenToolSchema: () -> Unit,
     onOpenMcp: () -> Unit,
     onOpenSkills: () -> Unit,
+    onOpenWorkspaces: () -> Unit,
     onOpenQuickPhrases: () -> Unit,
     onOpenInstructionInjection: () -> Unit,
     onOpenWorldBook: () -> Unit,
@@ -263,6 +264,8 @@ fun SettingsScreen(
                     SettingsRow(Lucide.Terminal, stringResource(UiR.string.settings_page_mcp), onTap = onOpenMcp)
                     DividerRow()
                     SettingsRow(Lucide.Puzzle, stringResource(UiR.string.settings_page_skills), onTap = onOpenSkills)
+                    DividerRow()
+                    SettingsRow(Lucide.Terminal, stringResource(UiR.string.workspace_page_title), onTap = onOpenWorkspaces)
                     DividerRow()
                     SettingsRow(Lucide.BookOpen, stringResource(UiR.string.settings_page_world_book), onTap = onOpenWorldBook)
                     DividerRow()

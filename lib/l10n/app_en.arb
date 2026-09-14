@@ -4037,5 +4037,33 @@
   "skillsPageRepoUrlLabel": "Repository URL",
   "skillsPageRepoUrlHint": "Supports /tree/branch or a subdirectory path",
   "skillsPageDownloading": "Downloading…",
-  "skillsPageImportConfirm": "Import"
+  "skillsPageImportConfirm": "Import",
+  "workspacePageTitle": "Workspaces",
+  "workspaceNew": "New workspace",
+  "workspaceNameLabel": "Name",
+  "workspaceEmpty": "No workspaces",
+  "workspaceInstallRootfs": "Install Rootfs",
+  "workspaceDeleteTitle": "Delete workspace",
+  "workspaceDeleteMessage": "Delete \"{name}\"? This cannot be undone.",
+  "@workspaceDeleteMessage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceBindCurrent": "Bind to current assistant",
+  "workspaceUnbindCurrent": "Unbind from current assistant",
+  "workspaceStatusDisabled": "Not installed",
+  "workspaceStatusInstalling": "Installing…",
+  "workspaceStatusReady": "Ready",
+  "workspaceStatusBroken": "Broken",
+  "workspaceInstallFailed": "Rootfs install failed: {message}",
+  "@workspaceInstallFailed": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  }
 }
