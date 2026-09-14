@@ -3357,5 +3357,11 @@
   "skillDetailPageSave": "保存",
   "settingsPageSkills": "技能",
   "assistantEditPageSkillsTab": "技能",
-  "contextLogSourceSkillPrompt": "技能"
+  "contextLogSourceSkillPrompt": "技能",
+  "skillsPageImportGithub": "从 GitHub 导入",
+  "skillsPageImportDescription": "输入 GitHub 仓库 URL，将自动下载根目录中的 SKILL.md 文件。",
+  "skillsPageRepoUrlLabel": "代码库网址",
+  "skillsPageRepoUrlHint": "支持 /tree/branch 或子目录路径",
+  "skillsPageDownloading": "正在下载...",
+  "skillsPageImportConfirm": "导入"
 }

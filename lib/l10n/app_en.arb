@@ -4031,5 +4031,11 @@
   "skillDetailPageSave": "Save",
   "settingsPageSkills": "Skills",
   "assistantEditPageSkillsTab": "Skills",
-  "contextLogSourceSkillPrompt": "Skills"
+  "contextLogSourceSkillPrompt": "Skills",
+  "skillsPageImportGithub": "Import from GitHub",
+  "skillsPageImportDescription": "Enter a GitHub repository URL; the SKILL.md at its root is downloaded automatically.",
+  "skillsPageRepoUrlLabel": "Repository URL",
+  "skillsPageRepoUrlHint": "Supports /tree/branch or a subdirectory path",
+  "skillsPageDownloading": "Downloading…",
+  "skillsPageImportConfirm": "Import"
 }

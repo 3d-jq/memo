@@ -3357,5 +3357,11 @@
   "skillDetailPageSave": "儲存",
   "settingsPageSkills": "技能",
   "assistantEditPageSkillsTab": "技能",
-  "contextLogSourceSkillPrompt": "技能"
+  "contextLogSourceSkillPrompt": "技能",
+  "skillsPageImportGithub": "從 GitHub 匯入",
+  "skillsPageImportDescription": "輸入 GitHub 倉庫 URL，將自動下載根目錄中的 SKILL.md 檔案。",
+  "skillsPageRepoUrlLabel": "程式庫網址",
+  "skillsPageRepoUrlHint": "支援 /tree/branch 或子目錄路徑",
+  "skillsPageDownloading": "正在下載...",
+  "skillsPageImportConfirm": "匯入"
 }

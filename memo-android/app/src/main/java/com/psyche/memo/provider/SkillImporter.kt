@@ -17,8 +17,7 @@ class SkillImportException(message: String) : Exception(message)
  * zip 里可能嵌套技能（`a/SKILL.md` 与 `a/b/SKILL.md` 同时存在），上游的做法是
  * 「取最外层」——[selectSkillBases] 就是那条规则，单独抽出来是为了能直接单测。
  *
- * 不做 GitHub 导入（上游还有 `importSkillFromGitHub`）：那是网络 + JSON API 的独立
- * 能力，见 PORTING.md 的批次说明。
+ * 从 GitHub 仓库导入是另一条路径，见 [SkillGitHubImporter]。
  */
 object SkillImporter {
 

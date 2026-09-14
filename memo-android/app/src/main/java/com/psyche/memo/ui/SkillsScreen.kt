@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -48,12 +49,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Download
+import com.composables.icons.lucide.Github
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.Trash2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.common.skill.SkillMetadata
+import com.psyche.memo.provider.SkillGitHubImporter
 import com.psyche.memo.provider.SkillImporter
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -68,10 +71,8 @@ import kotlinx.coroutines.withContext
  * **外壳按 Memo 既有风格**（`MemoTopBar` + `SectionCard` 行 + 长按操作面板，与
  * 搜索服务页/记忆页一致），不搬上游的 `LargeFlexibleTopAppBar` + `FloatingActionButton`。
  *
- * 技能本体在 `<filesDir>/skills/<名>/SKILL.md`；这里只做列表 / 手动添加 / 从文件导入 /
- * 删除。技能目录内的文件编辑在 [SkillDetailScreen]。
- *
- * 未移植：上游的「从 GitHub 导入」（网络 + Contents API 的独立能力，见 PORTING.md）。
+ * 技能本体在 `<filesDir>/skills/<名>/SKILL.md`；这里做列表 / 手动添加 / 从文件导入 /
+ * 从 GitHub 仓库导入 / 删除。技能目录内的文件编辑在 [SkillDetailScreen]。
  */
 @Composable
 fun SkillsScreen(
@@ -88,6 +89,7 @@ fun SkillsScreen(
 
     var showAddSheet by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showGitHubDialog by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
 
     val importFailedFmt = stringResource(R.string.skills_page_import_failed)
@@ -181,6 +183,48 @@ fun SkillsScreen(
             onImportFromFile = {
                 showAddSheet = false
                 filePicker.launch(arrayOf("text/*", "application/zip", "application/octet-stream"))
+            },
+            onImportFromGitHub = { showAddSheet = false; showGitHubDialog = true },
+        )
+    }
+
+    if (showGitHubDialog) {
+        // 网络拉取走容器的 OkHttp ⇒ 全局代理设置对 GitHub 导入同样生效。
+        ImportGitHubDialog(
+            onDismiss = { showGitHubDialog = false },
+            onImport = { url ->
+                scope.launch {
+                    val outcome = withContext(Dispatchers.IO) {
+                        runCatching {
+                            SkillGitHubImporter(
+                                store = container.skillStore,
+                                fetch = SkillGitHubImporter.okHttpFetcher(container.httpClient),
+                            ).import(url)
+                        }
+                    }
+                    outcome
+                        .onSuccess { names ->
+                            reload++
+                            SnackbarManager.show(
+                                AppNotification(
+                                    message = context.getString(
+                                        R.string.skills_page_import_success,
+                                        names.joinToString(),
+                                    ),
+                                    type = NotificationType.SUCCESS,
+                                ),
+                            )
+                        }
+                        .onFailure { error ->
+                            SnackbarManager.show(
+                                AppNotification(
+                                    message = importFailedFmt.format(error.message ?: ""),
+                                    type = NotificationType.ERROR,
+                                ),
+                            )
+                        }
+                    showGitHubDialog = false
+                }
             },
         )
     }
@@ -339,6 +383,7 @@ private fun SkillAddSheet(
     onDismiss: () -> Unit,
     onAddManually: () -> Unit,
     onImportFromFile: () -> Unit,
+    onImportFromGitHub: () -> Unit,
 ) {
     ActionSheet(
         onDismiss = onDismiss,
@@ -346,7 +391,76 @@ private fun SkillAddSheet(
         actions = listOf(
             SheetAction(Lucide.Plus, stringResource(R.string.skills_page_add_manually)) { onAddManually() },
             SheetAction(Lucide.Download, stringResource(R.string.skills_page_import_from_file)) { onImportFromFile() },
+            SheetAction(Lucide.Github, stringResource(R.string.skills_page_import_github)) { onImportFromGitHub() },
         ),
+    )
+}
+
+/**
+ * 从 GitHub 仓库导入（上游 `ImportSkillDialog`）：一句说明 + 仓库 URL + 下载中指示。
+ * 下载期间禁用确认与取消，避免半途关掉。
+ */
+@Composable
+private fun ImportGitHubDialog(
+    onDismiss: () -> Unit,
+    onImport: (url: String) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    var url by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onDismiss() },
+        title = { Text(stringResource(R.string.skills_page_import_github)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.skills_page_import_description),
+                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurfaceVariant),
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    label = { Text(stringResource(R.string.skills_page_repo_url_label)) },
+                    placeholder = {
+                        Text("https://github.com/owner/repo", fontFamily = FontFamily.Monospace)
+                    },
+                    supportingText = { Text(stringResource(R.string.skills_page_repo_url_hint)) },
+                    singleLine = true,
+                    enabled = !loading,
+                    textStyle = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (loading) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text(
+                            text = stringResource(R.string.skills_page_downloading),
+                            style = TextStyle(fontSize = 12.sp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    loading = true
+                    onImport(url)
+                },
+                enabled = url.isNotBlank() && !loading,
+            ) {
+                Text(stringResource(R.string.skills_page_import_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !loading) {
+                Text(stringResource(R.string.custom_theme_cancel))
+            }
+        },
     )
 }
 

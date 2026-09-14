@@ -1,0 +1,28 @@
+{
+  "skill-creator": {
+    "commit": "34040c9c568585f6929bedeaad110ad08f079624",
+    "files": [
+      "skills/skill-creator/LICENSE.txt",
+      "skills/skill-creator/SKILL.md",
+      "skills/skill-creator/agents/analyzer.md",
+      "skills/skill-creator/agents/comparator.md",
+      "skills/skill-creator/agents/grader.md",
+      "skills/skill-creator/assets/eval_review.html",
+      "skills/skill-creator/eval-viewer/generate_review.py",
+      "skills/skill-creator/eval-viewer/viewer.html",
+      "skills/skill-creator/references/schemas.md",
+      "skills/skill-creator/scripts/__init__.py",
+      "skills/skill-creator/scripts/aggregate_benchmark.py",
+      "skills/skill-creator/scripts/generate_report.py",
+      "skills/skill-creator/scripts/improve_description.py",
+      "skills/skill-creator/scripts/package_skill.py",
+      "skills/skill-creator/scripts/quick_validate.py",
+      "skills/skill-creator/scripts/run_eval.py",
+      "skills/skill-creator/scripts/run_loop.py",
+      "skills/skill-creator/scripts/utils.py"
+    ],
+    "path": "skills/skill-creator",
+    "ref": "main",
+    "repo": "anthropics/skills"
+  }
+}
