@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -71,6 +72,7 @@ import kotlinx.coroutines.launch
 fun WorkspaceScreen(
     container: AppContainerImpl,
     onBack: () -> Unit,
+    onOpenDetail: (String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -147,7 +149,8 @@ fun WorkspaceScreen(
                         workspaces.forEachIndexed { index, workspace ->
                             WorkspaceRow(
                                 workspace = workspace,
-                                onTap = { actionsFor = workspace },
+                                onTap = { onOpenDetail(workspace.id) },
+                                onLongPress = { actionsFor = workspace },
                             )
                             if (index != workspaces.lastIndex) DividerRow()
                         }
@@ -255,12 +258,13 @@ fun WorkspaceScreen(
 private fun WorkspaceRow(
     workspace: WorkspaceEntity,
     onTap: () -> Unit,
+    onLongPress: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onTap)
+            .combinedClickable(onClick = onTap, onLongClick = onLongPress)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

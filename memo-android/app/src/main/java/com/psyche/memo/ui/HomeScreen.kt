@@ -3578,19 +3578,12 @@ private fun ChatInputBar(
                                             active = reasoningActive,
                                         )
                                     }
-                                    // CIS:197 + 283-293 —— showMcpButton 门控：模型没有
-                                    // 工具能力或没有任何启用的 MCP 服务器时不显示。
-                                    if (showMcpButton) {
-                                        InputIcon(
-                                            Lucide.Hammer,
-                                            stringResource(UiR.string.chat_input_bar_mcp_servers_tooltip),
-                                            onOpenMcp,
-                                            cs,
-                                            // CIB:1929 active: mcpActive —— 有已连接的已选 MCP 才高亮。
-                                            active = mcpActive,
-                                        )
-                                    }
-                                    // CIB:1942 —— 没配快捷短语（全局+本助手）整颗按钮不显示。
+                                    // MCP 按钮**有意不再渲染**（用户 2026-09-14：
+                                    // 「你加了 MCP 在加号里面，输入框里面为什么还有呀」）——
+                                    // MCP 入口已并进输入栏「+」面板的 MCP 行，同一屏两个入口
+                                    // 是重复。`showMcpButton` 的门控逻辑与测试保留（能力判定
+                                    // 仍然成立，将来若要放回来直接用）。
+                                    // 没配快捷短语（全局+本助手）整颗按钮不显示。
                                     if (quickPhraseAvailable) {
                                         InputIcon(
                                             Lucide.Zap,
