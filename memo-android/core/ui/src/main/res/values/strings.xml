@@ -57,6 +57,7 @@
     <string name="ask_user_card_skipped">Skipped</string>
     <string name="ask_user_card_something_else">Something else</string>
     <string name="ask_user_card_submit">Submit answer</string>
+    <string name="ask_user_pending_reply">Waiting for your reply…</string>
     <string name="asr_services_add_action">Add</string>
     <string name="asr_services_add_title">Add Speech Recognition</string>
     <string name="asr_services_add_tooltip">Add speech recognition service</string>
@@ -579,6 +580,9 @@ Updating Memo first is the safer choice.</string>
     <string name="chat_input_bar_voice_send_tooltip">Transcribe and send</string>
     <string name="chat_input_bar_voice_stop_tooltip">Stop and transcribe to input</string>
     <string name="chat_input_bar_voice_transcribing">Recognizing…</string>
+    <string name="chat_interruption_close">Close</string>
+    <string name="chat_interruption_next">Next</string>
+    <string name="chat_interruption_previous">Previous</string>
     <string name="chat_message_widget_arguments">Arguments</string>
     <string name="chat_message_widget_attachment_unavailable">Attachment unavailable</string>
     <string name="chat_message_widget_builtin_search">Built-in Search</string>

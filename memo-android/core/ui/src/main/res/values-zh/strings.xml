@@ -57,6 +57,7 @@
     <string name="ask_user_card_skipped">已跳过</string>
     <string name="ask_user_card_something_else">其他</string>
     <string name="ask_user_card_submit">提交回答</string>
+    <string name="ask_user_pending_reply">等待你的回复…</string>
     <string name="asr_services_add_action">添加</string>
     <string name="asr_services_add_title">添加语音识别</string>
     <string name="asr_services_add_tooltip">添加语音识别服务</string>
@@ -579,6 +580,9 @@
     <string name="chat_input_bar_voice_send_tooltip">转文字并发送</string>
     <string name="chat_input_bar_voice_stop_tooltip">停止并转为文字</string>
     <string name="chat_input_bar_voice_transcribing">正在识别…</string>
+    <string name="chat_interruption_close">关闭</string>
+    <string name="chat_interruption_next">下一个</string>
+    <string name="chat_interruption_previous">上一个</string>
     <string name="chat_message_widget_arguments">参数</string>
     <string name="chat_message_widget_attachment_unavailable">附件不可用</string>
     <string name="chat_message_widget_builtin_search">模型内置搜索</string>

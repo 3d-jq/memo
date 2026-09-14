@@ -75,9 +75,25 @@ class AskUserInteractionService {
         notifyPending()
     }
 
+    /**
+     * 取消单次提问（底部问询面板右上角的 ×）—— 与 [cancelAll]/[cancelForConversation]
+     * 同语义：以 tool_error 'cancelled' 结束，模型据此知道用户不答了、可以继续。
+     */
+    fun cancel(toolCallId: String) {
+        val request = pending.remove(toolCallId) ?: return
+        if (!request.completer.isCompleted) {
+            request.completer.complete(
+                AskUserResult.error(
+                    error = "cancelled",
+                    message = "Ask user request was cancelled.",
+                ),
+            )
+        }
+        notifyPending()
+    }
+
     /** 取消全部提问请求（completed with tool_error 'cancelled'）。 */
-    fun cancelAll() {
-        for (request in pending.values) {
+    fun cancelAll() {        for (request in pending.values) {
             if (!request.completer.isCompleted) {
                 request.completer.complete(
                     AskUserResult.error(

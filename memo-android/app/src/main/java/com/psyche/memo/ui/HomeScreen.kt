@@ -138,8 +138,10 @@ import com.psyche.memo.data.model.ImagePart
 import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.ui.chat.AskUserInteractionService
 import com.psyche.memo.ui.chat.AskUserResult
+import com.psyche.memo.ui.chat.ChatInterruptionPanel
 import com.psyche.memo.ui.chat.ToolApprovalService
 import com.psyche.memo.ui.chat.ToolUiPart
+import com.psyche.memo.ui.chat.currentChatInterruption
 import com.psyche.memo.ui.chat.ImePinTracker
 import com.psyche.memo.ui.chat.checkpointPart
 import com.psyche.memo.ui.chat.shouldPinTimelineOnImeRise
@@ -555,6 +557,9 @@ fun ChatContent(
     // ask-user 卡与时间线可见性都从这里取状态。
     val approvalService = container.toolApprovalService
     val askUserService = container.askUserInteractionService
+    // 底部打断面板的数据源（问询 / 审批）——见 ChatInterruptionPanel.kt。
+    val approvalPending by approvalService.pendingRequests.collectAsState()
+    val askUserPending by askUserService.pendingRequests.collectAsState()
     // 自动滚动（scroll_controller.dart）：总开关默认开；用户拖动后
     // `autoScrollIdleSeconds` 秒内的跟随暂停（默认 8）。
     val autoScrollEnabled = remember {
@@ -1647,6 +1652,21 @@ fun ChatContent(
         }
         val searchSvcName = searchSvc?.let { stringResource(com.psyche.memo.ui.SearchServiceUi.nameRes(it)) }
         val searchIconAsset = searchSvcName?.let { BrandAssets.assetForName(it) }
+        // 待答问询 / 待审批时，底部换成对应面板、聊天输入栏暂时藏起来
+        //（用户 2026-09-14「这个应该出现在输入框那个位置，体验更加友好」）。
+        val interrupting = currentChatInterruption(
+            askUser = askUserPending.values,
+            approval = approvalPending,
+            conversationId = conversationId,
+        )
+        if (interrupting != null) {
+            ChatInterruptionPanel(
+                interruption = interrupting,
+                askUser = askUserService,
+                approval = approvalService,
+                conversationId = conversationId,
+            )
+        } else {
         ChatInputBar(
             input = input,
             enterToSend = remember {
@@ -1709,6 +1729,7 @@ fun ChatContent(
                 if (attachment != null) vm.addAttachments(listOf(attachment)) else vm.updateInput(text)
             },
         )
+        }
         }
     }
     }

@@ -3437,5 +3437,9 @@
   "workspaceTerminalLoading": "正在启动终端…",
   "workspaceTerminalNotInstalled": "先去装 Rootfs —— 终端要用它。",
   "workspaceTerminalNoTabs": "暂无终端会话",
-  "workspaceTerminalExited": "进程已退出"
+  "workspaceTerminalExited": "进程已退出",
+  "askUserPendingReply": "等待你的回复…",
+  "chatInterruptionClose": "关闭",
+  "chatInterruptionPrevious": "上一个",
+  "chatInterruptionNext": "下一个"
 }

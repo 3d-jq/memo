@@ -19,12 +19,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,9 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronLeft
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircleQuestion
+import com.composables.icons.lucide.X
 import com.psyche.memo.ui.ChatStyleSpec
 import com.psyche.memo.ui.IosCheckbox
 import com.psyche.memo.ui.R as UiR
@@ -360,6 +366,16 @@ internal fun AskUserInlineBody(
 
     fun clearSkip(id: String) {
         skipped = skipped - id
+    }
+
+    // 进行中的提问由**底部问询面板**负责作答（用户 2026-09-14「这个应该出现在输入框
+    // 那个位置」）——对话里的工具卡只留一行状态，不再内联渲染表单。
+    if (pendingRequest != null) {
+        Text(
+            text = stringResource(UiR.string.ask_user_pending_reply),
+            style = TextStyle(fontSize = 12.sp, lineHeight = 16.2.sp, color = fg.body),
+        )
+        return
     }
 
     Column(horizontalAlignment = Alignment.Start) {
@@ -738,8 +754,7 @@ private fun AskUserSubmitButton(
     color: Color,
     enabled: Boolean,
     onTap: () -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
+) {    val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
     val base = if (enabled) {
         color.copy(alpha = 0.86f)
@@ -775,5 +790,170 @@ private fun AskUserSubmitButton(
                 ),
             )
         }
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// 底部问询面板（本工程新增；用户 2026-09-14「问问题…这个应该出现在输入框那个位置，
+// 你可以看看这个就是在输入框那里显示的，体验更加友好」）
+// ---------------------------------------------------------------------------
+
+/**
+ * 输入栏位置的问询面板：**一题一页**（‹ n/N › + 右上角 × 关闭），题干 + 选项 +
+ * 「其他」自由输入 + 提交。作答走与内联卡同一条 [AskUserInteractionService.answer]
+ * 链路；× 等价于取消这次提问（服务以 tool_error 'cancelled' 结束，模型可以继续）。
+ */
+@Composable
+internal fun AskUserPanel(
+    request: AskUserRequest,
+    askUser: AskUserInteractionService?,
+    onClose: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.surface.luminance() < 0.5f
+    val questions = request.questions
+    var page by remember(request.toolCallId) { mutableIntStateOf(0) }
+    val singleAnswers = remember(request.toolCallId) { mutableStateMapOf<String, String>() }
+    val multiAnswers = remember(request.toolCallId) { mutableStateMapOf<String, Set<String>>() }
+    val textValues = remember(request.toolCallId) { mutableStateMapOf<String, String>() }
+    var skipped by remember(request.toolCallId) { mutableStateOf(setOf<String>()) }
+    var submitting by remember(request.toolCallId) { mutableStateOf(false) }
+
+    fun hasAnswer(question: AskUserQuestion): Boolean {
+        if (question.id in skipped) return true
+        if (textValues[question.id].orEmpty().trim().isNotEmpty()) return true
+        return when (question.kind) {
+            AskUserQuestionKind.Single -> singleAnswers[question.id].orEmpty().trim().isNotEmpty()
+            AskUserQuestionKind.Multi -> multiAnswers[question.id].orEmpty().isNotEmpty()
+        }
+    }
+
+    if (questions.isEmpty()) return
+    val index = page.coerceIn(0, questions.lastIndex)
+    val question = questions[index]
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                cs.primaryContainer.copy(
+                    alpha = if (isDark) {
+                        ChatStyleSpec.TIMELINE_CARD_ALPHA_DARK
+                    } else {
+                        ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
+                    },
+                ),
+                RoundedCornerShape(20.dp),
+            )
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+            // 页头：‹ n/N › ＋ 右上角关闭（照参考实现）。
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { if (index > 0) page = index - 1 },
+                    enabled = index > 0 && !submitting,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Lucide.ChevronLeft,
+                        contentDescription = stringResource(UiR.string.chat_interruption_previous),
+                        modifier = Modifier.size(18.dp),
+                        tint = if (index > 0) cs.onSurface else cs.onSurface.copy(alpha = 0.3f),
+                    )
+                }
+                Text(
+                    text = "${index + 1}/${questions.size}",
+                    style = TextStyle(fontSize = 13.sp, color = cs.onSurfaceVariant),
+                )
+                IconButton(
+                    onClick = { if (index < questions.lastIndex) page = index + 1 },
+                    enabled = index < questions.lastIndex && !submitting,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Lucide.ChevronRight,
+                        contentDescription = stringResource(UiR.string.chat_interruption_next),
+                        modifier = Modifier.size(18.dp),
+                        tint = if (index < questions.lastIndex) cs.onSurface else cs.onSurface.copy(alpha = 0.3f),
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                IconButton(
+                    onClick = onClose,
+                    enabled = !submitting,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        Lucide.X,
+                        contentDescription = stringResource(UiR.string.chat_interruption_close),
+                        modifier = Modifier.size(18.dp),
+                        tint = cs.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+            AskUserQuestionView(
+                question = question,
+                selectedSingle = singleAnswers[question.id],
+                selectedMulti = multiAnswers[question.id] ?: emptySet(),
+                textValue = textValues[question.id].orEmpty(),
+                skipped = question.id in skipped,
+                showQuestionText = true,
+                onOtherChanged = { value ->
+                    skipped = skipped - question.id
+                    if (question.kind == AskUserQuestionKind.Single && value.trim().isNotEmpty()) {
+                        singleAnswers.remove(question.id)
+                    }
+                    textValues[question.id] = value
+                },
+                onSelectSingle = { value ->
+                    skipped = skipped - question.id
+                    singleAnswers[question.id] = value
+                    textValues[question.id] = ""
+                },
+                onToggleMulti = { value ->
+                    skipped = skipped - question.id
+                    val set = multiAnswers[question.id].orEmpty().toMutableSet()
+                    if (set.contains(value)) set.remove(value) else set.add(value)
+                    multiAnswers[question.id] = set
+                },
+                onToggleSkip = {
+                    if (question.id in skipped) {
+                        skipped = skipped - question.id
+                    } else {
+                        singleAnswers.remove(question.id)
+                        multiAnswers.remove(question.id)
+                        textValues.remove(question.id)
+                        skipped = skipped + question.id
+                    }
+                },
+            )
+
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
+                AskUserSubmitButton(
+                    label = stringResource(UiR.string.ask_user_card_submit),
+                    color = cs.primary,
+                    enabled = questions.all { hasAnswer(it) } && !submitting && askUser != null,
+                    onTap = {
+                        val service = askUser ?: return@AskUserSubmitButton
+                        if (submitting) return@AskUserSubmitButton
+                        submitting = true
+                        service.answer(
+                            request.toolCallId,
+                            buildAskUserAnswers(
+                                questions,
+                                singleAnswers,
+                                multiAnswers,
+                                textValues,
+                                skipped,
+                            ),
+                        )
+                    },
+                )
+            }
     }
 }

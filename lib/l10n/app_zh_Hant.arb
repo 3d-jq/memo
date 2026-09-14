@@ -3437,5 +3437,9 @@
   "workspaceTerminalLoading": "正在啟動終端…",
   "workspaceTerminalNotInstalled": "先去安裝 Rootfs —— 終端需要它。",
   "workspaceTerminalNoTabs": "暫無終端工作階段",
-  "workspaceTerminalExited": "行程已結束"
+  "workspaceTerminalExited": "行程已結束",
+  "askUserPendingReply": "等待你的回覆…",
+  "chatInterruptionClose": "關閉",
+  "chatInterruptionPrevious": "上一個",
+  "chatInterruptionNext": "下一個"
 }

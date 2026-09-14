@@ -338,7 +338,6 @@ fun ChainOfThoughtToolStep(
     // _askUserExpanded 默认 true（`_askUserExpanded ?? true`）。
     var askUserExpanded by rememberSaveable { mutableStateOf(true) }
     var showDetail by remember { mutableStateOf(false) }
-    var showDeny by remember { mutableStateOf(false) }
     var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
     val icon: @Composable () -> Unit = if (isAskUser || !loading || isPendingApproval) {
@@ -450,37 +449,9 @@ fun ChainOfThoughtToolStep(
     val onToggleAskUser: () -> Unit = { askUserExpanded = !askUserExpanded }
     val onOpenDetail: () -> Unit = { showDetail = true }
 
-    // CMW:5528-5561 —— 审批中行尾加 X/Check extra 按钮（Deny 弹备注，Approve 直接批）。
-    val extra: (@Composable () -> Unit)? = if (pendingRequest != null) {
-        @Composable {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IosIconButton(
-                    icon = Lucide.X,
-                    onTap = { showDeny = true },
-                    modifier = Modifier.size((14 + 7 * 2).dp),
-                    size = 14.dp,
-                    contentPadding = 7.dp,
-                    color = cs.error,
-                    semanticLabel = stringResource(UiR.string.tool_approval_deny),
-                )
-                Spacer(Modifier.width(6.dp))
-                IosIconButton(
-                    icon = Lucide.Check,
-                    onTap = {
-                        approval?.approve(pendingRequest.toolCallId, conversationId = pendingRequest.conversationId)
-                        Unit
-                    },
-                    modifier = Modifier.size((14 + 7 * 2).dp),
-                    size = 14.dp,
-                    contentPadding = 7.dp,
-                    color = fg.accent,
-                    semanticLabel = stringResource(UiR.string.tool_approval_approve),
-                )
-            }
-        }
-    } else {
-        null
-    }
+    // CMW:5528-5561 的「审批中行尾 X/Check」不再内联：待审批时由输入栏位置的审批面板
+    // 负责（用户 2026-09-14「工具权限确认这个…应该出现在输入框那个位置」）。
+    val extra: (@Composable () -> Unit)? = null
 
     TimelineStepShell(
         icon = icon,
@@ -497,14 +468,6 @@ fun ChainOfThoughtToolStep(
         expectContent = loading || isPendingApproval || isAskUser || content != null,
     )
 
-    if (showDeny && pendingRequest != null && approval != null) {
-        ApprovalDenyDialog(
-            approval = approval,
-            toolCallId = pendingRequest.toolCallId,
-            conversationId = pendingRequest.conversationId,
-            onDismiss = { showDeny = false },
-        )
-    }
     if (showDetail) {
         ToolDetailSheet(part = part, onDismiss = { showDetail = false })
     }
@@ -811,33 +774,9 @@ fun ToolCallCard(
                     )
                 }
             }
-            // Approval action buttons
-            if (pendingRequest != null) {
-                Spacer(Modifier.height(10.dp))
-                Row {
-                    ApprovalButton(
-                        label = stringResource(UiR.string.tool_approval_deny),
-                        color = cs.error,
-                        filled = false,
-                        modifier = Modifier.weight(1f),
-                        onTap = { showDeny = true },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    ApprovalButton(
-                        label = stringResource(UiR.string.tool_approval_approve),
-                        color = fg.accent,
-                        filled = true,
-                        modifier = Modifier.weight(1f),
-                        onTap = {
-                            approval?.approve(
-                                pendingRequest.toolCallId,
-                                conversationId = pendingRequest.conversationId,
-                            )
-                            Unit
-                        },
-                    )
-                }
-            }
+            // 审批按钮不再内联：待审批时由**输入栏位置的审批面板**负责
+            // （用户 2026-09-14「工具权限确认这个…应该出现在输入框那个位置」），
+            // 这里只保留参数摘要，让人看得见"要做什么"。
             // CMW:5905-5929 —— 工具结果图片横滚条（180/320 常量），点击只开单张。
             if (!hideToolResultImages && part.allImagePaths.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
@@ -1293,3 +1232,121 @@ private fun TextBlockChunk(first: Boolean, last: Boolean, content: @Composable (
 }
 
 // TTS replay row lives in TtsPlayer.kt (TextToSpeechReplayRow).
+
+
+// ---------------------------------------------------------------------------
+// 输入栏位置的审批面板（本工程新增；用户 2026-09-14「工具权限确认这个…应该出现在
+// 输入框那个位置」）
+// ---------------------------------------------------------------------------
+
+/**
+ * 底部审批面板：工具名 + 参数摘要 + 拒绝/允许。与内联卡共用同一套
+ * [ApprovalButton] / [ApprovalDenyDialog] 与同一条 [ToolApprovalService] 链路，
+ * 只是把宿主从对话里的工具卡换到输入栏位置。
+ */
+@Composable
+internal fun ToolApprovalPanel(
+    request: ToolApprovalRequest,
+    approval: ToolApprovalService?,
+    conversationId: String?,
+) {
+    val cs = MaterialTheme.colorScheme
+    val isDark = cs.surface.luminance() < 0.5f
+    val fg = chatSurfaceFg()
+    var showDeny by remember(request.toolCallId) { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                cs.primaryContainer.copy(
+                    alpha = if (isDark) {
+                        ChatStyleSpec.TIMELINE_CARD_ALPHA_DARK
+                    } else {
+                        ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
+                    },
+                ),
+                RoundedCornerShape(20.dp),
+            )
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = toolIconFor(request.toolName, request.arguments),
+                contentDescription = null,
+                tint = fg.strong,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = toolTitleFor(request.toolName, request.arguments, isResult = false),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(
+                    fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
+                    fontWeight = AppFontWeights.semibold,
+                    color = fg.strong,
+                ),
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = stringResource(UiR.string.tool_approval_pending),
+                style = TextStyle(fontSize = 11.sp, color = cs.onSurfaceVariant),
+            )
+        }
+        if (request.arguments.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        cs.onSurface.copy(alpha = if (isDark) 0.06f else 0.04f),
+                        RoundedCornerShape(8.dp),
+                    )
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Text(
+                    text = argsSummary(request.arguments),
+                    style = TextStyle(
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = fg.body,
+                    ),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row {
+            ApprovalButton(
+                label = stringResource(UiR.string.tool_approval_deny),
+                color = cs.error,
+                filled = false,
+                modifier = Modifier.weight(1f),
+                onTap = { showDeny = true },
+            )
+            Spacer(Modifier.width(8.dp))
+            ApprovalButton(
+                label = stringResource(UiR.string.tool_approval_approve),
+                color = fg.accent,
+                filled = true,
+                modifier = Modifier.weight(1f),
+                onTap = {
+                    approval?.approve(request.toolCallId, conversationId = request.conversationId)
+                    Unit
+                },
+            )
+        }
+    }
+
+    if (showDeny && approval != null) {
+        ApprovalDenyDialog(
+            approval = approval,
+            toolCallId = request.toolCallId,
+            conversationId = request.conversationId ?: conversationId,
+            onDismiss = { showDeny = false },
+        )
+    }
+}

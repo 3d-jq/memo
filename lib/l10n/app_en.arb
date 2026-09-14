@@ -4159,5 +4159,9 @@
   "workspaceTerminalLoading": "Starting terminal…",
   "workspaceTerminalNotInstalled": "Install the Rootfs first — the terminal needs it.",
   "workspaceTerminalNoTabs": "No terminal sessions",
-  "workspaceTerminalExited": "Process exited"
+  "workspaceTerminalExited": "Process exited",
+  "askUserPendingReply": "Waiting for your reply…",
+  "chatInterruptionClose": "Close",
+  "chatInterruptionPrevious": "Previous",
+  "chatInterruptionNext": "Next"
 }
