@@ -30,8 +30,19 @@ class ToolHandler(
     private val isTemporary: Boolean = false,
 ) {
 
-    /** 处理一个工具调用，返回写回模型的内容（tool_error 为 JSON 字符串）。 */
-    suspend fun handle(name: String, args: JsonObject, toolCallId: String?): String {
+    /**
+     * 处理一个工具调用，返回写回模型的内容（tool_error 为 JSON 字符串）。
+     *
+     * [onImage] 收集工具结果附带的图片 —— 上游 RikkaHub 的工具结果本身就是
+     * Text/Image 混排的 part 列表，Memo 的 `handle` 只回字符串，所以图片用回调
+     * 交给调用方（它负责把图片挂进工具 part 的 payload）。
+     */
+    suspend fun handle(
+        name: String,
+        args: JsonObject,
+        toolCallId: String?,
+        onImage: (com.psyche.memo.data.model.ToolImage) -> Unit = {},
+    ): String {
         return try {
             // Search tool (tool_handler_service.dart L435-439).
             if (name == com.psyche.memo.provider.search.SearchToolService.TOOL_NAME &&
@@ -88,8 +99,12 @@ class ToolHandler(
                             args = args,
                         )
                     ) {
-                        is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Success ->
+                        is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Success -> {
+                            // 读图片：字节落盘成一个文件，再作为工具结果的图片交给调用方
+                            // （上游把字节交给 FilesManager 出 Image part，等价物就是这里）。
+                            outcome.image?.let { bytes -> persistToolImage(bytes)?.let(onImage) }
                             outcome.json
+                        }
                         is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Failure ->
                             toolError(outcome.error, outcome.message, name)
                     }
@@ -334,5 +349,27 @@ class ToolHandler(
         DayOfWeek.FRIDAY -> "Friday"
         DayOfWeek.SATURDAY -> "Saturday"
         DayOfWeek.SUNDAY -> "Sunday"
+    }
+
+    /**
+     * 把工具读到的图片字节落成文件 —— 图片要随工具结果持久化（重开对话还在），
+     * 所以放 `filesDir` 而不是 cacheDir；目录独立于 upload/，不污染上传管理器列表。
+     */
+    private fun persistToolImage(
+        image: com.psyche.memo.provider.workspace.WorkspaceTools.ToolImageBytes,
+    ): com.psyche.memo.data.model.ToolImage? {
+        val context = container?.appContext ?: return null
+        return runCatching {
+            val dir = java.io.File(context.filesDir, TOOL_IMAGES_DIR).apply { mkdirs() }
+            val file = java.io.File(dir, "${System.currentTimeMillis()}_${image.name}")
+            file.writeBytes(image.bytes)
+            com.psyche.memo.data.model.ToolImage(uri = file.absolutePath, mime = null)
+        }.onFailure { error ->
+            android.util.Log.w("ToolHandler", "Failed to persist tool image", error)
+        }.getOrNull()
+    }
+
+    private companion object {
+        const val TOOL_IMAGES_DIR = "tool_images"
     }
 }

@@ -3,6 +3,7 @@ package com.psyche.memo.llm.client
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -111,5 +112,72 @@ class MessageContentTest {
         assertEquals("image/jpeg", MessageContent.mimeFor("/a/b.JPG", null))
         assertEquals("application/pdf", MessageContent.mimeFor("/a/b.pdf", null))
         assertEquals("image/png", MessageContent.mimeFor("/a/unknown.bin", null))
+    }
+
+    // ------------------------------------------------------------------
+    // 工具结果里的图片（工作区 workspace_read_file 读图片）
+    // ------------------------------------------------------------------
+
+    private fun toolMsg(content: String?, images: List<LlmImage>) =
+        LlmMessage(role = "tool", content = content, toolCallId = "c1", toolImages = images)
+
+    private fun pngFile(): LlmImage {
+        val file = tmp.newFile("shot.png")
+        file.writeBytes(byteArrayOf(1, 2, 3))
+        return LlmImage(uri = file.absolutePath, mime = null)
+    }
+
+    @Test
+    fun `tool results without images stay a plain string`() {
+        val openAi = MessageContent.openAiToolResultContent(toolMsg("{}", emptyList()), true)
+        assertTrue(openAi is JsonPrimitive)
+        assertEquals("{}", (openAi as JsonPrimitive).content)
+
+        val responses = MessageContent.responsesToolResultOutput(toolMsg("{}", emptyList()), true)
+        assertTrue(responses is JsonPrimitive)
+    }
+
+    @Test
+    fun `tool result images become content parts when the model accepts images`() {
+        val message = toolMsg("read ok", listOf(pngFile()))
+
+        val openAi = MessageContent.openAiToolResultContent(message, true) as JsonArray
+        assertEquals(2, openAi.size)
+        assertEquals("text", (openAi[0] as JsonObject)["type"]!!.jsonPrimitive.content)
+        assertEquals("image_url", (openAi[1] as JsonObject)["type"]!!.jsonPrimitive.content)
+        val url = ((openAi[1] as JsonObject)["image_url"] as JsonObject)["url"]!!.jsonPrimitive.content
+        assertTrue(url.startsWith("data:image/png;base64,"))
+
+        val responses = MessageContent.responsesToolResultOutput(message, true) as JsonArray
+        assertEquals("input_text", (responses[0] as JsonObject)["type"]!!.jsonPrimitive.content)
+        assertEquals("input_image", (responses[1] as JsonObject)["type"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `tool result images degrade to a placeholder for text-only models`() {
+        val message = toolMsg("read ok", listOf(pngFile()))
+
+        // 上游：不支持图片输入时换成文本占位，避免 400。
+        val openAi = MessageContent.openAiToolResultContent(message, false)
+        assertTrue(openAi is JsonPrimitive)
+        assertEquals(
+            "read ok\n${MessageContent.IMAGE_OMITTED}",
+            (openAi as JsonPrimitive).content,
+        )
+
+        val responses = MessageContent.responsesToolResultOutput(message, false)
+        assertTrue(responses is JsonPrimitive)
+    }
+
+    @Test
+    fun `unreadable tool result image falls back to the encode failure text`() {
+        val missing = LlmImage(uri = "/nope/does-not-exist.png", mime = null)
+        val openAi = MessageContent.openAiToolResultContent(toolMsg("x", listOf(missing)), true) as JsonArray
+        assertEquals(2, openAi.size)
+        assertEquals("text", (openAi[1] as JsonObject)["type"]!!.jsonPrimitive.content)
+        assertEquals(
+            MessageContent.ENCODE_FAILED,
+            (openAi[1] as JsonObject)["text"]!!.jsonPrimitive.content,
+        )
     }
 }

@@ -30,11 +30,9 @@ object MessageContent {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    data class ImageRef(val uri: String, val mime: String?)
-
     /** Image payloads in order, deduplicated by source. */
-    fun imagesOf(message: LlmMessage): List<ImageRef> {
-        val out = ArrayList<ImageRef>()
+    fun imagesOf(message: LlmMessage): List<LlmImage> {
+        val out = ArrayList<LlmImage>()
         val seen = HashSet<String>()
         for (payload in message.parts) {
             val obj = runCatching { json.parseToJsonElement(payload) as? JsonObject }.getOrNull() ?: continue
@@ -46,7 +44,7 @@ object MessageContent {
             val name = (obj["name"] as? JsonPrimitive)?.contentOrNull
             if (!name.isNullOrEmpty()) continue
             if (!seen.add(uri)) continue
-            out.add(ImageRef(uri, (obj["mime"] as? JsonPrimitive)?.contentOrNull))
+            out.add(LlmImage(uri, (obj["mime"] as? JsonPrimitive)?.contentOrNull))
         }
         return out
     }
@@ -55,7 +53,7 @@ object MessageContent {
      * 可直接内嵌的图片地址：远端 http(s)/data URI 原样返回，本地文件读成
      * base64 data URI（读不到返回 null）。OpenAI 系（含 Responses）共用。
      */
-    fun dataUrlFor(image: ImageRef): String? = when {
+    fun dataUrlFor(image: LlmImage): String? = when {
         image.uri.startsWith("http://") || image.uri.startsWith("https://") -> image.uri
         image.uri.startsWith("data:") -> image.uri
         else -> readBase64(image.uri)?.let { "data:${mimeFor(image.uri, image.mime)};base64,$it" }
@@ -143,6 +141,89 @@ object MessageContent {
                         put("mime_type", mimeFor(image.uri, image.mime))
                         put("data", b64)
                     }
+                })
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 工具结果里的图片（照 RikkaHub `UIMessagePart.Tool.toToolResultContent`
+    // 与各 provider 的 tool_result 编码）
+    //
+    // 只有模型支持图片输入时才把图片作为多模态内容回传，否则换成文本占位 ——
+    // 上游注释原话：「避免发给不支持的模型报错」。
+    // ------------------------------------------------------------------
+
+    /** 图片编码失败的占位（逐字照上游）。 */
+    const val ENCODE_FAILED = "Error: Failed to encode image to base64"
+
+    /** 不支持图片输入时的占位（逐字照上游）。 */
+    const val IMAGE_OMITTED =
+        "[Image output omitted: current model does not support image input]"
+
+    private fun toolImagesOf(message: LlmMessage, supportsImageInput: Boolean): List<LlmImage> =
+        if (supportsImageInput) message.toolImages else emptyList()
+
+    /** 工具结果正文；图片被丢掉时补上占位文案，让模型知道这里本来有图。 */
+    private fun toolResultText(message: LlmMessage, supportsImageInput: Boolean): String {
+        val text = message.content ?: ""
+        val omitted = if (supportsImageInput || message.toolImages.isEmpty()) "" else IMAGE_OMITTED
+        return listOf(text, omitted).filter { it.isNotEmpty() }.joinToString("\n")
+    }
+
+    /** OpenAI chat-completions 的 tool 消息 content（只有带图时才换成数组形态）。 */
+    fun openAiToolResultContent(message: LlmMessage, supportsImageInput: Boolean): JsonElement {
+        val images = toolImagesOf(message, supportsImageInput)
+        val text = toolResultText(message, supportsImageInput)
+        if (images.isEmpty()) return JsonPrimitive(text)
+        return buildJsonArray {
+            if (text.isNotEmpty()) {
+                add(buildJsonObject {
+                    put("type", "text")
+                    put("text", text)
+                })
+            }
+            for (image in images) {
+                val url = dataUrlFor(image)
+                if (url == null) {
+                    add(buildJsonObject {
+                        put("type", "text")
+                        put("text", ENCODE_FAILED)
+                    })
+                    continue
+                }
+                add(buildJsonObject {
+                    put("type", "image_url")
+                    putJsonObject("image_url") { put("url", url) }
+                })
+            }
+        }
+    }
+
+    /** Responses API 的 `function_call_output.output`：input_text + input_image。 */
+    fun responsesToolResultOutput(message: LlmMessage, supportsImageInput: Boolean): JsonElement {
+        val images = toolImagesOf(message, supportsImageInput)
+        val text = toolResultText(message, supportsImageInput)
+        if (images.isEmpty()) return JsonPrimitive(text)
+        return buildJsonArray {
+            if (text.isNotEmpty()) {
+                add(buildJsonObject {
+                    put("type", "input_text")
+                    put("text", text)
+                })
+            }
+            for (image in images) {
+                val url = dataUrlFor(image)
+                if (url == null) {
+                    add(buildJsonObject {
+                        put("type", "input_text")
+                        put("text", ENCODE_FAILED)
+                    })
+                    continue
+                }
+                add(buildJsonObject {
+                    put("type", "input_image")
+                    put("image_url", url)
                 })
             }
         }

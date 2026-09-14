@@ -313,4 +313,38 @@ class WorkspaceToolsTest {
         assertTrue(BlockAnchorReplacer.findMatches(content, "if (x) {\nmiddle\n}", "y").isNotEmpty())
         assertTrue(BlockAnchorReplacer.findMatches(content, "\njunk\n", "y").isEmpty())
     }
+
+    // ---- 读图片（工具结果里的 image 部分） ----
+
+    @Test
+    fun imagePathsAreDetectedByExtensionOnly() {
+        assertTrue(WorkspaceTools.isImagePath("/workspace/shot.PNG"))
+        assertTrue(WorkspaceTools.isImagePath("/workspace/a/b/photo.jpeg"))
+        assertTrue(WorkspaceTools.isImagePath("/workspace/icon.webp"))
+        assertFalse(WorkspaceTools.isImagePath("/workspace/notes.md"))
+        assertFalse(WorkspaceTools.isImagePath("/workspace/archive.zip"))
+        // 没有扩展名（Makefile 这类）不当图片，否则二进制会被当成图片发给模型。
+        assertFalse(WorkspaceTools.isImagePath("/workspace/Makefile"))
+    }
+
+    @Test
+    fun imageReadOutcomeCarriesBytesAndDescribesTheFile() {
+        val bytes = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)
+        val outcome = WorkspaceTools.imageReadOutcome("/workspace/pics/shot.png", bytes)
+
+        // 正文只留路径与描述（1:1 上游 readImageInRootfs 的文本部分）——不能把二进制当文本塞进去。
+        val json = Json.parseToJsonElement(outcome.json).jsonObject
+        assertEquals("/workspace/pics/shot.png", json["path"].toString().trim('"'))
+        assertEquals("Image file read successfully", json["description"].toString().trim('"'))
+        assertFalse(json.containsKey("text"))
+        // 字节与文件名交给调用方落盘。
+        assertEquals("shot.png", outcome.image!!.name)
+        assertTrue(bytes.contentEquals(outcome.image!!.bytes))
+    }
+
+    @Test
+    fun nonImageReadsCarryNoAttachment() {
+        val outcome = WorkspaceTools.Outcome.Success("{}")
+        assertEquals(null, outcome.image)
+    }
 }

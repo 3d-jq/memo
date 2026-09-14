@@ -1,6 +1,7 @@
 package com.psyche.memo.data.model
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -75,6 +76,7 @@ class ToolCallPart(val payloadJson: String) : MessagePart() {
             content: JsonElement?,
             server: Boolean,
             metadata: JsonObject? = null,
+            images: List<ToolImage> = emptyList(),
         ): ToolCallPart {
             val root = LinkedHashMap<String, JsonElement>()
             root["id"] = JsonPrimitive(id)
@@ -83,6 +85,20 @@ class ToolCallPart(val payloadJson: String) : MessagePart() {
             root["content"] = content ?: JsonNull
             root["server"] = JsonPrimitive(server)
             metadata?.let { root["metadata"] = it }
+            // 工具结果附带的图片（本工程新增，见 ToolImage 的注释）；为空时不写这个键，
+            // 老 payload 的形状原样保持。
+            if (images.isNotEmpty()) {
+                root["images"] = JsonArray(
+                    images.map {
+                        JsonObject(
+                            buildMap {
+                                put("uri", JsonPrimitive(it.uri))
+                                it.mime?.let { mime -> put("mime", JsonPrimitive(mime)) }
+                            },
+                        )
+                    },
+                )
+            }
             return ToolCallPart(JsonObject(root).toString())
         }
 
@@ -96,12 +112,25 @@ class ToolCallPart(val payloadJson: String) : MessagePart() {
                 content = obj.value("content"),
                 server = obj.string("server")?.toBooleanStrictOrNull() ?: false,
                 metadata = obj["metadata"] as? JsonObject,
+                images = (obj["images"] as? JsonArray)?.mapNotNull { element ->
+                    val image = element as? JsonObject ?: return@mapNotNull null
+                    val uri = image.string("uri") ?: return@mapNotNull null
+                    ToolImage(uri = uri, mime = image.string("mime"))
+                }.orEmpty(),
             )
         } catch (e: Exception) {
             null
         }
     }
 }
+
+/**
+ * 工具结果附带的图片 —— 上游 RikkaHub 的工具结果本身就是 `List<UIMessagePart>`
+ * （Text / Image 混排），Memo 的工具结果只有 `content` 字符串，所以图片挂在 payload
+ * 的 `images` 键上。这是**本工程新增的 payload 键**（Flutter 原版没有工作区，也就没有
+ * 带图的工具结果），读取端全部忽略未知键、缺失即空列表。
+ */
+data class ToolImage(val uri: String, val mime: String? = null)
 
 /** Decoded tool_call payload. [arguments] keeps the raw JSON fragment. */
 data class ToolCallPayload(
@@ -111,6 +140,7 @@ data class ToolCallPayload(
     val content: String?,
     val server: Boolean,
     val metadata: JsonObject?,
+    val images: List<ToolImage> = emptyList(),
 )
 
 private fun JsonObject.string(key: String): String? =

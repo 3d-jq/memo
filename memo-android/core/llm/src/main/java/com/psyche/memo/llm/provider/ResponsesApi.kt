@@ -78,7 +78,13 @@ object ResponsesApi {
                             buildJsonObject {
                                 put("type", "function_call_output")
                                 put("call_id", callId)
-                                put("output", text)
+                                // 带图时 output 换成 input_text/input_image 数组
+                                // （照上游 ResponseAPI 的 function_call_output 分支）。
+                                put(
+                                    "output",
+                                    com.psyche.memo.llm.client.MessageContent
+                                        .responsesToolResultOutput(message, request.imageInput),
+                                )
                             },
                         )
                     }

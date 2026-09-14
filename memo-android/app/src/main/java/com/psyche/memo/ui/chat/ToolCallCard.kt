@@ -105,6 +105,7 @@ import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -132,6 +133,11 @@ data class ToolUiPart(
     val arguments: JsonObject,
     val content: String?,
     val metadata: JsonObject?,
+    /**
+     * payload `images` 键里的工具结果图片（本工程新增，工作区 `workspace_read_file`
+     * 读图片时写入）；与正文里的 markdown 图片标记合并成同一条图片横滚条。
+     */
+    val attachedImages: List<String> = emptyList(),
     /** Dart 侧是显式字段（默认 false）；流式 payload 没有它，按 content 推断。 */
     val loading: Boolean = content.isNullOrEmpty(),
 ) {
@@ -140,6 +146,9 @@ data class ToolUiPart(
 
     /** chat_message_widget.dart `parseToolResultImages(content).$2` —— 首见去重后的图片路径。 */
     val imagePaths: List<String> by lazy { parseToolResultImages(content).second }
+
+    /** 实际渲染的图片：payload 附件在前，正文 markdown 图片在后。 */
+    val allImagePaths: List<String> get() = attachedImages + imagePaths
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
@@ -156,6 +165,9 @@ data class ToolUiPart(
                 arguments = obj["arguments"] as? JsonObject ?: JsonObject(emptyMap()),
                 content = obj.str("content"),
                 metadata = obj["metadata"] as? JsonObject,
+                attachedImages = (obj["images"] as? JsonArray)
+                    ?.mapNotNull { element -> (element as? JsonObject)?.str("uri") }
+                    .orEmpty(),
             )
         }
 
@@ -387,10 +399,10 @@ fun ChainOfThoughtToolStep(
         pendingApproval = pendingRequest,
     )
     val imageStrip: (@Composable () -> Unit)? =
-        if (!isAskUser && !hideToolResultImages && part.imagePaths.isNotEmpty()) {
+        if (!isAskUser && !hideToolResultImages && part.allImagePaths.isNotEmpty()) {
             {
                 ToolResultImageStrip(
-                    paths = part.imagePaths,
+                    paths = part.allImagePaths,
                     height = ChatStyleSpec.TOOL_IMAGE_TIMELINE_HEIGHT_DP.dp,
                     maxWidth = ChatStyleSpec.TOOL_IMAGE_TIMELINE_MAX_WIDTH_DP.dp,
                     // CMW:5501 / 667-672 —— 点击只开单张（ImageViewerPage(images: [path])）。
@@ -827,10 +839,10 @@ fun ToolCallCard(
                 }
             }
             // CMW:5905-5929 —— 工具结果图片横滚条（180/320 常量），点击只开单张。
-            if (!hideToolResultImages && part.imagePaths.isNotEmpty()) {
+            if (!hideToolResultImages && part.allImagePaths.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
                 ToolResultImageStrip(
-                    paths = part.imagePaths,
+                    paths = part.allImagePaths,
                     height = ChatStyleSpec.TOOL_IMAGE_CARD_HEIGHT_DP.dp,
                     maxWidth = ChatStyleSpec.TOOL_IMAGE_CARD_MAX_WIDTH_DP.dp,
                     onOpenViewer = { paths, index -> viewerState = listOf(paths[index]) to 0 },

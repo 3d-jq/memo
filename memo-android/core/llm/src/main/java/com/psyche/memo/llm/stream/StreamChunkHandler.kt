@@ -173,9 +173,14 @@ class StreamChunkHandler(
     /**
      * stream_chunk_handler.dart `_upsertTool` — fold an executed tool's result
      * into its ToolCallPart (the ToolCallResult emit path of the round loop).
-     * Keeps id/name/arguments/server/metadata; only `content` is replaced.
+     * Keeps id/name/arguments/server/metadata; `content` is replaced and
+     * [images] (tool-result attachments, Memo-only payload key) is set.
      */
-    fun foldToolResult(id: String, content: JsonElement) {
+    fun foldToolResult(
+        id: String,
+        content: JsonElement,
+        images: List<com.psyche.memo.data.model.ToolImage> = emptyList(),
+    ) {
         val index = toolIndex[id] ?: return
         val existing = folded.getOrNull(index) as? ToolCallPart ?: return
         val payload = ToolCallPart.decode(existing.payloadJson) ?: return
@@ -186,6 +191,7 @@ class StreamChunkHandler(
             content = content,
             server = payload.server,
             metadata = payload.metadata,
+            images = images,
         )
     }
 

@@ -16,6 +16,13 @@ data class LlmMessage(
     val toolCallId: String? = null,
     val toolName: String? = null,
     /**
+     * 工具结果附带的图片（照 RikkaHub：上游的工具结果就是 part 列表，Text 与 Image
+     * 混排；Memo 的工具结果正文是字符串，图片单列在这里）。只有 `role == "tool"`
+     * 的消息会用它；**仅在 [LlmRequest.imageInput] 为真时才发出去**，否则以文本占位，
+     * 免得把图片塞给不支持图片输入的模型直接 400。
+     */
+    val toolImages: List<LlmImage> = emptyList(),
+    /**
      * Context-log tags collected while the request was assembled
      * (`context_log_models.dart` `_kelivo_ctx_segments`). Never sent: the
      * provider clients build their JSON field by field, so unlike the
@@ -31,6 +38,9 @@ data class LlmToolCall(
     /** jsonEncode(arguments) 形态：对象 JSON 字符串。 */
     val argumentsJson: String,
 )
+
+/** 一张待发送的图片：uri 可以是 http(s) / data: / 本地文件路径。 */
+data class LlmImage(val uri: String, val mime: String? = null)
 
 data class LlmToolSpec(
     val name: String,
@@ -71,6 +81,12 @@ data class LlmRequest(
      * （见 `ResponsesApi` / `ResponsesDecoder`）。
      */
     val useResponseApi: Boolean = false,
+    /**
+     * 当前模型是否支持图片输入（`ModelOverrideResolver` 的 `visionInput`，即上游的
+     * `Modality.IMAGE in supportInputModalities`）。只用来决定**工具结果里的图片**
+     * 发不发；不支持时按上游换成 `[Image output omitted: …]` 文本占位。
+     */
+    val imageInput: Boolean = false,
 )
 
 data class LlmUsage(

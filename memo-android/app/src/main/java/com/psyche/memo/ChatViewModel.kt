@@ -13,6 +13,7 @@ import com.psyche.memo.data.model.ReasoningSegmentCodec
 import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.data.model.ToolCallPart
 import com.psyche.memo.data.model.ToolCallPayload
+import com.psyche.memo.llm.client.LlmImage
 import com.psyche.memo.llm.client.LlmMessage
 import com.psyche.memo.llm.client.LlmRequest
 import com.psyche.memo.llm.client.LlmToolCall
@@ -1893,6 +1894,9 @@ class ChatViewModel(
                 apiKey = container.apiKeyFor(providerId) ?: "",
                 baseUrl = container.baseUrlFor(providerId),
                 chatPath = container.providerConfig(providerId)?.chatPath,
+                // 工具结果里的图片只发给支持图片输入的模型（上游
+                // supportInputModalities 等价物）。
+                imageInput = effectiveModel?.visionInput == true,
                 thinkingBudget = thinkingBudget,
                 reasoning = effectiveModel?.reasoning
                     ?: com.psyche.memo.ModelRegistry.infer(modelId).reasoning,
@@ -2044,13 +2048,14 @@ class ChatViewModel(
             // Execute each announced tool and fold its result into the
             // part (stream_chunk_handler.dart ToolCallResult path).
             val results = calls.map { call ->
+                val images = mutableListOf<com.psyche.memo.data.model.ToolImage>()
                 val result = toolHandler.handle(
                     call.name,
                     parseToolArguments(call.arguments),
                     call.id,
-                )
-                roundHandler.foldToolResult(call.id, JsonPrimitive(result))
-                result
+                ) { images += it }
+                roundHandler.foldToolResult(call.id, JsonPrimitive(result), images)
+                result to images
             }
             allParts += roundHandler.parts
             allSegments += roundHandler.reasoningSegments
@@ -2073,7 +2078,12 @@ class ChatViewModel(
                         role = "tool",
                         toolCallId = call.id,
                         toolName = call.name,
-                        content = results[index],
+                        content = results[index].first,
+                        // 工具结果附带的图片（工作区读图片）—— 照上游作为工具结果的一部分
+                        // 回传；模型不支持图片输入时由客户端换成文本占位。
+                        toolImages = results[index].second.map {
+                            LlmImage(uri = it.uri, mime = it.mime)
+                        },
                     ),
                 )
             }

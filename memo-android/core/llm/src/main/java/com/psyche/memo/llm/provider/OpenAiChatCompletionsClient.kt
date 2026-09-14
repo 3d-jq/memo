@@ -264,7 +264,7 @@ class OpenAiChatCompletionsClient(
         }
         val messages = buildJsonArray {
             for (m in request.messages) {
-                add(messageToJson(m))
+                add(messageToJson(m, request.imageInput))
             }
         }
         val obj = buildJsonObject {
@@ -322,7 +322,7 @@ class OpenAiChatCompletionsClient(
      * (25-66)：assistant 带 tool_calls（openaiToolCallMaps 形态）、tool role 带
      * tool_call_id + name（仅在非空时输出）。
      */
-    private fun messageToJson(m: LlmMessage): JsonObject = buildJsonObject {
+    private fun messageToJson(m: LlmMessage, supportsImageInput: Boolean): JsonObject = buildJsonObject {
         put("role", m.role)
         when {
             m.role == "assistant" && m.toolCalls.isNotEmpty() -> {
@@ -343,7 +343,13 @@ class OpenAiChatCompletionsClient(
             m.toolCallId != null -> {
                 put("tool_call_id", m.toolCallId)
                 if (!m.toolName.isNullOrEmpty()) put("name", m.toolName)
-                put("content", m.content ?: "")
+                // 工具结果带图时 content 换成 content-part 数组（照上游
+                // ChatCompletionsAPI.toToolResultContent）；不带图仍是字符串。
+                put(
+                    "content",
+                    com.psyche.memo.llm.client.MessageContent
+                        .openAiToolResultContent(m, supportsImageInput),
+                )
             }
             // Multimodal user turns: text-only messages stay plain strings,
             // attachments switch the field to the content-part array shape.

@@ -46,6 +46,43 @@ class ToolCallCardLogicTest {
         assertEquals("calc-3", ToolUiPart.fromPayload(payload, fallbackOrdinal = 3)!!.id)
     }
 
+    // ---- 工具结果里的图片（payload images 键，工作区读图片） ----
+
+    @Test
+    fun fromPayload_readsAttachedImagesAndMergesThemWithMarkdownPaths() {
+        val payload = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive("t1"),
+                "name" to JsonPrimitive("workspace_read_file"),
+                "content" to JsonPrimitive("shot\n\n![inline](/tmp/inline.png)"),
+                "images" to JsonArray(
+                    listOf(JsonObject(mapOf("uri" to JsonPrimitive("/files/tool_images/a.png")))),
+                ),
+            ),
+        ).toString()
+        val part = ToolUiPart.fromPayload(payload)!!
+
+        // payload 附件在前，正文里的 markdown 图片标记在后；两者共用同一条图片横滚条。
+        assertEquals(
+            listOf("/files/tool_images/a.png", "/tmp/inline.png"),
+            part.allImagePaths,
+        )
+    }
+
+    @Test
+    fun fromPayload_withoutImagesKeepsTheMarkdownOnlyList() {
+        val payload = JsonObject(
+            mapOf(
+                "id" to JsonPrimitive("t1"),
+                "name" to JsonPrimitive("workspace_read_file"),
+                "content" to JsonPrimitive("![only](/tmp/only.png)"),
+            ),
+        ).toString()
+        val part = ToolUiPart.fromPayload(payload)!!
+        assertTrue(part.attachedImages.isEmpty())
+        assertEquals(listOf("/tmp/only.png"), part.allImagePaths)
+    }
+
     @Test
     fun fromPayload_invalidJsonIsNull() {
         assertNull(ToolUiPart.fromPayload("not json"))

@@ -331,10 +331,34 @@ object WorkspaceTools {
 
     // ---------------------------------------------------------------- 执行
 
+    /** 工具结果附带的图片：原始字节 + 文件名，由调用方（`ToolHandler`）落盘成文件。 */
+    class ToolImageBytes(val name: String, val bytes: ByteArray)
+
     sealed interface Outcome {
-        data class Success(val json: String) : Outcome
+        data class Success(val json: String, val image: ToolImageBytes? = null) : Outcome
         data class Failure(val error: String, val message: String) : Outcome
     }
+
+    /** 图片扩展名（1:1 上游 `WorkspaceTools.kt` 的 `IMAGE_EXTENSIONS`）。 */
+    private val IMAGE_EXTENSIONS = setOf(
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "heic", "heif", "avif", "ico",
+    )
+
+    /**
+     * 图片的读取结果：正文只留路径与描述（1:1 上游 `readImageInRootfs` 的文本部分），
+     * 字节交给调用方落盘成图片附件。
+     */
+    internal fun imageReadOutcome(path: String, bytes: ByteArray): Outcome.Success =
+        Outcome.Success(
+            json = buildJsonObject {
+                put("path", path)
+                put("description", "Image file read successfully")
+            }.toString(),
+            image = ToolImageBytes(name = path.substringAfterLast('/'), bytes = bytes),
+        )
+
+    internal fun isImagePath(path: String): Boolean =
+        path.substringAfterLast('.', "").lowercase() in IMAGE_EXTENSIONS
 
     /**
      * 执行一次工作区工具。失败不抛异常 —— 调用方（`ToolHandler`）要把话讲给模型听，
@@ -368,6 +392,11 @@ object WorkspaceTools {
         requireReadableSize(path, size)
         val buffer = emptyBuffer(size)
         repo.exportRootfsFile(workspaceId, path, buffer)
+        // 图片不当文本读（那样只会给模型一串乱码）—— 照上游把它作为工具结果里的
+        // image 部分回传：正文换成一段描述，字节交给调用方落盘后随工具结果一起走。
+        if (isImagePath(path)) {
+            return imageReadOutcome(path, buffer.toByteArray())
+        }
         return Outcome.Success(
             buildJsonObject {
                 put("path", path)
