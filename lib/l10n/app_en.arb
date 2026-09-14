@@ -4068,5 +4068,11 @@
   },
   "contextLogSourceWorkspace": "Workspace",
   "workspaceNone": "None",
-  "assistantEditPageWorkspaceTab": "Workspace"
+  "assistantEditPageWorkspaceTab": "Workspace",
+  "workspaceAreaFiles": "Files",
+  "workspaceAreaLinux": "Linux",
+  "workspaceTerminalTitle": "Terminal",
+  "workspaceTerminalHint": "Run a command in the workspace rootfs",
+  "workspaceTerminalClear": "Clear",
+  "workspaceTerminalRunning": "Running…"
 }

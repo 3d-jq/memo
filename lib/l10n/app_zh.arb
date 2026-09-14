@@ -3394,5 +3394,11 @@
   },
   "contextLogSourceWorkspace": "工作区",
   "workspaceNone": "不使用",
-  "assistantEditPageWorkspaceTab": "工作区"
+  "assistantEditPageWorkspaceTab": "工作区",
+  "workspaceAreaFiles": "文件",
+  "workspaceAreaLinux": "Linux",
+  "workspaceTerminalTitle": "终端",
+  "workspaceTerminalHint": "在工作区 rootfs 里执行命令",
+  "workspaceTerminalClear": "清空",
+  "workspaceTerminalRunning": "执行中…"
 }

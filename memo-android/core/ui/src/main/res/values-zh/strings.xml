@@ -2751,6 +2751,8 @@
     <string name="user_profile_save">保存</string>
     <string name="user_profile_timezone">时区</string>
     <string name="user_provider_default_user_name">用户</string>
+    <string name="workspace_area_files">文件</string>
+    <string name="workspace_area_linux">Linux</string>
     <string name="workspace_bind_current">绑定到当前助手</string>
     <string name="workspace_delete_message">确定要删除“%1$s”吗？此操作无法撤销。</string>
     <string name="workspace_delete_title">删除工作区</string>
@@ -2765,6 +2767,10 @@
     <string name="workspace_status_disabled">未安装</string>
     <string name="workspace_status_installing">安装中…</string>
     <string name="workspace_status_ready">就绪</string>
+    <string name="workspace_terminal_clear">清空</string>
+    <string name="workspace_terminal_hint">在工作区 rootfs 里执行命令</string>
+    <string name="workspace_terminal_running">执行中…</string>
+    <string name="workspace_terminal_title">终端</string>
     <string name="workspace_unbind_current">解除当前助手绑定</string>
     <string name="world_book_add">添加世界书</string>
     <string name="world_book_add_entry">添加条目</string>

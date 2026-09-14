@@ -10,11 +10,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -34,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -45,14 +49,16 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CornerLeftUp
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Folder
-import com.composables.icons.lucide.FolderOpen
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Play
 import com.composables.icons.lucide.Trash2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
+import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.theme.withAlpha
+import com.psyche.memo.workspace.WorkspaceCommandResult
 import com.psyche.memo.workspace.WorkspaceFileEntry
 import com.psyche.memo.workspace.WorkspaceStorageArea
 import kotlinx.coroutines.Dispatchers
@@ -60,19 +66,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 工作区详情页 —— 浏览器式的文件浏览与编辑。
+ * 工作区详情页 —— 照 RikkaHub `WorkspaceDetailPage` + `WorkspaceDetailVM` 的结构做：
  *
- * 用户 2026-09-14：「这个创建了工作区 点击 会有一个详细界面呀」，对应上游 RikkaHub 的
- * `WorkspaceDetailPage`（那里还带文件树、编辑器与终端页）。这一版做的是**工作区文件区**
- * （`files/`，也就是沙箱里的 `/workspace`）：
+ *  - **两个存储区**（`FILES` = 沙箱里的 `/workspace`；`LINUX` = rootfs 本体），切区会
+ *    重置路径（上游 `selectArea` 同款）；
+ *  - 面包屑 + 上一级 + 目录/文件浏览，文件点开编辑、长按删；
+ *  - **终端控制台**：输入命令跑在 rootfs 里，保留「命令 → 输出」历史（上游
+ *    `executeTerminalCommand` 的 `WorkspaceTerminalEntry` 三种条目）。
  *
- *  - 面包屑 + 返回上一级；
- *  - 目录点进去、文件点开编辑（等宽字体编辑器，走统一样式 sheet）；
- *  - 长按出操作面板（删除）。
- *
- * **没做的**：rootfs 内部（`linux/` 存储区）的浏览 —— 那是 Linux 根文件系统，几万个文件，
- * 浏览体验完全不同于工作区文件，上游也是单独一套（带忽略规则与补全）。想看 rootfs 里的
- * 东西目前用 `workspace_shell`（例如 `ls /skills`）。见 PORTING §4-46。
+ * 与上游的差距（都记在 PORTING §4-46）：导入/导出文件、每工作区的工具审批覆盖、
+ * 以及带 PTY 的交互式终端页（上游是 `WorkspaceTerminalPage` + session manager，
+ * 需要 NDK 编 `termux_pty.cpp`）。这个控制台是上游详情页里那个**不需要 NDK** 的版本。
  */
 @Composable
 fun WorkspaceDetailScreen(
@@ -85,6 +89,7 @@ fun WorkspaceDetailScreen(
     val repo = container.workspaceRepository
     val workspace = remember(workspaceId) { repo.get(workspaceId) }
 
+    var area by remember { mutableStateOf(WorkspaceStorageArea.FILES) }
     var path by remember { mutableStateOf("") }
     var reload by remember { mutableIntStateOf(0) }
     var entries by remember { mutableStateOf<List<WorkspaceFileEntry>>(emptyList()) }
@@ -92,15 +97,36 @@ fun WorkspaceDetailScreen(
     var editorText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
 
-    // 进目录 / 改完 / 删完都重读（listFiles 会 ensureWorkspace，所以空工作区也能列）。
-    LaunchedEffect(reload, path) {
+    // 终端控制台状态（上游 WorkspaceTerminalState 的等价物）。
+    var command by remember { mutableStateOf("") }
+    var running by remember { mutableStateOf(false) }
+    var history by remember { mutableStateOf<List<TerminalEntry>>(emptyList()) }
+
+    LaunchedEffect(reload, path, area) {
         entries = withContext(Dispatchers.IO) {
-            runCatching { repo.listFiles(workspaceId, WorkspaceStorageArea.FILES, path) }
-                .getOrDefault(emptyList())
+            runCatching { repo.listFiles(workspaceId, area, path) }.getOrDefault(emptyList())
         }
     }
-
     LaunchedEffect(Unit) { runCatching { repo.touch(workspaceId) } }
+
+    fun runCommand() {
+        val trimmed = command.trim()
+        // 上游用 getAndUpdate 原子地「查 running + 置 true」，避免连点跑出两条并发命令。
+        if (trimmed.isEmpty() || running) return
+        running = true
+        command = ""
+        history = history + TerminalEntry.Command(trimmed)
+        scope.launch {
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) { repo.executeCommand(workspaceId, trimmed) }
+            }
+            history = history + outcome.fold(
+                onSuccess = { TerminalEntry.Output(it) },
+                onFailure = { TerminalEntry.Error(it.message ?: "") },
+            )
+            running = false
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(cs.surface).statusBarsPadding()) {
         MemoTopBar(
@@ -113,7 +139,18 @@ fun WorkspaceDetailScreen(
             contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),
         ) {
             item {
-                // 面包屑：工作区名 / a / b —— 点它一律回根，逐级返回用下面的「上一级」。
+                AreaToggle(
+                    area = area,
+                    onSelect = {
+                        if (it != area) {
+                            area = it
+                            path = ""
+                        }
+                    },
+                )
+            }
+
+            item {
                 Text(
                     text = breadcrumb(workspace?.name.orEmpty(), path),
                     style = TextStyle(
@@ -123,7 +160,7 @@ fun WorkspaceDetailScreen(
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
                 )
             }
 
@@ -144,10 +181,7 @@ fun WorkspaceDetailScreen(
                                 tint = cs.onSurfaceVariant,
                             )
                             Spacer(Modifier.width(12.dp))
-                            Text(
-                                text = "..",
-                                style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace),
-                            )
+                            Text("..", style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace))
                         }
                         DividerRow()
                     }
@@ -171,11 +205,7 @@ fun WorkspaceDetailScreen(
                                         scope.launch {
                                             editorText = withContext(Dispatchers.IO) {
                                                 runCatching {
-                                                    repo.readTextForPreview(
-                                                        workspaceId,
-                                                        WorkspaceStorageArea.FILES,
-                                                        entry.path,
-                                                    )
+                                                    repo.readTextForPreview(workspaceId, area, entry.path)
                                                 }.getOrElse { it.message ?: "" }
                                             }
                                         }
@@ -187,6 +217,18 @@ fun WorkspaceDetailScreen(
                         }
                     }
                 }
+            }
+
+            item { TerminalSection(history = history, running = running) }
+
+            item {
+                CommandInput(
+                    command = command,
+                    running = running,
+                    onCommandChange = { command = it },
+                    onRun = { runCommand() },
+                    onClear = { history = emptyList() },
+                )
             }
         }
     }
@@ -200,15 +242,10 @@ fun WorkspaceDetailScreen(
                 editing = null
                 scope.launch {
                     runCatching {
-                        withContext(Dispatchers.IO) {
-                            repo.writeText(workspaceId, entry.path, text, overwrite = true)
-                        }
+                        withContext(Dispatchers.IO) { repo.writeText(workspaceId, entry.path, text, overwrite = true) }
                     }.onFailure { error ->
                         SnackbarManager.show(
-                            AppNotification(
-                                message = error.message ?: "",
-                                type = NotificationType.ERROR,
-                            ),
+                            AppNotification(message = error.message ?: "", type = NotificationType.ERROR),
                         )
                     }
                     reload++
@@ -227,12 +264,7 @@ fun WorkspaceDetailScreen(
                     deleteTarget = null
                     scope.launch {
                         withContext(Dispatchers.IO) {
-                            repo.deleteFile(
-                                workspaceId,
-                                WorkspaceStorageArea.FILES,
-                                entry.path,
-                                recursive = entry.isDirectory,
-                            )
+                            repo.deleteFile(workspaceId, area, entry.path, recursive = entry.isDirectory)
                         }
                         reload++
                     }
@@ -246,6 +278,37 @@ fun WorkspaceDetailScreen(
                 }
             },
         )
+    }
+}
+
+/** 存储区切换（上游 `selectArea`）：两枚药丸，选中走主题色。 */
+@Composable
+private fun AreaToggle(area: WorkspaceStorageArea, onSelect: (WorkspaceStorageArea) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        listOf(
+            WorkspaceStorageArea.FILES to R.string.workspace_area_files,
+            WorkspaceStorageArea.LINUX to R.string.workspace_area_linux,
+        ).forEach { (value, labelRes) ->
+            val selected = value == area
+            Text(
+                text = stringResource(labelRes),
+                style = TextStyle(
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (selected) cs.onPrimary else cs.onSurface,
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .background(
+                        if (selected) cs.primary else LocalSemanticColors.current.surfaceCard,
+                        RoundedCornerShape(999.dp),
+                    )
+                    .clickable { onSelect(value) }
+                    .padding(vertical = 9.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
     }
 }
 
@@ -297,6 +360,136 @@ private fun EntryRow(
                     tint = withAlpha(cs.onSurface, 0.55),
                 )
             }
+        }
+    }
+}
+
+/** 终端条目（上游 `WorkspaceTerminalEntry`）。 */
+internal sealed interface TerminalEntry {
+    data class Command(val command: String) : TerminalEntry
+    data class Output(val result: WorkspaceCommandResult) : TerminalEntry
+    data class Error(val message: String) : TerminalEntry
+}
+
+/** 输出历史：命令用 `$` 前缀，输出按 stdout/stderr 分色，非零退出码单独标一行。 */
+@Composable
+private fun TerminalSection(history: List<TerminalEntry>, running: Boolean) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+        Text(
+            text = stringResource(R.string.workspace_terminal_title),
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+        )
+        if (history.isEmpty() && !running) {
+            Text(
+                text = stringResource(R.string.workspace_terminal_hint),
+                style = TextStyle(fontSize = 12.sp, color = cs.onSurfaceVariant),
+                modifier = Modifier.padding(start = 4.dp),
+            )
+            return@Column
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(cs.surfaceContainerHighest, RoundedCornerShape(12.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            history.forEach { entry ->
+                when (entry) {
+                    is TerminalEntry.Command -> Text(
+                        text = "$ ${entry.command}",
+                        style = TextStyle(
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = cs.primary,
+                        ),
+                    )
+                    is TerminalEntry.Output -> {
+                        val result = entry.result
+                        if (result.stdout.isNotBlank()) Text(
+                            text = result.stdout.trimEnd(),
+                            style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+                        )
+                        if (result.stderr.isNotBlank()) Text(
+                            text = result.stderr.trimEnd(),
+                            style = TextStyle(
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = cs.error,
+                            ),
+                        )
+                        if (result.timedOut) Text(
+                            text = "timeout",
+                            style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = semantic.warning),
+                        )
+                        if (result.exitCode != 0 && !result.timedOut) Text(
+                            text = "exit ${result.exitCode}",
+                            style = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = semantic.warning),
+                        )
+                    }
+                    is TerminalEntry.Error -> Text(
+                        text = entry.message,
+                        style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = cs.error),
+                    )
+                }
+            }
+            if (running) Text(
+                text = stringResource(R.string.workspace_terminal_running),
+                style = TextStyle(fontSize = 12.sp, color = cs.onSurfaceVariant),
+            )
+        }
+    }
+}
+
+/** 命令输入行 + 运行 + 清空。 */
+@Composable
+private fun CommandInput(
+    command: String,
+    running: Boolean,
+    onCommandChange: (String) -> Unit,
+    onRun: () -> Unit,
+    onClear: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 44.dp)
+                .background(cs.surfaceContainerHighest, RoundedCornerShape(12.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "$",
+                style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = cs.primary),
+            )
+            Spacer(Modifier.width(8.dp))
+            BasicTextField(
+                value = command,
+                onValueChange = onCommandChange,
+                singleLine = false,
+                textStyle = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace, color = cs.onSurface),
+                cursorBrush = SolidColor(cs.primary),
+                modifier = Modifier.weight(1f),
+            )
+        }
+        IconButton(onClick = onRun, enabled = !running && command.isNotBlank()) {
+            Icon(
+                Lucide.Play,
+                contentDescription = stringResource(R.string.workspace_terminal_title),
+                tint = if (running || command.isBlank()) withAlpha(cs.onSurface, 0.3) else cs.primary,
+            )
+        }
+        TextButton(onClick = onClear) {
+            Text(stringResource(R.string.workspace_terminal_clear))
         }
     }
 }
