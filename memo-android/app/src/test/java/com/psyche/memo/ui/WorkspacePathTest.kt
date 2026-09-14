@@ -1,32 +1,23 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.workspace.WorkspaceFileEntry
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * 工作区详情页的路径纯逻辑：面包屑与「上一级」。
+ * 工作区详情页的纯逻辑：路径「上一级」、文件类型分流、字节数格式化。
  *
- * 这两条决定用户能不能从子目录退回根 —— 退不回去就只能杀了页面重进，所以单独钉住。
+ * 「上一级」决定用户能不能从子目录退回根（退不回去只能杀了页面重进）；
+ * 文件类型决定点文件时走编辑器 / 图片查看器 / 系统应用三条路；
+ * 大小文案在文件行上直接显示，量级判错会让 1 GB 的文件写成 "1024.00 MB"。
  */
 class WorkspacePathTest {
-
-    @Test
-    fun `root path shows only the workspace name`() {
-        assertEquals("Scratch", breadcrumb("Scratch", ""))
-        assertEquals("Scratch", breadcrumb("Scratch", "   "))
-    }
-
-    @Test
-    fun `nested path is split into segments`() {
-        assertEquals("Scratch / src", breadcrumb("Scratch", "src"))
-        assertEquals("Scratch / src / lib", breadcrumb("Scratch", "src/lib"))
-    }
 
     @Test
     fun `parent walks one level up and stops at the root`() {
         assertEquals("src", parentOf("src/lib"))
         assertEquals("src/lib", parentOf("src/lib/deep"))
-        // 根再上一级还是根（空串），页面据此隐藏「..」行。
+        // 根再上一级还是根（空串），页面据此禁用后退按钮。
         assertEquals("", parentOf("src"))
         assertEquals("", parentOf(""))
     }
@@ -36,4 +27,43 @@ class WorkspacePathTest {
     fun `trailing slash is ignored`() {
         assertEquals("src", parentOf("src/lib/"))
     }
+
+    /** rootfs 区是绝对路径，同样要能一级一级往上退。 */
+    @Test
+    fun `absolute rootfs path walks up to the filesystem root`() {
+        assertEquals("/etc/nginx", parentOf("/etc/nginx/conf.d"))
+        assertEquals("/etc", parentOf("/etc/nginx"))
+        assertEquals("", parentOf("/etc"))
+    }
+
+    @Test
+    fun `file type is detected from the extension`() {
+        assertEquals(WorkspaceFileType.TEXT, entry("notes.md").detectFileType())
+        assertEquals(WorkspaceFileType.TEXT, entry("main.KT").detectFileType())
+        assertEquals(WorkspaceFileType.IMAGE, entry("shot.PNG").detectFileType())
+        assertEquals(WorkspaceFileType.OTHER, entry("archive.zip").detectFileType())
+        // 没有扩展名的名字（Makefile 这类）交给系统应用打开，
+        // 免得把二进制当文本读进编辑器。
+        assertEquals(WorkspaceFileType.OTHER, entry("Makefile").detectFileType())
+    }
+
+    @Test
+    fun `file size switches unit and precision like upstream`() {
+        assertEquals("0 B", 0L.fileSizeToString())
+        assertEquals("1023 B", 1023L.fileSizeToString())
+        assertEquals("1.00 KB", 1024L.fileSizeToString())
+        assertEquals("10.0 KB", (10 * 1024L).fileSizeToString())
+        assertEquals("100 KB", (100 * 1024L).fileSizeToString())
+        assertEquals("1.00 MB", (1024L * 1024).fileSizeToString())
+        assertEquals("1.00 GB", (1024L * 1024 * 1024).fileSizeToString())
+        assertEquals("2.00 TB", (2L * 1024 * 1024 * 1024 * 1024).fileSizeToString())
+    }
+
+    private fun entry(name: String) = WorkspaceFileEntry(
+        path = name,
+        name = name,
+        isDirectory = false,
+        sizeBytes = 0,
+        updatedAt = 0,
+    )
 }

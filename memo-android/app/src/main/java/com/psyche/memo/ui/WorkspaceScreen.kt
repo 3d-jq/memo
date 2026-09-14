@@ -360,7 +360,7 @@ private fun InstallProgressDialog(
  * 默认 Rootfs 源。上游 RikkaHub 写死 arm64；这里按设备 ABI 选 —— 我们的 proot 二进制
  * 同时提供 arm64-v8a 与 x86_64，模拟器上得拿 amd64 的那份。
  */
-private fun defaultRootfsUrl(): String =
+internal fun defaultRootfsUrl(): String =
     "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/" +
         "ubuntu-base-24.04.3-base-${rootfsArchFor(Build.SUPPORTED_ABIS.firstOrNull())}.tar.gz"
 

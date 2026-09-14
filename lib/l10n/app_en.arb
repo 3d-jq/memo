@@ -4074,5 +4074,62 @@
   "workspaceTerminalTitle": "Terminal",
   "workspaceTerminalHint": "Run a command in the workspace rootfs",
   "workspaceTerminalClear": "Clear",
-  "workspaceTerminalRunning": "Running…"
+  "workspaceTerminalRunning": "Running…",
+  "workspaceTabBasic": "Basic",
+  "workspaceToolApprovals": "Tool approvals",
+  "workspaceRefresh": "Refresh",
+  "workspaceOpenTerminal": "Terminal",
+  "workspaceInfoTitle": "Workspace info",
+  "workspaceFieldName": "Name",
+  "workspaceFieldShellStatus": "Shell status",
+  "workspaceEnableShellTitle": "Enable shell",
+  "workspaceEnableShellDesc": "Downloads an Ubuntu rootfs into the workspace. Tools and the terminal stay unavailable until it is ready.",
+  "workspaceReinstallRootfs": "Reinstall Rootfs",
+  "workspaceToolApprovalsDesc": "Tools listed below ask for confirmation before touching the workspace.",
+  "workspaceToolReadFile": "Read file",
+  "workspaceToolWriteFile": "Write file",
+  "workspaceToolEditFile": "Edit file",
+  "workspaceToolShell": "Run shell command",
+  "workspaceImportFile": "Import file",
+  "workspaceEmptyDirectory": "This directory is empty",
+  "workspaceDeleteDirectory": "Delete directory",
+  "workspaceDeleteFile": "Delete file",
+  "workspaceWillDelete": "About to delete: {path}",
+  "@workspaceWillDelete": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceLoading": "Loading…",
+  "workspaceExport": "Export",
+  "workspaceShare": "Share",
+  "workspaceInstall": "Install",
+  "workspaceDownloadUrl": "Download URL",
+  "workspaceRootfsInstallFailed": "Rootfs install failed",
+  "workspaceDownloading": "Downloading {bytes}{total}",
+  "@workspaceDownloading": {
+    "placeholders": {
+      "bytes": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceExtracting": "Extracting {count}{entry}",
+  "@workspaceExtracting": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      },
+      "entry": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceInstallComplete": "Install complete",
+  "workspaceOpenFailed": "No app can open this file"
 }
