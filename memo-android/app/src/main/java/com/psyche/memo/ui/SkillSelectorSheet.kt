@@ -2,6 +2,7 @@ package com.psyche.memo.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -16,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -104,16 +106,20 @@ fun SkillSelectorSheet(
                     val enabled = skill.name in assistant?.enabledSkills.orEmpty()
                     MemoSheetOptionRow(
                         label = skill.name,
-                        subtitle = skill.description,
                         selected = false,
                         // 整行可点：点哪儿都能开关（开关自己也响应）。
                         onClick = { toggle(skill.name, !enabled) },
+                        // 技能说明不裸排成第二行 —— 走全站统一的 ⓘ 浮动气泡，
+                        // 否则开关清单每行两行字、又长又吵。
                         trailing = {
-                            IosSwitch(
-                                value = enabled,
-                                onValueChanged = { toggle(skill.name, it) },
-                                semanticLabel = skill.name,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                SettingsTipIcon(skill.description)
+                                IosSwitch(
+                                    value = enabled,
+                                    onValueChanged = { toggle(skill.name, it) },
+                                    semanticLabel = skill.name,
+                                )
+                            }
                         },
                     )
                 }
