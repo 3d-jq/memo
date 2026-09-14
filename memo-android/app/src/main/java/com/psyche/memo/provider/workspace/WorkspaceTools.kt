@@ -264,81 +264,13 @@ object WorkspaceTools {
 
     data class ReplaceResult(val updated: String, val replacements: Int, val strategy: String)
 
-    const val STRATEGY_EXACT = "exact"
-    const val STRATEGY_LINE_TRIMMED = "line_trimmed"
-
     /**
-     * 上游 `replaceText` 的三级阶梯，这里实现了前两级（`exact` → `line_trimmed`）：
-     * 精确匹配失败时按「逐行 trim 后相等」找那一段再整段替换 —— 模型给的行首缩进常常对不上。
-     * 第三级 `block_anchor`（按首尾锚点行定位）没移植，见 PORTING §4-46。
+     * 三级替换阶梯（精确 → 逐行 trim → 首尾锚点），实现在 [WorkspaceTextReplacers]
+     * —— 照上游 `TextReplacers.kt` 1:1 移植，连「按匹配处缩进重排 new_text」都在。
      */
     fun replaceText(original: String, oldText: String, newText: String, replaceAll: Boolean): ReplaceResult {
-        require(oldText.isNotEmpty()) { "old_text must not be empty" }
-        val occurrences = countOccurrences(original, oldText)
-        if (occurrences > 0) {
-            if (!replaceAll) {
-                require(occurrences == 1) {
-                    "old_text occurs $occurrences times; make it unique or set replace_all=true"
-                }
-            }
-            return ReplaceResult(
-                updated = if (replaceAll) original.replace(oldText, newText)
-                else original.replaceFirst(oldText, newText),
-                replacements = if (replaceAll) occurrences else 1,
-                strategy = STRATEGY_EXACT,
-            )
-        }
-        return replaceLineTrimmed(original, oldText, newText, replaceAll)
-    }
-
-    private fun replaceLineTrimmed(
-        original: String,
-        oldText: String,
-        newText: String,
-        replaceAll: Boolean,
-    ): ReplaceResult {
-        val sourceLines = original.split('\n')
-        val targetLines = oldText.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
-        require(targetLines.isNotEmpty()) { "No exact match found for old_text" }
-        require(targetLines.size <= sourceLines.size) { "No exact match found for old_text" }
-
-        val hits = mutableListOf<Int>()
-        var i = 0
-        while (i + targetLines.size <= sourceLines.size) {
-            val window = sourceLines.subList(i, i + targetLines.size).map { it.trim() }
-            if (window == targetLines) {
-                hits += i
-                i += targetLines.size
-            } else {
-                i++
-            }
-        }
-        require(hits.isNotEmpty()) { "No exact match found for old_text" }
-        if (!replaceAll) require(hits.size == 1) {
-            "old_text matches ${hits.size} places after whitespace normalization; make it unique or set replace_all=true"
-        }
-
-        val chosen = if (replaceAll) hits else hits.take(1)
-        val replacement = newText.split('\n')
-        val output = mutableListOf<String>()
-        var cursor = 0
-        for (start in chosen) {
-            output += sourceLines.subList(cursor, start)
-            output += replacement
-            cursor = start + targetLines.size
-        }
-        output += sourceLines.subList(cursor, sourceLines.size)
-        return ReplaceResult(output.joinToString("\n"), chosen.size, STRATEGY_LINE_TRIMMED)
-    }
-
-    private fun countOccurrences(haystack: String, needle: String): Int {
-        var count = 0
-        var index = haystack.indexOf(needle)
-        while (index >= 0) {
-            count++
-            index = haystack.indexOf(needle, index + needle.length)
-        }
-        return count
+        val result = replaceWorkspaceText(original, oldText, newText, replaceAll)
+        return ReplaceResult(result.updated, result.replacements, result.strategy)
     }
 
     /** 读文件的字节上限（上游 `MAX_READ_FILE_BYTES` = 8MB）。 */

@@ -195,7 +195,7 @@ class WorkspaceToolsTest {
         val single = WorkspaceTools.replaceText("a b c", "b", "B", replaceAll = false)
         assertEquals("a B c", single.updated)
         assertEquals(1, single.replacements)
-        assertEquals(WorkspaceTools.STRATEGY_EXACT, single.strategy)
+        assertEquals(ExactReplacer.name, single.strategy)
 
         val all = WorkspaceTools.replaceText("b b b", "b", "x", replaceAll = true)
         assertEquals("x x x", all.updated)
@@ -219,8 +219,8 @@ class WorkspaceToolsTest {
             newText = "c()\n    d()",
             replaceAll = false,
         )
-        assertEquals(WorkspaceTools.STRATEGY_LINE_TRIMMED, result.strategy)
-        assertEquals("fun f() {\nc()\n    d()\n}\n", result.updated)
+        assertEquals(LineTrimmedReplacer.name, result.strategy)
+        assertEquals("fun f() {\n    c()\n        d()\n}\n", result.updated)
     }
 
     @Test
@@ -232,8 +232,8 @@ class WorkspaceToolsTest {
             newText = "X\nY",
             replaceAll = true,
         )
-        assertEquals(WorkspaceTools.STRATEGY_LINE_TRIMMED, result.strategy)
-        assertEquals("X\nY\nX\nY\n", result.updated)
+        assertEquals(LineTrimmedReplacer.name, result.strategy)
+        assertEquals("  X\n  Y\n  X\n  Y\n", result.updated)
         assertEquals(2, result.replacements)
     }
 
@@ -281,5 +281,36 @@ class WorkspaceToolsTest {
             WorkspaceTools.buildSystemPromptBlock("W", cwd = "proj")
                 .contains("Current working directory: `proj`"),
         )
+    }
+
+    // ---- 第三级 block_anchor + 缩进重排（上游 TextReplacers.kt 的细节）----
+
+    /**
+     * old_text ≥3 行时，只要**首尾两行**对得上就认定是同一块 —— 中间行可以不一致。
+     * 前两级都落空才会走到这里。
+     */
+    @Test
+    fun blockAnchorMatchesOnFirstAndLastLineOnly() {
+        val original = "fun f() {\n    if (x) {\n        body()\n    }\n}\n"
+        val result = WorkspaceTools.replaceText(
+            original = original,
+            oldText = "if (x) {\n    totally different middle\n}",
+            newText = "if (x) {\n    changed()\n}",
+            replaceAll = false,
+        )
+        assertEquals(BlockAnchorReplacer.name, result.strategy)
+        assertEquals("fun f() {\n    if (x) {\n        changed()\n    }\n}\n", result.updated)
+    }
+
+    /**
+     * 少于 3 行、或首尾是空行时 block_anchor 不适用（否则会命中任意空白区间）。
+     * `isApplicable` 是 protected（照上游），所以这里用 findMatches 验行为。
+     */
+    @Test
+    fun blockAnchorNeedsThreeLinesWithNonEmptyAnchors() {
+        val content = "if (x) {\n    junk\n}\n"
+        assertTrue(BlockAnchorReplacer.findMatches(content, "junk\n}", "y").isEmpty())
+        assertTrue(BlockAnchorReplacer.findMatches(content, "if (x) {\nmiddle\n}", "y").isNotEmpty())
+        assertTrue(BlockAnchorReplacer.findMatches(content, "\njunk\n", "y").isEmpty())
     }
 }
