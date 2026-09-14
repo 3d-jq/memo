@@ -91,6 +91,42 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         com.psyche.memo.common.skill.SkillStore(java.io.File(appContext.filesDir, SKILLS_DIR))
     }
 
+    /**
+     * 沙箱工作区（照 RikkaHub 的 `RepositoryModule`）：目录在 `<filesDir>/workspaces/`，
+     * rootfs 用 PRoot 跑，bind mount 把 `/skills` 与 `/upload` 挂进沙箱。
+     *
+     * **同一份挂载表既给 PRoot 的 `-b` 参数、也给文件工具的路径解析** —— 两处各写一份
+     * 就会漂移（上游注释点名过）。`useLegacyPackaging = true`（app 模块）必须开着，
+     * 否则 `nativeLibraryDir` 是空的、proot 找不到。
+     */
+    val workspaceManager: com.psyche.memo.workspace.WorkspaceManager by lazy {
+        com.psyche.memo.workspace.WorkspaceManager(
+            baseDir = java.io.File(appContext.filesDir, WORKSPACES_DIR),
+            shellRunner = com.psyche.memo.workspace.ProotShellRunner(
+                nativeLibraryDir = java.io.File(appContext.applicationInfo.nativeLibraryDir),
+            ),
+            bindMounts = listOf(
+                com.psyche.memo.workspace.WorkspaceBindMount(
+                    source = java.io.File(appContext.filesDir, SKILLS_DIR).apply { mkdirs() },
+                    target = "/skills",
+                ),
+                com.psyche.memo.workspace.WorkspaceBindMount(
+                    source = java.io.File(appContext.filesDir, UPLOAD_DIR).apply { mkdirs() },
+                    target = "/upload",
+                ),
+            ),
+        )
+    }
+
+    val workspaceRepository: com.psyche.memo.provider.workspace.WorkspaceRepository by lazy {
+        com.psyche.memo.provider.workspace.WorkspaceRepository(
+            store = com.psyche.memo.data.workspace.WorkspaceStore(database.writableDatabase),
+            manager = workspaceManager,
+            rootfsInstaller = com.psyche.memo.workspace.RootfsInstaller(workspaceManager),
+            assistants = assistantStore,
+        )
+    }
+
     /** 长期记忆数据层（memory_entry_rows 表 + payload 投影，见 MemoryEntryRowDao）。 */
     val memoryProviderV2: com.psyche.memo.ui.MemoryProviderV2 by lazy {
         com.psyche.memo.ui.MemoryProviderV2(database.writableDatabase)
@@ -480,6 +516,12 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     companion object {
         /** Agent Skills 的技能目录名（`<filesDir>/skills/`，照 RikkaHub）。 */
         const val SKILLS_DIR = "skills"
+
+        /** 沙箱工作区目录（`<filesDir>/workspaces/`，照 RikkaHub）。 */
+        const val WORKSPACES_DIR = "workspaces"
+
+        /** 附件目录 —— 也是沙箱里的 `/upload`（与 AttachmentStore 用的是同一个）。 */
+        const val UPLOAD_DIR = "upload"
     }
 }
 

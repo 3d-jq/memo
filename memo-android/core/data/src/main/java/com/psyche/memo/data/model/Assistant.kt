@@ -32,6 +32,9 @@ data class Assistant(
     val localToolIds: List<String> = emptyList(),
     /** Agent Skills：助手启用的技能名（技能本体在 filesDir/skills/<name>/SKILL.md）。 */
     val enabledSkills: List<String> = emptyList(),
+    /** 沙箱工作区绑定（RikkaHub `assistant.workspaceId` / `workspaceCwd`）。 */
+    val workspaceId: String? = null,
+    val workspaceCwd: String? = null,
     val healthDataTypeIds: List<String> = emptyList(),
     val background: String? = null,
     val customHeaders: List<Map<String, String>> = emptyList(),

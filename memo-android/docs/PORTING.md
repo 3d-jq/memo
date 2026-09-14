@@ -156,6 +156,14 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
     - **不移植**：上游的「从 GitHub 导入」（`importSkillFromGitHub`：Contents API + 递归下载 + 逐文件下载）。沙箱工作区是另一块（见 §5.11 与 `core/workspace`）。
     - 测试：`core:common` 的 `SkillFrontmatterParserTest`（13 例，含折叠块标量/CRLF/重复键/脏 YAML 不抛/非字符串值）、`SkillPathsTest`、`SkillStoreTest`（列表/原子保存/覆盖不留临时目录/删除/嵌套文件/文件表）；app 的 `SkillToolsTest`（暴露门控/提示词块/正文与文件读取/越界与缺失/幽灵名）、`SkillImporterTest`（条目规范化/取最外层/md 与 zip 落盘/穿越防护）。
 
+46. **沙箱工作区（proot rootfs）：照 RikkaHub 1:1 移植**（用户 2026-09-14「沙箱这个 rikkhub 怎么做了 我们怎么就怎么做」，并确认 rootfs 在他机器上装得上）：
+    - **模块划分**：`core:workspace` = 上游 `workspace` 模块的 7 个文件 1:1 移植（模型 / 文件系统 / 管理器 / rootfs 安装器与补丁 / proot 运行器），已提交 `19aec31`；proot 二进制（arm64-v8a + x86_64，GPL-2.0-or-later）随模块分发，真机 spike 见模块 `README.md`。
+    - **记录存哪**：上游有自己的 Room 表 `workspaces`；Memo 的 SQLite 是 drift v3 生成的、门禁还校验「生成器零 diff」，**不能加表** → 用 schema 里已有的通用表 `extension_entity_rows`（`kind = "workspace"`，`(kind,id)` 复合主键），另配 `ExtensionEntityDao`（现有 `PayloadEntityDao` 只管单列主键的表）。
+    - **编排**：app 的 `WorkspaceRepository`（包 `com.psyche.memo.provider.workspace`）把记录与 `WorkspaceManager` 缝起来。与上游的两处结构差异：① 上游用 Room `Flow` 发变更，Memo 用 `version` 计数器（与 `MemoryProviderV2` 同一套）；② 上游从 `SettingsStore` 清助手绑定，Memo 用 `AssistantStore`。
+    - **bind mount 一份两用**：`/skills` → `<filesDir>/skills`、`/upload` → `<filesDir>/upload`。同一份挂载表既给 PRoot 的 `-b` 参数、也给文件工具的路径解析 —— 上游注释点名过，两处各写一份必然漂移。
+    - **包名坑**：core:workspace 的包是 `com.psyche.memo.workspace`，app 侧仓储若也叫这个包就成了 split package → 挪到 `com.psyche.memo.provider.workspace`。
+    - 待续：四个工具（`workspace_read_file` / `write_file` / `edit_file` / `shell`）、工作区提示词、管理界面、交互式终端（需 NDK + cmake 3.22.1 + `com.termux.termux-app:terminal-view` AAR）。
+
 ## 5. 批次进度（收工更新）
 
 | 批次 | 范围 | 状态 |
