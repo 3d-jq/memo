@@ -4171,5 +4171,32 @@
         "type": "String"
       }
     }
-  }
+  },
+  "workspaceEnvironmentsTitle": "Common environments",
+  "workspaceEnvironmentsDesc": "Installs these into this workspace's Rootfs with apt. Each workspace keeps its own copy.",
+  "workspaceEnvNode": "Node.js + npm",
+  "workspaceEnvNodeDesc": "JavaScript runtime and package manager (Node 18 from Ubuntu 24.04).",
+  "workspaceEnvPython": "Python 3 + pip",
+  "workspaceEnvPythonDesc": "Python 3 with pip and venv.",
+  "workspaceEnvCli": "Command-line tools",
+  "workspaceEnvCliDesc": "curl, wget, unzip, xz, less, vim, nano, jq, ripgrep, tree.",
+  "workspaceEnvInstalled": "Installed",
+  "workspaceEnvNotInstalled": "Not installed",
+  "workspaceEnvInstall": "Install",
+  "workspaceEnvReinstall": "Reinstall",
+  "workspaceEnvInstalling": "Installing…",
+  "workspaceEnvInstallFailed": "Install failed",
+  "workspaceEnvNeedsRootfs": "Install the Rootfs first",
+  "workspaceEnvProbing": "Checking…",
+  "workspaceEnvMirror": "Software mirror",
+  "workspaceEnvMirrorDesc": "Where apt downloads packages from. The built-in one is ports.ubuntu.com, which is slow from mainland China.",
+  "workspaceEnvMirrorTuna": "TUNA (Tsinghua)",
+  "workspaceEnvMirrorUstc": "USTC",
+  "workspaceEnvMirrorAliyun": "Aliyun",
+  "workspaceEnvMirrorOfficial": "Official",
+  "workspaceEnvUpdatingIndex": "Refreshing package index…",
+  "workspaceEnvApplyMirror": "Switching mirror…",
+  "workspaceEnvUninstall": "Remove",
+  "workspaceEnvCancel": "Cancel",
+  "workspaceEnvRemoving": "Removing…"
 }
