@@ -369,6 +369,34 @@ object WorkspaceTools {
     fun emptyBuffer(sizeHint: Long): ByteArrayOutputStream =
         ByteArrayOutputStream(sizeHint.toInt())
 
+    // ---------------------------------------------------------------- 提示词
+
+    /**
+     * 系统提示词里的工作区引导 —— 逐字移植上游 `WorkspaceReminderTransformer`
+     * 的 `buildWorkspacePrompt`。
+     *
+     * 触发条件也照上游：助手绑了工作区**且** `shellStatus == READY`（没装好就说有沙箱
+     * 会骗模型）。`/skills` 与 `/upload` 那两段对应容器里的 bind mount；`/upload` 特别
+     * 写明**只读**，免得模型去改用户上传的原件。
+     */
+    fun buildSystemPromptBlock(workspaceName: String, cwd: String? = null): String = buildString {
+        appendLine("<workspace>")
+        appendLine("You have access to a persistent Linux workspace named \"$workspaceName\", running in a sandboxed proot rootfs environment.")
+        appendLine("- The workspace files area is mounted at `/workspace`. Use it as your working directory; files written there persist across turns of this conversation.")
+        appendLine("- All paths passed to workspace tools must be absolute and inside the Rootfs (for example `/workspace/notes.md`).")
+        appendLine("- Available tools:")
+        appendLine("  - `workspace_read_file`: read file contents.")
+        appendLine("  - `workspace_write_file` / `workspace_edit_file`: create files, or make precise edits to existing files.")
+        appendLine("  - `workspace_shell`: run shell commands (the files area is mounted at /workspace).")
+        appendLine("- Prefer `workspace_shell` for tasks that standard Unix tools handle well, and prefer `workspace_edit_file` for targeted edits over rewriting whole files.")
+        appendLine("- The skills directory is mounted at `/skills`. Each skill is a subdirectory `/skills/<skill-name>/` containing a `SKILL.md` (with `name` and `description` frontmatter) plus any supporting files. Read a skill's `SKILL.md` before using it, and follow its instructions.")
+        appendLine("- Files the user uploaded are mounted at `/upload`. Treat `/upload` as READ-ONLY: read uploaded files from `/upload/<file-name>`, but never modify, overwrite, or delete anything there. If you need to change an uploaded file, copy it into `/workspace` first and edit the copy.")
+        if (!cwd.isNullOrBlank()) {
+            appendLine("- Current working directory: `$cwd`. Use this as the default context for file operations and shell commands.")
+        }
+        append("</workspace>")
+    }
+
     // ---------------------------------------------------------------- 执行
 
     sealed interface Outcome {

@@ -701,6 +701,7 @@
     <string name="context_log_source_system_prompt">系统提示词</string>
     <string name="context_log_source_tool_call">工具调用</string>
     <string name="context_log_source_tool_result">工具结果</string>
+    <string name="context_log_source_workspace">工作区</string>
     <string name="context_log_source_world_book">世界书</string>
     <string name="context_log_tokens_estimate_hint">tokens 仅为预估值，请以模型实际消耗为准。</string>
     <string name="context_log_viewer_title">上下文</string>

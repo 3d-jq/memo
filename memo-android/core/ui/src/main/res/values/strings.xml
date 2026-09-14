@@ -701,6 +701,7 @@ Updating Memo first is the safer choice.</string>
     <string name="context_log_source_system_prompt">System prompt</string>
     <string name="context_log_source_tool_call">Tool call</string>
     <string name="context_log_source_tool_result">Tool result</string>
+    <string name="context_log_source_workspace">Workspace</string>
     <string name="context_log_source_world_book">World book</string>
     <string name="context_log_tokens_estimate_hint">Token counts are estimates only; use the model\'s actual usage as the source of truth.</string>
     <string name="context_log_viewer_title">Context</string>

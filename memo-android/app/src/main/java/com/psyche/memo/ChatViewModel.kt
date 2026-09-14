@@ -2405,6 +2405,23 @@ class ChatViewModel(
                 ),
             )
         }
+        // 沙箱工作区：助手绑了工作区**且 shell 就绪**才注入（上游
+        // WorkspaceReminderTransformer 的触发条件 —— 没装好就说有沙箱会骗模型）。
+        val workspaceId = assistant?.workspaceId
+        if (!workspaceId.isNullOrBlank()) {
+            val workspace = container.workspaceRepository.get(workspaceId)
+            if (workspace != null &&
+                workspace.shellStatus == com.psyche.memo.workspace.WorkspaceShellStatus.READY.name
+            ) {
+                add(
+                    ContextSource.workspace,
+                    com.psyche.memo.provider.workspace.WorkspaceTools.buildSystemPromptBlock(
+                        workspaceName = workspace.name,
+                        cwd = assistant.workspaceCwd,
+                    ),
+                )
+            }
+        }
         // injectInstructionPrompts L1748-1772 —— 助手启用中的注入项按顺序合并。
         add(ContextSource.instructionInjection, activeInstructionPrompts(assistant?.id))
         return parts

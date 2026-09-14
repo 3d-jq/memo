@@ -255,4 +255,31 @@ class WorkspaceToolsTest {
         }
         assertTrue(error.message!!.contains("head, tail, or grep"))
     }
+
+    // ---- 提示词注入 ----
+
+    @Test
+    fun promptBlockTellsTheModelWhereEverythingIsMounted() {
+        val block = WorkspaceTools.buildSystemPromptBlock("Scratch")
+        assertTrue(block.startsWith("<workspace>"))
+        assertTrue(block.endsWith("</workspace>"))
+        assertTrue(block.contains("Scratch"))
+        // 三个挂载点必须都讲清楚，否则模型只能瞎试路径。
+        assertTrue(block.contains("`/workspace`"))
+        assertTrue(block.contains("`/skills`"))
+        assertTrue(block.contains("`/upload`"))
+        // /upload 必须写明只读 —— 模型改掉用户上传的原件是不可接受的。
+        assertTrue(block.contains("READ-ONLY"))
+        // 四个工具名都要点到。
+        WorkspaceTools.ALL_TOOL_NAMES.forEach { assertTrue("提示词应当提到 $it", block.contains(it)) }
+    }
+
+    @Test
+    fun promptBlockOnlyMentionsCwdWhenThereIsOne() {
+        assertFalse(WorkspaceTools.buildSystemPromptBlock("W").contains("Current working directory"))
+        assertTrue(
+            WorkspaceTools.buildSystemPromptBlock("W", cwd = "proj")
+                .contains("Current working directory: `proj`"),
+        )
+    }
 }
