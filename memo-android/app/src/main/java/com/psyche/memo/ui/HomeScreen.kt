@@ -167,6 +167,7 @@ fun HomeScreen(
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
     onOpenTranslate: () -> Unit = {},
+    onOpenSkills: () -> Unit = {},
     onEditAssistant: (String) -> Unit = {},
     onManageTags: (String) -> Unit = {},
     pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
@@ -387,6 +388,7 @@ fun HomeScreen(
                 },
                 onOpenSearchServices = onOpenSearchServices,
                 onOpenWorldBookPage = onOpenWorldBookPage,
+                onOpenSkills = onOpenSkills,
                 titleRefreshTick = titleRefreshTick,
                 injectPresets = pendingPresetInject,
             )
@@ -501,6 +503,7 @@ fun ChatContent(
     onOpenConversation: (String) -> Unit = {},
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
+    onOpenSkills: () -> Unit = {},
     titleRefreshTick: Int = 0,
     injectPresets: Boolean = false,
 ) {
@@ -1821,6 +1824,10 @@ fun ChatContent(
             onOpenWorldBookPage = {
                 showToolsSheet = false
                 onOpenWorldBookPage()
+            },
+            onOpenSkills = {
+                showToolsSheet = false
+                onOpenSkills()
             },
             onOpenContextManagement = {
                 showToolsSheet = false

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -137,6 +136,12 @@ private fun SkillToggleRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Switch(checked = checked, onCheckedChange = onToggle)
+        // IosSwitch（不是裸 M3 Switch）—— 它按设置里的触觉开关反馈
+        // （`enableHaptics = true` + LocalHapticsSettings），全站开关都走它。
+        IosSwitch(
+            value = checked,
+            onValueChanged = onToggle,
+            semanticLabel = skill.name,
+        )
     }
 }

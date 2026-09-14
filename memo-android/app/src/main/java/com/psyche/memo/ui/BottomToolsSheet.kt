@@ -33,6 +33,7 @@ import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.Layers
+import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
@@ -58,6 +59,8 @@ fun BottomToolsSheet(
     onToggleOcr: () -> Unit = {},
     onOpenOcrPrompt: () -> Unit = {},
     onOpenInstructionInjection: () -> Unit = {},
+    /** 技能入口 —— 点进技能管理页（用户 2026-09-14「输入框里面加上 skill 管理这个」）。 */
+    onOpenSkills: () -> Unit = {},
     worldBooksAvailable: Boolean = false,
     onOpenWorldBook: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
@@ -171,6 +174,31 @@ fun BottomToolsSheet(
                     )
                     Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
                 }
+            }
+            // 技能行：点进技能管理页。上游 RikkaHub 的输入栏「扩展」入口点开是技能/
+            // 快捷短语/注入的选择面板（`FilesPicker` + `ExtensionSelector`），Memo 的
+            // 技能管理本身就是一个页面，所以直接进页面（与上面「指令注入」行同款）。
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .clickable {
+                        Haptics.light(view)
+                        onOpenSkills()
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Puzzle, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.settings_page_skills),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
             }
             // 上下文管理行（bottom_tools_sheet.dart L316-328）。
             Spacer(Modifier.height(8.dp))

@@ -375,6 +375,7 @@ private fun AppThemeAndContent(
                             onOpenProviders = { navController.navigate("providers") },
                             onOpenSearchServices = { navController.navigate("search_services") },
                             onOpenWorldBookPage = { navController.navigate("world_book") },
+                            onOpenSkills = { navController.navigate("skills") },
                             onOpenTranslate = { navController.navigate("translate") },
                             onEditAssistant = { id -> navController.navigate("assistant_settings_edit/$id") },
                             onManageTags = { id -> navController.navigate("tags_manager/$id") },
