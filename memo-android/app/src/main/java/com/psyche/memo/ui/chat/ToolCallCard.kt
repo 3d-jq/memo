@@ -86,6 +86,7 @@ import com.composables.icons.lucide.Link
 import com.composables.icons.lucide.ListPlus
 import com.composables.icons.lucide.ListTodo
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.MapPin
 import com.composables.icons.lucide.MessageCircleQuestion
 import com.composables.icons.lucide.Search
@@ -202,6 +203,9 @@ private fun JsonObject.str(key: String): String? =
 fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
     localToolIconFor(name, args)?.let { return it }
     return when (name) {
+        // 加载技能：与设置→技能页同一个 Puzzle 图标（RikkaHub 用 MagicWand01，
+        // icons-lucide 1.1.0 没有那个图标；技能域内保持同一个图标更重要）。
+        com.psyche.memo.provider.SkillTools.USE_SKILL -> Lucide.Puzzle
         "memory_read", "memory_update", "memory_search_profile", "memory_edit",
         "update_user_profile", "create_memory", "edit_memory",
         -> Lucide.BookHeart
@@ -247,6 +251,10 @@ fun toolTitleFor(name: String, args: JsonObject?, isResult: Boolean): String {
     if (name == LocalToolNames.ASK_USER) return askUserToolTitleFor(args)
     localToolTitleFor(name, args)?.let { return it }
     return when (name) {
+        // 加载技能：照 RikkaHub `UseSkillToolUI.title` —— "Skill: <技能名>"（带 path 时
+        // 追加 " / <路径>"）。不这么写就会落到默认的「调用工具 <工具名>」，看起来像
+        // 随便调了个工具，而不是"正在加载技能"。
+        com.psyche.memo.provider.SkillTools.USE_SKILL -> skillToolTitleFor(args)
         "memory_read" -> stringResource(UiR.string.chat_message_widget_memory_read)
         "memory_update" -> stringResource(UiR.string.chat_message_widget_memory_update)
         "memory_search_profile" -> stringResource(UiR.string.chat_message_widget_memory_search_profile)
@@ -277,6 +285,25 @@ internal fun askUserToolTitleFor(args: JsonObject?): String {
     }
     return stringResource(UiR.string.assistant_edit_local_tool_ask_user_title)
 }
+
+/**
+ * 加载技能的标题（RikkaHub `UseSkillToolUI.title`）：`Skill: <技能名>`，带 `path`
+ * 时追加 ` / <路径>`。技能名缺失时退回 `skill`，别让卡片出现空的 "Skill: "。
+ */
+@Composable
+private fun skillToolTitleFor(args: JsonObject?): String =
+    skillToolTitle(
+        base = stringResource(UiR.string.chat_message_widget_skill, skillNameFrom(args)),
+        path = args?.str("path"),
+    )
+
+/** `use_skill` 的技能名（缺失/空白时退回 `skill`）。 */
+internal fun skillNameFrom(args: JsonObject?): String =
+    args?.str("name").orEmpty().ifBlank { "skill" }
+
+/** 技能标题的拼装形状：有 path 就 `"<前缀+技能名> / <路径>"`（1:1 上游）。 */
+internal fun skillToolTitle(base: String, path: String?): String =
+    if (path.isNullOrBlank()) base else "$base / $path"
 
 /** chat_message_widget.dart _localToolTitleFor。 */
 @Composable

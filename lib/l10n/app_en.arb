@@ -4163,5 +4163,13 @@
   "askUserPendingReply": "Waiting for your reply…",
   "chatInterruptionClose": "Close",
   "chatInterruptionPrevious": "Previous",
-  "chatInterruptionNext": "Next"
+  "chatInterruptionNext": "Next",
+  "chatMessageWidgetSkill": "Skill: {name}",
+  "@chatMessageWidgetSkill": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

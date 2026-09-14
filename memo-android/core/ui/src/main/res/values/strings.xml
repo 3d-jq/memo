@@ -620,6 +620,7 @@ Updating Memo first is the safer choice.</string>
     <string name="chat_message_widget_screen_time_permission_required">Usage access permission is not granted. Please enable it in system settings and try again.</string>
     <string name="chat_message_widget_screen_time_total">Total screen time</string>
     <string name="chat_message_widget_search_results_title">Search results</string>
+    <string name="chat_message_widget_skill">Skill: %1$s</string>
     <string name="chat_message_widget_speak_text">Speaking: %1$s</string>
     <string name="chat_message_widget_speak_tooltip">Speak</string>
     <string name="chat_message_widget_speaking_title">Speaking:</string>

@@ -620,6 +620,7 @@
     <string name="chat_message_widget_screen_time_permission_required">未授予使用情况访问权限，请在系统设置中开启后重试。</string>
     <string name="chat_message_widget_screen_time_total">总屏幕时间</string>
     <string name="chat_message_widget_search_results_title">搜索结果</string>
+    <string name="chat_message_widget_skill">技能：%1$s</string>
     <string name="chat_message_widget_speak_text">正在朗读: %1$s</string>
     <string name="chat_message_widget_speak_tooltip">朗读</string>
     <string name="chat_message_widget_speaking_title">正在朗读:</string>

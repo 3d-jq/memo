@@ -46,6 +46,31 @@ class ToolCallCardLogicTest {
         assertEquals("calc-3", ToolUiPart.fromPayload(payload, fallbackOrdinal = 3)!!.id)
     }
 
+    // ---- 加载技能的工具卡标题（照 RikkaHub UseSkillToolUI.title） ----
+
+    @Test
+    fun skillTitleShowsTheSkillNameAndOptionalPath() {
+        // 用户 2026-09-14：「加载 skill…我这个怎么是调用工具呀显示 应该是加载吧，
+        // 你看看 rikkhub 就是显示加载 skill」—— 标题必须是「技能：<名>」而不是
+        // 默认的「调用工具 use_skill」。
+        assertEquals("技能：pdf", skillToolTitle("技能：pdf", null))
+        assertEquals("技能：pdf", skillToolTitle("技能：pdf", ""))
+        assertEquals("技能：pdf", skillToolTitle("技能：pdf", "   "))
+        assertEquals("技能：pdf / reference.md", skillToolTitle("技能：pdf", "reference.md"))
+    }
+
+    @Test
+    fun skillNameFallsBackToTheToolNameAndReadsTheArgument() {
+        assertEquals(
+            "pdf",
+            skillNameFrom(JsonObject(mapOf("name" to JsonPrimitive("pdf")))),
+        )
+        // 参数里没有/是空白 → 退回 "skill"，别让标题变成空的「技能：」。
+        assertEquals("skill", skillNameFrom(JsonObject(emptyMap())))
+        assertEquals("skill", skillNameFrom(JsonObject(mapOf("name" to JsonPrimitive("  ")))))
+        assertEquals("skill", skillNameFrom(null))
+    }
+
     // ---- 工具结果里的图片（payload images 键，工作区读图片） ----
 
     @Test

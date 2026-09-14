@@ -3441,5 +3441,6 @@
   "askUserPendingReply": "等待你的回复…",
   "chatInterruptionClose": "关闭",
   "chatInterruptionPrevious": "上一个",
-  "chatInterruptionNext": "下一个"
+  "chatInterruptionNext": "下一个",
+  "chatMessageWidgetSkill": "技能：{name}"
 }

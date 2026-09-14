@@ -620,6 +620,7 @@
     <string name="chat_message_widget_screen_time_permission_required">未授予使用記錄存取權限，請在系統設定中開啟後重試。</string>
     <string name="chat_message_widget_screen_time_total">總螢幕使用時間</string>
     <string name="chat_message_widget_search_results_title">搜尋結果</string>
+    <string name="chat_message_widget_skill">技能：%1$s</string>
     <string name="chat_message_widget_speak_text">正在朗讀: %1$s</string>
     <string name="chat_message_widget_speak_tooltip">朗讀</string>
     <string name="chat_message_widget_speaking_title">正在朗讀:</string>
