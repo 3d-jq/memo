@@ -1,0 +1,258 @@
+package com.psyche.memo.provider.workspace
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * 沙箱工作区工具面的纯逻辑（RikkaHub `WorkspaceTools.kt` 的移植）。
+ *
+ * 重点覆盖三类容易错的地方：**审批默认值与可写安全区**（判错就会静默放行越界写入）、
+ * **rootfs 元数据的 `\0` 解析**、以及**编辑的三级替换阶梯**。
+ */
+class WorkspaceToolsTest {
+
+    private fun args(vararg pairs: Pair<String, Any>): JsonObject = buildJsonObject {
+        pairs.forEach { (k, v) ->
+            when (v) {
+                is String -> put(k, v)
+                is Boolean -> put(k, v)
+                is Int -> put(k, v)
+                else -> error("unsupported $v")
+            }
+        }
+    }
+
+    // ---- 审批 ----
+
+    @Test
+    fun onlyShellNeedsApprovalByDefault() {
+        assertTrue(WorkspaceTools.DEFAULT_APPROVALS.getValue(WorkspaceTools.SHELL))
+        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.READ_FILE, emptyMap()))
+        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.WRITE_FILE, emptyMap()))
+        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.EDIT_FILE, emptyMap()))
+        assertTrue(WorkspaceTools.resolveApproval(WorkspaceTools.SHELL, emptyMap()))
+        // 未知工具默认不放行。
+        assertFalse(WorkspaceTools.resolveApproval("nope", emptyMap()))
+    }
+
+    @Test
+    fun workspaceOverridesBeatTheDefaults() {
+        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.SHELL, mapOf(WorkspaceTools.SHELL to false)))
+        assertTrue(WorkspaceTools.resolveApproval(WorkspaceTools.READ_FILE, mapOf(WorkspaceTools.READ_FILE to true)))
+    }
+
+    // ---- 路径边界 ----
+
+    @Test
+    fun onlyWorkspaceAndTmpAreWritableRoots() {
+        listOf("/workspace", "/workspace/a/b.txt", "/tmp", "/tmp/x", "/workspace/").forEach {
+            assertFalse("$it 应当在可写安全区内", WorkspaceTools.isOutsideWritableRoots(it))
+        }
+        listOf("/", "/etc/passwd", "/usr", "/workspaceX", "/tmpfoo").forEach {
+            assertTrue("$it 应当在可写安全区外", WorkspaceTools.isOutsideWritableRoots(it))
+        }
+    }
+
+    @Test
+    fun absolutePathRequiresRootfsAbsolutePaths() {
+        assertEquals("/workspace/a.txt", WorkspaceTools.absolutePath(args("path" to "/workspace/a.txt"), "path"))
+        // 反斜杠归一化（模型偶尔给 Windows 风格）。
+        assertEquals("/a/b", WorkspaceTools.absolutePath(args("path" to "\\a\\b"), "path"))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            WorkspaceTools.absolutePath(args("path" to "relative/x"), "path")
+        }
+        // 缺参数走的是上游的 error()（IllegalStateException），路径形状问题才是 require。
+        assertThrows(IllegalStateException::class.java) {
+            WorkspaceTools.absolutePath(buildJsonObject { }, "path")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            WorkspaceTools.absolutePath(args("path" to "/a\u0000b"), "path")
+        }
+    }
+
+    /** 参数坏掉时必须**失败关闭**（当成越界、要求审批），不能默默放行。 */
+    @Test
+    fun pathOutsideWritableRootsFailsClosed() {
+        assertTrue(WorkspaceTools.pathOutsideWritableRoots(buildJsonObject { }, "path"))
+        assertTrue(WorkspaceTools.pathOutsideWritableRoots(args("path" to "relative"), "path"))
+        assertTrue(WorkspaceTools.pathOutsideWritableRoots(args("path" to "/etc/x"), "path"))
+        assertFalse(WorkspaceTools.pathOutsideWritableRoots(args("path" to "/workspace/x"), "path"))
+    }
+
+    // ---- 定义 ----
+
+    @Test
+    fun noWorkspaceBindingMeansNoTools() {
+        assertTrue(WorkspaceTools.buildDefinitions(null).isEmpty())
+        assertTrue(WorkspaceTools.buildDefinitions("   ").isEmpty())
+    }
+
+    @Test
+    fun boundWorkspaceExposesTheFourTools() {
+        val defs = WorkspaceTools.buildDefinitions("ws-1")
+        assertEquals(
+            listOf(
+                WorkspaceTools.READ_FILE,
+                WorkspaceTools.WRITE_FILE,
+                WorkspaceTools.EDIT_FILE,
+                WorkspaceTools.SHELL,
+            ),
+            defs.map { it.name },
+        )
+        assertTrue(defs.all { it.description.isNotBlank() })
+        // 描述里不能有换行（上游 trimIndent().replace("\n", " ")）。
+        assertTrue(defs.none { it.description.contains('\n') })
+        assertTrue(defs.first { it.name == WorkspaceTools.SHELL }.description.contains("/workspace"))
+    }
+
+    @Test
+    fun shellDescriptionAndSchemaMentionTheDefaultCwd() {
+        val defs = WorkspaceTools.buildDefinitions("ws-1", cwd = "/workspace/proj")
+        val shell = defs.first { it.name == WorkspaceTools.SHELL }
+        assertTrue("默认 cwd 应当出现在描述里", shell.description.contains("proj"))
+        assertTrue(shell.inputSchemaJson.contains("proj"))
+        assertTrue(shell.inputSchemaJson.contains("600"))
+    }
+
+    @Test
+    fun shellCwdStripsTheWorkspacePrefix() {
+        assertEquals("proj", WorkspaceTools.shellCwd("/workspace/proj"))
+        assertEquals("", WorkspaceTools.shellCwd("/workspace"))
+        assertEquals(null, WorkspaceTools.shellCwd(null))
+    }
+
+    // ---- rootfs 元数据 ----
+
+    @Test
+    fun parsesNulSeparatedEntryMetadata() {
+        val stdout = "f\u000012\u00001700000000\u0000/workspace/a.txt\u0000"
+        val entry = WorkspaceTools.parseRootfsEntries(stdout).single()
+        assertEquals("/workspace/a.txt", entry.path)
+        assertEquals("a.txt", entry.name)
+        assertEquals(12L, entry.sizeBytes)
+        assertEquals(1_700_000_000_000L, entry.updatedAt)
+        assertFalse(entry.isDirectory)
+    }
+
+    @Test
+    fun parsesDirectoriesAndTrailingSlashNames() {
+        val entry = WorkspaceTools.parseRootfsEntries("d\u00000\u000010\u0000/workspace/dir/\u0000").single()
+        assertTrue(entry.isDirectory)
+        assertEquals("dir", entry.name)
+    }
+
+    @Test
+    fun rejectsMalformedMetadata() {
+        assertThrows(IllegalArgumentException::class.java) {
+            WorkspaceTools.parseRootfsEntries("f\u000012\u00001\u0000")
+        }
+        assertThrows(IllegalStateException::class.java) {
+            WorkspaceTools.parseRootfsEntries("f\u0000notanumber\u00001\u0000/p\u0000")
+        }
+    }
+
+    @Test
+    fun entryJsonCarriesEveryField() {
+        val json = WorkspaceTools.entryJson(
+            com.psyche.memo.workspace.WorkspaceFileEntry("/w/a", "a", false, 3, 9),
+        )
+        val obj = Json.parseToJsonElement(json).jsonObject
+        assertEquals("/w/a", obj["path"]!!.toString().trim('"'))
+        assertEquals("false", obj["isDirectory"]!!.toString())
+        assertEquals("3", obj["sizeBytes"]!!.toString())
+    }
+
+    @Test
+    fun shellQuoteEscapesSingleQuotes() {
+        assertEquals("'a b'", WorkspaceTools.shellQuote("a b"))
+        assertEquals("'a'\"'\"'b'", WorkspaceTools.shellQuote("a'b"))
+    }
+
+    @Test
+    fun timeoutDefaultsAndClamps() {
+        assertEquals(
+            com.psyche.memo.workspace.WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+            WorkspaceTools.timeoutMillis(args("command" to "ls")),
+        )
+        assertEquals(5_000L, WorkspaceTools.timeoutMillis(args("timeout" to 5)))
+        assertEquals(600_000L, WorkspaceTools.timeoutMillis(args("timeout" to 99_999)))
+        assertEquals(1_000L, WorkspaceTools.timeoutMillis(args("timeout" to 0)))
+    }
+
+    // ---- 替换阶梯 ----
+
+    @Test
+    fun exactReplacementRequiresUniquenessUnlessReplaceAll() {
+        val single = WorkspaceTools.replaceText("a b c", "b", "B", replaceAll = false)
+        assertEquals("a B c", single.updated)
+        assertEquals(1, single.replacements)
+        assertEquals(WorkspaceTools.STRATEGY_EXACT, single.strategy)
+
+        val all = WorkspaceTools.replaceText("b b b", "b", "x", replaceAll = true)
+        assertEquals("x x x", all.updated)
+        assertEquals(3, all.replacements)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            WorkspaceTools.replaceText("b b", "b", "x", replaceAll = false)
+        }
+    }
+
+    /**
+     * 精确匹配失败时退化到「逐行 trim 后相等」——模型给的行首缩进常常对不上。
+     * 这里 oldText 跨行且内层缩进与原文不一致，所以精确匹配必然落空。
+     */
+    @Test
+    fun fallsBackToWhitespaceTolerantLineMatching() {
+        val original = "fun f() {\n    a()\n    b()\n}\n"
+        val result = WorkspaceTools.replaceText(
+            original = original,
+            oldText = "a()\nb()",          // 少了内层缩进 ⇒ 不是原文的子串
+            newText = "c()\n    d()",
+            replaceAll = false,
+        )
+        assertEquals(WorkspaceTools.STRATEGY_LINE_TRIMMED, result.strategy)
+        assertEquals("fun f() {\nc()\n    d()\n}\n", result.updated)
+    }
+
+    @Test
+    fun whitespaceTolerantMatchingAlsoHonoursReplaceAll() {
+        val original = "  x\n  y\n  x\n  y\n"
+        val result = WorkspaceTools.replaceText(
+            original = original,
+            oldText = "x\ny",
+            newText = "X\nY",
+            replaceAll = true,
+        )
+        assertEquals(WorkspaceTools.STRATEGY_LINE_TRIMMED, result.strategy)
+        assertEquals("X\nY\nX\nY\n", result.updated)
+        assertEquals(2, result.replacements)
+    }
+
+    @Test
+    fun noMatchAndEmptyNeedleAreErrors() {
+        assertThrows(IllegalArgumentException::class.java) {
+            WorkspaceTools.replaceText("abc", "zzz", "y", replaceAll = false)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            WorkspaceTools.replaceText("abc", "", "y", replaceAll = false)
+        }
+    }
+
+    @Test
+    fun oversizedReadsAreRefusedWithAHint() {
+        WorkspaceTools.requireReadableSize("/w/a", 1024)
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            WorkspaceTools.requireReadableSize("/w/big", 9L * 1024 * 1024)
+        }
+        assertTrue(error.message!!.contains("head, tail, or grep"))
+    }
+}

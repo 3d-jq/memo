@@ -1,0 +1,546 @@
+package com.psyche.memo.provider.workspace
+
+import com.psyche.memo.llm.client.LlmToolSpec
+import com.psyche.memo.workspace.WorkspaceFileEntry
+import com.psyche.memo.workspace.WorkspaceManager
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import java.io.ByteArrayOutputStream
+
+/**
+ * 沙箱工作区的工具面 —— 1:1 移植 RikkaHub `data/ai/tools/WorkspaceTools.kt`。
+ *
+ * 四个工具：`workspace_read_file` / `workspace_write_file` / `workspace_edit_file` /
+ * `workspace_shell`。路径一律是 **rootfs 内的绝对路径**（工作区文件区挂在 `/workspace`）。
+ *
+ * 与上游一致的三个关键设计：
+ *  1. **写文件是走 shell 的**（`cat > path` + stdin），读文件走 `rootfsFileSize` +
+ *     `exportRootfsFile` —— 因为 proot 只暴露一个执行入口，直接碰宿主文件会绕过 rootfs
+ *     的路径映射（bind mount 就看不懂了）。
+ *  2. **免审批的安全可写区**只有 `/workspace` 与 `/tmp`；写到别处自动升级为需要审批。
+ *  3. `workspace_shell` 默认需要审批（[DEFAULT_APPROVALS]），其余三个默认免审批。
+ *
+ * 与上游的唯一缺口：`workspace_read_file` 读**图片**那条分支没移植（上游把字节交给
+ * `FilesManager` 生成图片 part；Memo 的工具结果要接进它自己的图片通道，见 PORTING）。
+ * 文本读取、写入、编辑、执行四件事都是完整的。
+ */
+object WorkspaceTools {
+
+    const val READ_FILE = "workspace_read_file"
+    const val WRITE_FILE = "workspace_write_file"
+    const val EDIT_FILE = "workspace_edit_file"
+    const val SHELL = "workspace_shell"
+
+    val ALL_TOOL_NAMES = setOf(READ_FILE, WRITE_FILE, EDIT_FILE, SHELL)
+
+    /** 上游 `WorkspaceToolDefaultApprovals`：只有 shell 默认要审批。 */
+    val DEFAULT_APPROVALS: Map<String, Boolean> = mapOf(
+        READ_FILE to false,
+        WRITE_FILE to false,
+        EDIT_FILE to false,
+        SHELL to true,
+    )
+
+    /** 上游 `resolveWorkspaceToolApproval`：工作区上的覆盖项优先，其次默认值。 */
+    fun resolveApproval(name: String, overrides: Map<String, Boolean>): Boolean =
+        overrides[name] ?: DEFAULT_APPROVALS[name] ?: false
+
+    /** 免强制审批的可写安全区（上游 `WRITABLE_ROOT_PREFIXES`）。 */
+    private val WRITABLE_ROOT_PREFIXES = listOf("/workspace", "/tmp")
+
+    private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
+    private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
+
+    // ---------------------------------------------------------------- 定义
+
+    /** 助手没绑工作区（`workspaceId` 为空）时整颗不提供。 */
+    fun buildDefinitions(workspaceId: String?, cwd: String? = null): List<LlmToolSpec> {
+        if (workspaceId.isNullOrBlank()) return emptyList()
+        val defaultCwd = shellCwd(cwd)
+        return listOf(
+            LlmToolSpec(READ_FILE, READ_DESCRIPTION, readParametersJson()),
+            LlmToolSpec(WRITE_FILE, WRITE_DESCRIPTION, writeParametersJson()),
+            LlmToolSpec(EDIT_FILE, EDIT_DESCRIPTION, editParametersJson()),
+            LlmToolSpec(SHELL, shellDescription(defaultCwd), shellParametersJson(defaultCwd)),
+        )
+    }
+
+    private val READ_DESCRIPTION = """
+        Read a file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Use /workspace for the workspace files area.
+        Supports UTF-8 text files and image files (png, jpg, jpeg, gif, webp, bmp, svg, heic, heif, avif, ico).
+    """.trimIndent().replace("\n", " ")
+
+    private val WRITE_DESCRIPTION = """
+        Write a UTF-8 text file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Use /workspace for the workspace files area.
+    """.trimIndent().replace("\n", " ")
+
+    private val EDIT_DESCRIPTION = """
+        Edit a UTF-8 text file using the assistant's bound workspace Rootfs. Paths must be absolute inside Rootfs.
+        Use /workspace for the workspace files area.
+        Provide old_text and new_text. By default old_text must occur exactly once; set replace_all=true to replace every occurrence.
+        If no exact match is found, whitespace-tolerant line matching is attempted automatically.
+    """.trimIndent().replace("\n", " ")
+
+    private fun shellDescription(defaultCwd: String?): String = buildString {
+        append("Run a shell command in the assistant's bound workspace Rootfs. The workspace files area is mounted at /workspace. ")
+        append("Use cwd for a path relative to the workspace files root. ")
+        if (!defaultCwd.isNullOrBlank()) append("Defaults to '$defaultCwd'. ")
+        append("Requires Rootfs to be installed and ready.")
+    }
+
+    /** 上游 `shellCwd`：把 `/workspace/...` 剥成相对工作区根的路径。 */
+    fun shellCwd(cwd: String?): String? =
+        cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
+
+    private fun pathProperty(required: Boolean) = buildJsonObject {
+        put("type", "string")
+        put(
+            "description",
+            if (required) {
+                "Absolute path inside Rootfs. Use /workspace for the workspace files area."
+            } else {
+                "Optional absolute path inside Rootfs. Use /workspace for the workspace files area."
+            },
+        )
+    }
+
+    fun readParametersJson(): String = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject { put("path", pathProperty(required = true)) })
+        put("required", buildJsonArray { add(JsonPrimitive("path")) })
+    }.toString()
+
+    fun writeParametersJson(): String = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("path", pathProperty(required = true))
+            put("text", buildJsonObject {
+                put("type", "string")
+                put("description", "UTF-8 text content to write")
+            })
+            put("overwrite", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Whether to overwrite an existing file. Defaults to true.")
+            })
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("path")); add(JsonPrimitive("text")) })
+    }.toString()
+
+    fun editParametersJson(): String = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("path", pathProperty(required = true))
+            put("old_text", buildJsonObject {
+                put("type", "string")
+                put("description", "Exact text to replace")
+            })
+            put("new_text", buildJsonObject {
+                put("type", "string")
+                put("description", "Replacement text")
+            })
+            put("replace_all", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Whether to replace every occurrence. Defaults to false.")
+            })
+        })
+        put("required", buildJsonArray {
+            add(JsonPrimitive("path")); add(JsonPrimitive("old_text")); add(JsonPrimitive("new_text"))
+        })
+    }.toString()
+
+    fun shellParametersJson(defaultCwd: String? = null): String = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("command", buildJsonObject {
+                put("type", "string")
+                put("description", "Shell command to run")
+            })
+            put("cwd", buildJsonObject {
+                put("type", "string")
+                put(
+                    "description",
+                    if (!defaultCwd.isNullOrBlank()) {
+                        "Working directory relative to the workspace files root. Defaults to '$defaultCwd'."
+                    } else {
+                        "Working directory relative to the workspace files root. Defaults to root."
+                    },
+                )
+            })
+            put("timeout", buildJsonObject {
+                put("type", "integer")
+                put(
+                    "description",
+                    "Command timeout in seconds. Defaults to 30, max $SHELL_TIMEOUT_MAX_SECONDS.",
+                )
+            })
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("command")) })
+    }.toString()
+
+    // ---------------------------------------------------------------- 纯工具
+
+    /** 上游 `putPathProperty`/`absolutePath`：必须是 rootfs 内的绝对路径。 */
+    fun absolutePath(args: JsonObject, name: String): String {
+        val path = args[name]?.jsonPrimitive?.contentOrNull?.replace('\\', '/')?.trim()
+            ?: error("$name is required")
+        require(path.isNotBlank()) { "$name is required" }
+        require(path.startsWith("/")) { "$name must be an absolute path inside Rootfs" }
+        require(!path.contains('\u0000')) { "$name contains invalid character" }
+        return path
+    }
+
+    /** 写到 `/workspace`、`/tmp` 之外要不要额外审批（上游 `pathOutsideWritableRoots`）。 */
+    fun pathOutsideWritableRoots(args: JsonObject, name: String): Boolean = runCatching {
+        isOutsideWritableRoots(absolutePath(args, name))
+    }.getOrDefault(true)
+
+    fun isOutsideWritableRoots(path: String): Boolean {
+        val normalized = path.trimEnd('/').ifBlank { "/" }
+        return WRITABLE_ROOT_PREFIXES.none { prefix ->
+            normalized == prefix || normalized.startsWith("$prefix/")
+        }
+    }
+
+    /** POSIX 单引号转义（上游 `shellQuote`）。 */
+    fun shellQuote(raw: String): String = "'" + raw.replace("'", "'\"'\"'") + "'"
+
+    /** 上游 `statEntryCommand`：`\0` 分隔的 `type/size/mtime/path` 四元组。 */
+    fun statEntryCommand(path: String): String {
+        val pathArg = shellQuote(path)
+        return """
+            if [ -d $pathArg ]; then entry_type=d; else entry_type=f; fi
+            entry_size=${'$'}(stat -c '%s' -- $pathArg) || exit 1
+            entry_mtime=${'$'}(stat -c '%Y' -- $pathArg) || exit 1
+            printf '%s\0%s\0%s\0%s\0' "${'$'}entry_type" "${'$'}entry_size" "${'$'}entry_mtime" $pathArg
+        """.trimIndent()
+    }
+
+    /** 上游 `parseRootfsEntries`。 */
+    fun parseRootfsEntries(stdout: String): List<WorkspaceFileEntry> {
+        val fields = stdout.split('\u0000').dropLastWhile { it.isEmpty() }
+        require(fields.size % 4 == 0) { "Invalid file metadata output" }
+        return fields.chunked(4).map { chunk ->
+            WorkspaceFileEntry(
+                path = chunk[3],
+                name = chunk[3].trimEnd('/').substringAfterLast('/').ifBlank { "/" },
+                isDirectory = chunk[0] == "d",
+                sizeBytes = chunk[1].toLongOrNull() ?: error("Invalid file size: ${chunk[1]}"),
+                updatedAt = (chunk[2].toLongOrNull() ?: error("Invalid file mtime: ${chunk[2]}")) * 1_000L,
+            )
+        }
+    }
+
+    fun entryJson(entry: WorkspaceFileEntry): String = buildJsonObject {
+        put("path", entry.path)
+        put("name", entry.name)
+        put("isDirectory", entry.isDirectory)
+        put("sizeBytes", entry.sizeBytes)
+        put("updatedAt", entry.updatedAt)
+    }.toString()
+
+    /** shell 结果 → 模型看的 JSON（上游 `createShellTool` 的 execute 尾部）。 */
+    fun commandResultJson(
+        exitCode: Int,
+        stdout: String,
+        stderr: String,
+        timedOut: Boolean,
+        truncated: Boolean,
+    ): String = buildJsonObject {
+        put("exitCode", exitCode)
+        put("stdout", stdout)
+        put("stderr", stderr)
+        put("timedOut", timedOut)
+        if (truncated) put("truncated", true)
+    }.toString()
+
+    // ---------------------------------------------------------------- 编辑
+
+    data class ReplaceResult(val updated: String, val replacements: Int, val strategy: String)
+
+    const val STRATEGY_EXACT = "exact"
+    const val STRATEGY_LINE_TRIMMED = "line_trimmed"
+
+    /**
+     * 上游 `replaceText` 的三级阶梯，这里实现了前两级（`exact` → `line_trimmed`）：
+     * 精确匹配失败时按「逐行 trim 后相等」找那一段再整段替换 —— 模型给的行首缩进常常对不上。
+     * 第三级 `block_anchor`（按首尾锚点行定位）没移植，见 PORTING §4-46。
+     */
+    fun replaceText(original: String, oldText: String, newText: String, replaceAll: Boolean): ReplaceResult {
+        require(oldText.isNotEmpty()) { "old_text must not be empty" }
+        val occurrences = countOccurrences(original, oldText)
+        if (occurrences > 0) {
+            if (!replaceAll) {
+                require(occurrences == 1) {
+                    "old_text occurs $occurrences times; make it unique or set replace_all=true"
+                }
+            }
+            return ReplaceResult(
+                updated = if (replaceAll) original.replace(oldText, newText)
+                else original.replaceFirst(oldText, newText),
+                replacements = if (replaceAll) occurrences else 1,
+                strategy = STRATEGY_EXACT,
+            )
+        }
+        return replaceLineTrimmed(original, oldText, newText, replaceAll)
+    }
+
+    private fun replaceLineTrimmed(
+        original: String,
+        oldText: String,
+        newText: String,
+        replaceAll: Boolean,
+    ): ReplaceResult {
+        val sourceLines = original.split('\n')
+        val targetLines = oldText.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+        require(targetLines.isNotEmpty()) { "No exact match found for old_text" }
+        require(targetLines.size <= sourceLines.size) { "No exact match found for old_text" }
+
+        val hits = mutableListOf<Int>()
+        var i = 0
+        while (i + targetLines.size <= sourceLines.size) {
+            val window = sourceLines.subList(i, i + targetLines.size).map { it.trim() }
+            if (window == targetLines) {
+                hits += i
+                i += targetLines.size
+            } else {
+                i++
+            }
+        }
+        require(hits.isNotEmpty()) { "No exact match found for old_text" }
+        if (!replaceAll) require(hits.size == 1) {
+            "old_text matches ${hits.size} places after whitespace normalization; make it unique or set replace_all=true"
+        }
+
+        val chosen = if (replaceAll) hits else hits.take(1)
+        val replacement = newText.split('\n')
+        val output = mutableListOf<String>()
+        var cursor = 0
+        for (start in chosen) {
+            output += sourceLines.subList(cursor, start)
+            output += replacement
+            cursor = start + targetLines.size
+        }
+        output += sourceLines.subList(cursor, sourceLines.size)
+        return ReplaceResult(output.joinToString("\n"), chosen.size, STRATEGY_LINE_TRIMMED)
+    }
+
+    private fun countOccurrences(haystack: String, needle: String): Int {
+        var count = 0
+        var index = haystack.indexOf(needle)
+        while (index >= 0) {
+            count++
+            index = haystack.indexOf(needle, index + needle.length)
+        }
+        return count
+    }
+
+    /** 读文件的字节上限（上游 `MAX_READ_FILE_BYTES` = 8MB）。 */
+    fun requireReadableSize(path: String, size: Long) {
+        require(size <= MAX_READ_FILE_BYTES) {
+            "File is too large to read: $path (${size / 1024 / 1024}MB, " +
+                "max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). " +
+                "Use shell commands like head, tail, or grep to read parts of it."
+        }
+    }
+
+    fun timeoutMillis(args: JsonObject): Long {
+        val seconds = args["timeout"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+        return seconds?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)?.times(1_000L)
+            ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
+    }
+
+    fun stringArg(args: JsonObject, name: String): String? =
+        args[name]?.jsonPrimitive?.contentOrNull
+
+    fun booleanArg(args: JsonObject, name: String, default: Boolean): Boolean =
+        args[name]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: default
+
+    /** 把一份字节读进内存（上游 `readRootfsBuffer`）。 */
+    fun readBuffer(stream: ByteArrayOutputStream): String =
+        stream.toString(Charsets.UTF_8.name())
+
+    fun emptyBuffer(sizeHint: Long): ByteArrayOutputStream =
+        ByteArrayOutputStream(sizeHint.toInt())
+
+    // ---------------------------------------------------------------- 执行
+
+    sealed interface Outcome {
+        data class Success(val json: String) : Outcome
+        data class Failure(val error: String, val message: String) : Outcome
+    }
+
+    /**
+     * 执行一次工作区工具。失败不抛异常 —— 调用方（`ToolHandler`）要把话讲给模型听，
+     * 让它自己改路径或换命令。
+     */
+    suspend fun execute(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        cwd: String?,
+        name: String,
+        args: JsonObject,
+    ): Outcome = try {
+        when (name) {
+            READ_FILE -> readFile(repo, workspaceId, args)
+            WRITE_FILE -> writeFile(repo, workspaceId, args)
+            EDIT_FILE -> editFile(repo, workspaceId, args)
+            SHELL -> shell(repo, workspaceId, cwd, args)
+            else -> Outcome.Failure("unknown_tool", "Unknown workspace tool: $name")
+        }
+    } catch (e: Exception) {
+        Outcome.Failure("execution_error", e.message ?: e.toString())
+    }
+
+    private suspend fun readFile(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        args: JsonObject,
+    ): Outcome {
+        val path = absolutePath(args, "path")
+        val size = repo.rootfsFileSize(workspaceId, path)
+        requireReadableSize(path, size)
+        val buffer = emptyBuffer(size)
+        repo.exportRootfsFile(workspaceId, path, buffer)
+        return Outcome.Success(
+            buildJsonObject {
+                put("path", path)
+                put("text", readBuffer(buffer))
+            }.toString(),
+        )
+    }
+
+    private suspend fun writeFile(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        args: JsonObject,
+    ): Outcome {
+        val path = absolutePath(args, "path")
+        val text = stringArg(args, "text") ?: error("text is required")
+        val overwrite = booleanArg(args, "overwrite", default = true)
+        val pathArg = shellQuote(path)
+        val result = runRootfsCommand(
+            repo = repo,
+            workspaceId = workspaceId,
+            action = "Write file",
+            command = """
+                if [ -e $pathArg ] && [ ${if (!overwrite) 1 else 0} = 1 ]; then
+                  printf '%s\n' ${shellQuote("File already exists: $path")} >&2
+                  exit 1
+                fi
+                if [ -e $pathArg ] && [ ! -f $pathArg ]; then
+                  printf '%s\n' ${shellQuote("Path is not a file: $path")} >&2
+                  exit 1
+                fi
+                parent=${'$'}(dirname -- $pathArg) || exit 1
+                mkdir -p -- "${'$'}parent" || exit 1
+                cat > $pathArg || exit 1
+                ${statEntryCommand(path)}
+            """.trimIndent(),
+            stdin = text.toByteArray(Charsets.UTF_8),
+        )
+        val entry = parseRootfsEntries(result.stdout).singleOrNull()
+            ?: error("Invalid file metadata output")
+        return Outcome.Success(entryJson(entry))
+    }
+
+    private suspend fun editFile(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        args: JsonObject,
+    ): Outcome {
+        val path = absolutePath(args, "path")
+        val oldText = stringArg(args, "old_text") ?: error("old_text is required")
+        val newText = stringArg(args, "new_text") ?: error("new_text is required")
+        val replaceAll = booleanArg(args, "replace_all", default = false)
+
+        val size = repo.rootfsFileSize(workspaceId, path)
+        requireReadableSize(path, size)
+        val buffer = emptyBuffer(size)
+        repo.exportRootfsFile(workspaceId, path, buffer)
+        val original = readBuffer(buffer)
+
+        val replaced = try {
+            replaceText(original, oldText, newText, replaceAll)
+        } catch (e: IllegalArgumentException) {
+            return Outcome.Failure("no_match", "${e.message} (path: $path)")
+        }
+
+        val write = writeFile(
+            repo,
+            workspaceId,
+            buildJsonObject {
+                put("path", JsonPrimitive(path))
+                put("text", JsonPrimitive(replaced.updated))
+                put("overwrite", JsonPrimitive(true))
+            },
+        )
+        if (write !is Outcome.Success) return write
+
+        // writeFile 返回的就是 entry 的 JSON，这里补上替换统计再回给模型。
+        return Outcome.Success(
+            buildString {
+                append(write.json.removeSuffix("}"))
+                append(",\"replacements\":").append(replaced.replacements)
+                if (replaced.strategy != STRATEGY_EXACT) {
+                    append(",\"matchStrategy\":\"").append(replaced.strategy).append('"')
+                }
+                append('}')
+            },
+        )
+    }
+
+    private suspend fun shell(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        cwd: String?,
+        args: JsonObject,
+    ): Outcome {
+        val command = stringArg(args, "command") ?: error("command is required")
+        val effectiveCwd = shellCwd(stringArg(args, "cwd") ?: cwd).orEmpty()
+        val result = repo.executeCommand(
+            id = workspaceId,
+            command = command,
+            cwd = effectiveCwd,
+            timeoutMillis = timeoutMillis(args),
+        )
+        return Outcome.Success(
+            commandResultJson(
+                exitCode = result.exitCode,
+                stdout = result.stdout,
+                stderr = result.stderr,
+                timedOut = result.timedOut,
+                truncated = result.truncated,
+            ),
+        )
+    }
+
+    /** 上游 `runRootfsCommand`：超时/非零退出/输出被截断都当成失败讲给模型。 */
+    private suspend fun runRootfsCommand(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        action: String,
+        command: String,
+        stdin: ByteArray? = null,
+    ): com.psyche.memo.workspace.WorkspaceCommandResult {
+        val result = repo.executeCommand(
+            id = workspaceId,
+            command = command,
+            timeoutMillis = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+            stdin = stdin,
+        )
+        if (result.timedOut) error("$action timed out")
+        if (result.exitCode != 0) {
+            val message = result.stderr.ifBlank { result.stdout }.trim()
+            error(if (message.isBlank()) "$action failed with exit code ${result.exitCode}" else message)
+        }
+        if (result.truncated) error("$action output is too large")
+        return result
+    }
+}

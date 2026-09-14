@@ -2293,12 +2293,20 @@ class ChatViewModel(
                 allSkills = container.skillStore.listSkills(),
             ),
         )
+        // 沙箱工作区（WorkspaceTools）：助手绑定了工作区才提供那四个工具。
+        out.addAll(
+            com.psyche.memo.provider.workspace.WorkspaceTools.buildDefinitions(
+                workspaceId = assistant.workspaceId,
+                cwd = assistant.workspaceCwd,
+            ),
+        )
         // MCP 工具（mcp_tool_service）：助手绑定且已连接的服务器，仅启用的工具；
         // 与内置工具同名的条目按原版保留名规则剔除。
         val reserved = com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all.toSet() + setOf(
             com.psyche.memo.provider.search.SearchToolService.TOOL_NAME,
         ) + com.psyche.memo.provider.MemoryTools.ALL_TOOL_NAMES +
-            com.psyche.memo.provider.SkillTools.ALL_TOOL_NAMES
+            com.psyche.memo.provider.SkillTools.ALL_TOOL_NAMES +
+            com.psyche.memo.provider.workspace.WorkspaceTools.ALL_TOOL_NAMES
         for (serverId in assistant.mcpServerIds) {
             if (!container.mcpConnections.isConnected(serverId)) continue
             val config = container.mcpRepository.server(serverId) ?: continue

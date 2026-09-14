@@ -163,7 +163,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
     - **编排**：app 的 `WorkspaceRepository`（包 `com.psyche.memo.provider.workspace`）把记录与 `WorkspaceManager` 缝起来。与上游的两处结构差异：① 上游用 Room `Flow` 发变更，Memo 用 `version` 计数器（与 `MemoryProviderV2` 同一套）；② 上游从 `SettingsStore` 清助手绑定，Memo 用 `AssistantStore`。
     - **bind mount 一份两用**：`/skills` → `<filesDir>/skills`、`/upload` → `<filesDir>/upload`。同一份挂载表既给 PRoot 的 `-b` 参数、也给文件工具的路径解析 —— 上游注释点名过，两处各写一份必然漂移。
     - **包名坑**：core:workspace 的包是 `com.psyche.memo.workspace`，app 侧仓储若也叫这个包就成了 split package → 挪到 `com.psyche.memo.provider.workspace`。
-    - 待续：四个工具（`workspace_read_file` / `write_file` / `edit_file` / `shell`）、工作区提示词、管理界面、交互式终端（需 NDK + cmake 3.22.1 + `com.termux.termux-app:terminal-view` AAR）。
+    - **工具面**（`app/.../provider/workspace/WorkspaceTools.kt`，照上游 `data/ai/tools/WorkspaceTools.kt`）：`workspace_read_file` / `write_file` / `edit_file` / `shell` 四个，助手绑了工作区才提供（`assistant.workspaceId`）。三个照搬的关键设计：① **写文件走 shell**（`cat > path` + stdin）、读走 `rootfsFileSize` + `exportRootfsFile` —— proot 只暴露一个执行入口，直接碰宿主文件会绕过 rootfs 的 bind mount 映射；② **免审批可写区**只有 `/workspace` 与 `/tmp`，写到别处自动升级为需要审批（`pathOutsideWritableRoots`，参数坏掉时**失败关闭**）；③ `workspace_shell` 默认要审批，其余三个免审批（`DEFAULT_APPROVALS`）。编辑走「精确匹配 → 逐行 trim 相等」两级阶梯。
+    - **两处未移植（会在下一批补）**：① `workspace_read_file` 读**图片**那条分支（上游把字节交给 `FilesManager` 生成图片 part，要接进 Memo 自己的工具结果图片通道）；② 编辑的第三级 `block_anchor` 替换器与工具结果里的 unified diff 元数据（Memo 的工具结果是字符串，没有 diff 通道）。用户 2026-09-14 的照片/截图场景走 ①，纯代码编辑场景两级够用。
+    - 测试：`WorkspaceToolsTest` 20 例 —— 审批默认值与工作区覆盖、可写安全区边界（含 `fail-closed`）、rootfs 元数据的 `\0` 四元组解析（含畸形输入）、`shellQuote` 转义、超时钳位、替换阶梯（精确唯一性 / `replace_all` / 逐行 trim 退化 / 空 needle / 读超限提示）。
+    - 待续：工作区提示词、管理界面、交互式终端（需 NDK + cmake 3.22.1 + `com.termux.termux-app:terminal-view` AAR，两者本机已装好）。
 
 ## 5. 批次进度（收工更新）
 

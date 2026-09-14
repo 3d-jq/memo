@@ -51,6 +51,51 @@ class ToolHandler(
                     common = searchCommonOptions,
                 )
             }
+            // 沙箱工作区（WorkspaceTools）：助手绑定了工作区才生效。默认只有
+            // workspace_shell 要审批（上游 DEFAULT_APPROVALS）；写到 /workspace、
+            // /tmp 之外也会升级为需要审批（上游 pathOutsideWritableRoots）。
+            if (container != null && assistant != null &&
+                name in com.psyche.memo.provider.workspace.WorkspaceTools.ALL_TOOL_NAMES
+            ) {
+                val workspaceId = assistant.workspaceId
+                if (!workspaceId.isNullOrBlank()) {
+                    val tools = com.psyche.memo.provider.workspace.WorkspaceTools
+                    val overrides = container.workspaceRepository
+                        .get(workspaceId)?.toolApprovalOverrides().orEmpty()
+                    val outsideRoots = (name == tools.WRITE_FILE || name == tools.EDIT_FILE) &&
+                        tools.pathOutsideWritableRoots(args, "path")
+                    if ((tools.resolveApproval(name, overrides) || outsideRoots) && approvalService != null) {
+                        val approval = approvalService.requestApproval(
+                            toolCallId = approvalIdFor(name, toolCallId),
+                            toolName = name,
+                            arguments = args,
+                            conversationId = conversationId,
+                        ).await()
+                        if (!approval.approved) {
+                            return toolError(
+                                error = "approval_denied",
+                                message = approval.denyReason ?: "User denied the tool call",
+                                tool = name,
+                            )
+                        }
+                    }
+                    return when (
+                        val outcome = tools.execute(
+                            repo = container.workspaceRepository,
+                            workspaceId = workspaceId,
+                            cwd = assistant.workspaceCwd,
+                            name = name,
+                            args = args,
+                        )
+                    ) {
+                        is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Success ->
+                            outcome.json
+                        is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Failure ->
+                            toolError(outcome.error, outcome.message, name)
+                    }
+                }
+            }
+
             // Creating calendar events or changing reminders modifies user data,
             // so those tools always require explicit user approval first.
             if (LocalToolNames.requiresUserApproval.contains(name) &&
