@@ -1566,10 +1566,37 @@ fun ChatContent(
                 ?: pid?.let { BrandAssets.assetForName(it) }
         }
         val modelIconInitial = modelId.ifEmpty { providerId }
+        // 供应商自己配了头像（内置图标 / emoji / 图片 / LobeHub）时优先用它 ——
+        // 品牌匹配只看名字，第三方供应商 key 里带「OpenAI」就会被认成 GPT。
+        val modelAvatarSource = remember(providerId) {
+            val cfg = providerId.takeIf { it.isNotEmpty() }
+                ?.let { runCatching { container.providerConfig(it) }.getOrNull() }
+            when (val src = providerAvatarSource(cfg?.avatarType, cfg?.avatarValue)) {
+                ProviderAvatarSource.Brand -> null
+                is ProviderAvatarSource.File -> src.takeIf { java.io.File(it.path).exists() }
+                else -> src
+            }
+        }
         // 搜索按钮（CIB:1782-1863）：当前助手启用搜索 → 所选搜索服务的品牌
         // 图标；未启用 → Globe。内置搜索（builtinSearchActive）未移植，恒 false。
         val assistantForSearch = container.currentAssistant()
         val searchActive = assistantForSearch?.searchEnabled == true
+        // 输入栏按钮的选中态（chat_input_section.dart:177-199）：
+        // 推理没关 → reasoningActive；已连接的已选 MCP 存在 → mcpActive；
+        // 快捷短语（全局 + 本助手）为空 → 整颗按钮不显示。
+        val reasoningActive = com.psyche.memo.llm.client.ReasoningBudget.isReasoningEnabled(
+            assistantForSearch?.thinkingBudget ?: com.psyche.memo.ui.chat.readBudget(container),
+        )
+        val mcpStates by container.mcpConnections.states.collectAsState()
+        val mcpActive = remember(assistantForSearch?.id, mcpStates) {
+            mcpButtonActive(
+                selectedIds = assistantForSearch?.mcpServerIds.orEmpty(),
+                connectedIds = mcpStates.filterValues { it.status == com.psyche.memo.provider.mcp.McpConnectionManager.Status.connected }.keys,
+            )
+        }
+        val quickPhraseAvailable = remember(assistantForSearch?.id, quickPhrases) {
+            quickPhraseButtonVisible(loadQuickPhrases(container).size, 0)
+        }
         // showSearchSheet 关闭后重组时重算，让 sheet 里改的服务/开关即时反映。
         val searchSvc = remember(container, showSearchSheet, searchActive) {
             if (!searchActive) null
@@ -1606,8 +1633,12 @@ fun ChatContent(
             onOpenSearch = { showSearchSheet = true },
             modelIconAsset = modelIconAsset,
             modelIconInitial = modelIconInitial,
+            modelAvatarSource = modelAvatarSource,
             searchActive = searchActive,
             searchIconAsset = searchIconAsset,
+            reasoningActive = reasoningActive,
+            mcpActive = mcpActive,
+            quickPhraseAvailable = quickPhraseAvailable,
             onOpenTools = {
                 worldBooksAvailable = runCatching {
                     com.psyche.memo.data.repo.WorldBookRepository(
@@ -1763,6 +1794,8 @@ fun ChatContent(
     }
 
     if (showContextSheet) {
+        // 模型编辑页可能刚改过「上下文长度」——打开面板时重算一次占用。
+        androidx.compose.runtime.LaunchedEffect(Unit) { vm.refreshContextUsageNow() }
         com.psyche.memo.ui.chat.ContextManagementSheet(
             clearLabel = vm.clearContextLabel(),
             usage = contextUsage,
@@ -3054,12 +3087,21 @@ private fun ChatInputBar(
     // 模型按钮（chat_input_bar.dart CIB:1763-1773 + model_icon.dart
     // CurrentModelIcon）：选中模型后按钮显示品牌图标圆（modelIconAsset），
     // 无品牌资产时用首字母圆（modelIconInitial）；两者都空 → Boxes。
+    // 供应商自己配了头像（图标/emoji/图片）时优先用它（用户 2026-09-14：
+    // 第三方供应商 key 叫「OpenAI - Agnes」会被品牌匹配成 GPT 图标）。
     modelIconAsset: String? = null,
     modelIconInitial: String? = null,
+    modelAvatarSource: ProviderAvatarSource? = null,
     // 搜索按钮（CIB:1782-1863）：searchActive 时显示所选搜索服务的品牌
     // 图标（searchIconAsset），否则 Globe。
     searchActive: Boolean = false,
     searchIconAsset: String? = null,
+    // 输入栏左排按钮的可用/选中态（chat_input_section.dart）：
+    // reasoningActive = 推理没关；mcpActive = 有已连接的已选 MCP；
+    // quickPhraseAvailable = 全局或本助手配了快捷短语（否则整颗按钮不显示）。
+    reasoningActive: Boolean = false,
+    mcpActive: Boolean = false,
+    quickPhraseAvailable: Boolean = true,
     onOpenTools: () -> Unit = {},
     onQuickPhrase: () -> Unit = {},
     attachments: List<ChatViewModel.PendingAttachment> = emptyList(),
@@ -3400,12 +3442,14 @@ private fun ChatInputBar(
                                     // 需要反色的 mono 资产才 tint onSurface
                                     // （model_icon.dart 的 assetNeedsDarkInvert）。
                                     val modelAsset = modelIconAsset
-                                    if (modelAsset != null || !modelIconInitial.isNullOrEmpty()) {
+                                    if (modelAvatarSource != null || modelAsset != null || !modelIconInitial.isNullOrEmpty()) {
                                         IconButton(
                                             onClick = onSelectModel,
                                             modifier = Modifier.size(32.dp),
                                         ) {
-                                            if (modelAsset != null) {
+                                            if (modelAvatarSource != null) {
+                                                ModelAvatarGlyph(modelAvatarSource, cs, isDark)
+                                            } else if (modelAsset != null) {
                                                 coil.compose.AsyncImage(
                                                     model = modelAsset,
                                                     contentDescription = stringResource(UiR.string.chat_input_bar_select_model_tooltip),
@@ -3450,26 +3494,33 @@ private fun ChatInputBar(
                                         )
                                     }
                                     // CIB:1880-1920 —— Brain 按钮渲染当前预算图标
-                                    // （ReasoningIcons.budgetIcon），点开预算 sheet。
+                                    // （ReasoningIcons.budgetIcon），点开预算 sheet；
+                                    // 推理没关时图标走 active 色（CIB:1904 active: reasoningActive）。
                                     InputIconAsset(
                                         asset = com.psyche.memo.ui.chat.ReasoningBudgetIcons
                                             .assetForBudget(reasoningBudget),
                                         label = stringResource(UiR.string.chat_input_bar_reasoning_strength_tooltip),
                                         onClick = onOpenReasoning,
                                         cs = cs,
+                                        active = reasoningActive,
                                     )
+                                    // CIB:1929 active: mcpActive —— 有已连接的已选 MCP 才高亮。
                                     InputIcon(
                                         Lucide.Hammer,
                                         stringResource(UiR.string.chat_input_bar_mcp_servers_tooltip),
                                         onOpenMcp,
                                         cs,
+                                        active = mcpActive,
                                     )
-                                    InputIcon(
-                                        Lucide.Zap,
-                                        stringResource(UiR.string.chat_input_bar_quick_phrase_tooltip),
-                                        onQuickPhrase,
-                                        cs,
-                                    )
+                                    // CIB:1942 —— 没配快捷短语（全局+本助手）整颗按钮不显示。
+                                    if (quickPhraseAvailable) {
+                                        InputIcon(
+                                            Lucide.Zap,
+                                            stringResource(UiR.string.chat_input_bar_quick_phrase_tooltip),
+                                            onQuickPhrase,
+                                            cs,
+                                        )
+                                    }
                                 }
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -3719,17 +3770,23 @@ private fun InputIcon(
     onClick: () -> Unit,
     cs: androidx.compose.material3.ColorScheme,
     enabled: Boolean = true,
+    /** 选中/生效态走 primary（CIB:1880-2042 的 `active:` 参数，如推理、MCP）。 */
+    active: Boolean = false,
 ) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(32.dp)) {
         Icon(
             icon,
             contentDescription = label,
-            // CIB:3211-3213 —— 非 active 色 onSurface@0.70(dark)/0.54(light)；
+            // CIB:3211-3213 —— active = primary；非 active 色 onSurface@0.70(dark)/0.54(light)；
             // 禁用态 = 原色 ×0.45（ios_tactile.dart:54-59）。
-            tint = cs.onSurface.copy(
-                alpha = (if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
-                else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT) * if (enabled) 1f else 0.45f,
-            ),
+            tint = if (active) {
+                cs.primary
+            } else {
+                cs.onSurface.copy(
+                    alpha = (if (cs.surface.luminance() < 0.5f) ChatStyleSpec.COMPACT_ICON_ALPHA_DARK
+                    else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT) * if (enabled) 1f else 0.45f,
+                )
+            },
             modifier = Modifier.size(20.dp),
         )
     }
@@ -3883,3 +3940,20 @@ private fun Modifier.drawerDragGesture(
         }
     }
 }
+
+
+// ---------------------------------------------------------------- 输入栏按钮态
+
+/**
+ * chat_input_section.dart:302-308 `_hasQuickPhrases` —— 全局 + 本助手的快捷短语
+ * 都为 0 时，输入栏那颗 Zap 按钮整颗不显示。
+ */
+internal fun quickPhraseButtonVisible(globalCount: Int, assistantCount: Int): Boolean =
+    (globalCount + assistantCount) > 0
+
+/**
+ * chat_input_section.dart:295-300 `_isMcpActive` —— 助手选中且当前已连接的 MCP
+ * 服务器存在时，Hammer 按钮走 active 色。
+ */
+internal fun mcpButtonActive(selectedIds: List<String>, connectedIds: Set<String>): Boolean =
+    selectedIds.isNotEmpty() && connectedIds.any { it in selectedIds }

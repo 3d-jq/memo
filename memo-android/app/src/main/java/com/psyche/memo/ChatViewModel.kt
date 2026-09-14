@@ -120,6 +120,26 @@ class ChatViewModel(
     ) {
         val content: String
             get() = parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+
+        /**
+         * 把 provider 报的 usage 落到 UI 消息上（token_display_widget 的数据源）。
+         * 流结束时必须即时反映 —— 只写库不更新内存态的话，token 数字要等冷启动
+         * 重读会话才出现（用户 2026-09-14 实测「输出结束后没马上显示」）。
+         * null 表示该字段本轮没有上报，保留原值。
+         */
+        fun withTokenStats(
+            totalTokens: Int?,
+            promptTokens: Int?,
+            completionTokens: Int?,
+            cachedTokens: Int?,
+            durationMs: Long?,
+        ): UiMessage = copy(
+            totalTokens = totalTokens ?: this.totalTokens,
+            promptTokens = promptTokens ?: this.promptTokens,
+            completionTokens = completionTokens ?: this.completionTokens,
+            cachedTokens = cachedTokens ?: this.cachedTokens,
+            durationMs = durationMs ?: this.durationMs,
+        )
     }
 
     /** Conversation title shown in the top bar; "" for a conversation whose
@@ -221,6 +241,14 @@ class ChatViewModel(
                 container.conversationDao.setChatModel(conversationId, providerId, modelId)
             }
         }
+    }
+
+    /**
+     * 强制重算上下文占用 —— 上下文管理 sheet 打开时调用：模型编辑页改了
+     * 「上下文长度」之后，占用卡的分母/阈值要立刻跟上（用户 2026-09-14）。
+     */
+    fun refreshContextUsageNow() {
+        viewModelScope.launch { refreshContextUsage() }
     }
 
     fun refreshTail() {
@@ -1597,6 +1625,7 @@ class ChatViewModel(
                     tools = tools,
                     allParts = allParts,
                     allSegments = allSegments,
+                    startedAtMs = generationStartMs,
                     updateStreaming = { parts, segments ->
                         updateAssistantStreaming(assistantId, parts, segments)
                     },
@@ -1825,6 +1854,8 @@ class ChatViewModel(
         tools: List<LlmToolSpec>,
         allParts: MutableList<MessagePart>,
         allSegments: MutableList<ReasoningSegment>,
+        /** 本轮生成的起始时刻 —— 收尾写 UI 的 durationMs 与落库同口径。 */
+        startedAtMs: Long,
         updateStreaming: (List<MessagePart>, String?) -> Unit,
         onPersist: (List<MessagePart>, UsageStats?, String?) -> Unit,
     ) {
@@ -2000,7 +2031,13 @@ class ChatViewModel(
                 }
                 val finalSegmentsJson = encodeSegments(collapseFinishedSegments(finalSegments))
                 updateStreaming(finalParts, finalSegmentsJson)
-                finishAssistant(assistantId, finalParts, finalSegmentsJson)
+                finishAssistant(
+                    assistantId,
+                    finalParts,
+                    finalSegmentsJson,
+                    usage = finishUsage,
+                    durationMs = System.currentTimeMillis() - startedAtMs,
+                )
                 onPersist(finalParts, finishUsage, finalSegmentsJson)
                 break
             }
@@ -2080,6 +2117,8 @@ class ChatViewModel(
         generationJob = viewModelScope.launch {
             container.streamingConversationIds.value =
                 container.streamingConversationIds.value + conversationId
+            // 本轮（续写）起始时刻 —— 收尾写 UI 的 durationMs 用。
+            val continueStartMs = System.currentTimeMillis()
             val allParts = updatedParts.toMutableList()
             val allSegments = ReasoningSegmentCodec.decode(targetUi.reasoningSegmentsJson).toMutableList()
             // 续写：已有 segment 视作「已存在」，用库里的展开/折叠态初始化权威态。
@@ -2155,6 +2194,7 @@ class ChatViewModel(
                     tools = offeredTools(),
                     allParts = allParts,
                     allSegments = allSegments,
+                    startedAtMs = continueStartMs,
                     updateStreaming = { parts, segments ->
                         updateAssistantStreaming(messageId, parts, segments)
                     },
@@ -2537,6 +2577,8 @@ class ChatViewModel(
         assistantId: String,
         parts: List<MessagePart>,
         segmentsJson: String? = null,
+        usage: UsageStats? = null,
+        durationMs: Long? = null,
     ) {
         val msgs = _messages.value
         val index = msgs.indexOfLast { it.id == assistantId }
@@ -2545,6 +2587,12 @@ class ChatViewModel(
             parts = parts,
             isStreaming = false,
             reasoningSegmentsJson = segmentsJson,
+        ).withTokenStats(
+            totalTokens = usage?.totalTokens,
+            promptTokens = usage?.promptTokens,
+            completionTokens = usage?.completionTokens,
+            cachedTokens = usage?.cachedTokens,
+            durationMs = durationMs,
         )
         _messages.value = msgs.toMutableList().apply { set(index, finalUi) }
     }

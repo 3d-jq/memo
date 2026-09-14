@@ -130,3 +130,56 @@ internal fun ProviderAvatar(
         }
     }
 }
+
+/**
+ * 供应商自定义头像的**裸图标**渲染（无底圆、无描边）—— 输入栏模型按钮这种
+ * 只给一个小图标位置的地方用。与 [ProviderAvatar] 取同一份
+ * [providerAvatarSource]，保证「供应商界面看到什么图标、这里就是什么图标」。
+ */
+@Composable
+internal fun ModelAvatarGlyph(
+    source: ProviderAvatarSource,
+    cs: androidx.compose.material3.ColorScheme,
+    isDark: Boolean,
+) {
+    val size = 20.dp
+    when (source) {
+        is ProviderAvatarSource.Emoji -> Text(
+            text = source.text.take(1),
+            fontSize = 15.sp,
+            maxLines = 1,
+        )
+        is ProviderAvatarSource.Url -> coil.compose.AsyncImage(
+            model = source.url,
+            contentDescription = null,
+            modifier = Modifier.size(size).clip(androidx.compose.foundation.shape.CircleShape),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+        )
+        is ProviderAvatarSource.File -> coil.compose.AsyncImage(
+            model = java.io.File(source.path),
+            contentDescription = null,
+            modifier = Modifier.size(size).clip(androidx.compose.foundation.shape.CircleShape),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+        )
+        is ProviderAvatarSource.Asset -> {
+            val asset = BrandIconCatalog.coilModel(source.asset)
+            coil.compose.AsyncImage(
+                model = asset,
+                contentDescription = null,
+                colorFilter = if (isDark && BrandAssets.assetNeedsDarkInvert(asset)) {
+                    androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
+                } else {
+                    null
+                },
+                modifier = Modifier.size(size),
+            )
+        }
+        is ProviderAvatarSource.Lobehub -> coil.compose.AsyncImage(
+            model = BrandIconCatalog.lobehubIconUrl(source.iconName),
+            contentDescription = null,
+            modifier = Modifier.size(size),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+        )
+        ProviderAvatarSource.Brand -> Unit
+    }
+}
