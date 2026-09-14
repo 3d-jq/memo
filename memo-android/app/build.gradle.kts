@@ -28,6 +28,16 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    // 沙箱工作区（core:workspace 的 proot 二进制）：必须把 jniLibs 以「传统方式」
+    // 打包 —— Android 10+ 只有 nativeLibraryDir 里的文件可执行，默认
+    // extractNativeLibs=false 会把 .so 留在 APK 里、nativeLibraryDir 为空，
+    // 于是每个 shell 命令都以 127「proot executable not found」失败（只在真机上看得出来）。
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             // Dev build: offset applicationId so the native port can be
@@ -66,6 +76,8 @@ dependencies {
     implementation(project(":core:ui"))
     implementation(project(":core:data"))
     implementation(project(":core:llm"))
+    // 沙箱工作区：proot 二进制 + 工作区核心（见 core/workspace/build.gradle.kts）
+    implementation(project(":core:workspace"))
     implementation(project(":feature:chat"))
     implementation(project(":feature:assistant"))
     implementation(project(":feature:utility"))
