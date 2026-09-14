@@ -34,6 +34,7 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Eye
 import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Puzzle
+import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
@@ -61,6 +62,8 @@ fun BottomToolsSheet(
     onOpenInstructionInjection: () -> Unit = {},
     /** 技能入口 —— 点进技能管理页（用户 2026-09-14「输入框里面加上 skill 管理这个」）。 */
     onOpenSkills: () -> Unit = {},
+    /** MCP 入口 —— 开的是与输入栏 Hammer 同一个面板（用户 2026-09-14 要求也放进「+」）。 */
+    onOpenMcp: () -> Unit = {},
     worldBooksAvailable: Boolean = false,
     onOpenWorldBook: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
@@ -195,6 +198,30 @@ fun BottomToolsSheet(
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = stringResource(R.string.settings_page_skills),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+            }
+            // MCP 行：与输入栏 Hammer 打开同一个助手 MCP 面板（用户 2026-09-14 要求
+            // 「这个 MCP 这个功能也做到加号里面的 sheet 里面吧」）。
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .clickable {
+                        Haptics.light(view)
+                        onOpenMcp()
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Terminal, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.settings_page_mcp),
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     modifier = Modifier.weight(1f),
                 )

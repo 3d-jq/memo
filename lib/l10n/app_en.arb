@@ -4066,5 +4066,7 @@
       }
     }
   },
-  "contextLogSourceWorkspace": "Workspace"
+  "contextLogSourceWorkspace": "Workspace",
+  "workspaceNone": "None",
+  "assistantEditPageWorkspaceTab": "Workspace"
 }

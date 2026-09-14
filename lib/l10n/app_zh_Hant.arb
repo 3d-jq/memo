@@ -3392,5 +3392,7 @@
       }
     }
   },
-  "contextLogSourceWorkspace": "工作區"
+  "contextLogSourceWorkspace": "工作區",
+  "workspaceNone": "不使用",
+  "assistantEditPageWorkspaceTab": "工作區"
 }

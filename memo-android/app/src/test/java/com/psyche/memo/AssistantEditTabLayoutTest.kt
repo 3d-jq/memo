@@ -24,7 +24,7 @@ class AssistantEditTabLayoutTest {
     @Test
     fun `saved ids come first and missing defaults are appended`() {
         assertEquals(
-            listOf("regex", "basic", "prompts", "memory", "quickPhrase", "custom", "localTools", "skills", "mcp"),
+            listOf("regex", "basic", "prompts", "memory", "quickPhrase", "custom", "localTools", "skills", "workspace", "mcp"),
             orderAssistantEditTabIds(listOf("regex", "basic")),
         )
     }
@@ -32,7 +32,7 @@ class AssistantEditTabLayoutTest {
     @Test
     fun `unknown ids and duplicates are dropped`() {
         assertEquals(
-            listOf("basic", "mcp", "prompts", "memory", "quickPhrase", "custom", "regex", "localTools", "skills"),
+            listOf("basic", "mcp", "prompts", "memory", "quickPhrase", "custom", "regex", "localTools", "skills", "workspace"),
             orderAssistantEditTabIds(listOf("basic", "bogus", "basic", "mcp")),
         )
     }
@@ -40,7 +40,7 @@ class AssistantEditTabLayoutTest {
     @Test
     fun `hidden ids are removed and the rest keep their order`() {
         assertEquals(
-            listOf("basic", "prompts", "localTools", "skills", "mcp"),
+            listOf("basic", "prompts", "localTools", "skills", "workspace", "mcp"),
             visibleAssistantEditTabIds(
                 savedOrder = emptyList(),
                 hiddenIds = setOf("memory", "quickPhrase", "custom", "regex"),
@@ -63,7 +63,7 @@ class AssistantEditTabLayoutTest {
     fun `a reorder crossing moves one id`() {
         val order = DEFAULT_ASSISTANT_EDIT_TAB_ORDER
         assertEquals(
-            listOf("prompts", "memory", "quickPhrase", "custom", "regex", "localTools", "skills", "basic", "mcp"),
+            listOf("prompts", "memory", "quickPhrase", "custom", "regex", "localTools", "skills", "basic", "workspace", "mcp"),
             applyAssistantTabMove(order, from = 0, to = 7),
         )
     }

@@ -231,6 +231,7 @@
     <string name="assistant_edit_page_regex_tab">Regex Replace</string>
     <string name="assistant_edit_page_skills_tab">Skills</string>
     <string name="assistant_edit_page_title">Assistant</string>
+    <string name="assistant_edit_page_workspace_tab">Workspace</string>
     <string name="assistant_edit_parameter_disabled">Disabled (uses provider default)</string>
     <string name="assistant_edit_parameter_disabled2">Disabled (no restrictions)</string>
     <string name="assistant_edit_preset_add_assistant">Add assistant preset</string>
@@ -2758,6 +2759,7 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="workspace_install_rootfs">Install Rootfs</string>
     <string name="workspace_name_label">Name</string>
     <string name="workspace_new">New workspace</string>
+    <string name="workspace_none">None</string>
     <string name="workspace_page_title">Workspaces</string>
     <string name="workspace_status_broken">Broken</string>
     <string name="workspace_status_disabled">Not installed</string>

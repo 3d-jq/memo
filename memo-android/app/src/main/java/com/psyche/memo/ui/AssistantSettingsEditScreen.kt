@@ -259,6 +259,11 @@ private fun AssistantEditTabContent(
             assistant = assistant,
             onEdit = onEdit,
         )
+        AssistantEditTab.WORKSPACE.id -> AssistantEditWorkspaceTab(
+            container = container,
+            assistant = assistant,
+            onEdit = onEdit,
+        )
         AssistantEditTab.MCP.id -> AssistantEditMcpTab(
             container = container,
             assistant = assistant,

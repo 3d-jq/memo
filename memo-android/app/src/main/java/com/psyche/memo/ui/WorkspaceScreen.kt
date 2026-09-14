@@ -41,11 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Download
-import com.composables.icons.lucide.Link
-import com.composables.icons.lucide.Link2Off
+import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
-import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Trash2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.workspace.WorkspaceEntity
@@ -80,7 +78,6 @@ fun WorkspaceScreen(
 
     var reload by remember { mutableIntStateOf(0) }
     val workspaces = remember(reload) { repo.list() }
-    val currentAssistant = remember(reload) { container.currentAssistant() }
 
     var creating by remember { mutableStateOf(false) }
     var actionsFor by remember { mutableStateOf<WorkspaceEntity?>(null) }
@@ -150,7 +147,6 @@ fun WorkspaceScreen(
                         workspaces.forEachIndexed { index, workspace ->
                             WorkspaceRow(
                                 workspace = workspace,
-                                boundToCurrent = currentAssistant?.workspaceId == workspace.id,
                                 onTap = { actionsFor = workspace },
                             )
                             if (index != workspaces.lastIndex) DividerRow()
@@ -203,52 +199,25 @@ fun WorkspaceScreen(
     }
 
     actionsFor?.let { workspace ->
-        val bound = currentAssistant?.workspaceId == workspace.id
         ActionSheet(
             onDismiss = { actionsFor = null },
-            actions = buildList {
-                add(
-                    SheetAction(
-                        icon = Lucide.Download,
-                        label = stringResource(R.string.workspace_install_rootfs),
-                    ) {
-                        actionsFor = null
-                        install(workspace)
-                    },
-                )
-                if (currentAssistant != null) {
-                    add(
-                        SheetAction(
-                            icon = if (bound) Lucide.Link2Off else Lucide.Link,
-                            label = stringResource(
-                                if (bound) R.string.workspace_unbind_current
-                                else R.string.workspace_bind_current,
-                            ),
-                        ) {
-                            actionsFor = null
-                            val assistant = container.currentAssistant() ?: return@SheetAction
-                            container.assistantStore.update(
-                                if (bound) {
-                                    assistant.copy(workspaceId = null, workspaceCwd = null)
-                                } else {
-                                    assistant.copy(workspaceId = workspace.id)
-                                },
-                            )
-                            reload++
-                        },
-                    )
-                }
-                add(
-                    SheetAction(
-                        icon = Lucide.Trash2,
-                        label = stringResource(R.string.workspace_delete_title),
-                        destructive = true,
-                    ) {
-                        actionsFor = null
-                        deleteTarget = workspace
-                    },
-                )
-            },
+            actions = listOf(
+                SheetAction(
+                    icon = Lucide.Download,
+                    label = stringResource(R.string.workspace_install_rootfs),
+                ) {
+                    actionsFor = null
+                    install(workspace)
+                },
+                SheetAction(
+                    icon = Lucide.Trash2,
+                    label = stringResource(R.string.workspace_delete_title),
+                    destructive = true,
+                ) {
+                    actionsFor = null
+                    deleteTarget = workspace
+                },
+            ),
         )
     }
 
@@ -285,7 +254,6 @@ fun WorkspaceScreen(
 @Composable
 private fun WorkspaceRow(
     workspace: WorkspaceEntity,
-    boundToCurrent: Boolean,
     onTap: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -297,7 +265,7 @@ private fun WorkspaceRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            Lucide.Terminal,
+            Lucide.HardDrive,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
             tint = cs.primary,
@@ -312,20 +280,7 @@ private fun WorkspaceRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                StatusBadge(workspace.shellStatus)
-                if (boundToCurrent) {
-                    Text(
-                        text = stringResource(R.string.workspace_bind_current),
-                        style = TextStyle(fontSize = 11.sp, color = cs.primary),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
+            StatusBadge(workspace.shellStatus)
         }
         Icon(
             Lucide.ChevronRight,

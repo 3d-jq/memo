@@ -1830,6 +1830,10 @@ fun ChatContent(
                 showToolsSheet = false
                 showSkillSelector = true
             },
+            onOpenMcp = {
+                showToolsSheet = false
+                showMcpSheet = true
+            },
             onOpenContextManagement = {
                 showToolsSheet = false
                 showContextSheet = true
