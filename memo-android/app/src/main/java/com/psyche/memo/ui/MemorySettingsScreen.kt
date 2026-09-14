@@ -513,7 +513,7 @@ private fun SettingsSectionHeader(title: String, trailing: (@Composable () -> Un
     ) {
         Text(
             title,
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.8)),
+            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = settingsSectionHeaderColor(cs)),
             // ⓘ 紧跟标题文字（用户 2026-09-12 点名）：标题只占所需宽度，右侧不再顶到边。
             modifier = Modifier.weight(1f, fill = false),
         )

@@ -90,7 +90,18 @@ object MemoTheme {
         dark: Boolean,
         pureBackground: Boolean = false,
     ): ColorScheme {
-        var scheme = if (dark) palette.dark else palette.light
+        val base = if (dark) palette.dark else palette.light
+        var scheme = base.copy(
+            // 「页面底 = surfaceContainer、卡片 = surfaceBright」—— 照 RikkaHub 实测取色
+            // （他们 Claude 浅色下页面 #F2F0E8 = surfaceContainer、卡片 #FFFFFF =
+            // surfaceBright；他们自己的命名 `CustomColors.cardColorsOnSurfaceContainer`
+            // = surfaceBright 就是这个意思）。Memo 全站的页面底读 `scheme.surface`，
+            // 所以这里把 surface 换成 surfaceContainer，卡片那边由
+            // [AppSemanticColors.authored] 取 surfaceBright。
+            // 实测对比（2026-09-14，真机取色）：改之前我们页面 #FAF9F5 / 卡片 #F2F0E8，
+            // 与 RikkaHub 正好相反（用户：「背景人家用的黄的 卡边是白色 我这个做反了吧」）。
+            surface = base.surfaceContainer,
+        )
         if (pureBackground) {
             scheme = if (dark) {
                 scheme.copy(

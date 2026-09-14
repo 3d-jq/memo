@@ -2,11 +2,14 @@ package com.psyche.memo.ui
 
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -74,6 +78,7 @@ import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.Palette
+import com.psyche.memo.ui.theme.buildCustomThemePalette
 import com.psyche.memo.ui.theme.allPalettes
 import com.psyche.memo.ui.theme.themeChoices
 
@@ -91,6 +96,10 @@ fun ThemeSettingsScreen(
 ) {
     val cs = MaterialTheme.colorScheme
     val currentLanguage = LocalConfiguration.current.locales[0].language
+    // 色卡/名字按当前明暗取色（上游 `LocalDarkMode.current` 的等价物）。
+    val currentDark = com.psyche.memo.ui.theme.MemoTheme
+        .resolve(paletteId = null, mode = ThemeState.mode, systemDark = isSystemInDarkTheme())
+        .second
     val clipboard = LocalClipboardManager.current
     val copyMsg = stringResource(UiR.string.custom_theme_copied)
 
@@ -156,10 +165,12 @@ fun ThemeSettingsScreen(
                 }
             }
 
-            // L124-138: palette list — 用户 2026-09-13「我们这个八个效果不好，用 RikkaHub
-            // 那个主题」：列表内容换成「Memo 默认 + RikkaHub 7 套预设」（themeChoices），
-            // 布局/交互仍是 Memo 这套 SectionCard + PaletteRow。Memo 自己那 8 套不再列出，
-            // 但 id 仍能解析；万一当前选中的正是旧的一套，临时补一行，免得看不到选中项。
+            // L124-138: 预设主题 —— 布局/交互 1:1 照 RikkaHub 的 `PresetThemeButtonGroup`
+            // （`ui/pages/setting/components/PresetThemeButton.kt`）：四列 FlowRow、
+            // 每项是 48dp 圆形「色卡」（primaryContainer 打底 + 右上次色象限 +
+            // 右下第三色象限 + 中心 primary 圆点，选中时圆点变大并在其上打勾）、
+            // 名字在圆下方用主题色居中；最后一行用 Spacer(weight) 补空位保证列宽一致。
+            // 用户 2026-09-14：「跟着人家一比一做 不然做出来不好看」。
             item { Spacer(Modifier.height(12.dp)) }
             item {
                 val legacySelected = allPalettes
@@ -168,15 +179,13 @@ fun ThemeSettingsScreen(
                 val palettes =
                     if (legacySelected != null) themeChoices + legacySelected else themeChoices
                 SectionCard {
-                    palettes.forEachIndexed { i, palette ->
-                        PaletteRow(
-                            palette = palette,
-                            language = currentLanguage,
-                            selected = ThemeState.paletteId == palette.id,
-                            onTap = { ThemeState.setPalette(container, palette.id) },
-                        )
-                        if (i != palettes.lastIndex) DividerRow()
-                    }
+                    ThemeSwatchGrid(
+                        palettes = palettes,
+                        dark = currentDark,
+                        selectedId = ThemeState.paletteId,
+                        language = currentLanguage,
+                        onSelect = { ThemeState.setPalette(container, it) },
+                    )
                 }
             }
 
@@ -193,7 +202,7 @@ fun ThemeSettingsScreen(
                         style = TextStyle(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = cs.onSurface.copy(alpha = 0.8f),
+                            color = settingsSectionHeaderColor(cs),
                         ),
                         modifier = Modifier.weight(1f),
                     )
@@ -229,6 +238,7 @@ fun ThemeSettingsScreen(
                         themes.forEachIndexed { i, theme ->
                             CustomThemeRow(
                                 theme = theme,
+                                dark = currentDark,
                                 selected = customActive &&
                                     ThemeState.selectedCustomThemeId == theme.id,
                                 nameFor = { t ->
@@ -310,45 +320,124 @@ fun ThemeSettingsScreen(
 }
 
 @Composable
-private fun PaletteRow(
-    palette: Palette,
-    language: String,
+private fun ThemeSwatchCanvas(
+    scheme: androidx.compose.material3.ColorScheme,
     selected: Boolean,
-    onTap: () -> Unit,
+    size: androidx.compose.ui.unit.Dp,
 ) {
-    val cs = MaterialTheme.colorScheme
-    val title = if (language == "zh") palette.zhName else palette.enName
-    val color = palette.light.primary
-    Row(
+    Canvas(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onTap)
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clip(CircleShape)
+            .size(size),
     ) {
-        Box(
-            modifier = Modifier
-                .size(24.dp)
-                .background(color, CircleShape),
+        // 注意：参数名 size(Dp) 会遮住 DrawScope.size(Size)，这里显式取后者。
+        val box = this.size
+        drawRect(color = scheme.primaryContainer, size = box)
+        drawRect(
+            color = scheme.secondaryContainer,
+            size = box,
+            topLeft = Offset(x = box.width / 2, y = 0f),
         )
-        Spacer(Modifier.width(16.dp))
-        Text(
-            text = title,
-            style = TextStyle(fontSize = 15.sp, color = cs.onSurface),
-            modifier = Modifier.weight(1f),
+        drawRect(
+            color = scheme.tertiaryContainer,
+            size = box,
+            topLeft = Offset(x = box.width / 2, y = box.height / 2),
         )
-        if (selected) {
-            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
-        } else {
-            Spacer(Modifier.size(18.dp))
+        drawCircle(
+            color = scheme.primary,
+            radius = if (selected) 12.dp.toPx() else 8.dp.toPx(),
+            center = Offset(x = box.width / 2, y = box.height / 2),
+        )
+    }
+}
+
+/** 四列色卡网格 —— 1:1 照 RikkaHub `PresetThemeButtonGroup`（见上）。 */
+private const val THEME_GRID_COLUMNS = 4
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun ThemeSwatchGrid(
+    palettes: List<Palette>,
+    dark: Boolean,
+    selectedId: String,
+    language: String,
+    onSelect: (String) -> Unit,
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = THEME_GRID_COLUMNS,
+    ) {
+        palettes.forEach { palette ->
+            key(palette.id) {
+                ThemeSwatchItem(
+                    palette = palette,
+                    dark = dark,
+                    selected = palette.id == selectedId,
+                    name = if (language == "zh") palette.zhName else palette.enName,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onSelect(palette.id) },
+                )
+            }
+        }
+        // 补齐最后一行的空位，让每列宽度保持一致（上游同款）。
+        repeat((THEME_GRID_COLUMNS - palettes.size % THEME_GRID_COLUMNS) % THEME_GRID_COLUMNS) {
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
 
-/** L210-259: custom theme row — dot + name + check + copy/edit/delete. */
+/** 单项：48dp 色卡 + 下方主题色名字（上游 `PresetThemeButton` 的几何逐条对齐）。 */
+@Composable
+private fun ThemeSwatchItem(
+    palette: Palette,
+    dark: Boolean,
+    selected: Boolean,
+    name: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val scheme = if (dark) palette.dark else palette.light
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = LocalIndication.current,
+                onClick = onClick,
+            )
+            .padding(8.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            ThemeSwatchCanvas(scheme = scheme, selected = selected, size = 48.dp)
+            if (selected) {
+                Icon(
+                    Lucide.Check,
+                    contentDescription = null,
+                    tint = scheme.onPrimary,
+                )
+            }
+        }
+        Text(
+            text = name,
+            style = TextStyle(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = scheme.primary,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            ),
+        )
+    }
+}
+
+/** L210-259: 自定义主题行 —— 色卡 + 名字 + 选中勾 + 复制/编辑/删除（1:1 上游色卡）。 */
 @Composable
 private fun CustomThemeRow(
     theme: CustomTheme,
+    dark: Boolean,
     selected: Boolean,
     nameFor: @Composable (CustomTheme) -> String,
     onTap: () -> Unit,
@@ -357,6 +446,17 @@ private fun CustomThemeRow(
     onDelete: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    // 上游自定义主题的色卡用的是「这个主题生成出来的色板」（`generateColorScheme`）。
+    val swatchScheme = remember(theme, dark) {
+        val palette = buildCustomThemePalette(
+            id = theme.id,
+            name = theme.name,
+            primaryArgb = theme.primaryArgb,
+            secondaryArgb = theme.secondaryArgb,
+            tertiaryArgb = theme.tertiaryArgb,
+        )
+        if (dark) palette.dark else palette.light
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -364,7 +464,17 @@ private fun CustomThemeRow(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CustomThemeDot(theme = theme, size = 28.dp, selected = selected)
+        Box(contentAlignment = Alignment.Center) {
+            ThemeSwatchCanvas(scheme = swatchScheme, selected = selected, size = 40.dp)
+            if (selected) {
+                Icon(
+                    Lucide.Check,
+                    contentDescription = null,
+                    tint = swatchScheme.onPrimary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
         Spacer(Modifier.width(12.dp))
         Text(
             text = nameFor(theme),
@@ -372,9 +482,6 @@ private fun CustomThemeRow(
             maxLines = 1,
             modifier = Modifier.weight(1f),
         )
-        if (selected) {
-            Icon(Lucide.Check, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
-        }
         RowAction(Lucide.Copy, onCopy)
         RowAction(Lucide.Pencil, onEdit)
         RowAction(Lucide.Trash2, onDelete, color = cs.error)
@@ -392,23 +499,6 @@ private fun RowAction(icon: ImageVector, onTap: () -> Unit, color: Color? = null
             modifier = Modifier.size(16.dp),
         )
     }
-}
-
-/** custom_theme_widgets.dart L318 CustomThemeDot — primary dot + select ring. */
-@Composable
-fun CustomThemeDot(theme: CustomTheme, size: androidx.compose.ui.unit.Dp, selected: Boolean) {
-    val cs = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .size(size)
-            .background(Color(theme.primaryArgb), CircleShape)
-            .border(
-                width = if (selected) 2.dp else 0.6.dp,
-                color = if (selected) cs.primary else cs.outlineVariant.copy(alpha = 0.4f),
-                shape = CircleShape,
-            )
-            .padding(2.dp),
-    )
 }
 
 // ---------------------------------------------------------------------------

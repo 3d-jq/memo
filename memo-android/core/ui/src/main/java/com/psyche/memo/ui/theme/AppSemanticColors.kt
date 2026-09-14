@@ -111,21 +111,25 @@ data class AppSemanticColors(
          * 「原样表面」通道（RikkaHub 预设，见 [MemoTheme.authoredColorScheme]）：
          * 面板/填充色直接取预设声明的角色，不走 [SurfaceLadder] 的白/黑 alpha 混合。
          *
-         * 用户 2026-09-13：「语义 token 226 处…我们要更 rikkhub 一样覆盖多，不然主题不好看」
-         * —— 卡片取 `surfaceContainer`、输入框/内嵌填充取 `surfaceContainerHigh`
-         * （RikkaHub 自己的卡片层就是 `surfaceContainer`，`Color.kt` 的 `CustomColors`），
+         * 用户 2026-09-14：「跟着人家一比一做 不然做出来不好看」，并且实测指出
+         * 我们的页面/卡片**做反了**。真机取色（Claude 浅色）：
+         *   RikkaHub  页面 #F2F0E8(= surfaceContainer) / 卡片 #FFFFFF(= surfaceBright)
+         *   我们（改前）页面 #FAF9F5(= surface)      / 卡片 #F2F0E8(= surfaceContainer)
+         * 所以：页面底在 [MemoTheme.authoredColorScheme] 里换成 surfaceContainer，
+         * 卡片（含列表项）取 `surfaceBright` —— 正是 RikkaHub `CustomColors` 的命名
+         * `cardColorsOnSurfaceContainer` / `listItemColors`（都 = surfaceBright）。
+         * 卡内/页内填充取 `surfaceContainerHigh`（在白卡上是可见的浅色，在页面上比页面略深）。
          * 边框取预设的 `outlineVariant`（预设的 outline 本身就是低对比中性色，不必再乘
          * Memo 那套 6%/38% 的 alpha —— 那是给「纯黑/纯白 outlineVariant」的调色板用的）。
-         * `success/warning/chartSeries` 等派生色仍复用同一份实现。
          */
         fun authored(cs: ColorScheme, dark: Boolean): AppSemanticColors =
             (if (dark) dark(cs) else light(cs)).copy(
                 surfaceFill = cs.surfaceContainerHigh,
-                surfaceCard = cs.surfaceContainer,
+                surfaceCard = cs.surfaceBright,
                 surfaceCardFill = cs.surfaceContainerHigh,
                 hairline = cs.outlineVariant.copy(alpha = if (dark) 0.35f else 0.55f),
                 hairlineStrong = cs.outlineVariant,
-                // 弹窗/面板底：预设的 surfaceContainer 与页面 surface 已经分得开。
+                // 弹窗/面板底：预设的 surfaceBright 与页面 surfaceContainer 已经分得开。
                 layered = true,
                 isDark = dark,
             )

@@ -261,7 +261,7 @@ private fun TraceSectionHeader(title: String) {
         style = TextStyle(
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = withAlpha(MaterialTheme.colorScheme.onSurface, 0.8),
+            color = settingsSectionHeaderColor(MaterialTheme.colorScheme),
         ),
         modifier = Modifier.padding(start = 12.dp, top = 0.dp, end = 12.dp, bottom = 6.dp),
     )

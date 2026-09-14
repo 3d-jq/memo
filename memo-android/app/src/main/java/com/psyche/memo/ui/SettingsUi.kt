@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -61,6 +62,19 @@ import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.LocalSemanticColors
 
+/**
+ * 设置页分组标题的颜色 —— **跟随主题色**（`colorScheme.primary`）。
+ *
+ * 照 RikkaHub：所有设置页的骨架 `CardGroup` 都是
+ * `LocalContentColor provides MaterialTheme.colorScheme.primary`（`CardGroup.kt:157`），
+ * 他们主题页的「预设主题 / 自定义主题」标题也直接写 `colorScheme.primary`
+ * （`SettingThemePage.kt:150/181`）。Memo 原先一律写死 `onSurface@80%`，于是换主题时
+ * 这一行字完全不动 —— 用户 2026-09-14：「主题设置里面那个分类的字的颜色没有跟着
+ * 主题走呀 rikkhub就可以呀」。五个分组标题（本文件的 SectionHeader + 主题页 +
+ * 内存设置 + 搜索服务 + 记忆追踪）都走这里，保证判据只有一处。
+ */
+internal fun settingsSectionHeaderColor(scheme: ColorScheme): Color = scheme.primary
+
 /** Mirrors kelivo's `header()`: LTRB(12, first ? 2 : 12, 12, 6) at 13sp semibold. */
 @Composable
 internal fun SectionHeader(text: String, first: Boolean = false) {
@@ -75,7 +89,7 @@ internal fun SectionHeader(text: String, first: Boolean = false) {
         style = MaterialTheme.typography.labelLarge.copy(
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+            color = settingsSectionHeaderColor(MaterialTheme.colorScheme),
         ),
     )
 }

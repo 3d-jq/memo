@@ -393,7 +393,7 @@ private fun SearchSectionHeader(text: String, first: Boolean = false) {
         style = TextStyle(
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = cs.onSurface.copy(alpha = 0.8f),
+            color = settingsSectionHeaderColor(cs),
         ),
         modifier = Modifier.padding(start = 12.dp, top = if (first) 2.dp else 18.dp, end = 12.dp, bottom = 6.dp),
     )

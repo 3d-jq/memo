@@ -125,21 +125,38 @@ class RikkaHubPresetsTest {
         assertTrue(bluePalette.id !in authoredSurfacePaletteIds)
     }
 
-    /** 语义 token 也直接采信预设的角色：卡片 = surfaceContainer，填充 = surfaceContainerHigh。 */
+    /** 语义 token 也直接采信预设的角色（页面=surfaceContainer、卡片=surfaceBright）。 */
     @Test
     fun authoredSemanticColorsFollowThePresetRoles() {
-        val dark = AppSemanticColors.authored(rikkahubClaudePalette.dark, dark = true)
-        assertEquals(rikkahubClaudePalette.dark.surfaceContainer, dark.surfaceCard)
-        assertEquals(rikkahubClaudePalette.dark.surfaceContainerHigh, dark.surfaceFill)
-        assertEquals(rikkahubClaudePalette.dark.surfaceContainerHigh, dark.surfaceCardFill)
-        assertTrue(dark.isDark)
-        assertTrue(dark.layered)
+        // 页面底：authoredColorScheme 把 scheme.surface 换成预设的 surfaceContainer
+        // （RikkaHub 实测：页面 #F2F0E8 = surfaceContainer、卡片 #FFFFFF = surfaceBright）。
+        val scheme = MemoTheme.authoredColorScheme(rikkahubClaudePalette, dark = false)
+        assertEquals(rikkahubClaudePalette.light.surfaceContainer, scheme.surface)
+        assertNotEquals(rikkahubClaudePalette.light.surface, scheme.surface)
 
-        val light = AppSemanticColors.authored(rikkahubClaudePalette.light, dark = false)
-        assertEquals(rikkahubClaudePalette.light.surfaceContainer, light.surfaceCard)
+        val light = AppSemanticColors.authored(scheme, dark = false)
+        assertEquals(rikkahubClaudePalette.light.surfaceBright, light.surfaceCard)
         assertEquals(rikkahubClaudePalette.light.surfaceContainerHigh, light.surfaceFill)
-        // 与走 SurfaceLadder 的那条通道确实不同（否则这个通道白加）。
-        val ladder = AppSemanticColors.light(rikkahubClaudePalette.light)
-        assertNotEquals("ladder-vs-authored", ladder.surfaceCard, light.surfaceCard)
+        assertEquals(rikkahubClaudePalette.light.surfaceContainerHigh, light.surfaceCardFill)
+        assertTrue(light.layered)
+        // 卡片必须比页面亮（我们此前做反了：页面 surface / 卡片 surfaceContainer）。
+        assertTrue(
+            "卡片应比页面亮",
+            light.surfaceCard != light.surfaceFill && light.surfaceCard != scheme.surface,
+        )
+
+        val darkScheme = MemoTheme.authoredColorScheme(rikkahubClaudePalette, dark = true)
+        val dark = AppSemanticColors.authored(darkScheme, dark = true)
+        assertEquals(rikkahubClaudePalette.dark.surfaceContainer, darkScheme.surface)
+        assertEquals(rikkahubClaudePalette.dark.surfaceBright, dark.surfaceCard)
+        assertTrue(dark.isDark)
+
+        // 与走 SurfaceLadder 的那条通道确实不同（否则这个通道白加）—— 差异在**页面层**：
+        // ladder 用预设声明的 surface（Claude 浅色 #FAF9F5），authored 换成 surfaceContainer
+        // （#F2F0E8）。**不能拿 surfaceCard 当判据**：Claude 这套的 surfaceBright 恰好也是
+        // #FFFFFF，与 ladder 推出来的卡色相同（2026-09-14 门禁实证，原断言正是在此挂掉）。
+        val ladderScheme = MemoTheme.colorScheme(rikkahubClaudePalette, dark = false)
+        assertEquals(rikkahubClaudePalette.light.surface, ladderScheme.surface)
+        assertNotEquals("page-vs-authored", ladderScheme.surface, scheme.surface)
     }
 }
