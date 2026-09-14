@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -199,67 +200,43 @@ internal data class SheetAction(
 )
 
 /**
- * 长按 / 「更多」用的底部操作面板 —— 与搜索服务页同款（自绘拖柄 + 图标 + 15sp 标签），
- * 抽成共享件给技能页等多个页面复用。
+ * 底部操作面板 —— **统一用全站选项面板样式**（`LanguageSheet` 那一套：自绘拖柄 +
+ * `spacedBy(8.dp)` + [MemoSheetOptionRow] 卡片行）。
+ *
+ * 用户 2026-09-14：「添加 skill 这个 sheet 你没有用我们统一那个样式呀 不用添加技能
+ * 这个标题」—— 所以这里既不手撸行、也没有标题（统一样式的范例 `LanguageSheet` /
+ * 各 SelectSheet 同样没有标题）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ActionSheet(
     onDismiss: () -> Unit,
     actions: List<SheetAction>,
-    title: String? = null,
 ) {
-    val cs = MaterialTheme.colorScheme
-    ModalBottomSheet(
-        sheetState = rememberMemoSheetState(),
-        onDismissRequest = onDismiss,
-        containerColor = cs.surface,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        dragHandle = null,
-    ) {
+    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MemoSheetHandle(trailingGap = if (title == null) 0.dp else 12.dp)
-            title?.let {
-                Text(
-                    text = it,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-            }
+            MemoSheetHandle(trailingGap = 0.dp)
             actions.forEach { action ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { action.onClick() }
-                        .padding(horizontal = 12.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        action.icon,
-                        contentDescription = null,
-                        tint = if (action.destructive) cs.error else cs.onSurface,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = action.label,
-                        style = TextStyle(
-                            fontSize = 15.sp,
-                            color = if (action.destructive) cs.error else cs.onSurface,
-                        ),
-                    )
-                }
+                MemoSheetOptionRow(
+                    label = action.label,
+                    selected = false,
+                    icon = action.icon,
+                    destructive = action.destructive,
+                    onClick = action.onClick,
+                )
             }
         }
     }
 }
 
 /** The label shown next to the language row, matching Kelivo's own wording. */
-internal fun languageLabelRes(locale: AppLocale): Int = when (locale) {    AppLocale.SYSTEM -> UiR.string.settings_page_system_mode
+internal fun languageLabelRes(locale: AppLocale): Int = when (locale) {
+    AppLocale.SYSTEM -> UiR.string.settings_page_system_mode
     AppLocale.ZH_CN -> UiR.string.display_settings_page_language_chinese_label
     AppLocale.ZH_HANT -> UiR.string.language_display_traditional_chinese
     AppLocale.EN_US -> UiR.string.display_settings_page_language_english_label
@@ -310,6 +287,12 @@ internal fun rememberMemoSheetState(): SheetState =
  * 下拉选项行 —— 「更多」sheet（`BottomToolsSheet`）的卡片样式，用户 2026-09-12
  * 指定为全站选项面板统一样式：`surfaceCard` 底 + r14 + 48dp 高 + 左右 12，
  * 选中 = primary 文字 + 右侧 ✓。列表用 `Arrangement.spacedBy(8.dp)`，**不再用分隔线**。
+ *
+ * 两个可选能力都是为了把别的面板并进来而不是另起一套（用户 2026-09-14
+ * 「没有用我们那个统一的 sheet 样式」）：
+ *  - [subtitle]：第二行小字（记忆/本机副本那类带说明的选项）。有副标题时行高改为
+ *    `heightIn(min = 48.dp)`，**没有副标题时仍是精确 48dp**（`SheetStyleTest` 锁着）。
+ *  - [destructive]：危险项（删除）用 `cs.error` 着色，替代原来各写各的红字。
  */
 @Composable
 internal fun MemoSheetOptionRow(
@@ -319,41 +302,58 @@ internal fun MemoSheetOptionRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     /** 右对齐的次要说明（如端点路径）——对齐设置行的 detailText 样式。 */
     detail: String? = null,
+    /** 第二行小字（左对齐，标签下方）。 */
+    subtitle: String? = null,
+    /** 危险操作（删除）：文字与图标用 `cs.error`。 */
+    destructive: Boolean = false,
 ) {
     val cs = MaterialTheme.colorScheme
     val view = LocalView.current
     val haptics = LocalHapticsSettings.current
+    val accent = if (destructive) cs.error else cs.primary
+    val labelColor = when {
+        destructive -> cs.error
+        selected -> cs.primary
+        else -> cs.onSurface
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .then(if (subtitle == null) Modifier.height(48.dp) else Modifier.heightIn(min = 48.dp))
             .testTag(SHEET_OPTION_TAG)
             .background(LocalSemanticColors.current.surfaceCard, RoundedCornerShape(14.dp))
             .clickable {
                 if (haptics.onListItemTap) Haptics.soft(view)
                 onClick()
             }
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 12.dp, vertical = if (subtitle == null) 0.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = if (selected) cs.primary else cs.onSurface,
+                tint = if (selected || destructive) accent else cs.onSurface,
                 modifier = Modifier.size(20.dp),
             )
             Spacer(Modifier.width(10.dp))
         }
-        Text(
-            text = label,
-            modifier = Modifier.weight(1f),
-            style = TextStyle(
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (selected) cs.primary else cs.onSurface,
-            ),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = TextStyle(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = labelColor,
+                ),
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.6f)),
+                )
+            }
+        }
         if (!detail.isNullOrEmpty()) {
             Spacer(Modifier.width(8.dp))
             Text(
@@ -368,7 +368,7 @@ internal fun MemoSheetOptionRow(
             Icon(
                 Lucide.Check,
                 contentDescription = null,
-                tint = cs.primary,
+                tint = accent,
                 modifier = Modifier.size(18.dp).testTag(SHEET_OPTION_CHECK_TAG),
             )
         }

@@ -454,90 +454,39 @@ internal data class MemoryPickerOption<T>(
 /**
  * memory_ui.dart L785-934 — bottom sheet on mobile (the desktop dialog branch
  * is unreachable on Android). Returns the chosen value via [onSelected].
+ *
+ * 样式走**全站统一件**（`MemoSheetHandle` + [MemoSheetOptionRow] + `spacedBy(8.dp)`），
+ * 不再自撸选项行与分隔线、也不带标题 —— 用户 2026-09-14：「记忆列表界面里的全部范围、
+ * 全部类型这个 sheet 也没用我们那个统一的 sheet 样式」。额外加 `verticalScroll`
+ * 是因为助手筛选项可能很长（统一样式的其它 sheet 都是短列表）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun <T> MemoryOptionPickerSheet(
-    title: String,
     options: List<MemoryPickerOption<T>>,
     selected: T,
     onDismiss: () -> Unit,
     onSelected: (T) -> Unit,
 ) {
-    val cs = MaterialTheme.colorScheme
     ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
-        Column(Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 12.dp)) {
-            MemoSheetHandle()
-            Column(Modifier.fillMaxWidth()) {
-                Text(
-                    title,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
-                )
-                Spacer(Modifier.height(8.dp))
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    options.forEachIndexed { i, opt ->
-                        MemoryOptionRow(
-                            label = opt.label,
-                            subtitle = opt.subtitle,
-                            selected = opt.value == selected,
-                            onTap = {
-                                onSelected(opt.value)
-                                onDismiss()
-                            },
-                        )
-                        if (i != options.lastIndex) {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 3.dp)
-                                    .height(0.6.dp)
-                                    .background(withAlpha(cs.outlineVariant, 0.18)),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun Modifier.androidVerticalScroll(): Modifier = this
-
-/** memory_ui.dart L936-1003. */
-@Composable
-private fun MemoryOptionRow(label: String, subtitle: String?, selected: Boolean, onTap: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    TactileRow(onTap = onTap, haptics = false) { pressed ->
-        val bg = if (pressed) withAlpha(cs.onSurface, 0.04) else Color.Transparent
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(bg)
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    label,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = withAlpha(cs.onSurface, 0.9)),
+            MemoSheetHandle(trailingGap = 0.dp)
+            options.forEach { opt ->
+                MemoSheetOptionRow(
+                    label = opt.label,
+                    subtitle = opt.subtitle,
+                    selected = opt.value == selected,
+                    onClick = {
+                        onSelected(opt.value)
+                        onDismiss()
+                    },
                 )
-                if (!subtitle.isNullOrEmpty()) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        subtitle,
-                        style = TextStyle(fontSize = 12.5.sp, lineHeight = 16.sp, color = withAlpha(cs.onSurface, 0.6)),
-                    )
-                }
-            }
-            if (selected) {
-                Icon(Lucide.Check, contentDescription = null, modifier = Modifier.size(18.dp), tint = cs.primary)
             }
         }
     }

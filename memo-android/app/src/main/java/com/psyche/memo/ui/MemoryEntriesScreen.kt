@@ -320,7 +320,6 @@ fun MemoryEntriesScreen(
     // Sheets (scope / type / status / assistant).
     if (scopeSheet) {
         MemoryOptionPickerSheet(
-            title = stringResource(UiR.string.memory_entry_scope_label),
             selected = scope,
             options = ScopeFilter.values().map {
                 MemoryPickerOption(it, stringResource(when (it) {
@@ -335,7 +334,6 @@ fun MemoryEntriesScreen(
     }
     if (typeSheet) {
         MemoryOptionPickerSheet(
-            title = stringResource(UiR.string.memory_entry_type_label),
             selected = type,
             options = listOf<MemoryPickerOption<MemoryType?>>(
                 MemoryPickerOption(null, stringResource(UiR.string.memory_filter_type_all)),
@@ -346,7 +344,6 @@ fun MemoryEntriesScreen(
     }
     if (statusSheet) {
         MemoryOptionPickerSheet(
-            title = stringResource(UiR.string.memory_ui_status_label),
             selected = status,
             options = StatusFilter.values().map {
                 MemoryPickerOption(it, stringResource(when (it) {
@@ -361,7 +358,6 @@ fun MemoryEntriesScreen(
     }
     if (assistantSheet) {
         MemoryOptionPickerSheet(
-            title = stringResource(UiR.string.memory_ui_assistant_label),
             selected = assistantFilterId,
             options = listOf<MemoryPickerOption<String?>>(
                 MemoryPickerOption(null, stringResource(UiR.string.memory_ui_assistant_all)),

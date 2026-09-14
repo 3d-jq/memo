@@ -350,7 +350,6 @@ fun MemorySettingsScreen(
         val selected = state.injectionMaxItems
         val counts = (INJECTION_MAX_ITEM_OPTIONS + selected).distinct().sorted()
         MemoryOptionPickerSheet(
-            title = stringResource(UiR.string.memory_settings_injection_max_items_title),
             selected = selected,
             options = counts.map { n ->
                 MemoryPickerOption(n, stringResource(UiR.string.memory_settings_injection_max_items_option, n.toString()))

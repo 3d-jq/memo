@@ -377,7 +377,7 @@ private fun SkillRow(
     }
 }
 
-/** 添加方式选择（沿用 Memo 的底部面板样式）。 */
+/** 添加方式选择 —— 全站统一的操作面板样式（无标题，见 [ActionSheet]）。 */
 @Composable
 private fun SkillAddSheet(
     onDismiss: () -> Unit,
@@ -387,7 +387,6 @@ private fun SkillAddSheet(
 ) {
     ActionSheet(
         onDismiss = onDismiss,
-        title = stringResource(R.string.skills_page_add_title),
         actions = listOf(
             SheetAction(Lucide.Plus, stringResource(R.string.skills_page_add_manually)) { onAddManually() },
             SheetAction(Lucide.Download, stringResource(R.string.skills_page_import_from_file)) { onImportFromFile() },

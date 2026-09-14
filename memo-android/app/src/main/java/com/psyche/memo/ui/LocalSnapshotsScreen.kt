@@ -344,7 +344,6 @@ fun LocalSnapshotsScreen(container: AppContainerImpl, onBack: () -> Unit) {
     // ── Pickers ─────────────────────────────────────────────────────────────
     if (intervalPicker) {
         MemoryOptionPickerSheet(
-            title = stringResource(UiR.string.local_snapshot_interval_title),
             selected = settings.intervalDays,
             options = LocalSnapshotSettings.INTERVAL_PRESETS.map { days ->
                 MemoryPickerOption(
@@ -363,7 +362,6 @@ fun LocalSnapshotsScreen(container: AppContainerImpl, onBack: () -> Unit) {
     }
     if (keepPicker) {
         MemoryOptionPickerSheet(
-            title = stringResource(UiR.string.local_snapshot_keep_title),
             selected = settings.keepRecent,
             options = (LocalSnapshotSettings.MINIMUM_KEEP_RECENT..LocalSnapshotSettings.MAXIMUM_KEEP_RECENT)
                 .map { count ->
@@ -378,7 +376,6 @@ fun LocalSnapshotsScreen(container: AppContainerImpl, onBack: () -> Unit) {
     }
     if (maximumPicker) {
         MemoryOptionPickerSheet(
-            title = stringResource(UiR.string.local_snapshot_maximum_title),
             selected = settings.maximumTotalBytes,
             options = LocalSnapshotSettings.TOTAL_BYTES_PRESETS.map { bytes ->
                 MemoryPickerOption(
