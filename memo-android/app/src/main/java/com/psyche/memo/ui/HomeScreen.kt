@@ -590,6 +590,7 @@ fun ChatContent(
     var quickPhrases by remember { mutableStateOf<List<com.psyche.memo.data.model.QuickPhrase>?>(null) }
     var showInstructionSheet by remember { mutableStateOf(false) }
     var showWorldBookSheet by remember { mutableStateOf(false) }
+    var showSkillSelector by remember { mutableStateOf(false) }
     var showContextSheet by remember { mutableStateOf(false) }
     var showMcpSheet by remember { mutableStateOf(false) }
     // ---- 消息多选（home_page_controller ChatSelectionMode）----
@@ -1827,7 +1828,7 @@ fun ChatContent(
             },
             onOpenSkills = {
                 showToolsSheet = false
-                onOpenSkills()
+                showSkillSelector = true
             },
             onOpenContextManagement = {
                 showToolsSheet = false
@@ -1949,6 +1950,14 @@ fun ChatContent(
         )
     }
 
+    if (showSkillSelector) {
+        SkillSelectorSheet(
+            container = container,
+            onDismiss = { showSkillSelector = false },
+            // 「管理技能」出口 —— 就是设置→技能 那个页面。
+            onManage = onOpenSkills,
+        )
+    }
     if (showWorldBookSheet) {
         com.psyche.memo.ui.WorldBookSheet(
             container = container,

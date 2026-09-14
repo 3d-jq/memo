@@ -306,6 +306,8 @@ internal fun MemoSheetOptionRow(
     subtitle: String? = null,
     /** 危险操作（删除）：文字与图标用 `cs.error`。 */
     destructive: Boolean = false,
+    /** 行尾自定义件（如 `IosSwitch`）——开关类行也用同一颗组件，不再另起一套。 */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val view = LocalView.current
@@ -363,7 +365,10 @@ internal fun MemoSheetOptionRow(
                 style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)),
             )
         }
-        if (selected) {
+        if (trailing != null) {
+            Spacer(Modifier.width(8.dp))
+            trailing()
+        } else if (selected) {
             Spacer(Modifier.width(8.dp))
             Icon(
                 Lucide.Check,
