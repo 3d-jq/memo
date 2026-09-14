@@ -4,10 +4,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -119,19 +121,14 @@ private fun SkillToggleRow(
             modifier = Modifier.size(20.dp),
             tint = cs.primary,
         )
-        Column(
-            modifier = Modifier.weight(1f).padding(start = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = skill.name,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        // 技能说明走全站统一的 ⓘ 浮泡，不裸排成第二行（用户 2026-09-14）。
-        SettingsTipIcon(skill.description)
+        Spacer(Modifier.width(12.dp))
+        // ⓘ 紧贴技能名（TipHuggingLabel 吃掉行内余量，开关照样贴边）。
+        TipHuggingLabel(
+            label = skill.name,
+            tip = skill.description,
+            labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
+            maxLines = 1,
+        )
         // IosSwitch（不是裸 M3 Switch）—— 它按设置里的触觉开关反馈
         // （`enableHaptics = true` + LocalHapticsSettings），全站开关都走它。
         IosSwitch(

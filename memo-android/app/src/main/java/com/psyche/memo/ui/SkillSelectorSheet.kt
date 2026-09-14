@@ -107,19 +107,16 @@ fun SkillSelectorSheet(
                     MemoSheetOptionRow(
                         label = skill.name,
                         selected = false,
+                        // 说明走 ⓘ 紧贴文字（不是挂到开关那侧）。
+                        tip = skill.description,
                         // 整行可点：点哪儿都能开关（开关自己也响应）。
                         onClick = { toggle(skill.name, !enabled) },
-                        // 技能说明不裸排成第二行 —— 走全站统一的 ⓘ 浮动气泡，
-                        // 否则开关清单每行两行字、又长又吵。
                         trailing = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                SettingsTipIcon(skill.description)
-                                IosSwitch(
-                                    value = enabled,
-                                    onValueChanged = { toggle(skill.name, it) },
-                                    semanticLabel = skill.name,
-                                )
-                            }
+                            IosSwitch(
+                                value = enabled,
+                                onValueChanged = { toggle(skill.name, it) },
+                                semanticLabel = skill.name,
+                            )
                         },
                     )
                 }

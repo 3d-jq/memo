@@ -308,6 +308,8 @@ internal fun MemoSheetOptionRow(
     destructive: Boolean = false,
     /** 行尾自定义件（如 `IosSwitch`）——开关类行也用同一颗组件，不再另起一套。 */
     trailing: (@Composable () -> Unit)? = null,
+    /** 标签的说明走 ⓘ 浮泡，**紧贴文字**（[TipHuggingLabel]），不是挂到行尾。 */
+    tip: String? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val view = LocalView.current
@@ -340,20 +342,25 @@ internal fun MemoSheetOptionRow(
             )
             Spacer(Modifier.width(10.dp))
         }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = TextStyle(
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = labelColor,
-                ),
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = cs.onSurface.copy(alpha = 0.6f)),
-                )
+        val labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium, color = labelColor)
+        if (subtitle == null && tip != null) {
+            // ⓘ 必须紧贴标签文字（用户 2026-09-12 点名、2026-09-14 又强调一次）——
+            // 不是挂到行尾开关那侧。TipHuggingLabel 是 RowScope 扩展，所以这里
+            // 标签直接放在行里，不再套一层 Column。
+            TipHuggingLabel(label = label, tip = tip, labelStyle = labelStyle, maxLines = 1)
+        } else {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = label, style = labelStyle)
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = TextStyle(
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            color = cs.onSurface.copy(alpha = 0.6f),
+                        ),
+                    )
+                }
             }
         }
         if (!detail.isNullOrEmpty()) {

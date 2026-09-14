@@ -334,12 +334,15 @@ private fun SkillRow(
             modifier = Modifier.weight(1f).padding(start = 12.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(
-                text = skill.name,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // ⓘ 紧贴技能名（TipHuggingLabel 是 RowScope 扩展，所以这里套一层 Row）。
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TipHuggingLabel(
+                    label = skill.name,
+                    tip = skill.description,
+                    labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                )
+            }
             skill.compatibility?.takeIf { it.isNotBlank() }?.let { compatibility ->
                 Text(
                     text = compatibility,
@@ -349,8 +352,6 @@ private fun SkillRow(
                 )
             }
         }
-        // 技能说明走全站统一的 ⓘ 浮泡，不裸排成第二行（用户 2026-09-14）。
-        SettingsTipIcon(skill.description)
         Icon(
             Lucide.ChevronRight,
             contentDescription = null,
