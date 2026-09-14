@@ -2022,7 +2022,7 @@
     <string name="providers_page_export_share_button">分享</string>
     <string name="providers_page_import_tooltip">导入</string>
     <string name="providers_page_models_count_single_suffix">个模型</string>
-    <string name="providers_page_models_count_suffix"> models</string>
+    <string name="providers_page_models_count_suffix">个模型</string>
     <string name="providers_page_multi_select_tooltip">多选</string>
     <string name="providers_page_provider_added_snackbar">已添加供应商</string>
     <string name="providers_page_search_hint">搜索供应商或分组</string>

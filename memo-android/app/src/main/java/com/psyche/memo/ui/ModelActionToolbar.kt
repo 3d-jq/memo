@@ -48,12 +48,14 @@ import com.psyche.memo.ui.theme.LocalSemanticColors
  * `_buildModelActionToolbar` (default) and `_buildModelSelectionToolbar`
  * (selection), `provider_detail_page.dart` L2426-2784.
  *
- * Flutter floats it (`Positioned(bottom: 12 + safeArea)`) over the list as a
- * `borderRadius: 999` capsule whose colour is `appColors.surfaceFill`. Both
- * states share identical geometry; only the button set changes.
+ * 外壳对齐 `_buildToolbarShell`（L2398-2424）：胶囊**按内容自适应宽度**
+ *（原版 Row mainAxisSize.min），居中放置；按钮各自有底色，超预算时靠
+ * `showLabel` 预算逐级收缩（见下）——此前强制 fillMaxWidth + 按钮不收缩，
+ * 按钮一多就撑破胶囊（用户 2026-09-14 截图）。
  *
  * Below 370dp of available width the labels collapse to icons only
- * (`compact` branch, L2434-2439).
+ * (`compact` branch, L2434-2439). 选择模式还走 `totalWidth`/`toolbarTextBudget`
+ * 的逐级 hide-label（L2700-2727）：删除标签 → 全选标签 → 检测标签。
  */
 @Composable
 internal fun ModelActionToolbar(
@@ -83,9 +85,33 @@ internal fun ModelActionToolbar(
         val itemGap = if (compact) 8.dp else 10.dp
         val hasSelection = selectionCount > 0 && !detecting
 
+        // 选择模式的 showLabel 预算（L2663-2727）：innerWidth-8 里放不下就按
+        // 「删除 → 全选 → 检测」顺序关标签。用 dp 近似原版 TextPainter 实测
+        //（label 宽 ≈ 0.62 × fontSize × 字符数 + 首尾 padding）。
+        val toolbarInnerWidth = maxWidth - horizontalMargin * 2 -
+            (if (compact) 10.dp * 2 else 14.dp * 2)
+        val textBudget = toolbarInnerWidth - 8.dp
+        fun labelWidthDp(label: String): Int = (label.length * 8.7f).toInt() + (if (compact) 28 else 36)
+        var deleteSelectedLabeled = true
+        var selectAllLabeled = true
+        var detectLabeled = true
+        if (selectMode) {
+            val selectLabel = if (allSelected) "清空" else "全选"
+            val detectLabel = if (detecting) "检测中" else "检测"
+            val deleteFailedW = if (hasFailed) itemGap.value.toInt() + labelWidthDp("") + 8 else 0
+            fun totalWidth(sel: Boolean, det: Boolean, del: Boolean): Int =
+                (if (sel) labelWidthDp(selectLabel) else 24 + 12) +
+                    itemGap.value.toInt() + 24 + 12 + // stream icon button
+                    itemGap.value.toInt() + (if (det) labelWidthDp(detectLabel) else 24 + 12) +
+                    deleteFailedW +
+                    itemGap.value.toInt() + (if (del) labelWidthDp("删除所选") else 24 + 12)
+            if (totalWidth(true, true, true) > textBudget.value) deleteSelectedLabeled = false
+            if (totalWidth(true, true, deleteSelectedLabeled) > textBudget.value) selectAllLabeled = false
+            if (totalWidth(selectAllLabeled, true, deleteSelectedLabeled) > textBudget.value) detectLabeled = false
+        }
+
         Row(
             modifier = Modifier
-                .fillMaxWidth()
                 .padding(horizontal = horizontalMargin)
                 .background(semantic.surfaceFill, RoundedCornerShape(999.dp))
                 .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = 10.dp),
@@ -100,6 +126,7 @@ internal fun ModelActionToolbar(
                     compact = compact,
                     style = ToolbarStyle.OUTLINED,
                     onClick = onFetch,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 Spacer(Modifier.width(itemGap))
                 ToolbarButton(
@@ -109,6 +136,7 @@ internal fun ModelActionToolbar(
                     compact = compact,
                     style = ToolbarStyle.FILLED,
                     onClick = onAddNew,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (hasModels) {
                     Spacer(Modifier.width(itemGap))
@@ -132,10 +160,11 @@ internal fun ModelActionToolbar(
                         else com.psyche.memo.ui.R.string.mcp_assistant_sheet_select_all,
                     ),
                     icon = if (allSelected) Lucide.CheckCheck else Lucide.Square,
-                    showLabel = !compact,
+                    showLabel = !compact && selectAllLabeled,
                     compact = compact,
                     style = ToolbarStyle.NEUTRAL,
                     onClick = onToggleSelectAll,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 Spacer(Modifier.width(itemGap))
                 // 「使用流式」批量开关（L2745-2749 + `_buildSelectionToolbarStreamButton`，
@@ -154,7 +183,7 @@ internal fun ModelActionToolbar(
                         else com.psyche.memo.ui.R.string.provider_detail_page_batch_detect_button,
                     ),
                     icon = if (detecting) Lucide.Loader else Lucide.HeartPulse,
-                    showLabel = !compact,
+                    showLabel = !compact && detectLabeled,
                     compact = compact,
                     style = ToolbarStyle.FILLED,
                     // 原版检测钮与其它不同：忙碌时换 Loader 图标（不是转圈 spinner），
@@ -162,6 +191,7 @@ internal fun ModelActionToolbar(
                     loading = false,
                     enabled = selectionCount > 0 && !detecting,
                     onClick = onDetect,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 if (hasFailed) {
                     Spacer(Modifier.width(itemGap))
@@ -178,7 +208,7 @@ internal fun ModelActionToolbar(
                 ToolbarButton(
                     label = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_selected_models_button),
                     icon = Lucide.Trash2,
-                    showLabel = !compact,
+                    showLabel = !compact && deleteSelectedLabeled,
                     compact = compact,
                     style = ToolbarStyle.DESTRUCTIVE,
                     enabled = hasSelection,
@@ -262,6 +292,7 @@ private fun ToolbarButton(
     loading: Boolean = false,
     iconSize: Dp = 20.dp,
     errorAlpha: Float = 0.12f,
+    modifier: Modifier = Modifier,
 ) {
     val cs = MaterialTheme.colorScheme
     val contentColor = when {
@@ -285,7 +316,7 @@ private fun ToolbarButton(
     val horizontal = if (showLabel) (if (compact) 14.dp else 18.dp) else (if (compact) 12.dp else 18.dp)
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
             .background(background, RoundedCornerShape(999.dp))
             .then(

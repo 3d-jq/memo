@@ -1005,7 +1005,6 @@ private fun ModelsTab(
     onReload: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     var showCreate by remember { mutableStateOf(false) }
@@ -1116,9 +1115,7 @@ private fun ModelsTab(
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth()
-                    .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
-                    .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                    .fillMaxWidth(),
             ) { model, _ ->
                 ModelRowWithSwipe(
                     modelId = model,

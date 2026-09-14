@@ -1594,8 +1594,42 @@ fun ChatContent(
                 connectedIds = mcpStates.filterValues { it.status == com.psyche.memo.provider.mcp.McpConnectionManager.Status.connected }.keys,
             )
         }
-        val quickPhraseAvailable = remember(assistantForSearch?.id, quickPhrases) {
+        val quickPhraseAvailable = remember(providerId, modelId, assistantForSearch?.id, quickPhrases) {
             quickPhraseButtonVisible(loadQuickPhrases(container).size, 0)
+        }
+        // CIS:187 supportsReasoning / CIS:197+283-293 showMcpButton —— 能力门控：
+        // 模型没有推理能力 → Brain 整颗不显示；没有工具能力或没有任何启用的
+        // MCP 服务器 → Hammer 不显示。判定走 isReasoningModel/isToolModel
+        //（override abilities 优先，否则名称推断）。
+        val currentModelCfg = remember(providerId) {
+            providerId.takeIf { it.isNotEmpty() }
+                ?.let { runCatching { container.providerConfig(it) }.getOrNull() }
+        }
+        val supportsReasoning = isReasoningModel(currentModelCfg, modelId)
+        val showMcpButton = remember(providerId, modelId, mcpStates) {
+            isToolModel(currentModelCfg, modelId) && runCatching {
+                com.psyche.memo.data.repo.McpRepository(container.database.readableDatabase)
+                    .enabledServers().isNotEmpty()
+            }.getOrDefault(false)
+        }
+        // CIS:248-281 `_enforceModelCapabilities` —— 能力不足时把助手设置归零
+        //（工具能力没有 → 清空 mcpServerIds；推理能力没有 → thinkingBudget=0），
+        // 防止发请求时带着模型根本不支持的能力参数。
+        val capAssistant = assistantForSearch
+        if (capAssistant != null && providerId.isNotEmpty() && modelId.isNotEmpty()) {
+            androidx.compose.runtime.LaunchedEffect(capAssistant.id, providerId, modelId) {
+                val aa = container.currentAssistant()
+                if (aa != null) {
+                    if (!isToolModel(currentModelCfg, modelId) && aa.mcpServerIds.isNotEmpty()) {
+                        container.assistantStore.update(aa.copy(mcpServerIds = emptyList()))
+                    }
+                    if (!isReasoningModel(currentModelCfg, modelId) &&
+                        com.psyche.memo.llm.client.ReasoningBudget.isReasoningEnabled(aa.thinkingBudget)
+                    ) {
+                        container.assistantStore.update(aa.copy(thinkingBudget = 0))
+                    }
+                }
+            }
         }
         // showSearchSheet 关闭后重组时重算，让 sheet 里改的服务/开关即时反映。
         val searchSvc = remember(container, showSearchSheet, searchActive) {
@@ -1637,6 +1671,8 @@ fun ChatContent(
             searchActive = searchActive,
             searchIconAsset = searchIconAsset,
             reasoningActive = reasoningActive,
+            supportsReasoning = supportsReasoning,
+            showMcpButton = showMcpButton,
             mcpActive = mcpActive,
             quickPhraseAvailable = quickPhraseAvailable,
             onOpenTools = {
@@ -3108,8 +3144,12 @@ private fun ChatInputBar(
     searchActive: Boolean = false,
     searchIconAsset: String? = null,
     // 输入栏左排按钮的可用/选中态（chat_input_section.dart）：
+    // supportsReasoning = 当前模型有推理能力（否则 Brain 整颗不显示，CIB:187）；
+    // showMcpButton = 工具能力 + 有启用的 MCP（否则 Hammer 不显示，CIS:283-293）；
     // reasoningActive = 推理没关；mcpActive = 有已连接的已选 MCP；
     // quickPhraseAvailable = 全局或本助手配了快捷短语（否则整颗按钮不显示）。
+    supportsReasoning: Boolean = true,
+    showMcpButton: Boolean = true,
     reasoningActive: Boolean = false,
     mcpActive: Boolean = false,
     quickPhraseAvailable: Boolean = true,
@@ -3504,25 +3544,32 @@ private fun ChatInputBar(
                                             cs,
                                         )
                                     }
-                                    // CIB:1880-1920 —— Brain 按钮渲染当前预算图标
-                                    // （ReasoningIcons.budgetIcon），点开预算 sheet；
-                                    // 推理没关时图标走 active 色（CIB:1904 active: reasoningActive）。
-                                    InputIconAsset(
-                                        asset = com.psyche.memo.ui.chat.ReasoningBudgetIcons
-                                            .assetForBudget(reasoningBudget),
-                                        label = stringResource(UiR.string.chat_input_bar_reasoning_strength_tooltip),
-                                        onClick = onOpenReasoning,
-                                        cs = cs,
-                                        active = reasoningActive,
-                                    )
-                                    // CIB:1929 active: mcpActive —— 有已连接的已选 MCP 才高亮。
-                                    InputIcon(
-                                        Lucide.Hammer,
-                                        stringResource(UiR.string.chat_input_bar_mcp_servers_tooltip),
-                                        onOpenMcp,
-                                        cs,
-                                        active = mcpActive,
-                                    )
+                                    // CIB:1879-1920 —— supportsReasoning 门控：模型没有
+                                    // 推理能力（override abilities 或名称推断都没有）时
+                                    // 整颗按钮不显示。渲染预算图标（ReasoningIcons），
+                                    // 推理没关时走 active 色（CIB:1904）。
+                                    if (supportsReasoning) {
+                                        InputIconAsset(
+                                            asset = com.psyche.memo.ui.chat.ReasoningBudgetIcons
+                                                .assetForBudget(reasoningBudget),
+                                            label = stringResource(UiR.string.chat_input_bar_reasoning_strength_tooltip),
+                                            onClick = onOpenReasoning,
+                                            cs = cs,
+                                            active = reasoningActive,
+                                        )
+                                    }
+                                    // CIS:197 + 283-293 —— showMcpButton 门控：模型没有
+                                    // 工具能力或没有任何启用的 MCP 服务器时不显示。
+                                    if (showMcpButton) {
+                                        InputIcon(
+                                            Lucide.Hammer,
+                                            stringResource(UiR.string.chat_input_bar_mcp_servers_tooltip),
+                                            onOpenMcp,
+                                            cs,
+                                            // CIB:1929 active: mcpActive —— 有已连接的已选 MCP 才高亮。
+                                            active = mcpActive,
+                                        )
+                                    }
                                     // CIB:1942 —— 没配快捷短语（全局+本助手）整颗按钮不显示。
                                     if (quickPhraseAvailable) {
                                         InputIcon(
@@ -3968,3 +4015,39 @@ internal fun quickPhraseButtonVisible(globalCount: Int, assistantCount: Int): Bo
  */
 internal fun mcpButtonActive(selectedIds: List<String>, connectedIds: Set<String>): Boolean =
     selectedIds.isNotEmpty() && connectedIds.any { it in selectedIds }
+
+/**
+ * generation_controller.dart:74-90 `isReasoningModel` —— 模型编辑页写了
+ * abilities 覆盖就完全按覆盖判定（写了就不再看名称推断），否则按
+ * ModelRegistry 的名称推断。CIS:187 supportsReasoning 用它门控 Brain 按钮。
+ */
+internal fun isReasoningModel(
+    cfg: com.psyche.memo.data.model.ProviderConfig?,
+    modelId: String,
+): Boolean {
+    if (modelId.isEmpty()) return false
+    val ov = cfg?.modelOverrides?.get(modelId) as? kotlinx.serialization.json.JsonObject
+    if (ov != null && ov.containsKey("abilities")) {
+        val abilities = com.psyche.memo.ModelOverrideResolver.parseAbilities(ov["abilities"])
+        // 上游：override 里的 abilities 键存在（哪怕解析为空列表）就完全信它。
+        return abilities?.contains("reasoning") ?: false
+    }
+    return com.psyche.memo.ModelRegistry.infer(modelId).reasoning
+}
+
+/**
+ * generation_controller.dart:92-106 `isToolModel` —— 同上，工具能力。
+ * CIS:283-293 `_shouldShowMcpButton` 用它门控 Hammer 按钮。
+ */
+internal fun isToolModel(
+    cfg: com.psyche.memo.data.model.ProviderConfig?,
+    modelId: String,
+): Boolean {
+    if (modelId.isEmpty()) return false
+    val ov = cfg?.modelOverrides?.get(modelId) as? kotlinx.serialization.json.JsonObject
+    if (ov != null && ov.containsKey("abilities")) {
+        val abilities = com.psyche.memo.ModelOverrideResolver.parseAbilities(ov["abilities"])
+        return abilities?.contains("tool") ?: false
+    }
+    return com.psyche.memo.ModelRegistry.infer(modelId).tool
+}

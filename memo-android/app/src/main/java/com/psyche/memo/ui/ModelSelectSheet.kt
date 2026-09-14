@@ -47,6 +47,7 @@ import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.Hammer
 import com.composables.icons.lucide.Heart
 import com.composables.icons.lucide.Wrench
 import kotlinx.coroutines.Dispatchers
@@ -499,43 +500,128 @@ private fun ModelTile(
     }
 }
 
-/** model_tag_wrap.dart — chat-type + I/O modality + tools/reasoning pills.
+/** model_tag_wrap.dart — chat/embedding type + I/O modality + tools/reasoning pills.
  *
  *  能力取 `effectiveModelInfo`（名称推断 **叠加** 模型 override）：用户在模型编辑页
- *  改了输入模态/abilities 之后，这里的标签必须跟着变（此前只看名称推断，改了不动）。 */
+ *  改了输入模态/abilities 之后，这里的标签必须跟着变（此前只看名称推断，改了不动）。
+ *
+ *  2026-09-14 对齐原版细节：
+ *  · I/O 胶囊按模型真实 input/output 画图标（此前写死 T > T，image 模型也是 T）；
+ *  · embedding 类型：类型胶囊显示 Embedding、输出恒 text；
+ *  · tools 胶囊 Hammer @primary（底 25%/15% 描边 0.2），reasoning 胶囊 deepthink.svg
+ *   （回落 Brain）@secondary（底 30%/18% 描边 0.25）——两颗此前共用 Brain+底色。 */
 @Composable
 internal fun ModelTagRow(modelId: String, cfg: com.psyche.memo.data.model.ProviderConfig? = null) {
     val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
     val traits = remember(modelId, cfg?.modelOverrides) {
         com.psyche.memo.ModelOverrideResolver.forModel(cfg, modelId)
     }
+    val isDark = semantic.isDark
+    // model_tag_wrap.dart inputMods/outputMods —— embedding 输出恒 text；chat 空
+    // list 回落 [text]。
+    val inputMods = remember(traits) {
+        if (traits.embedding) setOf("text") else (traits.input.ifEmpty { setOf("text") })
+    }
+    val outputMods = remember(traits) {
+        if (traits.embedding) setOf("text") else (traits.output.ifEmpty { setOf("text") })
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Type pill — chat primary@25%/15% + 0.2 border; embedding tertiary 同式
+        // 但原版类型胶囊恒 primary（model_tag_wrap L57-77 只用 cs.primary）。
         Pill(color = cs.primary) {
             Text(
-                text = stringResource(UiR.string.model_select_sheet_chat_type),
-                style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium, color = cs.primary),
+                text = stringResource(
+                    if (traits.embedding) UiR.string.model_select_sheet_embedding_type
+                    else UiR.string.model_select_sheet_chat_type,
+                ),
+                style = TextStyle(
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isDark) cs.primary else cs.primary.copy(alpha = 0.9f),
+                ),
             )
         }
+        // I/O pill —— 每个输入模态一枚图标，ChevronRight，每个输出模态一枚
+        //（L117-160）。图标按模态取 Type/Image。
         Pill(color = cs.tertiary) {
-            Icon(Lucide.Type, contentDescription = null, tint = cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
-            if (traits.visionInput) {
-                Icon(Lucide.Image, contentDescription = null, tint = cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            inputMods.forEach { mod ->
+                Icon(
+                    if (mod == "image") Lucide.Image else Lucide.Type,
+                    contentDescription = null,
+                    tint = if (isDark) cs.tertiary else cs.tertiary.copy(alpha = 0.9f),
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(2.dp))
             }
-            Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
-            // Chat output defaults to text (tag_wrap outputMods fallback).
-            Icon(Lucide.Type, contentDescription = null, tint = cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
-        }
-        if (traits.tool) {
-            Pill(color = cs.secondary) {
-                Icon(Lucide.Wrench, contentDescription = null, tint = cs.secondary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            Icon(Lucide.ChevronRight, contentDescription = null, tint = if (isDark) cs.tertiary else cs.tertiary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+            outputMods.forEach { mod ->
+                Icon(
+                    if (mod == "image") Lucide.Image else Lucide.Type,
+                    contentDescription = null,
+                    tint = if (isDark) cs.tertiary else cs.tertiary.copy(alpha = 0.9f),
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(2.dp))
             }
         }
-        if (traits.reasoning) {
-            Pill(color = cs.secondary) {
-                Icon(Lucide.Brain, contentDescription = null, tint = cs.secondary.copy(alpha = 0.9f), modifier = Modifier.size(12.dp))
+        if (!traits.embedding) {
+            if (traits.tool) {
+                // Tools pill —— Hammer @primary，底 25%/15%、描边 0.2（_abilityChip）。
+                AbilityPill(
+                    color = cs.primary,
+                    bgAlpha = if (isDark) 0.25f else 0.15f,
+                    borderAlpha = 0.2f,
+                ) {
+                    Icon(
+                        Lucide.Hammer,
+                        contentDescription = null,
+                        tint = if (isDark) cs.primary else cs.primary.copy(alpha = 0.9f),
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
+            if (traits.reasoning) {
+                // Reasoning pill —— deepthink.svg（回落 Brain）@secondary，
+                // 底 30%/18%、描边 0.25。
+                AbilityPill(
+                    color = cs.secondary,
+                    bgAlpha = if (isDark) 0.3f else 0.18f,
+                    borderAlpha = 0.25f,
+                ) {
+                    coil.compose.AsyncImage(
+                        model = "file:///android_asset/icons/deepthink.svg",
+                        contentDescription = null,
+                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                            if (isDark) cs.secondary else cs.secondary.copy(alpha = 0.9f),
+                        ),
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * model_tag_wrap.dart `_abilityChip` —— 12dp 圆胶囊，底色/描边透明度按能力
+ * 分别指定（tools 与 reasoning 不同）。
+ */
+@Composable
+private fun AbilityPill(
+    color: Color,
+    bgAlpha: Float,
+    borderAlpha: Float,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .background(color.copy(alpha = bgAlpha), RoundedCornerShape(999.dp))
+            .border(0.5.dp, color.copy(alpha = borderAlpha), RoundedCornerShape(999.dp))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
 }
 
 @Composable
