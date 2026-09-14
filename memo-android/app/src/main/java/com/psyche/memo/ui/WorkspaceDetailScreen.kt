@@ -1418,7 +1418,7 @@ internal fun WorkspaceFileEntry.detectFileType(): WorkspaceFileType {
 
 /** Shell 状态 → 文案（上游 `toShellStatusLabel`）。 */
 @Composable
-private fun String.toShellStatusLabel(): String = when (this) {
+internal fun String.toShellStatusLabel(): String = when (this) {
     WorkspaceShellStatus.DISABLED.name -> stringResource(R.string.workspace_status_disabled)
     WorkspaceShellStatus.INSTALLING.name -> stringResource(R.string.workspace_status_installing)
     WorkspaceShellStatus.READY.name -> stringResource(R.string.workspace_status_ready)

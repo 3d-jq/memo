@@ -3469,5 +3469,6 @@
   "workspaceEnvApplyMirror": "正在切换软件源…",
   "workspaceEnvUninstall": "卸载",
   "workspaceEnvCancel": "取消",
-  "workspaceEnvRemoving": "卸载中…"
+  "workspaceEnvRemoving": "卸载中…",
+  "workspaceManage": "管理工作区"
 }

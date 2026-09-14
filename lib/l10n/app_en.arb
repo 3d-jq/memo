@@ -4198,5 +4198,6 @@
   "workspaceEnvApplyMirror": "Switching mirror…",
   "workspaceEnvUninstall": "Remove",
   "workspaceEnvCancel": "Cancel",
-  "workspaceEnvRemoving": "Removing…"
+  "workspaceEnvRemoving": "Removing…",
+  "workspaceManage": "Manage workspaces"
 }

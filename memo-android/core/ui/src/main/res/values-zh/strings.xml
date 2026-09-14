@@ -2807,6 +2807,7 @@
     <string name="workspace_install_failed">安装失败：%1$s</string>
     <string name="workspace_install_rootfs">安装 Rootfs</string>
     <string name="workspace_loading">加载中…</string>
+    <string name="workspace_manage">管理工作区</string>
     <string name="workspace_name_label">名称</string>
     <string name="workspace_new">新建工作区</string>
     <string name="workspace_none">不使用</string>

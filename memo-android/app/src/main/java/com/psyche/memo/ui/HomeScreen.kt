@@ -170,6 +170,7 @@ fun HomeScreen(
     onOpenWorldBookPage: () -> Unit = {},
     onOpenTranslate: () -> Unit = {},
     onOpenSkills: () -> Unit = {},
+    onOpenWorkspaces: () -> Unit = {},
     onEditAssistant: (String) -> Unit = {},
     onManageTags: (String) -> Unit = {},
     pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
@@ -391,6 +392,7 @@ fun HomeScreen(
                 onOpenSearchServices = onOpenSearchServices,
                 onOpenWorldBookPage = onOpenWorldBookPage,
                 onOpenSkills = onOpenSkills,
+        onOpenWorkspaces = onOpenWorkspaces,
                 titleRefreshTick = titleRefreshTick,
                 injectPresets = pendingPresetInject,
             )
@@ -506,6 +508,7 @@ fun ChatContent(
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
     onOpenSkills: () -> Unit = {},
+    onOpenWorkspaces: () -> Unit = {},
     titleRefreshTick: Int = 0,
     injectPresets: Boolean = false,
 ) {
@@ -592,6 +595,7 @@ fun ChatContent(
     var reasoningBudget by remember { mutableStateOf(com.psyche.memo.ui.chat.readBudget(container)) }
     var showSearchSheet by remember { mutableStateOf(false) }
     var showToolsSheet by remember { mutableStateOf(false) }
+    var showWorkspaceSheet by remember { mutableStateOf(false) }
     var quickPhrases by remember { mutableStateOf<List<com.psyche.memo.data.model.QuickPhrase>?>(null) }
     var showInstructionSheet by remember { mutableStateOf(false) }
     var showWorldBookSheet by remember { mutableStateOf(false) }
@@ -1855,10 +1859,23 @@ fun ChatContent(
                 showToolsSheet = false
                 showMcpSheet = true
             },
+            onOpenWorkspace = {
+                showToolsSheet = false
+                showWorkspaceSheet = true
+            },
             onOpenContextManagement = {
                 showToolsSheet = false
                 showContextSheet = true
             },
+        )
+    }
+
+    if (showWorkspaceSheet) {
+        // 照 RikkaHub 的「+」面板工作区入口：选工作区（绑当前助手）+ 管理出口。
+        WorkspaceSelectorSheet(
+            container = container,
+            onDismiss = { showWorkspaceSheet = false },
+            onOpenManage = { showWorkspaceSheet = false; onOpenWorkspaces() },
         )
     }
 

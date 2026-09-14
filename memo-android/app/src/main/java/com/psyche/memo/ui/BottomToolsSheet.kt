@@ -32,6 +32,7 @@ import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Eye
+import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.Terminal
@@ -64,6 +65,8 @@ fun BottomToolsSheet(
     onOpenSkills: () -> Unit = {},
     /** MCP 入口 —— 开的是与输入栏 Hammer 同一个面板（用户 2026-09-14 要求也放进「+」）。 */
     onOpenMcp: () -> Unit = {},
+    /** 工作区入口 —— 开工作区选择面板（照 RikkaHub 的 `WorkspacePickerListItem`）。 */
+    onOpenWorkspace: () -> Unit = {},
     worldBooksAvailable: Boolean = false,
     onOpenWorldBook: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
@@ -222,6 +225,31 @@ fun BottomToolsSheet(
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = stringResource(R.string.settings_page_mcp),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+            }
+            // 工作区行 —— RikkaHub 的输入栏「+」面板里有 `WorkspacePickerListItem`
+            // （`FilesPicker.kt:141`）：一行入口 + 一个选择面板（选工作区 / 管理）。
+            // 用户 2026-09-14「这个输入框加号里面加一个工作区吧 你看看 rikkhub 都有」。
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .clickable {
+                        Haptics.light(view)
+                        onOpenWorkspace()
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.HardDrive, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.workspace_page_title),
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     modifier = Modifier.weight(1f),
                 )
