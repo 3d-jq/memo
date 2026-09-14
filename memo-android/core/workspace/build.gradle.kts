@@ -4,12 +4,13 @@ plugins {
 }
 
 /**
- * RikkaHub 的沙箱工作区（proot rootfs）—— 见 PORTING.md §5.11 / §4。
+ * 上游的沙箱工作区（proot rootfs）—— 见 PORTING.md §5.11 / §4。
  *
  * 本模块的「原生部分」只有两样东西：
  *  1. `src/main/jniLibs/<abi>/libproot_{exec,loader}.so` —— 预编译 PRoot 二进制
- *     （GPL-2.0-or-later，随 AGPL-3.0 工程分发需附源码获取声明；来源
- *     RikkaHub `workspace/src/main/jniLibs/`，arm64-v8a + x86_64 两个 ABI）。
+ *     （GPL-2.0-or-later，随 AGPL-3.0 工程分发需附源码获取声明；来源：上游
+ *     `workspace/src/main/jniLibs/`，arm64-v8a + x86_64 两个 ABI，
+ *     完整的许可/源码获取声明见本模块 README.md）。
  *     它们必须经 `jniLibs` 打进 APK 并由 `useLegacyPackaging = true`（app 模块）
  *     解压到 `nativeLibraryDir` —— 那是应用唯一可执行自有文件的目录
  *     （Android 10+ 禁止 exec `/data/data/...`）。少了那个开关，
@@ -20,7 +21,10 @@ plugins {
  *     走 `externalNativeBuild`（需要 NDK + cmake 3.22.1），**只有终端页用得到**；
  *     文件工具/`workspace_shell` 走 `ProcessBuilder`，不需要它。
  *
- * 现阶段（spike）只放 (1)：先验证这台 ROM 允许从 nativeLibraryDir 执行 PRoot。
+ * Kotlin 侧是**纯 JVM 核心**（无 Android API，除日志外），从上游 `workspace` 模块的
+ * 7 个文件 1:1 移植：`Workspace` / `WorkspaceFileSystem` / `WorkspaceManager` /
+ * `RootfsPatcher` / `RootfsInstaller` / `WorkspaceShellRunner` / `ProotShellRunner`。
+ * 交互式终端的 PTY 路径（`termux_pty.cpp` + termux AAR）不在本次移植范围。
  */
 android {
     namespace = "com.psyche.memo.workspace"
@@ -37,10 +41,27 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    testOptions {
+        unitTests {
+            // 单测跑在宿主 JVM 上（本模块不引 Robolectric）；WorkspaceShellRunner 用
+            // android.util.Log 记录被吞掉的 IOException，不开这个开关会在调用处抛
+            // "Method w in android.util.Log not mocked"。
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
     }
+}
+
+dependencies {
+    // org.tukaani:xz —— RootfsInstaller 解 TAR_XZ（.tar.xz/.txz）用；gzip 走 JDK。
+    implementation(libs.xz)
+    testImplementation(libs.junit)
+    // 本地 HTTP 服务端（rootfs 下载用例）：上游用 JDK 的 com.sun.net.httpserver，
+    // 但 Kotlin 在 Android + jvmTarget 11 下看不到 com.sun.*，改用 core:llm 同款 MockWebServer。
+    testImplementation(libs.okhttp.mockwebserver)
 }

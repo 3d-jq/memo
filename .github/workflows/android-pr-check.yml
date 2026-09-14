@@ -49,7 +49,7 @@ jobs:
             if [ -d "$1" ]; then find "$1" -name "$2" | wc -l; else echo 0; fi
           }
           missing=0
-          for m in app core/common core/ui core/data core/llm feature/chat feature/assistant feature/settings feature/utility; do
+          for m in app core/common core/ui core/data core/llm core/workspace feature/chat feature/assistant feature/settings feature/utility; do
             main=$(count_files "$m/src/main" '*.kt')
             test=$(($(count_files "$m/src/test" '*Test.kt') + $(count_files "$m/src/androidTest" '*Test.kt')))
             if [ "$main" -gt 0 ] && [ "$test" -eq 0 ]; then
