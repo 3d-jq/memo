@@ -25,12 +25,16 @@ import java.time.format.DateTimeFormatter
 /**
  * Port of core/services/memory/memory_tools.dart — the v2 memory tool family
  * (memory_read / memory_update / memory_search_profile / memory_edit /
- * memory_delete / update_user_profile). Definitions are localised exactly like
- * upstream; handlers mirror the Dart gates and error payloads.
+ * memory_delete / update_user_profile / chat_search). Definitions are
+ * localised exactly like upstream; handlers mirror the Dart gates and error
+ * payloads.
  *
- * Not ported yet: chat_search (needs the session search service) and the
- * Smart Add LLM merge — memory_update falls back to the upstream
- * exact-duplicate SKIP/NEW path.
+ * chat_search is gated on `assistant.allowPastConversationRecall` alone
+ * (upstream: the recall and memory gates are independent) and searches past
+ * conversations through [com.psyche.memo.data.db.MessageDao.searchMessagesForAssistant].
+ *
+ * Not ported yet: the Smart Add LLM merge — memory_update falls back to the
+ * upstream exact-duplicate SKIP/NEW path.
  */
 object MemoryTools {
 
