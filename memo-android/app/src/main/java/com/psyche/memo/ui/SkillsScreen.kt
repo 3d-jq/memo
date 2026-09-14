@@ -340,12 +340,6 @@ private fun SkillRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = skill.description,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = withAlpha(cs.onSurface, 0.62)),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
             skill.compatibility?.takeIf { it.isNotBlank() }?.let { compatibility ->
                 Text(
                     text = compatibility,
@@ -355,6 +349,8 @@ private fun SkillRow(
                 )
             }
         }
+        // 技能说明走全站统一的 ⓘ 浮泡，不裸排成第二行（用户 2026-09-14）。
+        SettingsTipIcon(skill.description)
         Icon(
             Lucide.ChevronRight,
             contentDescription = null,

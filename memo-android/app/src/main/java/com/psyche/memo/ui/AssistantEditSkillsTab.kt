@@ -129,13 +129,9 @@ private fun SkillToggleRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = skill.description,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = withAlpha(cs.onSurface, 0.62)),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
+        // 技能说明走全站统一的 ⓘ 浮泡，不裸排成第二行（用户 2026-09-14）。
+        SettingsTipIcon(skill.description)
         // IosSwitch（不是裸 M3 Switch）—— 它按设置里的触觉开关反馈
         // （`enableHaptics = true` + LocalHapticsSettings），全站开关都走它。
         IosSwitch(
