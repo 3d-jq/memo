@@ -80,6 +80,24 @@ class WorkspaceEnvironmentsTest {
         }
     }
 
+    /**
+     * sed 的分隔符不能出现在它自己的模式里。
+     *
+     * 用户 2026-09-14 实测踩到：交替匹配那条写成 `s|(a|b|c)|…|g`，模式里的 `|` 被 sed
+     * 当成 `s` 命令的结束 → `sed: -e expression #1, char 105: unknown option to 's'`，
+     * 而这条命令开头是 `set -e`，于是**三个预设全部安装失败**（报的还都是同一句）。
+     */
+    @Test
+    fun `no sed delimiter appears inside its own pattern`() {
+        val command = WorkspaceEnvironments.mirrorCommand(WorkspaceEnvironments.TUNA)
+        // 交替匹配那条用 `#`：URI 里不会有 `#`，模式里的 `|` 才是正则交替。
+        assertTrue(command.contains("s#("))
+        assertTrue(WorkspaceEnvironments.MIRRORS.none { it.uri.contains('#') })
+        // `URIs:` 那条用 `|`：它的模式是 `^URIs:.*`，不含 `|`。
+        assertTrue(command.contains("s|^URIs:.*|"))
+        assertFalse("^URIs:.*".contains('|'))
+    }
+
     @Test
     fun `mirror probe output maps back to a known mirror or null`() {
         assertEquals(

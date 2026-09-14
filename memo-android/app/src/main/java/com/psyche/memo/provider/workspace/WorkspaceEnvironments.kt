@@ -114,6 +114,11 @@ internal object WorkspaceEnvironments {
     /**
      * 改写软件源：deb822 的 `URIs:` 行，以及老式 `sources.list` 里出现的任一同源地址。
      * 幂等 —— 已经是目标镜像也照改，结果不变。
+     *
+     * ⚠️ **两条 sed 的分隔符都不能出现在各自的模式里**：交替匹配那条的模式里有 `|`
+     * （`(a|b|c)`），所以它必须用别的分隔符 —— 之前两条都写 `|`，sed 把模式里的 `|`
+     * 当成了 `s` 命令的结束，报 `unknown option to 's'`（用户 2026-09-14 实测：
+     * 「安装失败 … sed: -e expression #1, char 105: unknown option to's'」）。
      */
     fun mirrorCommand(mirror: AptMirror): String {
         val known = MIRRORS.joinToString("|") { Regex.escape(it.uri) }
@@ -123,7 +128,8 @@ internal object WorkspaceEnvironments {
             appendLine("  sed -i -E 's|^URIs:.*|URIs: ${mirror.uri}|' $SOURCES_FILE")
             appendLine("fi")
             appendLine("if [ -f /etc/apt/sources.list ]; then")
-            appendLine("  sed -i -E 's|($known)|${mirror.uri}|g' /etc/apt/sources.list")
+            // 分隔符用 `#`（URI 里不会有它），模式里的 `|` 才是正则交替。
+            appendLine("  sed -i -E 's#($known)#${mirror.uri}#g' /etc/apt/sources.list")
             append("fi")
         }
     }
