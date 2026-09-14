@@ -1844,6 +1844,12 @@ class ChatViewModel(
         )
         val providerId = selectedProviderId.value
         val modelId = selectedModelId.value
+        // chat_api_helpers.dart:137-153 effectiveModelInfo —— 名称推断**叠加**
+        // 模型 override；只看名称会让第三方模型（推断不出任何能力）永远不通思考，
+        // 也让「编辑页把 abilities 打开」形同虚设。
+        val effectiveModel = container.providerConfig(providerId)?.let { cfg ->
+            com.psyche.memo.ModelOverrideResolver.forModel(cfg, modelId)
+        }
         while (true) {
             // chat_actions.dart L2116-2117 —— 助手覆盖优先，其次全局 thinking_budget_v1。
             val thinkingBudget = container.currentAssistant()?.thinkingBudget
@@ -1857,7 +1863,8 @@ class ChatViewModel(
                 baseUrl = container.baseUrlFor(providerId),
                 chatPath = container.providerConfig(providerId)?.chatPath,
                 thinkingBudget = thinkingBudget,
-                reasoning = com.psyche.memo.ModelRegistry.infer(modelId).reasoning,
+                reasoning = effectiveModel?.reasoning
+                    ?: com.psyche.memo.ModelRegistry.infer(modelId).reasoning,
                 // 采样参数（chat_actions.dart:2113-2115 assistant.temperature/topP/maxTokens）。
                 temperature = assistant?.temperature,
                 topP = assistant?.topP,

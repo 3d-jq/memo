@@ -51,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Box
 import com.composables.icons.lucide.Boxes
@@ -845,21 +844,13 @@ fun StorageCategoryScreen(
     val deleteUploadsTemplate = stringResource(UiR.string.storage_space_delete_uploads_confirm_message)
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(onClick = onBack) {
-                Icon(Lucide.ArrowLeft, contentDescription = stringResource(UiR.string.settings_page_back_button), modifier = Modifier.size(22.dp))
-            }
-            Text(
-                text = storageTitleFor(categoryKey),
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-            )
-        }
+        // 统一顶栏（父页同款）：原版 storage_space_page.dart 各子页也用同一个
+        // 顶栏组件，这里此前手搓了 Row + TextButton，视觉与父页不一致。
+        MemoTopBar(
+            title = storageTitleFor(categoryKey),
+            onBack = onBack,
+            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+        )
         if (category == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -1058,6 +1049,7 @@ fun StorageCategoryScreen(
                             confirm = ConfirmSpec(
                                 target = uploadsName,
                                 message = String.format(deleteUploadsTemplate, paths.size),
+                                silent = true,
                                 action = {
                                     val n = StorageUsage.deleteUploadFiles(context, paths, images = categoryKey == StorageCategoryKey.IMAGES)
                                     SnackbarManager.show(
@@ -1095,12 +1087,11 @@ fun StorageCategoryScreen(
                         scope.launch {
                             runCatching { withContext(Dispatchers.IO) { action() } }
                                 .onSuccess {
-                                    SnackbarManager.show(
-                                        AppNotification(
-                                            message = String.format(doneTemplate, spec.target),
-                                            type = NotificationType.SUCCESS,
-                                        ),
-                                    )
+                                    confirmDoneMessage(spec.silent, doneTemplate, spec.target)?.let { msg ->
+                                        SnackbarManager.show(
+                                            AppNotification(message = msg, type = NotificationType.SUCCESS),
+                                        )
+                                    }
                                 }
                                 .onFailure { e ->
                                     SnackbarManager.show(
@@ -1130,8 +1121,18 @@ fun StorageCategoryScreen(
 private class ConfirmSpec(
     val target: String,
     val message: String? = null,
+    /** 动作自己已经弹过具体结果（如「已删除 N 个」）时置 true，确认层不再补一条
+     *  通用「已完成」——原版 uploads 删除只弹一条（storage_space_page.dart:1882）。 */
+    val silent: Boolean = false,
     val action: () -> Unit,
 )
+
+/**
+ * 确认动作成功后要弹的那条提示。动作自己报过结果（[silent]）时返回 null，
+ * 避免「已删除 N 个」+「已完成」两条并排闪现。
+ */
+internal fun confirmDoneMessage(silent: Boolean, doneTemplate: String, target: String): String? =
+    if (silent) null else String.format(doneTemplate, target)
 
 /** _UploadManager: source filter + sort + image grid with thumbnails (tap → viewer) or file rows. */
 @Composable

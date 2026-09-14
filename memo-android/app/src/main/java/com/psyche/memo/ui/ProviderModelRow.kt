@@ -167,7 +167,7 @@ internal fun ProviderModelRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.size(4.dp))
-            ModelTagRow(modelId = identity.baseId)
+            ModelTagRow(modelId = identity.baseId, cfg = cfg)
         }
 
         if (check != null && check.state != ModelCheckState.IDLE) {

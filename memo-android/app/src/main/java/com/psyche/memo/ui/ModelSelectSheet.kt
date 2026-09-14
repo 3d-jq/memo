@@ -145,6 +145,11 @@ fun ModelSelectSheet(
     // Pinned models — Flutter SettingsProvider.pinnedModels
     // (pinned_models_v1, "providerKey::modelId" entries).
     val pinned = remember { mutableStateOf(readPinnedModels(container)) }
+    // 能力标签要叠加模型 override（effectiveModelInfo）→ 每个 provider 取一次配置。
+    val modelCfgs = remember(options) {
+        options.map { it.providerId }.distinct()
+            .associateWith { container.providerConfig(it) }
+    }
     // Long-press opens the model detail sheet (model_detail_sheet.dart
     // _modelTile onLongPress); a successful save refreshes the options.
     var detailTarget by remember { mutableStateOf<ModelOption?>(null) }
@@ -354,7 +359,7 @@ fun ModelSelectSheet(
                         )
                     }
                     items(favs, key = { "fav::${it.providerId}::${it.modelId}" }) { option ->
-                        ModelTile(option, pinned = pinned.value, onTogglePin = ::togglePinned, showProviderLabel = true, onClick = { onSelect(option); onDismiss() }, onLongClick = { scope.launch { delay(220); detailTarget = option } })
+                        ModelTile(option, pinned = pinned.value, cfg = modelCfgs[option.providerId], onTogglePin = ::togglePinned, showProviderLabel = true, onClick = { onSelect(option); onDismiss() }, onLongClick = { scope.launch { delay(220); detailTarget = option } })
                     }
                 }
                 groupedDisplay.forEach { (providerName, models) ->
@@ -370,7 +375,7 @@ fun ModelSelectSheet(
                         )
                     }
                     items(models, key = { "${it.providerId}::${it.modelId}" }) { option ->
-                        ModelTile(option, pinned = pinned.value, onTogglePin = ::togglePinned, onClick = { onSelect(option); onDismiss() }, onLongClick = { scope.launch { delay(220); detailTarget = option } })
+                        ModelTile(option, pinned = pinned.value, cfg = modelCfgs[option.providerId], onTogglePin = ::togglePinned, onClick = { onSelect(option); onDismiss() }, onLongClick = { scope.launch { delay(220); detailTarget = option } })
                     }
                 }
             }
@@ -419,6 +424,7 @@ private fun ModelTile(
     option: ModelOption,
     pinned: Set<String>,
     onTogglePin: (String, String) -> Unit,
+    cfg: com.psyche.memo.data.model.ProviderConfig? = null,
     showProviderLabel: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -468,7 +474,7 @@ private fun ModelTile(
                 )
             }
             Spacer(Modifier.height(4.dp))
-            ModelTagRow(modelId = option.modelId)
+            ModelTagRow(modelId = option.modelId, cfg = cfg)
         }
         // Favorite toggle — solid heart when pinned (settings.togglePinModel).
         val pinKey = option.providerId + "::" + option.modelId
@@ -493,11 +499,16 @@ private fun ModelTile(
     }
 }
 
-/** model_tag_wrap.dart — chat-type + I/O modality + tools/reasoning pills. */
+/** model_tag_wrap.dart — chat-type + I/O modality + tools/reasoning pills.
+ *
+ *  能力取 `effectiveModelInfo`（名称推断 **叠加** 模型 override）：用户在模型编辑页
+ *  改了输入模态/abilities 之后，这里的标签必须跟着变（此前只看名称推断，改了不动）。 */
 @Composable
-internal fun ModelTagRow(modelId: String) {
+internal fun ModelTagRow(modelId: String, cfg: com.psyche.memo.data.model.ProviderConfig? = null) {
     val cs = MaterialTheme.colorScheme
-    val traits = remember(modelId) { com.psyche.memo.ModelRegistry.infer(modelId) }
+    val traits = remember(modelId, cfg?.modelOverrides) {
+        com.psyche.memo.ModelOverrideResolver.forModel(cfg, modelId)
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         Pill(color = cs.primary) {
             Text(

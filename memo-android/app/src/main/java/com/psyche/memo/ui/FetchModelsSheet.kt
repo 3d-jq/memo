@@ -347,6 +347,7 @@ internal fun FetchModelsSheet(
                                     FetchedModelRow(
                                         model = model,
                                         added = model.id in selected,
+                                        cfg = cfg,
                                         onToggle = {
                                             apply(
                                                 toggleModelSelection(
@@ -435,6 +436,7 @@ private fun GroupHeader(
 private fun FetchedModelRow(
     model: LlmModelInfo,
     added: Boolean,
+    cfg: com.psyche.memo.data.model.ProviderConfig,
     onToggle: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -457,7 +459,7 @@ private fun FetchedModelRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(4.dp))
-            ModelTagRow(modelId = model.id)
+            ModelTagRow(modelId = model.id, cfg = cfg)
         }
         Spacer(Modifier.width(8.dp))
         IconButton(onClick = onToggle) {
