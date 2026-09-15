@@ -47,7 +47,7 @@ class ChatScrollOffsetTest {
 
         assertTrue(
             "滚动命令不许用 Int.MAX_VALUE 当偏移（会被原样写进滚动位置 → 界面闪一下）；" +
-                "到底用有界越界下标 `requestScrollToItem(size + SCROLL_TO_END_INDEX_SLACK)`：\n" +
+                "到底请滚末尾哨兵项（`SCROLL_BOTTOM_ITEM_KEY` / `scrollTimelineToBottom()`）：\n" +
                 offenders.joinToString("\n"),
             offenders.isEmpty(),
         )

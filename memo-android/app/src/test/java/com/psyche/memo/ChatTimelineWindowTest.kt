@@ -121,8 +121,7 @@ class ChatTimelineWindowTest {
     }
 
     @Test
-    fun `paging back fills the version table of the older page`() {
-        val id = conversation()
+    fun `paging back fills the version table of the older page`() {        val id = conversation()
         // 窗口之外的更早两行属于同一个多版本组（orders 0/1，尾窗取 5..44）。
         insert(id, 0, groupId = "g-old", version = 0)
         insert(id, 1, groupId = "g-old", version = 1)
@@ -136,5 +135,53 @@ class ChatTimelineWindowTest {
         assertTrue(added > 0)
         assertEquals(listOf(0, 1), vm.versionInfo.value["g-old"])
         assertFalse("一页取不满就到底了", vm.hasMoreBefore.value)
+    }
+
+    /**
+     * 顶栏 `+` 的三态判据不能再靠组合期 `messageDao.count()`（用户 2026-09-15
+     * 「对话点击加载还是卡」）：改由 VM 的「首屏已读」+ 窗口是否为空决定。
+     */
+    @Test
+    fun `the empty-chat toggle only turns on after the first window was read`() {
+        // 首屏还没回来：即使窗口为空也**不能**当成空会话（否则有消息的会话会先闪一下图标）。
+        assertFalse(
+            com.psyche.memo.ui.newActionToggleable(
+                isTemporary = false,
+                tailLoaded = false,
+                messagesEmpty = true,
+            ),
+        )
+
+        val withMessages = conversation()
+        for (i in 0 until 3) insert(withMessages, i)
+        val vm = open(withMessages)
+        assertTrue("首屏读完必须置位", vm.tailLoaded.value)
+        assertFalse(
+            com.psyche.memo.ui.newActionToggleable(
+                isTemporary = false,
+                tailLoaded = vm.tailLoaded.value,
+                messagesEmpty = vm.messages.value.isEmpty(),
+            ),
+        )
+
+        val empty = conversation()
+        val emptyVm = open(empty)
+        assertTrue(emptyVm.tailLoaded.value)
+        assertTrue(
+            com.psyche.memo.ui.newActionToggleable(
+                isTemporary = false,
+                tailLoaded = emptyVm.tailLoaded.value,
+                messagesEmpty = emptyVm.messages.value.isEmpty(),
+            ),
+        )
+
+        // 临时会话恒为开关态（不落库，所以「有没有消息」永远是空）。
+        assertTrue(
+            com.psyche.memo.ui.newActionToggleable(
+                isTemporary = true,
+                tailLoaded = false,
+                messagesEmpty = true,
+            ),
+        )
     }
 }

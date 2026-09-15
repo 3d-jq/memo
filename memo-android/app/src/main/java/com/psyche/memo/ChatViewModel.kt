@@ -174,6 +174,16 @@ class ChatViewModel(
     private val _sendEnabled = MutableStateFlow(false)
     val sendEnabled: StateFlow<Boolean> = _sendEnabled
 
+    /**
+     * 首屏窗口是否已经读过一次（[reloadTail] 走完）。`messages` 为空**且**这个为真才是
+     * 「这是个空会话」—— 否则刚打开会话的那一帧会把有消息的会话当成空的（顶栏图标会闪）。
+     * 顶栏 `+` 的三态判据 `newActionToggleable` 用它，替掉原先组合期的
+     * `messageDao.count(conversationId)`（整表 COUNT 打在跑组合的那一帧上，
+     * 用户 2026-09-15「对话点击加载还是卡」，见 PORTING §5.14）。
+     */
+    private val _tailLoaded = MutableStateFlow(false)
+    val tailLoaded: StateFlow<Boolean> = _tailLoaded
+
     private val _streaming = MutableStateFlow(false)
     val streaming: StateFlow<Boolean> = _streaming
 
@@ -266,6 +276,7 @@ class ChatViewModel(
     fun refreshTail() {
         if (isTemporary) {
             _sendEnabled.value = true
+            _tailLoaded.value = true
             // 临时会话不落库，但占用条一样要算（发给模型的还是同一套消息）。
             viewModelScope.launch { refreshContextUsage() }
             return
@@ -379,6 +390,7 @@ class ChatViewModel(
         // `rows.size >= HISTORY_PAGE_SIZE` 同一个判据。
         _hasMoreBefore.value = loaded.size >= TAIL_WINDOW
         _sendEnabled.value = true
+        _tailLoaded.value = true
         // 占用**不在这里算**：实测这一步要 ~100ms，而占用只在「上下文管理」sheet 里
         // 展示（输入栏上方的常显细条已撤掉）。打开 sheet 时
         // `refreshContextUsageNow()` 会重算，冷启动/切会话没必要为它买单。

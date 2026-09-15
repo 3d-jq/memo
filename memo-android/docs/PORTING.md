@@ -690,6 +690,15 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | **流式跟随** | 位置判据 + 用户接管旗标 | `ChatList.kt:236-243` `isAtBottom()` | ✅ 位置判据 + `pointerDown` 硬标志（§4.42） | ✅ 一致 |
 | 仍挂账 | | | ① `HomeScreen.currentIsEmpty()` 组合期 `messageDao.count()`（§5.13 已记账，要 VM 级「本会话有无消息」信号才能搬）；② 到底按钮不做动画（若要做：先组合尾部，再 `animateScrollBy(尾部底边 − 视口底边)`）；③ 未做 RikkaHub 的 `ScrollBottomKey` 哨兵项（「到顶/到底」锚点可以更精确，收益中等） | ⬜ |
 
+**2026-09-15 第二轮（用户「点到底部会闪」「对话点击加载还是卡」，完整报告见
+`docs/CHAT_JANK_AUDIT_2026-09-15.md`）**：① 到底按钮改成滚**末尾哨兵项**
+（`SCROLL_BOTTOM_ITEM_KEY`，RikkaHub `ChatList.kt:374` 同款）—— 下标合法、位置恰好
+`maxScrollExtent`；② 组合期 `messageDao.count(id)`（整表 COUNT）换成
+`ChatViewModel.tailLoaded + messages.isEmpty()` 的纯函数 `newActionToggleable`
+（首屏没读回来时**不**当成空会话，避免图标闪）；③ 打开会话的落底、进入会话落底统一走
+`scrollTimelineToBottom()`。上面第 ①③ 条挂账至此关闭，剩下的见报告 §7（真机 frame trace、
+自定义高度估算、首屏骨架行、抽屉路径、图片路径、打字重组）。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)

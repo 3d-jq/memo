@@ -216,10 +216,11 @@ fun HomeScreen(
 
     val newChatTitle = stringResource(UiR.string.chat_service_default_conversation_title)
 
-    /** True when the current view is an empty normal chat or a temporary chat. */
-    fun currentIsEmpty(): Boolean =
-        temporaryActive ||
-            (selectedConversationId?.let { container.messageDao.count(it) == 0 } ?: false)
+    // 这里原来有个 `currentIsEmpty()`：组合期实参里调 `container.messageDao.count(id)`
+    // （整表 `SELECT COUNT(*)`）—— 点开一条长会话时它就是主线程上的一次全表扫描，也就是
+    // 用户 2026-09-15「对话点击加载还是卡」的一个直接来源。现在改由 `ChatContent` 用
+    // `ChatViewModel.tailLoaded + messages.isEmpty()` 判断（见 `newActionToggleable`），
+    // 组合期不再有任何查库。
 
     // Conversation creation jumps straight into a fresh (persisted) chat.
     // 新会话标记：ChatViewModel 创建时注入助手的预设对话（一次性的，选旧
@@ -406,7 +407,6 @@ fun HomeScreen(
                 else selectedConversationId ?: Conversation.TEMPORARY_ID,
                 onOpenDrawer = { drawerOpen = true },
                 onNew = ::handleTopBarAction,
-                newActionToggleable = temporaryActive || currentIsEmpty(),
                 modifier = modifier,
                 isTemporary = temporaryActive,
                 onOpenConversation = { id ->
@@ -519,6 +519,23 @@ internal fun headerAssistantId(
     conversationAssistantId?.takeIf { it.isNotEmpty() }
         ?: currentAssistantId?.takeIf { it.isNotEmpty() }
 
+/**
+ * 顶栏 `+` 到底该显示「临时聊天开关」还是「新建会话」—— 判据：「当前会话是空的」。
+ *
+ * 原版（`home_mobile_layout` + `home_view_model`）由内存里的 `currentConversation` 消息数
+ * 决定；我们这边原来在**组合期实参**里调 `messageDao.count(id)`（整表 COUNT，主线程），
+ * 点开长会话时会卡一下（用户 2026-09-15「对话点击加载还是卡」）。现在改成
+ * 「VM 说首屏已读（[ChatViewModel.tailLoaded]）**且**窗口为空」：
+ *
+ * - 首屏还没读回来时**不**当成空会话 —— 否则有消息的会话会先闪一下临时聊天图标；
+ * - 临时会话（不落库）恒为真。
+ */
+internal fun newActionToggleable(
+    isTemporary: Boolean,
+    tailLoaded: Boolean,
+    messagesEmpty: Boolean,
+): Boolean = isTemporary || (tailLoaded && messagesEmpty)
+
 @Composable
 fun ChatContent(
     container: AppContainerImpl,
@@ -527,7 +544,6 @@ fun ChatContent(
     onNew: () -> Unit,
     modifier: Modifier = Modifier,
     isTemporary: Boolean = false,
-    newActionToggleable: Boolean = false,
     onOpenConversation: (String) -> Unit = {},
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
@@ -545,6 +561,15 @@ fun ChatContent(
         if (titleRefreshTick > 0) vm.refreshTitle()
     }
     val messages by vm.messages.collectAsState()
+    // 顶栏 `+` 的三态（home_page.dart:1504-1516 / MLV 的「空会话换成临时聊天开关」）：
+    // **组合期不再查库** —— 用 VM 的「首屏已读」+ 窗口是否为空判断（见
+    // `newActionToggleable` 的注释）。
+    val tailLoaded by vm.tailLoaded.collectAsState()
+    val newActionToggleable = newActionToggleable(
+        isTemporary = isTemporary,
+        tailLoaded = tailLoaded,
+        messagesEmpty = messages.isEmpty(),
+    )
     // 最后一条助手消息的 id。原来每个 LazyColumn item 内都要
     // `messages.lastOrNull { it.role == "assistant" }`（每条 O(n) → O(n²)），
     // 而且 item 闭包捕获整个 messages 列表，流式时每帧更新都会让所有可见行重组。
@@ -930,9 +955,19 @@ fun ChatContent(
      * （`firstVisible=3 offset=2147483647`）再被夹一次，多一次 Int.MAX_VALUE 参与的
      * 位置运算 —— 换成有界下标后语义一样、位置算术不再碰边界值。
      */
+    /**
+     * 列表末尾**哨兵项**的下标（RikkaHub `ChatList.kt:374` 的 `ScrollBottomKey` 同款）：
+     * 它是列表最后一项、高度约 0，「滚到它」= 精确等于 `maxScrollExtent`（视口会把
+     * 它的顶对齐视口顶 → 越界部分被夹成最大滚动量）。有了它，到底就**不需要**越界下标
+     * （`size + 5`）那一招，也不用碰 `Int.MAX_VALUE`（用户 2026-09-15 报的「点到底部
+     * 会闪」就是那个越界偏移造成的，见 §5.14）。
+     */
+    val bottomAnchorIndex = messages.size +
+        if (compacting && streamingMessageId == null) 1 else 0
+
     fun scrollTimelineToBottom() {
         if (messages.isEmpty()) return
-        timelineListState.requestScrollToItem(messages.size + SCROLL_TO_END_INDEX_SLACK)
+        timelineListState.requestScrollToItem(bottomAnchorIndex)
     }
     /** scroll_controller.dart `_navButtonsHideDelayMs = 2000`。 */
     fun armNavHideTimer() {
@@ -980,18 +1015,19 @@ fun ChatContent(
     // 进入会话先落到最新一条 —— RikkaHub ChatPage.kt:170-183 同款：首次拿到
     // 非空消息时滚到底（一次性守卫，之后不再触发，免得抢用户的滚动）。
     //
-    // 索引故意**越界**（`size + 5`）：`requestScrollToItem(i)` 是把第 i 条对齐到视口
-    // **顶部**，所以传末条下标并不等于"到底"（长消息会停在它的开头）；越界后由
-    // LazyColumn 夹到末条、再夹到最大滚动量，结果就是真正的底部。上游用的是同一招
-    // （`ChatPage.kt:179` 的 `size + 5`、`ChatList.kt:284` 的 `lastIndex + 10`）。
+    // 落到列表底部的哨兵项（`SCROLL_BOTTOM_ITEM_KEY`）：`requestScrollToItem(i)` 是把第 i
+    // 项对齐到视口**顶部**，所以「传末条下标」并不等于到底（长消息会停在它的开头）；
+    // 滚到那个零高哨兵项时，视口把它的顶对齐视口顶 → 越界部分被夹成 maxScrollExtent，
+    // 正好是真底部。RikkaHub 同款（`ChatList.kt:374 ScrollBottomKey`，
+    // 另有 `ChatPage.kt:179` / `ChatList.kt:284` 的 `size + 5` / `lastIndex + 10` 变体）。
     //
     // 以前这里传的是 `(lastIndex, Int.MAX_VALUE)`：真机日志显示那个 MAX_VALUE 会**原样
     // 留在滚动位置里**（`layout total=4 firstVisible=3 offset=2147483647`）再被夹一次，
-    // 徒增一次 Int.MAX_VALUE 参与的位置运算。改用上游的有界写法。
+    // 用户看到的就是「点一下到底部整个界面闪一下」（2026-09-15，见 §5.14）。
     var listInitialized by remember(conversationId) { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(messages) {
         if (!listInitialized && messages.isNotEmpty()) {
-            timelineListState.requestScrollToItem(messages.size + SCROLL_TO_END_INDEX_SLACK)
+            scrollTimelineToBottom()
             listInitialized = true
         }
     }
@@ -1588,6 +1624,12 @@ fun ChatContent(
                         item(key = "compaction-progress") {
                             com.psyche.memo.ui.chat.CompactionDivider(inProgress = true)
                         }
+                    }
+                    // RikkaHub `ChatList.kt:374 ScrollBottomKey` —— 末尾哨兵项：让「到底」
+                    // 有一个**合法下标**可以滚（`bottomAnchorIndex`），位置恰好是
+                    // maxScrollExtent。高度 1dp 只为让 LazyColumn 收下它。
+                    item(key = SCROLL_BOTTOM_ITEM_KEY) {
+                        Spacer(Modifier.height(1.dp))
                     }
                 }
                 // 滚动导航面板（scroll_nav_buttons.dart）：贴输入栏上方右侧。
@@ -4067,7 +4109,8 @@ private fun InputIconAsset(
  * 夹到末条、再夹到 maxScrollExtent，于是"把末条对齐到视口顶部"变成"真到底"。
  * 上游同款（`ChatPage.kt:179` 用 +5，`ChatList.kt:284` 用 +10）。
  */
-private const val SCROLL_TO_END_INDEX_SLACK = 5
+/** 列表末尾哨兵项的 key（RikkaHub `ScrollBottomKey` 同款，见 `bottomAnchorIndex`）。 */
+internal const val SCROLL_BOTTOM_ITEM_KEY = "scroll-bottom"
 
 /** `LazyColumn` 的测试标签（`ChatRowRecompositionTest` 用它做手势）。 */
 internal const val CHAT_TIMELINE_TAG = "chat_timeline"
