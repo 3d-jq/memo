@@ -204,13 +204,21 @@ fun HomeScreen(
     // closed so it can never intercept taps aimed at the chat.
     var presenting by remember { mutableStateOf(false) }
 
-    var selectedConversationId by remember { mutableStateOf<String?>(null) }
+    // 选中的会话**从容器恢复**：进设置页/其它路由时本页会被销毁，页面级 state 会丢，
+    // 返回时就会落到「启动恢复」逻辑去开列表第一条（用户 2026-09-15「为什么点击设置回来
+    // 不是我点开那个对话了 是第一个对话了呀」）。原版 controller 活在页面之上，不会丢。
+    var selectedConversationId by remember {
+        mutableStateOf(container.currentConversationId.value?.takeIf { it != Conversation.TEMPORARY_ID })
+    }
     // Publish the open conversation so the assistant memory tab can organize it.
     LaunchedEffect(selectedConversationId) {
         com.psyche.memo.PerfProbe.mark("selection-applied")
         container.setCurrentConversation(selectedConversationId)
     }
-    var temporaryActive by remember { mutableStateOf(false) }
+    // 临时聊天也一起从容器恢复（否则进设置返回会掉出临时模式）。
+    var temporaryActive by remember {
+        mutableStateOf(container.currentConversationId.value == Conversation.TEMPORARY_ID)
+    }
 
     // 顶栏标题刷新信号：抽屉改写了当前会话标题（重命名 / 重新生成标题）后自增，
     // ChatContent 观察到变化即让 ChatViewModel 重读库里的标题。对齐 Flutter 端
@@ -392,7 +400,9 @@ fun HomeScreen(
     }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        if (selectedConversationId == null) {
+        // 只有**真正冷启动**（容器里还没有当前会话）才跑启动恢复；页面重建（进设置返回）
+        // 时上面的 remember 已经从容器把会话恢复回来了，不能再开一条。
+        if (selectedConversationId == null && container.currentConversationId.value == null) {
             // `display_new_chat_on_launch_v1`（默认**开**，home_page_controller.dart:782-786
             // `initChat`）：开启时每次启动都新建会话；关闭时回到最近一条。两种情况下
             // 都没有历史就开一个 draft（不入库，发首条消息才落库）。
