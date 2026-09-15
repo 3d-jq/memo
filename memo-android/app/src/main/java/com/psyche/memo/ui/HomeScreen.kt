@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
@@ -572,47 +573,54 @@ internal fun showTimelineSkeleton(tailLoaded: Boolean, messagesEmpty: Boolean): 
     !tailLoaded && messagesEmpty
 
 /**
- * 首屏骨架 —— 原版 `_WindowLoadingSkeleton`（气泡形状的 shimmer）。只在窗口未就绪的
- * 那一小段显示，避免会话切换时出现空白。
+ * 首屏骨架 —— 1:1 照原版 `_WindowLoadingSkeleton`（`message_list_view.dart:2779-2850`）：
+ * - 4 个气泡，**高度统一 44**，颜色 `onSurface@8%`（原版 `:2811`）；
+ * - 宽度比依次 **0.62 / 0.48 / 0.70 / 0.55**，左右交替，行距 14（原版 `:2841-2847`）；
+ * - 脉冲作用于**整列** `opacity 0.45→1.0`、900ms 往复（原版 `:2799/:2837`）——
+ *   不是给颜色加 alpha；
+ * - 内边距 `水平 + 12` / `上 + 24`（原版 `:2829-2834`）。
  */
 @Composable
 private fun TimelineSkeleton(modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
+    val bubbleColor = cs.onSurface.copy(alpha = 0.08f)
     val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "timelineSkeleton")
-    val alpha by transition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.62f,
+    val pulse by transition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
             animation = androidx.compose.animation.core.tween(900),
             repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
         ),
-        label = "timelineSkeletonAlpha",
+        label = "timelineSkeletonPulse",
     )
-    // 四行「气泡」：左右交替、最后一行短一点（原版骨架也是交替气泡）。
     val rows = listOf(
-        0.62f to false,
-        0.78f to true,
-        0.5f to false,
-        0.72f to true,
+        false to 0.62f,
+        true to 0.48f,
+        false to 0.70f,
+        true to 0.55f,
     )
     Column(
-        modifier = modifier.padding(
-            horizontal = 16.dp,
-            vertical = ChatStyleSpec.MESSAGE_VERTICAL_DP.dp,
-        ),
+        modifier = modifier
+            .padding(
+                start = 16.dp + 12.dp,
+                top = ChatStyleSpec.LIST_TOP_PADDING_DP.dp + 24.dp,
+                end = 16.dp + 12.dp,
+            )
+            .alpha(pulse),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        rows.forEachIndexed { index, (widthFraction, alignEnd) ->
+        rows.forEach { (alignEnd, widthFactor) ->
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart,
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(widthFraction)
-                        .height(if (index % 2 == 0) 64.dp else 92.dp)
+                        .fillMaxWidth(widthFactor)
+                        .height(44.dp)
                         .background(
-                            cs.onSurface.copy(alpha = alpha * 0.18f),
+                            bubbleColor,
                             androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                         ),
                 )
