@@ -100,9 +100,11 @@ import com.psyche.memo.ui.R
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.theme.alphaBlend
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
 import org.commonmark.ext.gfm.strikethrough.Strikethrough
@@ -214,7 +216,22 @@ fun MarkdownText(
         snapshotFlow { latest }
             .distinctUntilChanged()
             .drop(1)
-            .mapLatest { (md, withCitations) -> parseMarkdownSource(md, withCitations) }
+            // `conflate()` + 长文时的 50ms 等待 = 原版 `_syncRenderText`/
+            // `_streamingLongRenderDebounce` 的去抖语义：解析（或去抖窗口）期间到达的
+            // 增量被丢掉，只保留**最新**那份再渲染。长回答流式输出时，每个 token 都重建
+            // 整篇 AnnotatedString 太贵（内容多的会话尤其明显），这也是原版唯一为长文
+            // 加的那道闸。短文本不加延迟（`shouldThrottleStreamingRender` 判据同原版）。
+            .conflate()
+            .map { (md, withCitations) ->
+                val started = android.os.SystemClock.uptimeMillis()
+                val result = parseMarkdownSource(md, withCitations)
+                if (shouldThrottleStreamingRender(md.length)) {
+                    val elapsed = android.os.SystemClock.uptimeMillis() - started
+                    val wait = STREAMING_LONG_RENDER_DEBOUNCE_MS - elapsed
+                    if (wait > 0) kotlinx.coroutines.delay(wait)
+                }
+                result
+            }
             .flowOn(Dispatchers.Default)
             .collect { parsed = it }
     }
@@ -259,6 +276,20 @@ private data class InlineMathScope(
 )
 
 private val LocalInlineMath = staticCompositionLocalOf<InlineMathScope?> { null }
+
+/**
+ * 长文渲染去抖阈值 —— 逐字照原版 `markdown_with_highlight.dart:122`：
+ * 只有「流式 + 文本 ≥8000 字」才启用去抖（短文本照旧每个增量都渲染，
+ * 不然打字机效果会被拖成 20fps）。
+ */
+internal const val STREAMING_DEBOUNCE_THRESHOLD_CHARS = 8000
+
+/** 去抖窗口 —— 原版 `markdown_with_highlight.dart:127-129` 的 50ms。 */
+internal const val STREAMING_LONG_RENDER_DEBOUNCE_MS = 50L
+
+/** 这次渲染要不要走去抖（原版 `_syncRenderText` 的判据）。 */
+internal fun shouldThrottleStreamingRender(textLength: Int): Boolean =
+    textLength >= STREAMING_DEBOUNCE_THRESHOLD_CHARS
 
 /**
  * 一次解析的产物：AST 根 + 每个节点纯文本在**一段扁平缓冲**里的区间。

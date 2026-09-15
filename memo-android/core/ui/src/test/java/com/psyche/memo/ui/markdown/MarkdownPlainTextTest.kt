@@ -116,4 +116,15 @@ class MarkdownPlainTextTest {
         assertEquals(expected.length, parsed.flatChars)
         assertEquals(expected.toString(), parsed.plainTexts[parsed.root])
     }
+
+    @Test
+    fun `streaming render throttle matches the original thresholds`() {
+        // 逐字照 markdown_with_highlight.dart:122-129（8000 字 / 50ms）与
+        // `_syncRenderText` 的判据：不足 8000 字不做去抖（保打字机手感），够了才节流。
+        assertEquals(8000, STREAMING_DEBOUNCE_THRESHOLD_CHARS)
+        assertEquals(50L, STREAMING_LONG_RENDER_DEBOUNCE_MS)
+        assertTrue(!shouldThrottleStreamingRender(7999))
+        assertTrue(shouldThrottleStreamingRender(8000))
+        assertTrue(shouldThrottleStreamingRender(120_000))
+    }
 }
