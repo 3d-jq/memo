@@ -113,6 +113,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -977,6 +978,12 @@ fun ChatContent(
     // 免得抢用户的滚动。此前 LazyListState 默认停在 index 0，打开长会话看到的
     // 是最旧那一页。
     var listInitialized by remember(conversationId) { mutableStateOf(false) }
+    // 消息到齐之前**不给列表出画**：否则消息到达的那一帧会先按 index 0 画顶部、
+    // 下一帧才被 requestScrollToItem 拉到底部 —— 用户看到的就是「加载时跳动一下」
+    //（用户 2026-09-15）。原版加载完直接落在底部，没有这一帧。
+    // 只压**绘制**、不压布局：布局照跑，pending 的滚动请求才会在同一帧被解析，
+    // 于是第一帧可见内容就已经是底部（压布局反而会让请求丢失）。
+    val timelineReady = listInitialized || messages.isEmpty()
     androidx.compose.runtime.LaunchedEffect(messages) {
         if (!listInitialized && messages.isNotEmpty()) {
             // 打开会话落到**真正的底部**（同样必须顶 offset，见 scrollTimelineToBottom）。
@@ -1345,6 +1352,7 @@ fun ChatContent(
                     state = timelineListState,
                     modifier = Modifier
                         .fillMaxSize()
+                        .drawWithContent { if (timelineReady) drawContent() }
                         // scroll_controller.dart:374-425 handleUserScrollIntent —— 原版把
                         // 「用户接管」记在 `message_list_view` 的 `Listener.onPointerDown`
                         // （1711-1721）上，**程序化滚动绝不触发**。这里同样只旁听不消费：

@@ -126,7 +126,6 @@ fun WorkspaceSelectorSheet(
             WorkspaceFilesSheet(
                 container = container,
                 workspaceId = workspace.id,
-                workspaceName = workspace.name,
                 onDismiss = { filesFor = null },
             )
         }

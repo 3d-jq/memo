@@ -46,7 +46,6 @@ import kotlinx.coroutines.withContext
 fun WorkspaceFilesSheet(
     container: AppContainerImpl,
     workspaceId: String,
-    workspaceName: String,
     onDismiss: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -83,15 +82,8 @@ fun WorkspaceFilesSheet(
                 .fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
         ) {
-            MemoSheetHandle(trailingGap = 0.dp)
-            Text(
-                text = workspaceName,
-                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-                color = cs.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // 用户 2026-09-15：「文件这个 sheet 不要 title」——把手下方直接就是文件列表。
+            MemoSheetHandle(trailingGap = 8.dp)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

@@ -356,8 +356,9 @@ class ChatViewModel(
             container.messageDao.count(conversationId) > loaded.size
         }
         _sendEnabled.value = true
-        // 占用进度条：加载/刷新后重算（含刚被压缩过的会话）。
-        refreshContextUsage()
+        // 占用**不在这里算**：实测这一步要 ~100ms，而占用只在「上下文管理」sheet 里
+        // 展示（输入栏上方的常显细条已撤掉）。打开 sheet 时
+        // `refreshContextUsageNow()` 会重算，冷启动/切会话没必要为它买单。
     }
 
     /**
