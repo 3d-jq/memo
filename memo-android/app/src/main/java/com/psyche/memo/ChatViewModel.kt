@@ -322,6 +322,19 @@ class ChatViewModel(
                     .map { it.toUi() }
                 if (older.isNotEmpty()) {
                     _messages.value = older + _messages.value
+                    // 翻进来的老消息里若有「重新生成/编辑」过多版本的消息，也要有版本表
+                    // 才能出分支选择器 —— 补一次**只针对这一页**的 IN 查询（之前是全表
+                    // 一把查完，所以翻页天然覆盖；改成按需查之后必须在这里补）。
+                    val pageGroups = rows.asSequence()
+                        .filter { it.version > 0 }
+                        .map { it.groupId }
+                        .toCollection(LinkedHashSet())
+                    if (pageGroups.isNotEmpty()) {
+                        val extra = withContext(Dispatchers.IO) {
+                            container.messageDao.groupVersions(conversationId, pageGroups)
+                        }
+                        _versionInfo.value = _versionInfo.value + extra
+                    }
                     // 取满一页就认为可能还有更多（原版 hasMoreBefore 同义）；
                     // 下一页取空时上面会把标记清掉。
                     _hasMoreBefore.value = rows.size >= HISTORY_PAGE_SIZE
@@ -345,16 +358,26 @@ class ChatViewModel(
             if (isTemporary) emptyList()
             else container.conversationDao.get(conversationId)?.chatSuggestions ?: emptyList()
         }
+        // 版本表**按需查**：只有窗口里确实出现过多版本的组才需要分支选择器。原版同一
+        // 判据（`chat_controller.dart:180-198`：只收 `versionCount > 1 || version > 0
+        // || 已在 versionSelections 里` 的组才预载），而且那批组一次查完。之前这里是
+        // 无条件 `groupVersions(conversationId)`：把整会话的 `group_id, version` 全表扫
+        // 一遍、每次打开会话都跑，会话越长越慢（用户 2026-09-15「历史对话打开卡到爆」）。
+        val candidateGroups = loaded.asSequence()
+            .filter { it.version > 0 }
+            .map { it.groupId }
+            .toCollection(LinkedHashSet())
         val versions = withContext(Dispatchers.IO) {
-            container.messageDao.groupVersions(conversationId)
+            if (candidateGroups.isEmpty()) emptyMap()
+            else container.messageDao.groupVersions(conversationId, candidateGroups)
         }
         _versionInfo.value = versions
         _messages.value = loaded.collapseVersions()
-        // 首页窗口（40 条）之后还有没有更早的：总数比窗口大就说明有
-        // （原版 LoadedTimelinePage.hasMoreBefore = start > 0 的等价判断）。
-        _hasMoreBefore.value = withContext(Dispatchers.IO) {
-            container.messageDao.count(conversationId) > loaded.size
-        }
+        // 窗口之外还有没有更早的：**窗口装满就说明有**（原版
+        // `LoadedTimelinePage.hasMoreBefore = start > 0`，不查库）。之前这里又多做了一次
+        // 全表 `SELECT COUNT(*)`，白扫一遍 message_rows —— 和 [loadOlderMessages] 的
+        // `rows.size >= HISTORY_PAGE_SIZE` 同一个判据。
+        _hasMoreBefore.value = loaded.size >= TAIL_WINDOW
         _sendEnabled.value = true
         // 占用**不在这里算**：实测这一步要 ~100ms，而占用只在「上下文管理」sheet 里
         // 展示（输入栏上方的常显细条已撤掉）。打开 sheet 时
@@ -2861,6 +2884,13 @@ class ChatViewModel(
          * （首屏窗口是 `defaultTimelineInitialSlots = 40`，见 MessageDao.getTail）。
          */
         private const val HISTORY_PAGE_SIZE = 20
+
+        /**
+         * 首屏窗口条数 —— `chat_service.dart:77 defaultTimelineInitialSlots = 40`，
+         * 也是 `MessageDao.getTail` 的默认 limit。窗口装满即认为还有更早的，
+         * 不必再查一次总数。
+         */
+        private const val TAIL_WINDOW = 40
 
         fun factory(
             container: AppContainerImpl,

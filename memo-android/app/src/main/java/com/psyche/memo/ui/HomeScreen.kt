@@ -968,19 +968,13 @@ fun ChatContent(
                 }
             }
     }
-    // 后台预热 Markdown 解析缓存（列表稳定 / 非流式时）：滚动到任意一条都命中
-    // 缓存，不会再有"首帧在主线程同步解析 CommonMark"的那一下卡顿。放在 Default
-    // 线程，和渲染不抢主线程。
-    androidx.compose.runtime.LaunchedEffect(messages, streaming) {
-        if (streaming || messages.isEmpty()) return@LaunchedEffect
-        val texts = messages.takeLast(MARKDOWN_PRELOAD_MESSAGES).flatMap { m ->
-            m.parts.filterIsInstance<com.psyche.memo.data.model.TextPart>().map { it.text }
-        }
-        if (texts.isEmpty()) return@LaunchedEffect
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            com.psyche.memo.ui.markdown.preloadMarkdown(texts.map { it to true })
-        }
-    }
+    // 这里原先有一段「后台预热最近 60 条 Markdown 解析缓存」。**已按原版删除**：
+    // Flutter 原项目没有任何预热（对 `lib/` 搜 `preloadMarkdown` 零命中），只对可见项
+    // 惰性解析（`richtext/Markdown.kt:240-252` 的 `mapLatest + flowOn(Default)`）；
+    // 而一次性解 60 条 CommonMark 是几百 ms 的 CPU + 一堆临时对象，正好和「打开会话的
+    // 首帧」抢 CPU —— 2026-09-15 实测打开长会话有两帧各 ~330ms，主线程 SQL 只占 6ms，
+    // 热点就在这一带（用户：「对话还是卡到爆」「原项目也没有这个问题」）。若日后滚动到
+    // 未解析行反而变卡，再按**可见窗口大小**做有界预热，不要回到 60 条一次性全解。
 
     // 进入会话先落到最新一条 —— RikkaHub ChatPage.kt:170-183 同款：首次拿到
     // 非空消息时滚到底（一次性守卫，之后不再触发，免得抢用户的滚动）。
@@ -3983,9 +3977,6 @@ private fun InputIconAsset(
  * list row, and this runs for every message header on every recomposition while
  * scrolling. DateTimeFormatter is immutable and thread-safe.
  */
-/** 预热 Markdown 解析缓存时最多处理的最近消息条数。 */
-private const val MARKDOWN_PRELOAD_MESSAGES = 60
-
 /**
  * 落到列表底部的**越界量**：`requestScrollToItem(size + N)` 的下标越界后由 LazyColumn
  * 夹到末条、再夹到 maxScrollExtent，于是"把末条对齐到视口顶部"变成"真到底"。

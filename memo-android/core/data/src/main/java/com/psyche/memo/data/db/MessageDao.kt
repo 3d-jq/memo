@@ -387,12 +387,30 @@ class MessageDao(private val db: SQLiteDatabase) {
     /**
      * Available versions per group (sorted ASC) for the branch selector.
      * Groups with a single version are included so the UI can compute counts.
+     *
+     * [groups] narrows the scan to the groups the caller actually needs (a single
+     * `IN (?,?,…)` query); the original only preloads groups whose window row has
+     * `version > 0` (`chat_controller.dart:180-198`), so callers should pass that
+     * set instead of scanning the whole conversation on every open.
      */
-    fun groupVersions(conversationId: String): Map<String, List<Int>> {
+    fun groupVersions(
+        conversationId: String,
+        groups: Collection<String>? = null,
+    ): Map<String, List<Int>> {
+        if (groups != null && groups.isEmpty()) return emptyMap()
         val out = LinkedHashMap<String, MutableSet<Int>>()
+        val selection = if (groups == null) {
+            "conversation_id = ?"
+        } else {
+            "conversation_id = ? AND group_id IN (${groups.joinToString(",") { "?" }})"
+        }
+        val args = buildList {
+            add(conversationId)
+            if (groups != null) addAll(groups)
+        }.toTypedArray()
         db.query(
-            "message_rows", arrayOf("group_id", "version"), "conversation_id = ?",
-            arrayOf(conversationId), null, null, "message_order ASC, id ASC",
+            "message_rows", arrayOf("group_id", "version"), selection,
+            args, null, null, "message_order ASC, id ASC",
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 val gid = cursor.getString(0) ?: continue
