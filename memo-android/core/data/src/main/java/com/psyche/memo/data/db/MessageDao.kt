@@ -21,9 +21,8 @@ class MessageDao(private val db: SQLiteDatabase) {
     /** Single message row (parts loaded). */
     fun get(id: String): ChatMessage? {
         db.query("message_rows", null, "id = ?", arrayOf(id), null, null, null).use { cursor ->
-            if (cursor.moveToFirst()) return cursor.hydrate()
+            return cursor.readMessages().firstOrNull()
         }
-        return null
     }
 
     fun getByIds(ids: List<String>): List<ChatMessage> {
@@ -32,11 +31,8 @@ class MessageDao(private val db: SQLiteDatabase) {
         db.query(
             "message_rows", null, "id IN ($placeholders)", ids.toTypedArray(), null, null, null,
         ).use { cursor ->
-            val byId = LinkedHashMap<String, ChatMessage>()
-            while (cursor.moveToNext()) {
-                val m = cursor.hydrate()
-                byId[m.id] = m
-            }
+            val byId = HashMap<String, ChatMessage>()
+            for (message in cursor.readMessages()) byId[message.id] = message
             return ids.mapNotNull { byId[it] }
         }
     }
@@ -62,9 +58,7 @@ class MessageDao(private val db: SQLiteDatabase) {
             "message_rows", null, "conversation_id = ?", arrayOf(conversationId),
             null, null, "message_order DESC, id DESC", limit.toString(),
         ).use { cursor ->
-            val out = ArrayList<ChatMessage>(cursor.count)
-            while (cursor.moveToNext()) out.add(cursor.hydrate())
-            return out.reversed()
+            return cursor.readMessages().reversed()
         }
     }
 
@@ -74,9 +68,7 @@ class MessageDao(private val db: SQLiteDatabase) {
             "message_rows", null, "conversation_id = ?", arrayOf(conversationId),
             null, null, "message_order ASC, id ASC",
         ).use { cursor ->
-            val out = ArrayList<ChatMessage>(cursor.count)
-            while (cursor.moveToNext()) out.add(cursor.hydrate())
-            return out
+            return cursor.readMessages()
         }
     }
 
@@ -91,9 +83,7 @@ class MessageDao(private val db: SQLiteDatabase) {
             """.trimIndent(),
             arrayOf(conversationId, anchor.toString(), limit.toString()),
         ).use { cursor ->
-            val out = ArrayList<ChatMessage>(cursor.count)
-            while (cursor.moveToNext()) out.add(cursor.hydrate())
-            return out.reversed()
+            return cursor.readMessages().reversed()
         }
     }
 
@@ -460,9 +450,14 @@ class MessageDao(private val db: SQLiteDatabase) {
         put("extras_json", "{}")
     }
 
-    private fun Cursor.hydrate(): ChatMessage {
+    /**
+     * Builds one message from the current row. [parts] comes from [loadPartsFor]:
+     * a page's parts are read in **one** batched query instead of one query per
+     * row (the old per-row `loadParts` cost 41 queries for a 40-message tail page,
+     * which is what made opening a conversation feel slow).
+     */
+    private fun Cursor.hydrate(parts: List<MessagePart>): ChatMessage {
         val id = getString(getColumnIndexOrThrow("id"))
-        val parts = loadParts(id)
         return ChatMessage(
             id = id,
             role = getString(getColumnIndexOrThrow("role")),
@@ -488,17 +483,53 @@ class MessageDao(private val db: SQLiteDatabase) {
         )
     }
 
-    private fun loadParts(revisionId: String): List<MessagePart> {
-        db.query(
-            "message_part_rows", arrayOf("ordinal", "kind", "payload"),
-            "revision_id = ?", arrayOf(revisionId), null, null, "ordinal ASC",
-        ).use { cursor ->
-            val out = ArrayList<MessagePart>(cursor.count)
-            while (cursor.moveToNext()) {
-                out.add(MessagePart.fromRow(cursor.getString(1), cursor.getString(2)))
+    /**
+     * Parts of several revisions in **one** query per chunk, grouped by revision.
+     *
+     * `IN (...)`, so the chunk size is capped well under SQLite's variable limit
+     * (999 on older builds). `ORDER BY revision_id, ordinal` guarantees the parts
+     * of each revision stay in `ordinal ASC` order once grouped.
+     */
+    private fun loadPartsFor(revisionIds: Collection<String>): Map<String, List<MessagePart>> {
+        if (revisionIds.isEmpty()) return emptyMap()
+        val out = HashMap<String, MutableList<MessagePart>>(revisionIds.size)
+        for (chunk in revisionIds.distinct().chunked(SQLITE_IN_CLAUSE_CHUNK)) {
+            val placeholders = chunk.joinToString(",") { "?" }
+            db.rawQuery(
+                "SELECT revision_id, kind, payload FROM message_part_rows " +
+                    "WHERE revision_id IN ($placeholders) " +
+                    "ORDER BY revision_id, ordinal ASC",
+                chunk.toTypedArray(),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    out.getOrPut(cursor.getString(0)) { ArrayList() }
+                        .add(MessagePart.fromRow(cursor.getString(1), cursor.getString(2)))
+                }
             }
-            return out
         }
+        return out
+    }
+
+    /**
+     * Reads every row of [cursor] into messages with their parts attached.
+     *
+     * Two passes over the same cursor: the first only collects ids (cheap), then
+     * one batched parts query, then the rows are assembled. `SQLiteCursor` is
+     * random-access, so rewinding with `moveToPosition(-1)` is fine — that is what
+     * keeps this a single `message_rows` query.
+     */
+    private fun Cursor.readMessages(): List<ChatMessage> {
+        val ids = ArrayList<String>(count)
+        while (moveToNext()) ids.add(getString(getColumnIndexOrThrow("id")))
+        if (ids.isEmpty()) return emptyList()
+        val partsByRevision = loadPartsFor(ids)
+        moveToPosition(-1)
+        val out = ArrayList<ChatMessage>(ids.size)
+        while (moveToNext()) {
+            val id = getString(getColumnIndexOrThrow("id"))
+            out.add(hydrate(partsByRevision[id].orEmpty()))
+        }
+        return out
     }
 
     private fun Cursor.getIntOrNull(column: String): Int? {
@@ -509,5 +540,17 @@ class MessageDao(private val db: SQLiteDatabase) {
     private fun Cursor.getLongOrNull(column: String): Long? {
         val idx = getColumnIndexOrThrow(column)
         return if (isNull(idx)) null else getLong(idx)
+    }
+
+    /**
+     * `internal` 而非 private：单测要按这个常量构造「多批」的用例（改大小时测试跟着走，
+     * 不会因为写死 501 而悄悄失去覆盖）。
+     */
+    internal companion object {
+        /**
+         * `IN (...)` 每批的变量数。SQLite 的 `SQLITE_MAX_VARIABLE_NUMBER` 在旧版本上是
+         * 999，取 500 留足余量（`getAllForConversation` 在长会话上会超过 999 行）。
+         */
+        const val SQLITE_IN_CLAUSE_CHUNK = 500
     }
 }

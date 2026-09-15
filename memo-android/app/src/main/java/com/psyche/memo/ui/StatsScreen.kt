@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -248,14 +249,28 @@ fun StatsScreen(
                 Spacer(Modifier.height(2.dp))
             }
             Spacer(Modifier.height(10.dp))
-            val active = snapshot ?: StatsAggregation.buildDatabaseSnapshot(
-                now = LocalDate.now(),
-                range = range,
-                aggregate = ChatStatsAggregate(0L, ChatStatsTotals(0, 0, 0, 0), emptyList(), emptyList(), emptyList(), emptyList(), emptyList()),
-                launchCount = 0,
-                unknownProviderLabel = unknownProviderLabel,
-                unknownTopicLabel = unknownTopicLabel,
-            )
+            val active = snapshot
+            if (active == null) {
+                // 加载期间**不渲染内容**、只画加载态（照 RikkaHub `StatsPage.kt:73-81`）。
+                //
+                // 这里原来是 `snapshot ?: StatsAggregation.buildDatabaseSnapshot(...)`：
+                // 兜底在**组合期（主线程）**跑一遍聚合，而同一个东西在 133 行的
+                // LaunchedEffect 里已经在 IO 上算过 —— 算两遍、其中一遍卡主线程，用户
+                // 2026-09-15「点击统计界面会卡一下」就是它。加载态本身是上方那条 2px
+                // 进度条（`loading` 为真），所以这里只补一个居中指示器、不再兜底渲染。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(28.dp),
+                        color = cs.primary,
+                    )
+                }
+                return@Column
+            }
             // Categorized sections (user request): overview group for the raw
             // data cards, ranking group for the three rank cards — matching
             // the SectionHeader + card form of the settings home.

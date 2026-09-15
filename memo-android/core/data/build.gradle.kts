@@ -16,6 +16,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    testOptions {
+        unitTests {
+            // MessageDao 的批量取 parts 要在真 SQLite 上验（顺序/分组/分批），而
+            // loadSchemaStatements 读的是本模块 assets 里的 schema。
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 kotlin {
@@ -31,4 +38,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 }
