@@ -1148,9 +1148,48 @@ fun ChatContent(
         }
     }
 
+    // 消息头「模型名」（可选 `| 供应商`）的原料 —— `_resolveModelDisplayName`
+    // (chat_message_widget.dart:1355-1407)。历史消息可能来自别的供应商，所以按**会话里
+    // 出现过的 providerId** 异步读一次投影（组合期读库是禁止的，见 PORTING §5.13）。
+    val messageProviderIds = remember(messages) {
+        messages.mapNotNull { it.providerId?.takeIf { p -> p.isNotEmpty() } }.distinct()
+    }
+    val modelLabelSources = rememberLoaded(
+        emptyMap<String, com.psyche.memo.ui.chat.MessageModelLabelSource>(),
+        container,
+        messageProviderIds,
+    ) {
+        messageProviderIds.associateWith { pid ->
+            val cfg = container.providerConfig(pid)
+            com.psyche.memo.ui.chat.MessageModelLabelSource(
+                providerName = cfg?.name?.trim()?.takeIf { it.isNotEmpty() },
+                overrides = buildMap {
+                    cfg?.modelOverrides?.forEach { (mid, element) ->
+                        val obj = element as? kotlinx.serialization.json.JsonObject ?: return@forEach
+                        val name = (obj["name"] as? kotlinx.serialization.json.JsonPrimitive)
+                            ?.content?.trim()?.takeIf { it.isNotEmpty() }
+                        val apiId = ((obj["apiModelId"] ?: obj["api_model_id"])
+                            as? kotlinx.serialization.json.JsonPrimitive)
+                            ?.content?.trim()?.takeIf { it.isNotEmpty() }
+                        // CMW:1376-1389 —— 覆盖名优先，其次 apiModelId。
+                        (name ?: apiId)?.let { put(mid, it) }
+                    }
+                },
+            )
+        }
+    }
+
     // chat_assistant_background.dart —— 当前助手壁纸 + surface 遮罩渐变（0.20→0.50 × 强度）。
     val bgAssistantId by container.currentAssistantId.collectAsState()
-    val chatBackground = remember(bgAssistantId) { container.currentAssistant()?.background }
+    val currentAssistant = remember(bgAssistantId) { container.currentAssistant() }
+    val chatBackground = currentAssistant?.background
+    // display_use_new_assistant_avatar_ux_v1（默认 false，settings_provider.dart:1114-1115）
+    // —— 顶栏标题行前面加当前助手头像（home_mobile_layout.dart:185-227
+    // `_buildAssistantTitleAvatar`，28dp）。用户 2026-09-15 要求把「聊天项显示」里
+    // 这几个失效开关真正接上（此前 6 个键一个都没被消费）。
+    val useNewAssistantAvatarUx = remember {
+        container.preferenceRepository.readJson("display_use_new_assistant_avatar_ux_v1") == "1"
+    }
     val chatMaskStrength = remember {
         container.preferenceRepository.readJson("display_chat_background_mask_strength_v1")
             ?.toFloatOrNull() ?: 1f
@@ -1255,6 +1294,14 @@ fun ChatContent(
                     tint = cs.onSurface,
                     modifier = Modifier.size(14.dp),
                 )
+            }
+            if (useNewAssistantAvatarUx && currentAssistant != null) {
+                // home_mobile_layout.dart:188-189 / 306-329 —— 头像 + 10dp 间距；
+                // 点它开抽屉（原版 `onTap = onDismissKeyboard + onToggleDrawer`）。
+                Box(modifier = Modifier.clickable { onOpenDrawer() }) {
+                    AssistantListAvatar(currentAssistant, 28.dp)
+                }
+                Spacer(Modifier.width(10.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1464,6 +1511,13 @@ fun ChatContent(
                             },
                             onSuggestionTap = { vm.sendSuggestion(it) },
                             assistantLabel = resolvedAssistantLabel,
+                            // CMW:2807-2813 —— 助手没开「使用助手名字」时名字行显示模型名
+                            // （模型名后按 display_show_provider_in_chat_message_v1 拼供应商）。
+                            modelLabel = com.psyche.memo.ui.chat.messageModelDisplayName(
+                                msg.model,
+                                modelLabelSources[msg.providerId],
+                                timelineSettings.showProviderInChatMessage,
+                            ),
                             assistant = assistantRow,
                             userProfile = userProfile,
                             showModelIcon = showModelIcon,
@@ -2278,6 +2332,11 @@ private fun MessageRow(
     suggestions: List<String> = emptyList(),
     onSuggestionTap: (String) -> Unit = {},
     assistantLabel: String,
+    /**
+     * 该消息的模型显示名（`_resolveModelDisplayName`，CMW:1355-1407；含
+     * `display_show_provider_in_chat_message_v1` 的 `" | 供应商"` 后缀）。
+     */
+    modelLabel: String = "",
     /** 当前助手：消息头在「助手头像 / 模型图标」之间二选一（CMW:2787-2802）。 */
     assistant: com.psyche.memo.data.model.Assistant? = null,
     /** 用户资料（user_provider.dart）：用户头的头像/名字。 */
@@ -2562,22 +2621,34 @@ private fun MessageRow(
                     Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
                 }
                 Column {
-                    Text(
-                        text = assistantLabel,
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = cs.onSurface.copy(alpha = 0.7f),
-                        ),
-                    )
-                    Spacer(Modifier.height(ChatStyleSpec.NAME_TIME_GAP_DP.dp))
-                    Text(
-                        text = timeLabel,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 11.sp,
-                            color = cs.onSurface.copy(alpha = 0.5f),
-                        ),
-                    )
+                    // CMW:2807-2820 —— 名字行由 display_show_model_name_v1 门控；文字是
+                    // 「助手开了『使用助手名字』→ 助手名，否则模型名」（CMW:2809-2813），
+                    // 模型名拿不到（预设消息没有 modelId）时回落助手名。
+                    if (timelineSettings.showModelName) {
+                        Text(
+                            text = if (assistant?.useAssistantName == true) {
+                                assistantLabel
+                            } else {
+                                modelLabel.ifEmpty { assistantLabel }
+                            },
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = cs.onSurface.copy(alpha = 0.7f),
+                            ),
+                        )
+                    }
+                    // CMW:2821-2834 —— 时间戳由 display_show_model_timestamp_v1 门控。
+                    if (timelineSettings.showModelTimestamp) {
+                        Spacer(Modifier.height(ChatStyleSpec.NAME_TIME_GAP_DP.dp))
+                        Text(
+                            text = timeLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                color = cs.onSurface.copy(alpha = 0.5f),
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -2919,8 +2990,11 @@ private fun MessageRow(
         // regenerate / speak / translate / more (CMW:3191-3410), version
         // selector and token stats trail the row.
         val showVersionSwitcher = versionCount > 1
+        // CMW:1847-1858 —— 用户侧那一排（复制/重发/编辑/更多）由
+        // display_show_user_message_actions_v1 门控；关掉后整行还能因为分支选择器而存在。
+        val userActionsVisible = isUser && timelineSettings.showUserMessageActions
         // CMW:1979 —— 多选态隐藏操作行与建议气泡。
-        if (!selecting && (isUser || showVersionSwitcher || msg.totalTokens != null || !isUser)) {
+        if (!selecting && (!isUser || userActionsVisible || showVersionSwitcher)) {
             // CMW:1848 / 3209 —— 按钮行上方 8（用户与助手一致）。
             Spacer(Modifier.height(ChatStyleSpec.ACTIONS_TOP_GAP_DP.dp))
             Row(
@@ -2928,7 +3002,7 @@ private fun MessageRow(
                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (isUser) {
+                if (userActionsVisible) {
                     MessageActionIcon(Lucide.Copy, "Copy", onClick = onCopy)
                     Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
                     MessageActionIcon(
@@ -3018,9 +3092,9 @@ private fun MessageRow(
                         onNext = onNextVersion,
                     )
                 }
-                if (!isUser && msg.totalTokens != null) {
+                if (!isUser && timelineSettings.showTokenStats && msg.totalTokens != null) {
                     // 源码 chat_message_widget.dart:3395-3405 —— Spacer 后
-                    // 靠右的 TokenDisplayWidget。
+                    // 靠右的 TokenDisplayWidget（display_show_token_stats_v1 门控）。
                     Spacer(Modifier.weight(1f))
                     com.psyche.memo.ui.chat.TokenDisplay(
                         totalTokens = msg.totalTokens,

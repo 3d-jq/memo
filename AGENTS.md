@@ -66,6 +66,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - 编辑页骨架 + 分段条 + basic tab（聊天模型/背景/参数 sheet×4/头像 sheet/思考预算）+ 提示词 tab（系统提示词/消息模板/预设对话）+ 记忆/MCP/本地工具/快捷短语/自定义请求/正则/标签 tab
 - 编辑页 tab 布局管理页 C（重排/隐藏/重置 + 提纲模式 + 单 tab 分段页，`AssistantTabLayoutState` 容器级共享）
 - 显示设置 + 子页（ChatItemDisplay 13 / Rendering 8 / Behavior/Startup 20 / Image/MessageStyle/AutoRetry/Haptics）
+- **聊天项显示 6 开关全部通电（2026-09-15）**：用户消息操作行（`display_show_user_message_actions_v1`）、助手名字行/时间戳（`display_show_model_name_v1`/`_timestamp_v1`）、`模型名 | 供应商`（`display_show_provider_in_chat_message_v1`，默认关）、Token 统计（`display_show_token_stats_v1`）、顶栏助手头像（`display_use_new_assistant_avatar_ux_v1`，默认关，28dp 头像加在标题行前）。**助手名字行照 CMW:2809-2813 取值**：助手开了「使用助手名字」（`Assistant.useAssistantName`，默认 false）才显示助手名，否则显示模型名（`modelOverrides[id].name` → `apiModelId` → 模型 id，`ChatTimeline.kt` 的 `messageModelDisplayName`，原料经 `rememberLoaded` 异步取）——**勿改回「永远显示助手名」**（那样这排开关没有意义）
 
 对话增强与工具
 - 搜索体系 S1–S4（定义/8+15 provider 引擎/设置/用量，共 23 个可运行 provider）

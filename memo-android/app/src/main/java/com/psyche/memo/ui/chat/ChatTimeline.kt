@@ -133,6 +133,28 @@ data class ChatTimelineSettings(
     val showUserAvatar: Boolean = true,
     val showUserName: Boolean = true,
     val showUserTimestamp: Boolean = true,
+    // 助手（model）消息侧 —— settings_provider.dart:1070-1119。
+    /**
+     * `display_show_user_message_actions_v1`（默认 true，:1085-1086）—— 用户消息下方的
+     * 复制/重发/编辑/更多操作行；关掉后用户消息只剩分支选择器（CMW:1847
+     * `if (showUserActions || showVersionSwitcher)`）。
+     */
+    val showUserMessageActions: Boolean = true,
+    /**
+     * `display_show_model_name_v1`（默认 true，:1081-1082）—— 助手消息头的名字行
+     * （CMW:2807-2820）。默认显示的**是模型名**：只有助手开了「使用助手名字」
+     * （`Assistant.useAssistantName`）才换成助手名（CMW:2809-2813）。
+     */
+    val showModelName: Boolean = true,
+    /** `display_show_model_timestamp_v1`（默认 true，:1083-1084）—— 助手消息头的时间戳。 */
+    val showModelTimestamp: Boolean = true,
+    /**
+     * `display_show_provider_in_chat_message_v1`（默认 false，:1118-1119）—— 名字行拼成
+     * `模型名 | 供应商名`（`_resolveModelDisplayName`，CMW:1379-1404）。
+     */
+    val showProviderInChatMessage: Boolean = false,
+    /** `display_show_token_stats_v1`（默认 true，:1072）—— 助手操作行末尾的 token 统计（CMW:3395-3405）。 */
+    val showTokenStats: Boolean = true,
 ) {
     companion object {
         fun fromPrefs(read: (key: String) -> String?): ChatTimelineSettings {
@@ -171,9 +193,43 @@ data class ChatTimelineSettings(
                 showUserAvatar = bool("display_show_user_avatar_v1", true),
                 showUserName = bool("display_show_user_name_v1", true),
                 showUserTimestamp = bool("display_show_user_timestamp_v1", true),
+                showUserMessageActions = bool("display_show_user_message_actions_v1", true),
+                showModelName = bool("display_show_model_name_v1", true),
+                showModelTimestamp = bool("display_show_model_timestamp_v1", true),
+                showProviderInChatMessage = bool("display_show_provider_in_chat_message_v1", false),
+                showTokenStats = bool("display_show_token_stats_v1", true),
             )
         }
     }
+}
+
+/**
+ * 消息头「模型名」（可选 `| 供应商名`）的原料 —— `_resolveModelDisplayName`
+ * （chat_message_widget.dart:1355-1407）按 providerId 查供应商配置里的
+ * `modelOverrides[modelId]`。历史消息可能来自别的供应商，所以由页面**异步**读好
+ * 一份投影（组合期不许查库，见 PORTING §5.13），这里只做纯函数拼接。
+ */
+data class MessageModelLabelSource(
+    val providerName: String?,
+    /** modelId → 覆盖名优先、否则 apiModelId。 */
+    val overrides: Map<String, String> = emptyMap(),
+)
+
+/**
+ * CMW:1355-1407 —— 消息头显示的模型名：`modelOverrides[id].name` 优先，否则
+ * `apiModelId`，否则模型 id 本身；[showProvider] 打开且有供应商名时再拼
+ * `" | <供应商名>"`。模型 id 为空（预设消息）时返回 ""，由调用方回落到助手名。
+ */
+fun messageModelDisplayName(
+    modelId: String,
+    source: MessageModelLabelSource?,
+    showProvider: Boolean,
+): String {
+    if (modelId.isBlank()) return ""
+    val base = source?.overrides?.get(modelId)?.takeIf { it.isNotEmpty() } ?: modelId
+    // 原版取的就是 `cfg.name.trim()`，空/纯空白当没有供应商（CMW:1374/1401）。
+    val provider = source?.providerName?.trim()?.takeIf { it.isNotEmpty() }
+    return if (showProvider && provider != null) "$base | $provider" else base
 }
 
 /**

@@ -330,6 +330,90 @@ class ChatTimelineTest {
         assertEquals(false, s.showThinkingCards)
     }
 
+    // --- 助手消息头 / 操作行的键（settings_provider.dart:1070-1119） ---
+    //
+    // 用户 2026-09-15「聊天项显示那 6 个开关（做了吗）」—— 这 6 个键此前只看不
+    // 消费。默认值逐条核对过 settings_provider.dart：只有「聊天标题栏显示助手头像」
+    // （页面级，见 HomeScreen）与「模型名称后显示供应商」是 false。
+
+    @Test
+    fun settings_assistantRowsUseSourceDefaults() {
+        val s = ChatTimelineSettings.fromPrefs { null }
+        assertEquals(true, s.showUserMessageActions) // :1085-1086
+        assertEquals(true, s.showModelName) // :1081-1082
+        assertEquals(true, s.showModelTimestamp) // :1083-1084
+        assertEquals(true, s.showTokenStats) // :1072
+        assertEquals(false, s.showProviderInChatMessage) // :1118-1119
+    }
+
+    @Test
+    fun settings_assistantRowsReadStoredValues() {
+        val store = mapOf(
+            "display_show_user_message_actions_v1" to "0",
+            "display_show_model_name_v1" to "0",
+            "display_show_model_timestamp_v1" to "0",
+            "display_show_token_stats_v1" to "0",
+            "display_show_provider_in_chat_message_v1" to "1",
+        )
+        val s = ChatTimelineSettings.fromPrefs { store[it] }
+        assertEquals(false, s.showUserMessageActions)
+        assertEquals(false, s.showModelName)
+        assertEquals(false, s.showModelTimestamp)
+        assertEquals(false, s.showTokenStats)
+        assertEquals(true, s.showProviderInChatMessage)
+    }
+
+    // --- 消息头模型名（_resolveModelDisplayName，CMW:1355-1407） ---
+
+    @Test
+    fun modelLabel_fallsBackToTheRawModelId() {
+        assertEquals(
+            "glm-5.3-flash",
+            messageModelDisplayName("glm-5.3-flash", null, showProvider = false),
+        )
+    }
+
+    @Test
+    fun modelLabel_prefersTheOverrideNameThenTheApiId() {
+        val source = MessageModelLabelSource(
+            providerName = "Zhipu AI",
+            overrides = mapOf("glm-5.3-flash" to "GLM 5.3", "glm-4.6" to "glm-4.6-air"),
+        )
+        assertEquals("GLM 5.3", messageModelDisplayName("glm-5.3-flash", source, showProvider = false))
+        assertEquals("glm-4.6-air", messageModelDisplayName("glm-4.6", source, showProvider = false))
+        // 没被覆盖过的模型仍然用 id 本身。
+        assertEquals("glm-5", messageModelDisplayName("glm-5", source, showProvider = false))
+    }
+
+    @Test
+    fun modelLabel_appendsTheProviderOnlyWhenTheSwitchIsOn() {
+        val source = MessageModelLabelSource(providerName = "Zhipu AI")
+        assertEquals(
+            "glm-5.3-flash",
+            messageModelDisplayName("glm-5.3-flash", source, showProvider = false),
+        )
+        assertEquals(
+            "glm-5.3-flash | Zhipu AI",
+            messageModelDisplayName("glm-5.3-flash", source, showProvider = true),
+        )
+        // 供应商名取不到时不拼一个空后缀（CMW:1401-1405 同样要求非空）。
+        assertEquals(
+            "glm-5.3-flash",
+            messageModelDisplayName("glm-5.3-flash", MessageModelLabelSource(null), showProvider = true),
+        )
+        assertEquals(
+            "glm-5.3-flash",
+            messageModelDisplayName("glm-5.3-flash", MessageModelLabelSource("  "), showProvider = true),
+        )
+    }
+
+    @Test
+    fun modelLabel_isEmptyWhenTheMessageHasNoModel() {
+        // 预设消息/老消息没有 modelId —— 调用方回落到助手名，不能显示 " | 供应商"。
+        assertEquals("", messageModelDisplayName("", MessageModelLabelSource("P"), showProvider = true))
+        assertEquals("", messageModelDisplayName("   ", null, showProvider = true))
+    }
+
     // --- 气泡样式 / 贴合内容 / 按段拆分（message_style_settings_page） ---
 
     @Test
