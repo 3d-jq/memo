@@ -1,4 +1,4 @@
-package com.psyche.memo
+﻿package com.psyche.memo
 
 import android.content.Context
 import com.psyche.memo.data.assistant.AssistantStore
@@ -324,6 +324,17 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val askUserInteractionService: com.psyche.memo.ui.chat.AskUserInteractionService by lazy {
         com.psyche.memo.ui.chat.AskUserInteractionService()
     }
+
+    /**
+     * 「冷启动那一次窗口加载」是否还没结束 —— 原版 `home_page_controller.dart:311`
+     * `_startupConversationPending` 的等价物。
+     *
+     * **必须放在容器里、不能放页面级 `remember`**：进设置页再返回时聊天页会重建，
+     * 页面级状态会把标记重置成 true，于是返回时又露一次骨架 + 重新读整窗
+     * （用户 2026-09-15「点击设置 返回 又会加载对话 又会卡一下」）。
+     */
+    @Volatile
+    var startupConversationPending: Boolean = true
 
     /** App-wide IO scope for one-shot persistence (assistant selection writes). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

@@ -1,4 +1,4 @@
-package com.psyche.memo.ui
+﻿package com.psyche.memo.ui
 
 import java.io.File
 import org.junit.Assert.assertTrue
@@ -44,6 +44,25 @@ class DrawerListReloadTest {
             "抽屉列表的刷新不能以 selectedId 为 key（每次点会话都整表重读，历史越多越卡）；" +
                 "用 `LaunchedEffect(open) { if (open) reload() }`：\n" + offenders.joinToString("\n"),
             offenders.isEmpty(),
+        )
+    }
+    /**
+     * 页面销毁**不许**回收当前会话的 VM。
+     *
+     * 用户 2026-09-15「点击设置 返回 又会加载对话 又会卡一下」：`ChatContent` 的
+     * `onDispose` 里调了 `reapIdleChatViewModels(keep = null)`，进设置页时把当前会话的窗口
+     * 清空，返回时 `ensureLoaded()` 又整窗重读 + 重渲染。原版 controller 活在页面之上
+     * （内存缓存），返回是瞬时的 —— 所以回收只该发生在「切到另一条会话」时
+     * （`registerChatViewModel` 内部 keep 当前那个）。
+     */
+    @Test
+    fun `chat page disposal does not release the active conversation view model`() {
+        val src = File("src/main/java/com/psyche/memo/ui/HomeScreen.kt")
+        val text = blankComments(src.readText())
+        assertTrue(
+            "HomeScreen 里不许出现「页面销毁即回收会话 VM」（keep = null）；" +
+                "回收只由 registerChatViewModel 在切会话时做",
+            !text.contains("reapIdleChatViewModels(keep = null)"),
         )
     }
 }

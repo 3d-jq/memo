@@ -1,4 +1,4 @@
-package com.psyche.memo.ui
+﻿package com.psyche.memo.ui
 
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
@@ -227,7 +227,7 @@ fun HomeScreen(
     val convoFade = remember { androidx.compose.animation.core.Animatable(1f) }
     // 只有**冷启动那一次**窗口加载会露骨架（原版 _startupConversationPending）；+/点会话
     // 都走 fetch-then-commit，提交时数据已在手 ⇒ 不铺骨架。
-    var startupWindowPending by remember { mutableStateOf(true) }
+    var startupWindowPending by remember { mutableStateOf(container.startupConversationPending) }
     fun switchConversation(target: String?) {
         if (target == null || target == selectedConversationId) return
         scope.launch {
@@ -246,6 +246,7 @@ fun HomeScreen(
             )
             selectedConversationId = target
             startupWindowPending = false
+            container.startupConversationPending = false
             convoFade.animateTo(
                 targetValue = 1f,
                 animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS, easing = CONVO_FADE_EASING),
@@ -288,6 +289,7 @@ fun HomeScreen(
         )
         selectedConversationId = conv.id
         startupWindowPending = false
+        container.startupConversationPending = false
     }
 
     /**
@@ -307,6 +309,7 @@ fun HomeScreen(
             container.conversationDao.delete(currentId)
             selectedConversationId = null
             startupWindowPending = false
+            container.startupConversationPending = false
             temporaryActive = true
             return
         }
@@ -328,6 +331,7 @@ fun HomeScreen(
         if (latest != null) {
             selectedConversationId = latest.id
             startupWindowPending = false
+            container.startupConversationPending = false
         } else {
             newConversation()
         }
@@ -381,6 +385,7 @@ fun HomeScreen(
         if (!id.isNullOrEmpty()) {
             selectedConversationId = id
             startupWindowPending = false
+            container.startupConversationPending = false
             temporaryActive = false
             pendingOpenConversation.value = null
         }
@@ -411,6 +416,7 @@ fun HomeScreen(
                     assistantId = container.currentAssistantId.value,
                 ).id
             startupWindowPending = false
+            container.startupConversationPending = false
         }
     }
 
@@ -701,9 +707,12 @@ fun ChatContent(
     }
     // 会话页 VM 的回收登记：`viewModel(key = conversationId)` 不会因为 key 变化释放旧 VM，
     // 由容器在切会话时把不忙的旧 VM 清成空壳（见 AppContainerImpl.registerChatViewModel）。
-    androidx.compose.runtime.DisposableEffect(vm) {
+    androidx.compose.runtime.LaunchedEffect(vm) {
+        // 登记进容器的会话页 VM 表（它会把**上一个不忙的** VM 清成空壳）。
+        // **不要在页面销毁时回收**：进设置页/其它路由时本页会被拿掉，回收会把当前会话的
+        // 窗口清空，返回时又要整窗重读 + 重渲染（用户 2026-09-15「点击设置 返回 又会加载
+        // 对话 又会卡一下」）。原版 controller 活在页面之上（内存缓存），返回是瞬时的。
         container.registerChatViewModel(vm)
-        onDispose { container.reapIdleChatViewModels(keep = null) }
     }
     // 首次进入本会话、或被回收后切回来 → 补读首屏窗口（回收时 tailLoaded 被清掉）。
     androidx.compose.runtime.LaunchedEffect(conversationId) {
