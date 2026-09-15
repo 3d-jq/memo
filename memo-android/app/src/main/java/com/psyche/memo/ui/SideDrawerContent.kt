@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+﻿@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.psyche.memo.ui
 
@@ -17,6 +17,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -142,6 +143,8 @@ fun SideDrawerContent(
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     var conversations by remember { mutableStateOf<List<Conversation>>(emptyList()) }
+    /** 列表是否已读过一次（决定要不要铺 tile 骨架）。 */
+    var listLoaded by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
 
     fun reload() {
@@ -159,7 +162,10 @@ fun SideDrawerContent(
     // 抽屉内部的增删改（置顶/重命名/删除/移动/复制）本来就都显式调了 `reload()`，所以去掉
     // 这两个 key 不会让列表变旧；每次重新打开抽屉也一定会刷新。读放 IO（`getAll()` 是同步的）。
     androidx.compose.runtime.LaunchedEffect(open) {
-        if (open) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reload() }
+        if (open) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reload() }
+            listLoaded = true
+        }
     }
 
     // 全局当前助手（assistant_provider.currentAssistantId）：抽屉助手卡显示它，
@@ -595,6 +601,12 @@ fun SideDrawerContent(
             )
             }
         } else {
+            // 列表还没读回来 → 铺原版那个 **tile 骨架**（`side_drawer.dart:4949`
+            // `_ConversationListSkeleton`：药丸条，不是气泡块）。渲染在列表上层，
+            // 列表此刻是空的，所以视觉上就是骨架。
+            if (!listLoaded) {
+                ConversationListSkeleton()
+            }
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(
@@ -1603,4 +1615,63 @@ private fun buildCopyName(
         counter++
     }
     return candidate
+}
+
+/**
+ * 抽屉会话列表的加载骨架 —— 逐字照原版 `side_drawer.dart:4949-5016`
+ * `_ConversationListSkeleton`：
+ * - 每个 tile = `bar(标题, 高 14)` + 8 间隔 + `bar(元信息, 高 10)`，圆角 = **高/2**（药丸）；
+ * - 颜色 `onSurface@8%`（`:4975`）；tile 内边距 `horizontal 6 / vertical 10`（`:4992`）；
+ * - 5 个 tile，宽度比 `0.72/0.56/0.66/0.50/0.62`、副行 `0.42/0.34/0.48/0.30/0.38`（`:5009-5013`）；
+ * - 整列 `opacity 0.45→1.0`、900ms 往复（`:4961-4964` / `:5005`）。
+ *
+ * 只在「列表还没读到第一批数据」时显示（原版同条件：ChatService 初始化期间）。
+ */
+@Composable
+private fun ConversationListSkeleton(modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val barColor = cs.onSurface.copy(alpha = 0.08f)
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "conversationListSkeleton")
+    val pulse by transition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(900),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "conversationListSkeletonPulse",
+    )
+    val tiles = listOf(
+        0.72f to 0.42f,
+        0.56f to 0.34f,
+        0.66f to 0.48f,
+        0.50f to 0.30f,
+        0.62f to 0.38f,
+    )
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 10.dp, top = 4.dp, end = 10.dp)
+            .alpha(pulse),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+        tiles.forEach { (titleFactor, metaFactor) ->
+            Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)) {
+                SkeletonBar(titleFactor, 14.dp, barColor)
+                Spacer(Modifier.height(8.dp))
+                SkeletonBar(metaFactor, 10.dp, barColor)
+            }
+        }
+    }
+}
+
+/** 骨架里的一根药丸条（圆角 = 高/2，原版 `side_drawer.dart:4977-4988`）。 */
+@Composable
+private fun SkeletonBar(widthFactor: Float, height: androidx.compose.ui.unit.Dp, color: androidx.compose.ui.graphics.Color) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(widthFactor)
+            .height(height)
+            .background(color, androidx.compose.foundation.shape.RoundedCornerShape(height / 2)),
+    )
 }
