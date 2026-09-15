@@ -149,39 +149,6 @@ class CompositionThreadingTest {
         return out
     }
 
-    /** 把 `//…` 与 `/* … */` 抹成空白（换行保留，字符串字面量原样保留）。 */
-    private fun blankComments(code: String): String {
-        val sb = StringBuilder(code.length)
-        var i = 0
-        while (i < code.length) {
-            val c = code[i]
-            when {
-                c == '"' || c == '\'' -> {
-                    val next = skipString(code, i)
-                    sb.append(code, i, next)
-                    i = next
-                }
-                c == '/' && code.getOrNull(i + 1) == '/' -> {
-                    while (i < code.length && code[i] != '\n') {
-                        sb.append(' ')
-                        i++
-                    }
-                }
-                c == '/' && code.getOrNull(i + 1) == '*' -> {
-                    val close = code.indexOf("*/", i + 2)
-                    val end = if (close < 0) code.length else close + 2
-                    for (j in i until end) sb.append(if (code[j] == '\n') '\n' else ' ')
-                    i = end
-                }
-                else -> {
-                    sb.append(c)
-                    i++
-                }
-            }
-        }
-        return sb.toString()
-    }
-
     /** `remember` 之后跳过可选的 `(…)` 实参，返回尾随 lambda 的 `{` 下标。 */
     private fun trailingLambdaStart(source: String, from: Int): Int? {
         var i = from
@@ -202,7 +169,7 @@ class CompositionThreadingTest {
             when (source[i]) {
                 '(' -> depth++
                 ')' -> if (--depth == 0) return i
-                '"', '\'' -> i = skipString(source, i) - 1
+                '"', '\'' -> i = skipStringLiteral(source, i) - 1
             }
             i++
         }
@@ -216,30 +183,10 @@ class CompositionThreadingTest {
             when (source[i]) {
                 '{' -> depth++
                 '}' -> if (--depth == 0) return i
-                '"', '\'' -> i = skipString(source, i) - 1
+                '"', '\'' -> i = skipStringLiteral(source, i) - 1
             }
             i++
         }
         return null
-    }
-
-    /** 返回字符串字面量之后的下标（支持 `"…"`、`"""…"""`、`'…'`）。 */
-    private fun skipString(source: String, start: Int): Int {
-        val quote = source[start]
-        if (quote == '"' && source.startsWith("\"\"\"", start)) {
-            val end = source.indexOf("\"\"\"", start + 3)
-            return if (end < 0) source.length else end + 3
-        }
-        var i = start + 1
-        while (i < source.length) {
-            val c = source[i]
-            if (c == '\\') {
-                i += 2
-                continue
-            }
-            if (c == quote || c == '\n') return i + 1
-            i++
-        }
-        return source.length
     }
 }

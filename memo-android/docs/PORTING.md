@@ -668,6 +668,28 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | 移出组合期的重活 | `provider_rows` 整表 + 逐条解 JSON ×3（`DefaultModelScreen` / `AssistantSettingsEditScreen` / `MemorySettingsScreen` → 统一 `loadModelOptions` + `rememberLoaded`）；`assistant_rows` 整表 ×2（抽屉移动会话 sheet、记忆条目编辑 sheet）；本地背景图 `BitmapFactory.decodeFile`；技能详情页的目录遍历 + 技能文件 `readText()` |
 | **机器守卫** | `app/src/test/.../ui/CompositionThreadingTest.kt`：扫所有 `remember { … }` / `remember(keys) { … }` 的 lambda 体（跳过 `rememberLoaded` 等），命中 `.getAll(`/`.query(`/`.rawQuery(`/`.execSQL(`/`.count(`/`loadModelOptions`/`providerConfig(`/`currentAssistant(`/`assistantStore`/`contentResolver`/`decodeFile`/`listFiles(`/`readText()`/`exists()` 等**干活**词就失败（造 DAO/取库句柄**不算**；注释与字符串里的示例代码也不算）。豁免按「文件 + 具体 token」登记并写原因 —— 同一文件里出现**新的**那类调用照样失败 |
 
+## 5.14 对话界面卡顿审计（2026-09-15，逐项对比 Flutter 原版与 RikkaHub）
+
+**触发**：用户「点击到底部这个按钮 对话界面会闪」「我很怀疑你这个对话界面这个整个部分没有做好 你可以看看人家原项目和 rikkhub 代码 人家做的都很好 都没有什么卡顿问题」。
+
+**方法（先取证再改）**：
+1. Compose 编译器稳定性报告（`:app:compileDebugKotlin --rerun-tasks` → `app/build/compose_reports/app_debug-composables.txt`）：确认每个聊天相关 composable 是 `restartable skippable` 还是被哪个 `unstable` 实参拖累；
+2. 新增 `ChatRecompositionProbe`（`MessageRow` 每次组合 +1，一次 int 自增）+ `ChatRowRecompositionTest`：用真实手势断言「碰列表（会翻 `pointerDown`/`following`/`navVisible` 三个 `ChatContent` 状态）之后消息行组合次数必须还是 0」；
+3. 逐项读两边的实现（Flutter `lib/features/home/...`、RikkaHub `ui/pages/chat/...`）。
+
+**结论（证据 → 处理）**：
+
+| 项 | Flutter 原版 | RikkaHub | 我们 | 结论 |
+|---|---|---|---|---|
+| **「到底」按钮的滚动命令** | `scroll_controller.dart:625-744 _animateToBottom`：目标是**真实 `maxScrollExtent`**（`alignment: 1`），动画 250/350/450ms `easeOutCubic`，另有「非动画」分支 | `ChatList.kt:284 requestScrollToItem(lastIndex + 10)`、`ChatPage.kt:179 requestScrollToItem(size + 5)`（全部**有界**） | ❌ 之前是 `animateScrollToItem(size - 1, Int.MAX_VALUE)` —— 越界偏移被**原样写进滚动位置**（真机日志 `firstVisible=3 offset=2147483647`），下一帧 LazyColumn 再夹一次 ⇒ **点一下就闪**（用户报的就是这个） | ✅ **已修**：`scrollTimelineToBottom()` = `requestScrollToItem(size + SCROLL_TO_END_INDEX_SLACK)`，与「进入会话」「流式跟随」同一条有界写法；`ChatScrollOffsetTest` 扫描所有 `*ScrollToItem(` 调用点（含跨行 5 行窗口）禁止 `Int.MAX_VALUE`。**有意差异**：不做动画（Compose 侧拿不到 `maxScrollExtent` 等价值；动画期间流式跟随会再插一次瞬移反而更抖） |
+| **消息行的可跳过性** | `ListView.builder` 只重建脏 item（`RepaintBoundary` 由框架给） | Compose 稳定性：`ChatMessage` 是 skippable composable | ✅ 编译器报告：`MessageRow` = `restartable skippable`（实参 `msg: UiMessage` / `assistantLabel` / `assistant` / `prevVersion`… 全 stable），靠 `app/compose_compiler_config.conf` 把 `ChatViewModel.UiMessage`、`ChatTimelineSettings`、`Assistant`、`MessagePart`、`Conversation`、`ProviderConfig` 显式声明 stable；`ChatRowRecompositionTest` 证明「碰列表不重组合任何消息行」 | ✅ 一致 + 加了回归判据 |
+| **Markdown 解析（流式）** | `gpt_markdown` + `RepaintBoundary`；流式增量只重建当前气泡 | `Markdown.kt:240-252` `mapLatest` + `flowOn(Default)`，段落级 `AnnotatedString` 缓存 | ✅ `MarkdownText` 同款：首帧同步解析（避免空白闪烁）→ `snapshotFlow + distinctUntilChanged + drop(1) + mapLatest + flowOn(Dispatchers.Default)`；`parsedCache` LruCache(32) | ✅ 一致（原「预热最近 60 条」的自创逻辑已删，见 §5.13 与 34d54d2） |
+| **列表配置** | `ListView.builder`，`itemCount` = 消息数 | `itemsIndexed(key = id)`，`Arrangement.spacedBy(12)` | `items(messages, key = { it.id }, contentType = { 角色 / compaction })` + `contentPadding` top 8 / bottom 16（MLV:1684-1690） | ✅ 至少不差（多一个 `contentType` 复用维度） |
+| **打开会话的取数** | `loadTimelinePage`：尾窗 + 槽位 + 批量 `getMessagesByIds`；版本表只预载多版本组 | 一条分页查询（64/页）+ 消息与 parts 同列 | ✅ 已按原版改（34d54d2）：尾窗 40、版本表按需 `IN`、不再全表 `COUNT(*)` | ✅ 一致 |
+| **组合期重活** | — | — | ✅ 见 §5.13：偏好/助手读缓存 + 启动预热 + 守卫；8 处重活移出组合期 | ✅ |
+| **流式跟随** | 位置判据 + 用户接管旗标 | `ChatList.kt:236-243` `isAtBottom()` | ✅ 位置判据 + `pointerDown` 硬标志（§4.42） | ✅ 一致 |
+| 仍挂账 | | | ① `HomeScreen.currentIsEmpty()` 组合期 `messageDao.count()`（§5.13 已记账，要 VM 级「本会话有无消息」信号才能搬）；② 到底按钮不做动画（若要做：先组合尾部，再 `animateScrollBy(尾部底边 − 视口底边)`）；③ 未做 RikkaHub 的 `ScrollBottomKey` 哨兵项（「到顶/到底」锚点可以更精确，收益中等） | ⬜ |
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)

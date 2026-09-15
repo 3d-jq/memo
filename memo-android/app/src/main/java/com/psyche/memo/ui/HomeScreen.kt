@@ -2,6 +2,7 @@ package com.psyche.memo.ui
 
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.animation.core.animateFloatAsState
@@ -1405,7 +1406,7 @@ fun ChatContent(
                     state = timelineListState,
                     modifier = Modifier
                         .fillMaxSize()
-                        // scroll_controller.dart:374-425 handleUserScrollIntent —— 原版把
+                        .testTag(CHAT_TIMELINE_TAG)                        // scroll_controller.dart:374-425 handleUserScrollIntent —— 原版把
                         // 「用户接管」记在 `message_list_view` 的 `Listener.onPointerDown`
                         // （1711-1721）上，**程序化滚动绝不触发**。这里同样只旁听不消费：
                         // 手指一按下就 `pointerDown=true; following=false`（跟随立即让位，
@@ -1606,12 +1607,21 @@ fun ChatContent(
                             onPreviousMessage = { jumpAdjacentQuestion(previous = true) },
                             onNextMessage = { jumpAdjacentQuestion(previous = false) },
                             onScrollToBottom = {
-                                coroutineScope.launch {
-                                    timelineListState.animateScrollToItem(
-                                        (messages.size - 1).coerceAtLeast(0),
-                                        Int.MAX_VALUE,
-                                    )
-                                }
+                                // 这里曾经是 `animateScrollToItem(size - 1, Int.MAX_VALUE)`：
+                                // 越界偏移会被**原样写进滚动位置**（本文件 985-990 行的真机日志
+                                // `firstVisible=3 offset=2147483647`），下一帧 LazyColumn 再夹
+                                // 一次 —— 用户看到的就是「点一下到底部，整个对话界面闪一下」
+                                // （2026-09-15）。改成与「进入会话」「流式跟随」同一条**有界**
+                                // 写法（`size + 5`，上游 ChatPage.kt:179 同款）。
+                                //
+                                // **有意与 Flutter 的一处差异**：原版
+                                // `scroll_controller.dart:625-744 _animateToBottom` 在这里
+                                // 走 450ms easeOutCubic 动画（目标是真实的 `maxScrollExtent`）。
+                                // Compose 的 `animateScrollToItem` 只接受「下标 + 偏移」，
+                                // 想要「动画到 maxScrollExtent」得先组合出尾部再算距离；而且
+                                // 动画期间流式跟随（同一个目标）会再插一次瞬移，反而容易看出抖动。
+                                // 所以到底按钮走瞬移 —— 与上面三条路径同一套语义。
+                                scrollTimelineToBottom()
                                 // scroll_controller.dart:488-496 forceScrollToBottom ——
                                 // 主动到底：恢复跟随。
                                 idleStickJob?.cancel()
@@ -2373,6 +2383,7 @@ private fun MessageRow(
     /** display_show_regenerate_confirm_dialog_v1 = false 时跳过确认弹窗。 */
     skipRegenerateConfirm: Boolean = false,
 ) {
+    ChatRecompositionProbe.messageRows++
     val cs = MaterialTheme.colorScheme
     val rowView = LocalView.current
     val isUser = msg.role == "user"
@@ -4057,6 +4068,26 @@ private fun InputIconAsset(
  * 上游同款（`ChatPage.kt:179` 用 +5，`ChatList.kt:284` 用 +10）。
  */
 private const val SCROLL_TO_END_INDEX_SLACK = 5
+
+/** `LazyColumn` 的测试标签（`ChatRowRecompositionTest` 用它做手势）。 */
+internal const val CHAT_TIMELINE_TAG = "chat_timeline"
+
+/**
+ * 组合次数探针 —— **诊断/测试用**，`MessageRow` 每组合一次 +1。
+ *
+ * 为什么值得留在生产代码里：聊天页的状态变化（`pointerDown` / `following` /
+ * `navVisible` / 输入框内容…）**不该**重组合消息行 —— 这正是用户 2026-09-15
+ * 「点一下『到底部』整个对话界面闪一下」这类问题的判据。`ChatRowRecompositionTest`
+ * 用它断言「碰列表/打字都不会重组合消息行」，哪天某个 `unstable` 实参把 `MessageRow`
+ * 的 skippable 打破，测试立刻红。计数器是一次 int 自增，可以忽略不计。
+ */
+internal object ChatRecompositionProbe {
+    @Volatile var messageRows = 0
+
+    fun reset() {
+        messageRows = 0
+    }
+}
 
 /**
  * 选中的云端 ASR 服务（`asr_selected_service_id_v1` + `asr_services_v1`）：
