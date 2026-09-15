@@ -652,7 +652,14 @@ private fun BasicSettingsTab(
         item {
             val semanticBg = LocalSemanticColors.current
             // Override display name wins (assistant_settings_edit_basic_tab.dart L343-354).
-            val modelDisplay = remember(assistant.chatModelProvider, assistant.chatModelId) {
+            // 「聊天模型」行显示的模型名（provider 的 modelOverrides 优先）——
+            // **别在组合期查库**（`PayloadEntityDao(...).get(p)` 是「查库 + 解 JSON」，
+            // 每次进编辑页/每次重组都落在主线程那一帧上；守卫 `CompositionThreadingTest`
+            // 的「构造 DAO/仓库后立刻调用」规则会抓）。改走 rememberLoaded（IO）。
+            val modelDisplay = rememberLoaded<String?>(
+                assistant.chatModelProvider,
+                assistant.chatModelId,
+            ) {
                 val p = assistant.chatModelProvider
                 val m = assistant.chatModelId
                 if (p == null || m == null) {

@@ -57,6 +57,22 @@ class CompositionThreadingTest {
         "isFile" to "文件系统",
         "readText()" to "文件读取",
         "exists()" to "文件系统",
+        "loadQuickPhrases" to "快捷短语仓库（两条 SQL）",
+        "enabledServers(" to "MCP 仓库查询",
+    )
+
+    /**
+     * **通用**规则（比固定词表更重要）：`remember { … }` 块里出现
+     * 「构造 DAO/仓库**紧接着调用**它」——`XxxDao(db).something()` /
+     * `XxxRepository(db).something()` —— 一律算违规。
+     *
+     * 为什么要有它：光靠词表抓不住「包在辅助函数里的查询」（例如
+     * `remember { loadQuickPhrases(container) }`，那函数里是两条 SQL；以及
+     * `McpRepository(container.database.readableDatabase).enabledServers()`）。这两处
+     * 曾经躲过了第一版守卫，用户 2026-09-15「还是卡呀」之后才被翻出来。
+     */
+    private val constructThenCall = Regex(
+        "\\b\\w+(Dao|Repository)\\([^)]*\\)\\s*\\.",
     )
 
     /**
@@ -104,11 +120,23 @@ class CompositionThreadingTest {
                 // 先把注释抹成空白（**保留换行**，行号才不会漂）再扫。
                 val text = blankComments(file.readText())
                 for (block in rememberBlocks(text)) {
-                    val hit = forbidden.firstOrNull { block.text.contains(it.first) } ?: continue
-                    if (exemptions.any { it.path == rel && it.token == hit.first }) continue
-                    val line = block.line + block.text.substring(0, block.text.indexOf(hit.first))
-                        .count { it == '\n' }
-                    offenders += "$rel:$line remember{ …${hit.first}… } ← ${hit.second}"
+                    val hit = forbidden.firstOrNull { block.text.contains(it.first) }
+                    if (hit != null && exemptions.none { it.path == rel && it.token == hit.first }) {
+                        val line = block.line + block.text.substring(0, block.text.indexOf(hit.first))
+                            .count { it == '\n' }
+                        offenders += "$rel:$line remember{ …${hit.first}… } ← ${hit.second}"
+                        continue
+                    }
+                    // 通用规则：DAO/仓库「构造 + 立刻调用」（词表抓不到辅助函数里的查询）。
+                    val call = constructThenCall.find(block.text)
+                    if (call != null &&
+                        exemptions.none { it.path == rel && it.token == "construct-then-call" }
+                    ) {
+                        val line = block.line + block.text.substring(0, call.range.first)
+                            .count { it == '\n' }
+                        offenders += "$rel:$line remember{ …${call.value.trim()}… } ← 组合期查库" +
+                            "（构造 DAO/仓库后立刻调用）"
+                    }
                 }
             }
 

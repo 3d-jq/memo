@@ -215,6 +215,48 @@ fun HomeScreen(
     // 共享 _conversationsCache + notifyListeners 的自动同步语义。
     var titleRefreshTick by remember { mutableStateOf(0) }
 
+    // ---- 会话切换：淡出 → 后台备好 → 提交 → 落底 → 淡入 ----
+    // 照原版 `home_page_controller.switchConversationAnimated`（L1077-1131）：
+    // `_reverseConvoFade()` → 与淡出**并行** `prepareConversationSwitch(id)` →
+    // 等淡完才 `commitConversationSwitch(prepared)` → `settleAtBottomBeforeReveal()` →
+    // `_convoFadeController.forward()`。于是「取数 + 首帧渲染 + 落底」全在透明度 0 后面，
+    // 抽屉关闭动画不再和重活抢帧（用户 2026-09-15「内容多的就会很卡」）。
+    // 冷启动/空会话那条（原版 `isLoadingWindow`）由 ChatContent 的加载态负责。
+    val convoFade = remember { androidx.compose.animation.core.Animatable(1f) }
+    var switchPending by remember { mutableStateOf(false) }
+    fun switchConversation(target: String?) {
+        if (target == null || target == selectedConversationId) return
+        switchPending = true
+        scope.launch {
+            val fadeOut = launch {
+                convoFade.animateTo(
+                    targetValue = 0f,
+                    animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS),
+                )
+            }
+            // 与淡出并行：读目标会话首屏 + 预热 Markdown（全在 IO/Default）。
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                container.prepareConversationSwitch(target)
+            }
+            fadeOut.join()
+            // 提交：此刻时间线仍是全透明。
+            selectedConversationId = target
+            // 兜底：万一首屏回调没来（异常路径），1.2s 后也把列表放出来 —— 绝不能
+            // 因为一个回调丢失让对话界面一直透明。
+            kotlinx.coroutines.delay(1200)
+            switchPending = false
+        }
+    }
+    // 新会话首屏上屏 + 落底完成 → 淡入（原版 `_convoFadeController.forward()`）。
+    androidx.compose.runtime.LaunchedEffect(switchPending, selectedConversationId) {
+        if (!switchPending && selectedConversationId != null && convoFade.value < 1f) {
+            convoFade.animateTo(
+                targetValue = 1f,
+                animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS),
+            )
+        }
+    }
+
     val newChatTitle = stringResource(UiR.string.chat_service_default_conversation_title)
 
     // 这里原来有个 `currentIsEmpty()`：组合期实参里调 `container.messageDao.count(id)`
@@ -412,10 +454,9 @@ fun HomeScreen(
                 modifier = modifier,
                 isTemporary = temporaryActive,
                 onOpenConversation = { id ->
-                    // 诊断用（debug 构建才输出，见 PerfProbe）：侧边栏点会话 → 主界面
-                    // 这条链的时间点与掉帧统计打到 logcat（tag MemoPerf）。
+                    // 全局搜索结果 / 通知点开：同一条淡出→备好→提交→落底→淡入的路径。
                     com.psyche.memo.PerfProbe.begin("open-conversation")
-                    selectedConversationId = id
+                    switchConversation(id)
                     temporaryActive = false
                 },
                 onOpenSearchServices = onOpenSearchServices,
@@ -424,6 +465,11 @@ fun HomeScreen(
         onOpenWorkspaces = onOpenWorkspaces,
                 titleRefreshTick = titleRefreshTick,
                 injectPresets = pendingPresetInject,
+                timelineAlpha = { convoFade.value },
+                onTimelineSettled = {
+                    // 新会话首屏已上屏并落底 → 淡入（原版 `_convoFadeController.forward()`）。
+                    switchPending = false
+                },
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
             // 常驻组合：之前用 `if (presenting)` 插拔节点，开合瞬间要新建布局
@@ -480,7 +526,9 @@ fun HomeScreen(
                     onSelect = { id, closeDrawer ->
                         // 诊断用（debug 构建）：侧边栏点会话 → 主界面这条链从这里开始。
                         com.psyche.memo.PerfProbe.begin("drawer-select")
-                        selectedConversationId = id
+                        // 先选中（淡出 + 后台备好），再关抽屉 —— 与原版
+                        // `home_mobile_layout.dart:110-113` 同序（选中在前、close 在后）。
+                        switchConversation(id)
                         if (closeDrawer) drawerOpen = false
                     },
                     onNew = { closeDrawer ->
@@ -558,6 +606,13 @@ fun ChatContent(
     onOpenWorkspaces: () -> Unit,
     titleRefreshTick: Int = 0,
     injectPresets: Boolean = false,
+    /**
+     * 时间线透明度（会话切换的交叉淡入，原版 `_convoFadeController`）。传 lambda 是
+     * 为了让每帧的 alpha 变化只脏 `graphicsLayer` 的绘制阶段，不重组合整页。
+     */
+    timelineAlpha: () -> Float = { 1f },
+    /** 新会话首屏已上屏且落底完成 → 调用方可以淡入。 */
+    onTimelineSettled: () -> Unit = {},
 ) {
     val vm: ChatViewModel = viewModel(
         key = conversationId,
@@ -1051,7 +1106,13 @@ fun ChatContent(
         if (!listInitialized && messages.isNotEmpty()) {
             scrollTimelineToBottom()
             listInitialized = true
+            // 落底完成 → 通知外层淡入（原版 `settleAtBottomBeforeReveal` 之后才 forward）。
+            onTimelineSettled()
         }
+    }
+    // 空会话（没有消息可落底）：窗口读完就告诉外层可以淡入，别让时间线一直透明。
+    androidx.compose.runtime.LaunchedEffect(tailLoaded, messages.isEmpty()) {
+        if (tailLoaded && messages.isEmpty()) onTimelineSettled()
     }
     // 流式期间贴底跟随（scroll_controller.dart:116-155 —— 布局期贴底，不做动画）。
     // 三个前提缺一不可：跟随开着（following）∧ 手指不在屏上（pointerDown）∧ 此刻没在滚动。
@@ -1464,6 +1525,9 @@ fun ChatContent(
                     state = timelineListState,
                     modifier = Modifier
                         .fillMaxSize()
+                        // 交叉淡入：alpha 只在绘制阶段读（lambda 里的 State），
+                        // 不触发重组（原版 `_convoFadeController` 包在消息列表外）。
+                        .graphicsLayer { alpha = timelineAlpha() }
                         .testTag(CHAT_TIMELINE_TAG)                        // scroll_controller.dart:374-425 handleUserScrollIntent —— 原版把
                         // 「用户接管」记在 `message_list_view` 的 `Listener.onPointerDown`
                         // （1711-1721）上，**程序化滚动绝不触发**。这里同样只旁听不消费：
@@ -1771,7 +1835,10 @@ fun ChatContent(
                 connectedIds = mcpStates.filterValues { it.status == com.psyche.memo.provider.mcp.McpConnectionManager.Status.connected }.keys,
             )
         }
-        val quickPhraseAvailable = remember(providerId, modelId, assistantForSearch?.id, quickPhrases) {
+        // 快捷短语（全局 + 本助手）是否非空 —— 只用来决定那颗按钮显不显示。
+        // **不能**在组合期直接 `loadQuickPhrases(container)`（它一进去就是两条 SQL +
+        // 拿 writableDatabase），那等于每次重组都在主线程查库；改走 `rememberLoaded`（IO）。
+        val quickPhraseAvailable = rememberLoaded(false, providerId, modelId, assistantForSearch?.id) {
             quickPhraseButtonVisible(loadQuickPhrases(container).size, 0)
         }
         // CIS:187 supportsReasoning / CIS:197+283-293 showMcpButton —— 能力门控：
@@ -1783,7 +1850,8 @@ fun ChatContent(
                 ?.let { runCatching { container.providerConfig(it) }.getOrNull() }
         }
         val supportsReasoning = isReasoningModel(currentModelCfg, modelId)
-        val showMcpButton = remember(providerId, modelId, mcpStates) {
+        // `McpRepository(...).enabledServers()` 是一条 SQL —— 同样挪出组合期（IO）。
+        val showMcpButton = rememberLoaded(false, providerId, modelId, mcpStates) {
             isToolModel(currentModelCfg, modelId) && runCatching {
                 com.psyche.memo.data.repo.McpRepository(container.database.readableDatabase)
                     .enabledServers().isNotEmpty()
@@ -4133,6 +4201,12 @@ private fun InputIconAsset(
  */
 /** 列表末尾哨兵项的 key（RikkaHub `ScrollBottomKey` 同款，见 `bottomAnchorIndex`）。 */
 internal const val SCROLL_BOTTOM_ITEM_KEY = "scroll-bottom"
+
+/**
+ * 会话切换的淡出/淡入时长 —— 原版 `home_page_controller` 的 `_convoFadeController`
+ * 用的是默认 `AnimationController` 时长（200ms 量级），这里取 180ms。
+ */
+private const val CONVO_FADE_MS = 180
 
 /** `LazyColumn` 的测试标签（`ChatRowRecompositionTest` 用它做手势）。 */
 internal const val CHAT_TIMELINE_TAG = "chat_timeline"

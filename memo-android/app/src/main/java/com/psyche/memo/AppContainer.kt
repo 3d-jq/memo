@@ -249,6 +249,34 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     }
 
     /**
+     * 会话切换的**准备阶段** —— 照原版 `home_page_controller.switchConversationAnimated`
+     * 的「fetch-then-commit」：`prepareConversationSwitch` 在列表**淡出（opacity 0）**期间
+     * 把目标会话的首屏数据读出来，并把即将可见的 Markdown 在 Default 线程预热好；
+     * 之后才提交（切 `selectedConversationId`）、落底、淡入。
+     *
+     * 为什么有效：原版把「取数 + 首帧渲染 + 落底」全部藏在透明度 0 后面，用户看到的是
+     * 一次平滑的交叉淡入；我们原来是同一帧里直接提交，重活全压在抽屉关闭动画上
+     * （用户 2026-09-15「从侧边栏到主界面 内容多的就会很卡」）。
+     */
+    fun prepareConversationSwitch(conversationId: String) {
+        val rows = runCatching { messageDao.getTail(conversationId) }.getOrDefault(emptyList())
+        if (rows.isEmpty()) return
+        // 与 ChatViewModel.prewarmWindowMarkdown 同一套有界预算（条数 + 字符）。
+        val marks = ArrayList<Pair<String, Boolean>>(8)
+        var budget = 40_000
+        for (row in rows.takeLast(8).asReversed()) {
+            val text = row.content
+            if (text.isEmpty()) continue
+            if (text.length > budget) break
+            budget -= text.length
+            marks += text to true
+        }
+        if (marks.isNotEmpty()) {
+            runCatching { com.psyche.memo.ui.markdown.preloadMarkdown(marks) }
+        }
+    }
+
+    /**
      * 预热两个解码缓存：在 **IO** 上把 provider_rows / assistant_rows 全表读一遍。
      *
      * 组合期有多处 `remember { providerConfig(key) }` / `remember { assistantStore.get(id) }`
