@@ -113,7 +113,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -916,13 +915,17 @@ fun ChatContent(
      * 到**视口顶部**（Compose KDoc：正的 `scrollOffset` 表示 item 滚到视口上方），所以传
      * 「末条下标」**不等于**到底 —— 长消息会跳到这条消息的开头，看起来就是「视口往上跑」
      * （日志：`initialJump(lastIndex)` 之后 `firstIdx=16 firstOff=0 tailGap=1282px`）。
-     * 真到底必须把 `scrollOffset` 顶到 `Int.MAX_VALUE`，让 LazyList 自己夹到
-     * maxScrollExtent。RikkaHub 用「越界下标 + 0」绕开（`ChatList.kt:284`），但我们这里
-     * 用「末条 + MAX_VALUE」语义更明确，也不依赖越界下标的实现细节。
+     *
+     * 真到底用**越界下标**：LazyColumn 先把它夹到末条、再夹到 maxScrollExtent，结果就是
+     * 底部。上游 RikkaHub 用的是同一招（`ChatList.kt:284` 的 `lastIndex + 10`、
+     * `ChatPage.kt:179` 的 `size + 5`）。以前这里写 `(lastIndex, Int.MAX_VALUE)`：
+     * 2026-09-15 真机日志显示那个 MAX_VALUE 会**原样留在滚动位置里**
+     * （`firstVisible=3 offset=2147483647`）再被夹一次，多一次 Int.MAX_VALUE 参与的
+     * 位置运算 —— 换成有界下标后语义一样、位置算术不再碰边界值。
      */
     fun scrollTimelineToBottom() {
         if (messages.isEmpty()) return
-        timelineListState.requestScrollToItem(messages.lastIndex, Int.MAX_VALUE)
+        timelineListState.requestScrollToItem(messages.size + SCROLL_TO_END_INDEX_SLACK)
     }
     /** scroll_controller.dart `_navButtonsHideDelayMs = 2000`。 */
     fun armNavHideTimer() {
@@ -974,20 +977,20 @@ fun ChatContent(
     }
 
     // 进入会话先落到最新一条 —— RikkaHub ChatPage.kt:170-183 同款：首次拿到
-    // 非空消息时滚到底（requestScrollToItem 传入末条 index），之后置位不再触发，
-    // 免得抢用户的滚动。此前 LazyListState 默认停在 index 0，打开长会话看到的
-    // 是最旧那一页。
+    // 非空消息时滚到底（一次性守卫，之后不再触发，免得抢用户的滚动）。
+    //
+    // 索引故意**越界**（`size + 5`）：`requestScrollToItem(i)` 是把第 i 条对齐到视口
+    // **顶部**，所以传末条下标并不等于"到底"（长消息会停在它的开头）；越界后由
+    // LazyColumn 夹到末条、再夹到最大滚动量，结果就是真正的底部。上游用的是同一招
+    // （`ChatPage.kt:179` 的 `size + 5`、`ChatList.kt:284` 的 `lastIndex + 10`）。
+    //
+    // 以前这里传的是 `(lastIndex, Int.MAX_VALUE)`：真机日志显示那个 MAX_VALUE 会**原样
+    // 留在滚动位置里**（`layout total=4 firstVisible=3 offset=2147483647`）再被夹一次，
+    // 徒增一次 Int.MAX_VALUE 参与的位置运算。改用上游的有界写法。
     var listInitialized by remember(conversationId) { mutableStateOf(false) }
-    // 消息到齐之前**不给列表出画**：否则消息到达的那一帧会先按 index 0 画顶部、
-    // 下一帧才被 requestScrollToItem 拉到底部 —— 用户看到的就是「加载时跳动一下」
-    //（用户 2026-09-15）。原版加载完直接落在底部，没有这一帧。
-    // 只压**绘制**、不压布局：布局照跑，pending 的滚动请求才会在同一帧被解析，
-    // 于是第一帧可见内容就已经是底部（压布局反而会让请求丢失）。
-    val timelineReady = listInitialized || messages.isEmpty()
     androidx.compose.runtime.LaunchedEffect(messages) {
         if (!listInitialized && messages.isNotEmpty()) {
-            // 打开会话落到**真正的底部**（同样必须顶 offset，见 scrollTimelineToBottom）。
-            timelineListState.requestScrollToItem(messages.lastIndex, Int.MAX_VALUE)
+            timelineListState.requestScrollToItem(messages.size + SCROLL_TO_END_INDEX_SLACK)
             listInitialized = true
         }
     }
@@ -1352,7 +1355,6 @@ fun ChatContent(
                     state = timelineListState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .drawWithContent { if (timelineReady) drawContent() }
                         // scroll_controller.dart:374-425 handleUserScrollIntent —— 原版把
                         // 「用户接管」记在 `message_list_view` 的 `Listener.onPointerDown`
                         // （1711-1721）上，**程序化滚动绝不触发**。这里同样只旁听不消费：
@@ -3974,6 +3976,13 @@ private fun InputIconAsset(
  */
 /** 预热 Markdown 解析缓存时最多处理的最近消息条数。 */
 private const val MARKDOWN_PRELOAD_MESSAGES = 60
+
+/**
+ * 落到列表底部的**越界量**：`requestScrollToItem(size + N)` 的下标越界后由 LazyColumn
+ * 夹到末条、再夹到 maxScrollExtent，于是"把末条对齐到视口顶部"变成"真到底"。
+ * 上游同款（`ChatPage.kt:179` 用 +5，`ChatList.kt:284` 用 +10）。
+ */
+private const val SCROLL_TO_END_INDEX_SLACK = 5
 
 /**
  * 选中的云端 ASR 服务（`asr_selected_service_id_v1` + `asr_services_v1`）：
