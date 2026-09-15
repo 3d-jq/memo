@@ -3470,5 +3470,6 @@
   "workspaceEnvUninstall": "解除安裝",
   "workspaceEnvCancel": "取消",
   "workspaceEnvRemoving": "解除安裝中…",
-  "workspaceManage": "管理工作區"
+  "workspaceManage": "管理工作區",
+  "workspaceViewFiles": "查看檔案"
 }

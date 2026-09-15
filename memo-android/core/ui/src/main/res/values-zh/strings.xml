@@ -2808,7 +2808,6 @@
     <string name="workspace_install_rootfs">安装 Rootfs</string>
     <string name="workspace_loading">加载中…</string>
     <string name="workspace_manage">管理工作区</string>
-    <string name="workspace_view_files">查看文件</string>
     <string name="workspace_name_label">名称</string>
     <string name="workspace_new">新建工作区</string>
     <string name="workspace_none">不使用</string>
@@ -2842,6 +2841,7 @@
     <string name="workspace_tool_shell">执行 Shell 命令</string>
     <string name="workspace_tool_write_file">写入文件</string>
     <string name="workspace_unbind_current">解除当前助手绑定</string>
+    <string name="workspace_view_files">查看文件</string>
     <string name="workspace_will_delete">将删除：%1$s</string>
     <string name="world_book_add">添加世界书</string>
     <string name="world_book_add_entry">添加条目</string>

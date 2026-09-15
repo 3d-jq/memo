@@ -4199,5 +4199,6 @@
   "workspaceEnvUninstall": "Remove",
   "workspaceEnvCancel": "Cancel",
   "workspaceEnvRemoving": "Removing…",
-  "workspaceManage": "Manage workspaces"
+  "workspaceManage": "Manage workspaces",
+  "workspaceViewFiles": "View files"
 }
