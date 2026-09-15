@@ -1037,7 +1037,7 @@ private fun InstallRootfsDialog(
 
 /** 「文件」页 —— 上游 `WorkspaceFilesPage`：存储区段控 → 路径栏 → 错误/空态/条目卡。 */
 @Composable
-private fun FilesTab(
+internal fun FilesTab(
     area: WorkspaceStorageArea,
     path: String,
     entries: List<WorkspaceFileEntry>,
@@ -1049,6 +1049,12 @@ private fun FilesTab(
     onDelete: (WorkspaceFileEntry) -> Unit,
     onExport: (WorkspaceFileEntry) -> Unit,
     onShare: (WorkspaceFileEntry) -> Unit,
+    /**
+     * 文件卡右侧的操作菜单（导出/分享/删除）。工作区预览 sheet 里关掉 —— 那里只是
+     * 「快速看工作结果」，重动作仍走「管理工作区」的详情页，避免同一个菜单在两处
+     * 各挂一套 SAF / 分享 / 删除确认。
+     */
+    showFileActions: Boolean = true,
 ) {
     val cs = MaterialTheme.colorScheme
     LazyColumn(
@@ -1087,6 +1093,7 @@ private fun FilesTab(
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
                 onShare = { onShare(entry) },
+                showActions = showFileActions,
             )
         }
     }
@@ -1169,6 +1176,7 @@ private fun WorkspaceFileCard(
     onDelete: () -> Unit,
     onExport: () -> Unit,
     onShare: () -> Unit,
+    showActions: Boolean = true,
 ) {
     val cs = MaterialTheme.colorScheme
     var menuExpanded by remember { mutableStateOf(false) }
@@ -1218,7 +1226,7 @@ private fun WorkspaceFileCard(
                     )
                 }
             }
-            Box {
+            if (showActions) Box {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(
                         Lucide.EllipsisVertical,
@@ -1336,7 +1344,7 @@ private fun WorkspaceBottomTabs(tab: Int, onSelect: (Int) -> Unit) {
 /** 文本编辑器（等宽、统一样式 sheet）。`editable=false` 时是只读预览（rootfs 区）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FileEditorSheet(
+internal fun FileEditorSheet(
     title: String,
     initial: String,
     editable: Boolean,

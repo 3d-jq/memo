@@ -53,6 +53,9 @@ class DrawerAndChatUiTest {
                     conversationId = conv.id,
                     onOpenDrawer = {},
                     onNew = {},
+                    // 工作区入口（home 路由 → HomeScreen → 这里）现在没有默认值，
+                    // 漏传会直接编译不过 —— 见 HomeScreen 的 onOpenWorkspaces 注释。
+                    onOpenWorkspaces = {},
                 )
             }
         }
@@ -74,6 +77,9 @@ class DrawerAndChatUiTest {
                     conversationId = conv.id,
                     onOpenDrawer = {},
                     onNew = {},
+                    // 工作区入口（home 路由 → HomeScreen → 这里）现在没有默认值，
+                    // 漏传会直接编译不过 —— 见 HomeScreen 的 onOpenWorkspaces 注释。
+                    onOpenWorkspaces = {},
                 )
             }
         }

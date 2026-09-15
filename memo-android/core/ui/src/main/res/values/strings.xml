@@ -2808,6 +2808,7 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="workspace_install_rootfs">Install Rootfs</string>
     <string name="workspace_loading">Loading…</string>
     <string name="workspace_manage">Manage workspaces</string>
+    <string name="workspace_view_files">View files</string>
     <string name="workspace_name_label">Name</string>
     <string name="workspace_new">New workspace</string>
     <string name="workspace_none">None</string>

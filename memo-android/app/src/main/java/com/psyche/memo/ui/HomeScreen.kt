@@ -170,7 +170,13 @@ fun HomeScreen(
     onOpenWorldBookPage: () -> Unit = {},
     onOpenTranslate: () -> Unit = {},
     onOpenSkills: () -> Unit = {},
-    onOpenWorkspaces: () -> Unit = {},
+    /**
+     * 工作区管理入口。**故意不给默认值**：它是从「+」面板 →「工作区」→「管理工作区」
+     * 一路抛上来的，曾经因为这里有 `= {}` 默认值、而 `home` 路由漏传 → 点了没反应
+     *（用户 2026-09-15「加号里面的工作区里面的管理工作区点击没有反应呀」）。去掉默认值
+     * 后调用方漏传会直接编译不过。
+     */
+    onOpenWorkspaces: () -> Unit,
     onEditAssistant: (String) -> Unit = {},
     onManageTags: (String) -> Unit = {},
     pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
@@ -286,9 +292,9 @@ fun HomeScreen(
     val drawerHaptics = LocalHapticsSettings.current
     val drawerView = LocalView.current
     fun settleDrawer(open: Boolean, velocityPx: Float = 0f) {
-        // home_page_controller.dart L2364-2382: pulse when the drawer finishes
-        // opening or closing, gated by the "on sidebar" switch.
-        if (drawerHaptics.onDrawer) Haptics.drawerPulse(drawerView)
+        // 触觉**不在这里发**（见下方 LaunchedEffect）：手势收起时 onSettle 会先
+        // 把 drawerOpen 翻成目标值、紧接着又触发这个 effect，两处都发就会连震两下
+        //（用户 2026-09-15「侧边栏到主对话界面这个震动怎么是两下」）。
         presenting = true
         dragJob?.cancel()
         dragJob = scope.launch {
@@ -308,7 +314,18 @@ fun HomeScreen(
         }
     }
 
+    // 抽屉触觉：home_page_controller.dart L2364-2382 `onDrawerValueChanged` ——
+    // 越过 0.05 / 0.95 阈值时 pulse 一次，即「抽屉状态真的翻转」时给一次。
+    // 首帧（冷启动 drawerOpen 初值）不发；旋转导致的 drawerWidthPx 变化也不发。
+    var lastDrawerOpenForPulse by remember { mutableStateOf<Boolean?>(null) }
     androidx.compose.runtime.LaunchedEffect(drawerOpen, drawerWidthPx) {
+        if (lastDrawerOpenForPulse != null &&
+            lastDrawerOpenForPulse != drawerOpen &&
+            drawerHaptics.onDrawer
+        ) {
+            Haptics.drawerPulse(drawerView)
+        }
+        lastDrawerOpenForPulse = drawerOpen
         settleDrawer(drawerOpen)
     }
     BackHandler(enabled = drawerOpen) { drawerOpen = false }
@@ -508,7 +525,7 @@ fun ChatContent(
     onOpenSearchServices: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
     onOpenSkills: () -> Unit = {},
-    onOpenWorkspaces: () -> Unit = {},
+    onOpenWorkspaces: () -> Unit,
     titleRefreshTick: Int = 0,
     injectPresets: Boolean = false,
 ) {

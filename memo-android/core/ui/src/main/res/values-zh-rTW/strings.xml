@@ -2808,6 +2808,7 @@
     <string name="workspace_install_rootfs">安裝 Rootfs</string>
     <string name="workspace_loading">載入中…</string>
     <string name="workspace_manage">管理工作區</string>
+    <string name="workspace_view_files">查看檔案</string>
     <string name="workspace_name_label">名稱</string>
     <string name="workspace_new">新增工作區</string>
     <string name="workspace_none">不使用</string>

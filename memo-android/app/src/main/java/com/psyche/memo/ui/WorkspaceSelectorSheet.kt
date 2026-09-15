@@ -10,14 +10,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.FolderOpen
 import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Settings
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.data.workspace.WorkspaceEntity
 
 /**
  * 输入栏「+」面板里的工作区选择面板 —— 照 RikkaHub 的 `WorkspacePickerListItem`
@@ -38,6 +43,8 @@ fun WorkspaceSelectorSheet(
 ) {
     val assistant = remember { container.currentAssistant() }
     val workspaces = remember { container.workspaceRepository.list() }
+    // 点「查看文件」时打开哪个工作区的预览 sheet（null = 不显示）。
+    var filesFor by remember { mutableStateOf<WorkspaceEntity?>(null) }
 
     fun bind(workspaceId: String?) {
         val current = container.currentAssistant() ?: return
@@ -87,6 +94,18 @@ fun WorkspaceSelectorSheet(
                             bind(workspace.id)
                             onDismiss()
                         },
+                        // 行尾「查看文件」：不用先绑成当前助手、也不用跳进管理工作区，
+                        // 点一下就能看到这个沙箱跑出来的东西（用户 2026-09-15）。
+                        trailing = {
+                            IosIconButton(
+                                icon = Lucide.FolderOpen,
+                                onTap = { filesFor = workspace },
+                                size = 20.dp,
+                                contentPadding = 6.dp,
+                                minSize = 36.dp,
+                                semanticLabel = stringResource(R.string.workspace_view_files),
+                            )
+                        },
                     )
                 }
                 MemoSheetOptionRow(
@@ -99,6 +118,17 @@ fun WorkspaceSelectorSheet(
                     },
                 )
             }
+        }
+
+        // 文件预览 sheet 叠在本面板之上（同 RikkaHub 的选择面板 → 详情的关系），
+        // 关掉它就回到本面板。
+        filesFor?.let { workspace ->
+            WorkspaceFilesSheet(
+                container = container,
+                workspaceId = workspace.id,
+                workspaceName = workspace.name,
+                onDismiss = { filesFor = null },
+            )
         }
     }
 }
