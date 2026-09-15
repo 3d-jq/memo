@@ -205,6 +205,7 @@ fun HomeScreen(
     var selectedConversationId by remember { mutableStateOf<String?>(null) }
     // Publish the open conversation so the assistant memory tab can organize it.
     LaunchedEffect(selectedConversationId) {
+        com.psyche.memo.PerfProbe.mark("selection-applied")
         container.setCurrentConversation(selectedConversationId)
     }
     var temporaryActive by remember { mutableStateOf(false) }
@@ -312,6 +313,7 @@ fun HomeScreen(
             if (!open) {
                 presenting = false
                 contentOffsetPx.floatValue = 0f
+                com.psyche.memo.PerfProbe.mark("drawer-closed")
             }
         }
     }
@@ -410,6 +412,9 @@ fun HomeScreen(
                 modifier = modifier,
                 isTemporary = temporaryActive,
                 onOpenConversation = { id ->
+                    // 诊断用（debug 构建才输出，见 PerfProbe）：侧边栏点会话 → 主界面
+                    // 这条链的时间点与掉帧统计打到 logcat（tag MemoPerf）。
+                    com.psyche.memo.PerfProbe.begin("open-conversation")
                     selectedConversationId = id
                     temporaryActive = false
                 },
@@ -473,6 +478,8 @@ fun HomeScreen(
                     open = presenting,
                     selectedId = selectedConversationId,
                     onSelect = { id, closeDrawer ->
+                        // 诊断用（debug 构建）：侧边栏点会话 → 主界面这条链从这里开始。
+                        com.psyche.memo.PerfProbe.begin("drawer-select")
                         selectedConversationId = id
                         if (closeDrawer) drawerOpen = false
                     },
@@ -567,12 +574,19 @@ fun ChatContent(
         onDispose { container.reapIdleChatViewModels(keep = null) }
     }
     // 首次进入本会话、或被回收后切回来 → 补读首屏窗口（回收时 tailLoaded 被清掉）。
-    androidx.compose.runtime.LaunchedEffect(conversationId) { vm.ensureLoaded() }
+    androidx.compose.runtime.LaunchedEffect(conversationId) {
+        com.psyche.memo.PerfProbe.mark("page-composed")
+        vm.ensureLoaded()
+    }
     val messages by vm.messages.collectAsState()
     // 顶栏 `+` 的三态（home_page.dart:1504-1516 / MLV 的「空会话换成临时聊天开关」）：
     // **组合期不再查库** —— 用 VM 的「首屏已读」+ 窗口是否为空判断（见
     // `newActionToggleable` 的注释）。
     val tailLoaded by vm.tailLoaded.collectAsState()
+    // 首屏消息第一次进状态（诊断用；PerfProbe 只在 debuggable 构建输出）。
+    androidx.compose.runtime.LaunchedEffect(messages.isNotEmpty()) {
+        if (messages.isNotEmpty()) com.psyche.memo.PerfProbe.mark("tail-in-state")
+    }
     val newActionToggleable = newActionToggleable(
         isTemporary = isTemporary,
         tailLoaded = tailLoaded,

@@ -24,6 +24,19 @@
 | 9 | Flutter 的自定义**列表高度估算**（`_estimateItemExtent`）与**首屏骨架**（`windowSkeletonKey`） | ⬜ 未做（前者影响长会话跳转精度；后者是可见 UI 变化，要你点头） |
 | 10 | 真机 frame trace（Perfetto/systrace）级别的量化 | ⬜ 未做（本轮证据 = 编译器报告 + 单元测试 + 逐行对比，不是帧时间线） |
 
+### 2026-09-15 第二轮追加：三个**随内容/历史量线性变慢**的点（用户「不论内容多少 点击都不会卡」）
+
+用户这句话把范围锁死了：参考实现不随数据量退化，说明我们这条路上有 O(N) 的活。逐个找出来：
+
+| # | 位置 | 原状（O(N) 在哪） | 参考实现怎么做 | 修法 |
+|---|---|---|---|---|
+| 11 | `SideDrawerContent` 列表刷新 | `LaunchedEffect(selectedId, open) { withContext(IO) { reload() } }` —— `selectedId` **每次点会话都变** ⇒ 整表 `conversationDao.getAll()` + 逐条解 payload JSON；`open`（`presenting` 驱动）在**抽屉收起时**再触发一次。历史越多，「侧边栏→主界面」越慢 | 原版：内存 `_conversationsCache` + `notifyListeners`；RikkaHub：Room `Flow<List<Conversation>>`。**都不在选中时重查** | ✅ 改成 `LaunchedEffect(open) { if (open) reload() }`；抽屉内部的增删改本来就显式调 `reload()`（12 处），重新打开也必刷。守卫 `DrawerListReloadTest`（扫 `LaunchedEffect` 块里出现 `selectedId` + `reload()` 就红） |
+| 12 | `MarkdownText` 首帧解析 | 首帧**同步**解析整篇 CommonMark，并且为**每个 AST 节点**各存一份「子树纯文本」字符串 —— 祖先把后代文本重复存一遍（O(内容 × 深度) 的分配），内容多的消息一打开就是主线程上一大批分配 | 原版 `markdown_with_highlight.dart`：`IncrementalMarkdownDocument`（流式按块增量解析）+ `ByteLruCache`（4MB，规范化结果）+ 流式上限（表 30 行 / 高亮 300 行·12000 字）+ 长文 50ms 渲染去抖 | ✅ 改成「整篇拼一次扁平缓冲 + 每节点记区间 + 惰性切片」，`MarkdownPlainTextTest` 3 例钉住「逐字等价」与「不再重复」 |
+| 13 | 打开会话时的首屏 Markdown 冷解析 | 可见的几条消息全冷缓存 ⇒ 解析落在跑组合的那一帧 | 原版有首屏骨架 + 增量解析；RikkaHub 首帧同样同步，但解析器是逐行式的（更便宜） | ✅ `ChatViewModel.prewarmWindowMarkdown`：发布窗口**之前**在 `Dispatchers.Default` 预热**即将可见的一屏**（条数 8 / 字符 40000 双上限，命中渲染侧 `withCitations=true` 的同一个键） |
+
+> 注意这三条的**形状**：11 是「每次交互都重做一遍全量读」，12 是「单位内容的开销被放大」，13 是「把解析放在错误的线程/时刻」。都不是"再调一调参数"能解决的，所以对照两个参考实现看**它们怎么组织数据与时机**才是正解。
+
+
 ---
 
 ## 1. 取证方法（可复现）
@@ -118,7 +131,6 @@ cd memo-android && ./gradlew :app:compileDebugKotlin --rerun-tasks
 ---
 
 ## 7. 仍挂账（按性价比排序）
-
 1. **真机 frame trace**：本轮全部证据是「编译器报告 + 单元测试 + 源码对照」，**没有** Perfetto/systrace 帧时间线。要看真实帧耗时（尤其滚动 vs 流式），需要一次 `perfetto` 抓取（我可以做，但会占用你正在用的手机几分钟）。
 2. **自定义高度估算 / `beyondBoundsItemCount`**：长会话「跳到第 N 条」的落点与预组合范围。收益中等（体感「跳得准不准」），改动小（`LazyListState` 不支持自定义估算，Compose 侧等价物有限，需要方案）。
 3. **首屏骨架行**（原版 `windowSkeletonKey`）：**可见 UI 变化**，需要你确认要不要（现在是「空 → 内容到齐」，用户可能感知为「顿一下」）。

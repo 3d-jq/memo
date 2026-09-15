@@ -261,13 +261,54 @@ private data class InlineMathScope(
 private val LocalInlineMath = staticCompositionLocalOf<InlineMathScope?> { null }
 
 /**
- * 一次解析的产物：AST 根 + 每个节点的纯文本（渲染阶段查表，避免在组合里递归）。
- * commonmark 0.26 移除了 `Node.data`，所以只能外挂一张表。
+ * 一次解析的产物：AST 根 + 每个节点纯文本在**一段扁平缓冲**里的区间。
+ *
+ * 为什么不是 `Map<Node, String>`：老实现给**每个节点**都存一份「子树纯文本」字符串，
+ * 于是祖先节点把它所有后代的文本各存了一遍（O(内容 × 深度) 的分配）。内容多的会话
+ * 一打开就是主线程上一大批字符串分配 —— 用户 2026-09-15「点击对话历史…内容多的就会
+ * 很卡」。原版 `markdown_with_highlight.dart` 用 `ByteLruCache` + `IncrementalMarkdownDocument`
+ * 避免这件事；我们这边等价的做法是：**整篇只拼一次扁平缓冲**，每个节点只记 `(start,end)`。
+ * 参数同 [ParsedMarkdown]。
  */
 private class ParsedMarkdown(
     val root: Node,
-    val plainTexts: Map<Node, String>,
-)
+    /** 全篇纯文本；每个节点的 `[start, end)` 就是它在里面的切片。 */
+    val flatText: String,
+    val ranges: Map<Node, IntRange>,
+) {
+    /**
+     * `Map<Node, String>` 的**惰性视图**（渲染阶段仍按 `plainTexts[node]` 取值，签名不变）：
+     * 只在真的取某个节点时才切子串 + 记忆化，不再为整棵树预先造字符串。
+     * 视图只在渲染线程（主线程）用，所以内部 `memo` 不需要同步。
+     */
+    val plainTexts: Map<Node, String> by lazy { LazyNodeTextMap(flatText, ranges) }
+}
+
+private class LazyNodeTextMap(
+    private val flat: String,
+    private val ranges: Map<Node, IntRange>,
+) : AbstractMap<Node, String>() {
+
+    private val memo = HashMap<Node, String>()
+
+    override fun get(key: Node): String? {
+        memo[key]?.let { return it }
+        val range = ranges[key] ?: return null
+        val text = flat.substring(range.first, range.last + 1)
+        memo[key] = text
+        return text
+    }
+
+    override fun containsKey(key: Node): Boolean = ranges.containsKey(key)
+
+    override val entries: Set<Map.Entry<Node, String>>
+        get() = ranges.entries.mapTo(LinkedHashSet()) { (node, range) ->
+            object : Map.Entry<Node, String> {
+                override val key: Node = node
+                override val value: String = flat.substring(range.first, range.last + 1)
+            }
+        }
+}
 
 /**
  * 解析结果缓存（按源文本）。滚动时每条"见过"的消息都能直接命中 —— 否则每次
@@ -290,6 +331,25 @@ fun preloadMarkdown(marks: List<Pair<String, Boolean>>) {
     }
 }
 
+/** [parseForTest] 的返回值（测试专用，见 `MarkdownPlainTextTest`）。 */
+internal class MarkdownParseForTest(
+    val root: Node,
+    /** 渲染侧用的那张惰性表（`plainTexts[node]`）。 */
+    val plainTexts: Map<Node, String>,
+    /** 扁平缓冲的长度：整篇只拼一遍，不做「每个祖先各存一份子树文本」。 */
+    val flatChars: Int,
+)
+
+/**
+ * 测试用：解析一段 Markdown 并把内部结构暴露出来，用来钉住两件事：
+ * ① 惰性表取到的每个节点纯文本与原实现（每个节点各存一份子树文本）**逐字相同**；
+ * ② 扁平缓冲**不重复**祖先内容（`flatChars` 只含 Text 字面量，不会随嵌套深度膨胀）。
+ */
+internal fun parseForTest(markdown: String, withCitations: Boolean = true): MarkdownParseForTest {
+    val parsed = parseMarkdown(markdown, withCitations)
+    return MarkdownParseForTest(parsed.root, parsed.plainTexts, parsed.flatText.length)
+}
+
 private fun cacheKey(markdown: String, withCitations: Boolean): String =
     (if (withCitations) "c:" else "p:") + markdown
 
@@ -304,32 +364,56 @@ private fun cacheKey(markdown: String, withCitations: Boolean): String =
 private fun parseMarkdownSource(markdown: String, withCitations: Boolean): ParsedMarkdown {
     val key = cacheKey(markdown, withCitations)
     parsedCache.get(key)?.let { return it }
+    // 冷解析发生在**组合期（主线程）**：首帧同步解析是照 RikkaHub `Markdown.kt:240`
+    // 做的（避免空白闪烁），但「打开一条历史会话」时可见的几条消息全是冷的，
+    // 累计耗时是那条路径的主要嫌疑。这里把慢的那几次报给可选 sink（app 层在 debug
+    // 构建里接到 PerfProbe；release 默认 null，零开销）。
+    val startedAt = android.os.SystemClock.uptimeMillis()
     val parsed = parseMarkdown(markdown, withCitations)
     parsedCache.put(key, parsed)
+    val elapsed = android.os.SystemClock.uptimeMillis() - startedAt
+    if (elapsed >= 4) {
+        MarkdownPerf.sink?.invoke("markdown-cold-parse ${markdown.length}ch ${elapsed}ms")
+    }
     return parsed
+}
+
+/**
+ * 冷解析的观测口（app 层 debug 构建里接到 `PerfProbe`；release 保持 null）。
+ * 放在 core:ui 里是因为解析发生在这一层，而 app 依赖 core:ui（不能反向依赖）。
+ */
+object MarkdownPerf {
+    @Volatile
+    var sink: ((String) -> Unit)? = null
 }
 
 private fun parseMarkdown(markdown: String, withCitations: Boolean): ParsedMarkdown {
     val source = if (withCitations) preprocessCitations(markdown) else markdown
     val root = MarkdownRenderer.parse(source)
-    val plainTexts = HashMap<Node, String>()
-    collectPlainText(root, plainTexts)
-    return ParsedMarkdown(root, plainTexts)
+    val flat = StringBuilder(source.length + 16)
+    val ranges = HashMap<Node, IntRange>()
+    // 一次自底向上遍历：整篇只拼一遍，每个节点只记区间（见 ParsedMarkdown 的注释）。
+    collectPlainTextRanges(root, flat, ranges)
+    return ParsedMarkdown(root, flat.toString(), ranges)
 }
 
-/** 自底向上记录「本节点子树的纯文本」，供 [nodeText] 查表。 */
-private fun collectPlainText(node: Node, out: MutableMap<Node, String>): String {
-    val sb = StringBuilder()
+/** 把整棵树的纯文本拼进 [flat]，同时记下每个节点的 `[start, end)`。 */
+private fun collectPlainTextRanges(
+    node: Node,
+    flat: StringBuilder,
+    out: MutableMap<Node, IntRange>,
+): Unit {
+    val start = flat.length
     var child = node.firstChild
     while (child != null) {
-        sb.append(
-            if (child is Text) child.literal.orEmpty() else collectPlainText(child, out),
-        )
+        if (child is Text) {
+            flat.append(child.literal.orEmpty())
+        } else {
+            collectPlainTextRanges(child, flat, out)
+        }
         child = child.next
     }
-    val text = sb.toString()
-    out[node] = text
-    return text
+    out[node] = start until flat.length
 }
 
 @Composable

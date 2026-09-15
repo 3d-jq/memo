@@ -148,11 +148,18 @@ fun SideDrawerContent(
         conversations = container.conversationDao.getAll()
     }
 
-    // 抽屉改为常驻组合（避免开合时插拔节点导致布局抖动），所以不能靠"每次重建"
-    // 刷新列表 —— 用 open 作为 key，每次展示时重新加载。读放 IO：reload() 是同步
-    // getAll()，原先直接压在 LaunchedEffect 的主线程体里（抽屉就在聊天页边上）。
-    androidx.compose.runtime.LaunchedEffect(selectedId, open) {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reload() }
+    // 只在抽屉**打开**时重读一次列表。
+    //
+    // 原版是内存里的 `_conversationsCache` + `notifyListeners`，RikkaHub 是 Room 的
+    // `Flow<List<Conversation>>` —— 两边都**不会**在「选中一条会话」时重查整张表。
+    // 我们这里曾经的 key 是 `(selectedId, open)`：`selectedId` 一变（= 每次点会话）就
+    // `conversationDao.getAll()` 整表读 + 逐条解 payload JSON，而 `open` 由 `presenting`
+    // 驱动、**抽屉收起时再触发一次** —— 正好压在「侧边栏 → 主界面」那一下，历史越多越慢
+    // （用户 2026-09-15「点击对话历史…内容多的就会很卡」）。
+    // 抽屉内部的增删改（置顶/重命名/删除/移动/复制）本来就都显式调了 `reload()`，所以去掉
+    // 这两个 key 不会让列表变旧；每次重新打开抽屉也一定会刷新。读放 IO（`getAll()` 是同步的）。
+    androidx.compose.runtime.LaunchedEffect(open) {
+        if (open) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reload() }
     }
 
     // 全局当前助手（assistant_provider.currentAssistantId）：抽屉助手卡显示它，

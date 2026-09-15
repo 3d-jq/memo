@@ -423,6 +423,41 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * 首屏窗口里**马上要显示的那几条**先在 Default 线程把 Markdown 解析缓存预热掉。
+     *
+     * 为什么：`MarkdownText` 的首帧是同步解析（照 RikkaHub `Markdown.kt:240`，避免空白
+     * 闪烁），而打开一条**内容多**的历史会话时，可见的几条消息全是冷缓存 —— 那些
+     * CommonMark 解析 + 纯文本收集全落在跑组合的那一帧上（用户 2026-09-15「内容多的就会
+     * 很卡」）。原版 `markdown_with_highlight.dart` 靠 `ByteLruCache` +
+     * `IncrementalMarkdownDocument` 避免这件事；我们这边等价的办法就是**在发布窗口数据
+     * 之前先把这几条解析好**（有界：条数 + 字符数双上限）。
+     *
+     * 注意与 2026-09-15 删掉的那段「预热最近 60 条」的区别：那段是无界的、与首帧抢 CPU；
+     * 这里只预热**即将可见的一屏**、并且**等它完成才发布**（延迟一点点换首帧不再解析）。
+     */
+    private suspend fun prewarmWindowMarkdown(rows: List<ChatMessage>) {
+        val tail = rows.takeLast(MARKDOWN_PREWARM_MESSAGES)
+        runCatching {
+            withContext(Dispatchers.Default) {
+                val marks = ArrayList<Pair<String, Boolean>>(tail.size)
+                var budget = MARKDOWN_PREWARM_CHARS
+                for (row in tail.asReversed()) {
+                    val text = row.content
+                    if (text.isEmpty()) continue
+                    if (text.length > budget) break
+                    budget -= text.length
+                    // `withCitations=true`：渲染侧两处 `MarkdownText` 都传了非空的
+                    // `onCitationTap`（HomeScreen:2521/2824/2906），所以缓存键就是 true。
+                    marks += text to true
+                }
+                if (marks.isNotEmpty()) {
+                    com.psyche.memo.ui.markdown.preloadMarkdown(marks)
+                }
+            }
+        }
+    }
+
     private suspend fun reloadTailBody() {
         val loaded = withContext(Dispatchers.IO) {
             container.messageDao.getTail(conversationId)
@@ -431,6 +466,9 @@ class ChatViewModel(
             if (isTemporary) emptyList()
             else container.conversationDao.get(conversationId)?.chatSuggestions ?: emptyList()
         }
+        // 内容多的会话：可见的那几条先在 Default 线程解析好，别把 CommonMark 落在首帧上
+        // （发布 `_messages` 之前完成 —— 见 prewarmWindowMarkdown 的注释）。
+        prewarmWindowMarkdown(loaded)
         // 版本表**按需查**：只有窗口里确实出现过多版本的组才需要分支选择器。原版同一
         // 判据（`chat_controller.dart:180-198`：只收 `versionCount > 1 || version > 0
         // || 已在 versionSelections 里` 的组才预载），而且那批组一次查完。之前这里是
@@ -2965,6 +3003,12 @@ class ChatViewModel(
          * 不必再查一次总数。
          */
         private const val TAIL_WINDOW = 40
+
+        /** 首屏 Markdown 预热条数：一屏可见量 + 余量（不是原来那套无界的 60 条）。 */
+        private const val MARKDOWN_PREWARM_MESSAGES = 8
+
+        /** 预热的总字符预算（原版流式侧 `_streamingHighlightMaxChars = 12000` 同量级）。 */
+        private const val MARKDOWN_PREWARM_CHARS = 40_000
 
         fun factory(
             container: AppContainerImpl,

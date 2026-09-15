@@ -51,6 +51,11 @@ class MemoApplication : Application(), ImageLoaderFactory {
         com.psyche.memo.service.ChatNotificationManager.init(this) { key ->
             container.preferenceRepository.readJson(key)
         }
+        // 诊断用（debug 构建）：把 core:ui 的 Markdown 冷解析耗时接到 PerfProbe。
+        PerfProbe.init(applicationInfo)
+        if (PerfProbe.isEnabled()) {
+            com.psyche.memo.ui.markdown.MarkdownPerf.sink = { line -> PerfProbe.mark(line) }
+        }
         // 供应商/助手配置缓存预热：组合期多处 `remember { providerConfig(key) }`、
         // `remember { assistantStore.get(id) }`（含列表行级的 ProviderAvatar、抽屉当前助手、
         // 消息头归属助手）首次要查库 + 解 JSON，落在跑组合的那一帧上。IO 上预热一次即可
