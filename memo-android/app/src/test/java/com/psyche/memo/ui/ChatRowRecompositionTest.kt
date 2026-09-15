@@ -89,6 +89,17 @@ class ChatRowRecompositionTest {
     }
 
     @Test
+    fun `timeline skeleton shows only while the first window is still loading`() {
+        // 原版 `message_list_view.dart:1739`：`rendered.isEmpty && isLoadingWindow`。
+        assertTrue(showTimelineSkeleton(tailLoaded = false, messagesEmpty = true))
+        // 窗口读完了但还是空 → 是「真的空会话」，要显示正常空态，别挂骨架。
+        assertTrue(!showTimelineSkeleton(tailLoaded = true, messagesEmpty = true))
+        // 有内容就一定是内容。
+        assertTrue(!showTimelineSkeleton(tailLoaded = false, messagesEmpty = false))
+        assertTrue(!showTimelineSkeleton(tailLoaded = true, messagesEmpty = false))
+    }
+
+    @Test
     fun `touching the timeline does not recompose message rows`() {
         val id = seedConversation(messages = 6)
         render(id)

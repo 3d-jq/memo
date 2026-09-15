@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.animation.core.animateFloatAsState
@@ -223,33 +224,23 @@ fun HomeScreen(
     // 抽屉关闭动画不再和重活抢帧（用户 2026-09-15「内容多的就会很卡」）。
     // 冷启动/空会话那条（原版 `isLoadingWindow`）由 ChatContent 的加载态负责。
     val convoFade = remember { androidx.compose.animation.core.Animatable(1f) }
-    var switchPending by remember { mutableStateOf(false) }
     fun switchConversation(target: String?) {
         if (target == null || target == selectedConversationId) return
-        switchPending = true
         scope.launch {
-            val fadeOut = launch {
-                convoFade.animateTo(
-                    targetValue = 0f,
-                    animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS),
-                )
-            }
-            // 与淡出并行：读目标会话首屏 + 预热 Markdown（全在 IO/Default）。
+            // ① **先备好，再切换**（原版 `prepareConversationSwitch` → `commitConversationSwitch`
+            //    的 fetch-then-commit）。第一版写反了：先淡出再等预热，于是屏幕上有一段
+            //    空白（用户 2026-09-15「会白一会 在显示」）。现在预热期间**旧会话内容照旧
+            //    可见**，用户看不到任何空白。
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 container.prepareConversationSwitch(target)
             }
-            fadeOut.join()
-            // 提交：此刻时间线仍是全透明。
+            // ② 短淡出 → ③ 提交（首帧命中预热的 Markdown 缓存，很快）→ ④ 立刻淡入：
+            //    屏幕上要么已经是新内容，要么是骨架（`showTimelineSkeleton`），不会是白屏。
+            convoFade.animateTo(
+                targetValue = 0f,
+                animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS),
+            )
             selectedConversationId = target
-            // 兜底：万一首屏回调没来（异常路径），1.2s 后也把列表放出来 —— 绝不能
-            // 因为一个回调丢失让对话界面一直透明。
-            kotlinx.coroutines.delay(1200)
-            switchPending = false
-        }
-    }
-    // 新会话首屏上屏 + 落底完成 → 淡入（原版 `_convoFadeController.forward()`）。
-    androidx.compose.runtime.LaunchedEffect(switchPending, selectedConversationId) {
-        if (!switchPending && selectedConversationId != null && convoFade.value < 1f) {
             convoFade.animateTo(
                 targetValue = 1f,
                 animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS),
@@ -466,10 +457,6 @@ fun HomeScreen(
                 titleRefreshTick = titleRefreshTick,
                 injectPresets = pendingPresetInject,
                 timelineAlpha = { convoFade.value },
-                onTimelineSettled = {
-                    // 新会话首屏已上屏并落底 → 淡入（原版 `_convoFadeController.forward()`）。
-                    switchPending = false
-                },
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
             // 常驻组合：之前用 `if (presenting)` 插拔节点，开合瞬间要新建布局
@@ -575,6 +562,66 @@ internal fun headerAssistantId(
         ?: currentAssistantId?.takeIf { it.isNotEmpty() }
 
 /**
+ * 首屏窗口未就绪时是否铺骨架 —— 判据照原版 `message_list_view.dart:1739`
+ * （`_effectiveRenderModels.isEmpty && widget.isLoadingWindow`）。
+ *
+ * 注意「真的空会话」不算：窗口读完了（`tailLoaded`）就该显示正常空态/临时聊天提示，
+ * 不能一直挂着骨架。
+ */
+internal fun showTimelineSkeleton(tailLoaded: Boolean, messagesEmpty: Boolean): Boolean =
+    !tailLoaded && messagesEmpty
+
+/**
+ * 首屏骨架 —— 原版 `_WindowLoadingSkeleton`（气泡形状的 shimmer）。只在窗口未就绪的
+ * 那一小段显示，避免会话切换时出现空白。
+ */
+@Composable
+private fun TimelineSkeleton(modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "timelineSkeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.62f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(900),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "timelineSkeletonAlpha",
+    )
+    // 四行「气泡」：左右交替、最后一行短一点（原版骨架也是交替气泡）。
+    val rows = listOf(
+        0.62f to false,
+        0.78f to true,
+        0.5f to false,
+        0.72f to true,
+    )
+    Column(
+        modifier = modifier.padding(
+            horizontal = 16.dp,
+            vertical = ChatStyleSpec.MESSAGE_VERTICAL_DP.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        rows.forEachIndexed { index, (widthFraction, alignEnd) ->
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = if (alignEnd) Alignment.CenterEnd else Alignment.CenterStart,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(widthFraction)
+                        .height(if (index % 2 == 0) 64.dp else 92.dp)
+                        .background(
+                            cs.onSurface.copy(alpha = alpha * 0.18f),
+                            androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        ),
+                )
+            }
+        }
+    }
+}
+
+/**
  * 顶栏 `+` 到底该显示「临时聊天开关」还是「新建会话」—— 判据：「当前会话是空的」。
  *
  * 原版（`home_mobile_layout` + `home_view_model`）由内存里的 `currentConversation` 消息数
@@ -611,8 +658,6 @@ fun ChatContent(
      * 为了让每帧的 alpha 变化只脏 `graphicsLayer` 的绘制阶段，不重组合整页。
      */
     timelineAlpha: () -> Float = { 1f },
-    /** 新会话首屏已上屏且落底完成 → 调用方可以淡入。 */
-    onTimelineSettled: () -> Unit = {},
 ) {
     val vm: ChatViewModel = viewModel(
         key = conversationId,
@@ -1106,13 +1151,7 @@ fun ChatContent(
         if (!listInitialized && messages.isNotEmpty()) {
             scrollTimelineToBottom()
             listInitialized = true
-            // 落底完成 → 通知外层淡入（原版 `settleAtBottomBeforeReveal` 之后才 forward）。
-            onTimelineSettled()
         }
-    }
-    // 空会话（没有消息可落底）：窗口读完就告诉外层可以淡入，别让时间线一直透明。
-    androidx.compose.runtime.LaunchedEffect(tailLoaded, messages.isEmpty()) {
-        if (tailLoaded && messages.isEmpty()) onTimelineSettled()
     }
     // 流式期间贴底跟随（scroll_controller.dart:116-155 —— 布局期贴底，不做动画）。
     // 三个前提缺一不可：跟随开着（following）∧ 手指不在屏上（pointerDown）∧ 此刻没在滚动。
@@ -1717,6 +1756,12 @@ fun ChatContent(
                     item(key = SCROLL_BOTTOM_ITEM_KEY) {
                         Spacer(Modifier.height(1.dp))
                     }
+                }
+                // 首屏窗口还没读回来 → 铺骨架，而不是让这一块空着（用户 2026-09-15
+                // 「会白一会 在显示」）。判据同原版 `message_list_view.dart:1739`：
+                // `rendered.isEmpty && isLoadingWindow`。
+                if (showTimelineSkeleton(tailLoaded = tailLoaded, messagesEmpty = messages.isEmpty())) {
+                    TimelineSkeleton(modifier = Modifier.fillMaxSize())
                 }
                 // 滚动导航面板（scroll_nav_buttons.dart）：贴输入栏上方右侧。
                 // home_page.dart:1504-1516 移动端三态：always 常显 / scroll 跟随
