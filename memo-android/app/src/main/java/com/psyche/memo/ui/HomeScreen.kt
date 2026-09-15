@@ -587,6 +587,12 @@ fun ChatContent(
     }
     val chatHaptics = LocalHapticsSettings.current
     val chatView = LocalView.current
+    // home_view_model.dart:185/423/495 —— 「消息生成」触觉由 ViewModel 在生成开跑前
+    // 触发（发送/回车发送/重新生成/建议气泡全覆盖），页面只注入：有 View 才能发的
+    // 触觉 + 显示设置里的 `haptics on generate` 开关。
+    androidx.compose.runtime.SideEffect {
+        vm.onHapticFeedback = { if (chatHaptics.onGenerate) Haptics.light(chatView) }
+    }
 
     val cs = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1680,9 +1686,8 @@ fun ChatContent(
             streaming = streaming,
             onInputChange = vm::updateInput,
             onSend = {
-                // home_page_controller.dart L532-537: generation start fires a
-                // light tick when "haptics on generate" is enabled.
-                if (chatHaptics.onGenerate) Haptics.light(chatView)
+                // 触觉移进 ViewModel（home_view_model.dart:423）—— 只挂在这个按钮上
+                // 会漏掉回车发送/建议气泡等入口，见 vm.onHapticFeedback。
                 vm.send()
                 // home_page_controller.dart L526-531 发送路径：resetUserScrolling() +
                 // scrollToBottom —— 自己发消息一律回到最新，即便此前上滑过。
@@ -2179,7 +2184,7 @@ fun ChatContent(
             onDismiss = { regenerateFor = null },
             onConfirm = {
                 regenerateFor = null
-                if (chatHaptics.onGenerate) Haptics.light(chatView)
+                // 触觉由 vm.regenerate() 自己发（同上传送路径），别在这里重复一次。
                 vm.regenerate(target.id)
             },
         )

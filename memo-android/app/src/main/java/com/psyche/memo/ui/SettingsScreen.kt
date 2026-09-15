@@ -130,34 +130,25 @@ fun SettingsScreen(
     val themeMode = ThemeState.mode
     var colorModeSheetVisible by remember { mutableStateOf(false) }
 
-    // B4 — chat storage summary (files + bytes over the app data dirs).
+    // B4 — chat storage summary. 与「存储空间」页共用同一份计算（原版也是同一个
+    // `StorageUsageService.computeReport`，行与页面口径必须一致）。此前这里自己
+    // 又写了一遍遍历：口径不同，还把沙箱 rootfs 的三万多个文件算进「聊天记录」，
+    // 于是数字永远填不上、一直显示「统计中」（用户 2026-09-15）。
+    // 失败也必须落地成一个可见状态 —— 抛异常就永远停在「统计中」是最糟的。
     var storageSummary by remember { mutableStateOf<Pair<Int, Long>?>(null) }
+    var storageFailed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        storageSummary = withContext(Dispatchers.IO) {
-            var count = 0L
-            var bytes = 0L
-            val roots = listOfNotNull(
-                context.filesDir,
-                context.getDatabasePath("memo.db")?.parentFile,
-                context.cacheDir,
-            )
-            fun walk(dir: java.io.File?) {
-                if (dir == null || !dir.exists()) return
-                val stack = ArrayDeque<java.io.File>()
-                stack.add(dir)
-                while (stack.isNotEmpty()) {
-                    val f = stack.removeLast()
-                    val children = runCatching { f.listFiles() }.getOrNull() ?: continue
-                    for (child in children) {
-                        if (child.isDirectory) stack.add(child) else {
-                            count += 1
-                            bytes += runCatching { child.length() }.getOrDefault(0L)
-                        }
-                    }
-                }
-            }
-            roots.forEach { walk(it) }
-            count.toInt() to bytes
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                val report = com.psyche.memo.ui.StorageUsage.computeReport(context)
+                report.totalFiles to report.totalBytes
+            }.getOrNull()
+        }
+        if (result == null) {
+            android.util.Log.w("SettingsScreen", "chat storage summary failed")
+            storageFailed = true
+        } else {
+            storageSummary = result
         }
     }
 
@@ -291,14 +282,15 @@ fun SettingsScreen(
                     SettingsRow(
                         Lucide.HardDrive,
                         stringResource(UiR.string.settings_page_chat_storage),
-                        detailText = if (summary == null) {
-                            stringResource(UiR.string.settings_page_calculating)
-                        } else {
-                            stringResource(
+                        detailText = when {
+                            summary != null -> stringResource(
                                 UiR.string.settings_page_files_count,
                                 summary.first.toString(),
                                 fmtBytes(summary.second),
                             )
+                            // 统计失败也要落地：永远卡在「统计中」是最糟的状态。
+                            storageFailed -> "—"
+                            else -> stringResource(UiR.string.settings_page_calculating)
                         },
                         onTap = onOpenStorage,
                     )

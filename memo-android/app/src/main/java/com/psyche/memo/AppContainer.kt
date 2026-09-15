@@ -420,14 +420,19 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
      * the model at all.
      */
     fun providerConfig(providerId: String): com.psyche.memo.data.model.ProviderConfig? {
+        // 组合期/请求组装期都会被高频调用（单次请求 4 次），每次查库 + 解 JSON 会
+        // 把 SQLite 往返打到主线程上。缓存由 `PayloadEntityDao` 在写入时整体失效。
+        com.psyche.memo.data.db.ProviderConfigCache.get(providerId)?.let { return it }
         val dao = PayloadEntityDao(database.readableDatabase, "provider_rows", primaryKey = "provider_key")
         val row = dao.get(providerId)
             ?: dao.get(com.psyche.memo.data.repo.ProviderRepository.canonicalizeKey(providerId))
             ?: return null
-        return com.psyche.memo.data.model.ProviderConfig.fromJsonString(
+        val config = com.psyche.memo.data.model.ProviderConfig.fromJsonString(
             kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
             row.payload,
         )
+        com.psyche.memo.data.db.ProviderConfigCache.put(providerId, config)
+        return config
     }
 
     fun apiKeyFor(providerId: String): String? =

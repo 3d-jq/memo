@@ -16,6 +16,11 @@ class PayloadEntityDao(
     private val table: String,
     private val primaryKey: String = "id",
 ) {
+    private companion object {
+        /** 只有这张表的 payload 会被解码缓存（[ProviderConfigCache]）。 */
+        const val PROVIDER_ROWS = "provider_rows"
+    }
+
     data class Row(
         val id: String,
         val sortOrder: Int,
@@ -47,10 +52,12 @@ class PayloadEntityDao(
             put("updated_at", now)
         }
         db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        invalidateDecodedCache()
     }
 
     fun delete(id: String) {
         db.delete(table, "$primaryKey = ?", arrayOf(id))
+        invalidateDecodedCache()
     }
 
     /**
@@ -72,7 +79,17 @@ class PayloadEntityDao(
             }
             db.insertWithOnConflict(table, null, values, SQLiteDatabase.CONFLICT_REPLACE)
         }
+        invalidateDecodedCache()
         return rows.size
+    }
+
+    /**
+     * `provider_rows` 变了就让 [ProviderConfigCache] 整表失效 —— 解码缓存与这里
+     * 的写入是同一份真相，写在哪个入口都必须让缓存知道（upsert/delete/replaceAll
+     * 都覆盖到，备份恢复的 replaceAll 也走这里）。
+     */
+    private fun invalidateDecodedCache() {
+        if (table == PROVIDER_ROWS) ProviderConfigCache.invalidate()
     }
 
     /** Next sort_order (max + 1, 0 when empty) — matches drift semantics. */

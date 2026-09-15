@@ -162,7 +162,7 @@ object StorageUsage {
         else -> null
     }
 
-    private fun walk(dir: File, onFile: (File) -> Unit) {
+    private fun walk(dir: File, skip: (File) -> Boolean = { false }, onFile: (File) -> Unit) {
         if (!dir.exists()) return
         val stack = ArrayDeque<File>()
         stack.add(dir)
@@ -170,9 +170,29 @@ object StorageUsage {
             val f = stack.removeLast()
             val children = runCatching { f.listFiles() }.getOrNull() ?: continue
             for (child in children) {
-                if (child.isDirectory) stack.add(child) else onFile(child)
+                if (child.isDirectory) {
+                    if (!skip(child)) stack.add(child)
+                } else {
+                    onFile(child)
+                }
             }
         }
+    }
+
+    /**
+     * 沙箱工作区的 Linux rootfs（`workspaces/<助手 id>/linux` 整棵子树）**不参与遍历**。
+     *
+     * 用户 2026-09-15「聊天记录存储一直显示统计中」：真机实测 `filesDir` 共
+     * 34,615 个文件，其中 `workspaces` 占 34,342 个（99.2%）——全是 proot 用的
+     * Linux rootfs。逐文件 stat 这 3 万多个文件要十几秒，统计永远填不上数字，
+     * 而它本来也不是「聊天记录」：rootfs 是安装出来的系统镜像（原版没有这个目录，
+     * 是我们的沙箱工作区新增的）。工作区自己的用量在「设置 → 工作区」里看。
+     */
+    internal fun isWorkspaceRootfs(dir: File): Boolean {
+        if (dir.name != "linux") return false
+        val workspaceDir = dir.parentFile ?: return false
+        val workspacesDir = workspaceDir.parentFile ?: return false
+        return workspacesDir.name == "workspaces"
     }
 
     fun computeReport(context: Context): StorageReport {
@@ -259,7 +279,7 @@ object StorageUsage {
 
         // filesDir walk (appData): root-level files → other/app; legacy hive
         // artifacts (absent on this build, mirrored for parity).
-        walk(root) { file ->
+        walk(root, skip = ::isWorkspaceRootfs) { file ->
             val rel = runCatching { file.relativeTo(root).invariantSeparatorsPath }.getOrDefault("")
             val parts = rel.split('/')
             val bytes = runCatching { file.length() }.getOrDefault(0L)

@@ -63,6 +63,17 @@ class ChatViewModel(
 
     private val isTemporary: Boolean = conversationId == com.psyche.memo.data.model.Conversation.TEMPORARY_ID
 
+    /**
+     * `home_view_model.dart:185/423/495` `onHapticFeedback` —— **生成开始时**的触觉
+     * 回调，由页面注入（触觉必须有 View 才能发，ViewModel 拿不到）。
+     *
+     * 挂在 ViewModel 而不是发送按钮的 onSend 上：上游是在 `sendMessage` /
+     * `regenerateAtMessage` 真正开跑前触发，所以回车发送、重新生成、建议气泡等
+     * 所有入口都覆盖；只挂按钮就会漏（用户 2026-09-15「消息生成触觉反馈好像没有
+     * 做到呀」）。
+     */
+    var onHapticFeedback: (() -> Unit)? = null
+
     /** provider + model for this conversation (selected in the UI). Empty
      * until the first configured provider is resolved — no hardcoded defaults. */
     val selectedProviderId = MutableStateFlow("")
@@ -428,6 +439,8 @@ class ChatViewModel(
         input.value = ""
         _attachments.value = emptyList()
         clearSuggestions()
+        // home_view_model.dart:423 —— 生成开始前给一次触觉（开关在页面侧）。
+        onHapticFeedback?.invoke()
         viewModelScope.launch {
             // nextOrder queries SQLite synchronously, so both the build and
             // the insert run on Dispatchers.IO; StateFlow updates (append)
@@ -1020,6 +1033,8 @@ class ChatViewModel(
         if (!hasModelOrWarn()) return
         val anchor = msgs[idx]
         clearSuggestions()
+        // home_view_model.dart:495 —— 重新生成同样属于「生成开始」，一样给触觉。
+        onHapticFeedback?.invoke()
         val deleteTrailing = container.preferenceRepository
             .readJson("display_regenerate_delete_trailing_messages_v1") == "1"
         val anchorGroupId = anchor.groupId.ifEmpty { anchor.id }
