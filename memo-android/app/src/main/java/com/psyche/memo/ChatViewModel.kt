@@ -273,6 +273,59 @@ class ChatViewModel(
         viewModelScope.launch { refreshContextUsage() }
     }
 
+    /**
+     * 这条会话页的 VM 是否还在干活（在途生成 / 流式）。**回收判据**：容器的
+     * [com.psyche.memo.AppContainerImpl.reapIdleChatViewModels] 绝不回收还在生成的 VM
+     * —— 「切走会话继续后台生成」是既有功能（`ChatBackgroundController`），不能被回收打断。
+     */
+    val isBusy: Boolean
+        get() = generationJob?.isActive == true || _streaming.value
+
+    /** 回收判据用：是否还握着消息窗口/版本表/建议这些重状态。 */
+    val hasLoadedContent: Boolean
+        get() = _messages.value.isNotEmpty() ||
+            _suggestions.value.isNotEmpty() ||
+            _versionInfo.value.isNotEmpty()
+
+    /** 首屏窗口正在读（[ensureLoaded] 用它避免和 init 的 refreshTail 打架）。 */
+    private var tailLoadInFlight = false
+
+    /**
+     * 把这条会话的**重状态**释放成空壳，等下次切回来再读（[ensureLoaded]）。
+     *
+     * 为什么需要：`ChatContent` 用 `viewModel(key = conversationId)` 取 VM，而
+     * `ViewModelStore` **不会**因为 key 变化移除旧 VM —— 每点开一条会话就留下一个活的
+     * VM：40 条消息 + 每条的 parts、一个 `viewModelScope`、可能还有在途生成。真机上就是
+     * 「点击对话多还是会卡 / 从侧边栏到主页会很卡」（用户 2026-09-15）；同一时刻
+     * `dumpsys meminfo` 对比：我们 RSS 259MB，原版 Flutter 版 120MB。
+     *
+     * **刻意不动 `viewModelScope`**：scope 一旦 cancel 就不能再启动协程，切回来这个 VM
+     * 就废了；这里只取消我们自己记着的长任务（生成 / 翻译），重状态清空即可让 GC 收走。
+     */
+    fun releaseForReuse() {
+        generationJob?.cancel()
+        generationJob = null
+        translationJobs.values.forEach { it.cancel() }
+        translationJobs.clear()
+        _streaming.value = false
+        _messages.value = emptyList()
+        _versionInfo.value = emptyMap()
+        _suggestions.value = emptyList()
+        _hasMoreBefore.value = false
+        _tailLoaded.value = false
+        versionSelections.clear()
+    }
+
+    /** 首次进入本会话、或被 [releaseForReuse] 回收过之后切回来：补读首屏窗口。 */
+    fun ensureLoaded() {
+        if (isTemporary) {
+            _tailLoaded.value = true
+            return
+        }
+        // 已经在读就不要重复发起（首次进入时 init 的 refreshTail 可能还没回来）。
+        if (!_tailLoaded.value && !tailLoadInFlight) refreshTail()
+    }
+
     fun refreshTail() {
         if (isTemporary) {
             _sendEnabled.value = true
@@ -362,6 +415,15 @@ class ChatViewModel(
     }
 
     private suspend fun reloadTail() {
+        tailLoadInFlight = true
+        try {
+            reloadTailBody()
+        } finally {
+            tailLoadInFlight = false
+        }
+    }
+
+    private suspend fun reloadTailBody() {
         val loaded = withContext(Dispatchers.IO) {
             container.messageDao.getTail(conversationId)
         }

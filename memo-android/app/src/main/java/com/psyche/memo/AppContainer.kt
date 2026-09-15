@@ -301,6 +301,34 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
+     * 活着的会话页 VM（`viewModel(key = conversationId)` 每条会话一个）。
+     *
+     * `ViewModelStore` **不会**因为 key 变化移除旧 VM，所以由容器在这里管回收：注册新
+     * VM 时把**不忙**的旧 VM 释放成空壳（[ChatViewModel.releaseForReuse]）。不这么做的话，
+     * 每点开一条会话就留下 40 条消息 + parts + 一个 `viewModelScope`（可能还有在途生成），
+     * 真机表现就是「点击对话多了越来越卡」（用户 2026-09-15「从侧边栏到主页这个会很卡」；
+     * 同期 `dumpsys meminfo` 对比：我们 RSS 259MB / 原版 120MB）。
+     */
+    private val liveChatViewModels = java.util.concurrent.CopyOnWriteArrayList<ChatViewModel>()
+
+    /** 会话页组合时登记自己；顺手回收不忙的旧 VM。 */
+    fun registerChatViewModel(vm: ChatViewModel) {
+        if (!liveChatViewModels.contains(vm)) liveChatViewModels.add(vm)
+        reapIdleChatViewModels(keep = vm)
+    }
+
+    /**
+     * 把不忙（[ChatViewModel.isBusy] 为假）且还握着重状态的 VM 释放成空壳。
+     * [keep] 传当前屏上的那个（离开会话页时可以不传）。
+     */
+    fun reapIdleChatViewModels(keep: ChatViewModel? = null) {
+        for (vm in liveChatViewModels) {
+            if (vm === keep || vm.isBusy || !vm.hasLoadedContent) continue
+            vm.releaseForReuse()
+        }
+    }
+
+    /**
      * 记忆流程追踪（memory_trace.dart）：内存环形缓冲（24 条，不落盘），
      * 后台整理与记忆工具调用都会写一份，供「流程追踪」页查看。
      */

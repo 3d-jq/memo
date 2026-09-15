@@ -138,9 +138,52 @@ class ChatTimelineWindowTest {
     }
 
     /**
-     * 顶栏 `+` 的三态判据不能再靠组合期 `messageDao.count()`（用户 2026-09-15
-     * 「对话点击加载还是卡」）：改由 VM 的「首屏已读」+ 窗口是否为空决定。
+     * 会话页 VM 的回收（用户 2026-09-15「点击对话多还是会卡 / 从侧边栏到主页这个会很卡」）：
+     * `viewModel(key = conversationId)` 不会因为 key 变化释放旧 VM，所以由容器在切会话时
+     * 把不忙的旧 VM 清成空壳；切回来时 [ChatViewModel.ensureLoaded] 重新读首屏。
      */
+    @Test
+    fun `released conversations drop their window and reload when opened again`() {
+        val id = conversation()
+        for (i in 0 until 5) insert(id, i)
+        val vm = open(id)
+        assertEquals(5, vm.messages.value.size)
+
+        vm.releaseForReuse()
+
+        assertTrue("回收后不该再握着消息窗口", vm.messages.value.isEmpty())
+        assertFalse("回收后要标记成未加载，切回来才会重读", vm.tailLoaded.value)
+        assertFalse(vm.hasLoadedContent)
+        assertFalse(vm.isBusy)
+
+        vm.ensureLoaded()
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline && vm.messages.value.isEmpty()) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(20)
+        }
+        assertEquals("切回来必须把首屏读回来", 5, vm.messages.value.size)
+    }
+
+    @Test
+    fun `opening another conversation reaps the idle previous one`() {
+        val first = conversation()
+        for (i in 0 until 3) insert(first, i)
+        val vm1 = open(first)
+        assertEquals(3, vm1.messages.value.size)
+        container.registerChatViewModel(vm1)
+
+        val second = conversation()
+        insert(second, 0)
+        val vm2 = open(second)
+        container.registerChatViewModel(vm2)
+
+        assertTrue("切走后上一条会话的 VM 应被清成空壳", vm1.messages.value.isEmpty())
+        assertFalse(vm1.hasLoadedContent)
+        // 当前屏上的这条不受影响。
+        assertEquals(1, vm2.messages.value.size)
+    }
+
     @Test
     fun `the empty-chat toggle only turns on after the first window was read`() {
         // 首屏还没回来：即使窗口为空也**不能**当成空会话（否则有消息的会话会先闪一下图标）。

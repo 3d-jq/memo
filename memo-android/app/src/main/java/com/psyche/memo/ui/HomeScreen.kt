@@ -560,6 +560,14 @@ fun ChatContent(
     androidx.compose.runtime.LaunchedEffect(titleRefreshTick) {
         if (titleRefreshTick > 0) vm.refreshTitle()
     }
+    // 会话页 VM 的回收登记：`viewModel(key = conversationId)` 不会因为 key 变化释放旧 VM，
+    // 由容器在切会话时把不忙的旧 VM 清成空壳（见 AppContainerImpl.registerChatViewModel）。
+    androidx.compose.runtime.DisposableEffect(vm) {
+        container.registerChatViewModel(vm)
+        onDispose { container.reapIdleChatViewModels(keep = null) }
+    }
+    // 首次进入本会话、或被回收后切回来 → 补读首屏窗口（回收时 tailLoaded 被清掉）。
+    androidx.compose.runtime.LaunchedEffect(conversationId) { vm.ensureLoaded() }
     val messages by vm.messages.collectAsState()
     // 顶栏 `+` 的三态（home_page.dart:1504-1516 / MLV 的「空会话换成临时聊天开关」）：
     // **组合期不再查库** —— 用 VM 的「首屏已读」+ 窗口是否为空判断（见
