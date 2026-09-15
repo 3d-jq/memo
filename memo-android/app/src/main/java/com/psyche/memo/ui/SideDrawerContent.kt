@@ -149,8 +149,11 @@ fun SideDrawerContent(
     }
 
     // 抽屉改为常驻组合（避免开合时插拔节点导致布局抖动），所以不能靠"每次重建"
-    // 刷新列表 —— 用 open 作为 key，每次展示时重新加载。
-    androidx.compose.runtime.LaunchedEffect(selectedId, open) { reload() }
+    // 刷新列表 —— 用 open 作为 key，每次展示时重新加载。读放 IO：reload() 是同步
+    // getAll()，原先直接压在 LaunchedEffect 的主线程体里（抽屉就在聊天页边上）。
+    androidx.compose.runtime.LaunchedEffect(selectedId, open) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reload() }
+    }
 
     // 全局当前助手（assistant_provider.currentAssistantId）：抽屉助手卡显示它，
     // 会话列表按它过滤；切换即 setCurrentAssistant。
@@ -1503,7 +1506,11 @@ private fun GlobalSearchResults(
 
     LaunchedEffect(needle) {
         if (needle.isNotEmpty()) {
-            onResults(container.messageDao.searchGlobal(needle), true)
+            // 全库消息搜索（不是本会话）：真机上是几十毫秒级，不能占主线程。
+            val hits = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                container.messageDao.searchGlobal(needle)
+            }
+            onResults(hits, true)
         }
     }
 

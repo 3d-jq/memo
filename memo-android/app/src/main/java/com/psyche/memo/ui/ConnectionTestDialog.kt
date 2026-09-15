@@ -171,7 +171,8 @@ internal fun ConnectionTestDialog(
         // `showModelPickerForTest` → showModelSelector(limitProviderKey: 本供应商)。
         ModelSelectSheet(
             container = container,
-            options = remember(cfg.id, cfg.models) {
+            // 读库走 IO（原 `remember { loadModelOptions(...) }` 是组合期同步查）。
+            options = rememberLoaded(emptyList(), cfg.id, cfg.models) {
                 loadModelOptions(container, cfg.id, selectedModelId).filter { it.providerId == cfg.id }
             },
             onSelect = { option ->

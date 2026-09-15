@@ -639,6 +639,23 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | **模型能力＝推断 + override 叠加**（2026-09-14 用户实测：第三方模型思考不生效／编辑页改输入模态后选择页标签不变） | ✅ 新增 `ModelOverrideResolver.kt`（移植 `model_override_resolver.dart` + `chat_api_helpers.dart:137-153 effectiveModelInfo`）：`forModel(cfg, modelId)` 先按 override 的 `apiModelId` 取 `ModelRegistry.inferFull` 基线，再叠 `type/input/output/abilities`（embedding 特判：abilities 清空、output 固定 text；空模态回落 text）。**接线三处**：① `ChatViewModel` 的 `reasoning` 旗标（此前只 `ModelRegistry.infer(modelId)` ⇒ 名字推断不出能力的第三方模型永远不通思考）；② `ModelTagRow`（模型选择页 / 供应商列表 / 拉取模型面板，新增 `cfg` 参数）；③ 同一 apiModelId 基线口径。**勿改回只读名称推断** | ✅ 2026-09-14 |
 | **存储空间两处**（2026-09-14 用户实测：删文档/图片弹两个 toast／子页顶栏没统一） | ✅ 删除只弹一条：`ConfirmSpec.silent` + 纯函数 `confirmDoneMessage`（动作自己报过「已删除 N 个」时确认层不再补通用「已完成」；上游 `storage_space_page.dart:1882` 只有一条）；✅ 子页 `StorageCategoryScreen` 顶栏换 `MemoTopBar`（父页同款），不再手搓返回行 | ✅ 2026-09-14 |
 
+## 5.13 组合期不许干重活（性能约定 + 2026-09-15 普查）
+
+**约定**：`@Composable` 函数体里（含 `remember { ... }` 与「组合期实参」）**不许出现 SQLite / 文件 / `ContentResolver` 调用**。要「按 key 读一次」用 `ui/AsyncLoad.kt` 的 `rememberLoaded(initial, keys…) { … }`（`produceState` + `Dispatchers.IO`，保持 `remember(key)` 语义；`RememberLoadedTest` 3 例钉住「跑在非组合线程」与「key 不变不重读」）；`LaunchedEffect` 体默认跑在主线程，里面的库操作要自己包 `withContext(Dispatchers.IO)`。
+
+**为什么**：用户 2026-09-15 报的「点击统计界面会卡一下」「进会话先看到最旧一条再跳到底部」，根都是组合期同步干重活（统计页在组合期兜底重算一遍聚合；进会话那帧在组合期查库 + 画旧像素）。
+
+**本批修掉的**：
+
+| 位置 | 原状 | 修法 |
+|---|---|---|
+| `StatsScreen.kt:251` | `snapshot ?: StatsAggregation.buildDatabaseSnapshot(...)` —— 组合期兜底聚合，与 IO 里那个 LaunchedEffect 算的是同一份 | 组合期只渲染加载态，内容一律等 IO |
+| `HomeScreen.kt:1120`、`TranslateScreen.kt:151`、`ConnectionTestDialog.kt:175`、`chat/CompressContextDialog.kt:272` | `remember { loadModelOptions(...) }`：provider_rows 整表 + 逐条 JSON 解码，同步卡首帧 | `rememberLoaded`（消费方都是用户点开的 sheet，点开时早已就位） |
+| `HomeScreen.kt:348/354`（冷启动选会话） | LaunchedEffect 体里主线程读偏好 + `conversationDao.getAll()` | 两处读 `withContext(IO)` |
+| `ProviderListScreen.kt:202`（进页面清理写 + 读）、`ProviderSettingsScreens.kt:114`、`ChatHistoryScreen.kt:100`、`SideDrawerContent.kt:153`（抽屉列表）、`SideDrawerContent.kt:1504`（全库消息搜索） | LaunchedEffect 体里直接同步读/写库 | 包 `withContext(IO)` |
+
+**仍挂账（下一批，别当没看见）**：`PreferenceRepository.readJson` 是**每次调用一条 SQL**（无缓存），而 ui/ 目录里约 **195 处**「组合期读偏好」的 `remember { readJson(...) }`（`DefaultModelScreen` 22、`BehaviorStartupSettingsScreen` 20、`HomeScreen` 15、`SideDrawerContent` 11…每次重组都重查一遍）。**根治照兄弟实现来**：容器已有 `ProviderConfigCache`（`PayloadEntityDao` 写入时整体失效，见 `AppContainer.providerConfig` 的注释），给 `preference_rows` 配一个同款内存缓存 + 写端失效，一次消掉整类问题——**不要逐个改这 195 处**。**另**：`HomeScreen.kt:402` 的 `currentIsEmpty()`（组合期实参里的 `messageDao.count()`）本批**故意不动**：它的刷新靠「随便哪次重组」，没有 `titleRefreshTick` 那样的键可挂，直接搬进 keyed effect 会让「首条消息发出后 + 号仍按临时聊天处理」——得先有 VM 级「本会话有无消息」信号。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)

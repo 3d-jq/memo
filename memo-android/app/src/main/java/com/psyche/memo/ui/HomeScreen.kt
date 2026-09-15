@@ -345,13 +345,19 @@ fun HomeScreen(
             // `display_new_chat_on_launch_v1`（默认**开**，home_page_controller.dart:782-786
             // `initChat`）：开启时每次启动都新建会话；关闭时回到最近一条。两种情况下
             // 都没有历史就开一个 draft（不入库，发首条消息才落库）。
-            val newChatOnLaunch = container.preferenceRepository
-                .readJson("display_new_chat_on_launch_v1")
-                ?.let { it == "1" || it == "true" } ?: true
+            // 两个读都在 IO 上：这是**冷启动路径**（挂首页的组合），读偏好 + 取最近一条
+            // 会话原来直接在 LaunchedEffect 的主线程体里跑。
+            val newChatOnLaunch = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                container.preferenceRepository
+                    .readJson("display_new_chat_on_launch_v1")
+                    ?.let { it == "1" || it == "true" } ?: true
+            }
             val latest = if (newChatOnLaunch) {
                 null
             } else {
-                container.conversationDao.getAll().firstOrNull()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    container.conversationDao.getAll().firstOrNull()
+                }
             }
             selectedConversationId = latest?.id
                 ?: Conversation.create(
@@ -1115,7 +1121,10 @@ fun ChatContent(
     // Detail-sheet saves bump optionsVersion so the list reloads
     // (model_select_sheet.dart _loadModelsAsync after showModelDetailSheet).
     var optionsVersion by remember { mutableIntStateOf(0) }
-    val modelOptions = remember(container, optionsVersion, providerId, modelId) {
+    // 组合期不许读库：`loadModelOptions` 要把 provider_rows 整表读出来逐条解 JSON，
+    // 原来是 `remember { loadModelOptions(...) }`（同步、卡首帧）。改走 IO，
+    // 消费方只有用户点开的模型 sheet，点开时早已就位。
+    val modelOptions = rememberLoaded(emptyList(), container, optionsVersion, providerId, modelId) {
         loadModelOptions(container, providerId, modelId)
     }
 

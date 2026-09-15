@@ -200,8 +200,11 @@ fun ProvidersScreen(
     // Reload on entry (add/import sheets mutate the store); first sweep drops
     // empty builtin rows left by earlier test builds (KelivoIN / dup Tensdaq).
     LaunchedEffect(Unit) {
-        repo.cleanupEmptyBuiltinRows()
-        providers = loadProviders(container)
+        // 一次清理写 + 一次读，都在 IO 上：原来直接跑在 LaunchedEffect 的主线程体里。
+        providers = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            repo.cleanupEmptyBuiltinRows()
+            loadProviders(container)
+        }
     }
 
     // Merge builtin + dynamic keys, then apply saved order (providers_page.build).

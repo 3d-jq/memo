@@ -111,7 +111,11 @@ fun ProviderEditScreen(
 
     LaunchedEffect(providerId) {
         if (providerId != null) {
-            loadProviders(container).firstOrNull { it.first == providerId }?.second?.let { cfg ->
+            // 读库走 IO（原来是 LaunchedEffect 主线程体里直接查 provider_rows）。
+            val cfg = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                loadProviders(container).firstOrNull { it.first == providerId }?.second
+            }
+            if (cfg != null) {
                 name = cfg.name
                 baseUrl = cfg.baseUrl
                 apiKey = cfg.apiKey

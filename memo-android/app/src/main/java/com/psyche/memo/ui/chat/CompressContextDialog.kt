@@ -269,7 +269,10 @@ fun CompressContextDialog(
     }
 
     if (showModelSheet) {
-        val options = remember(container) { loadCompressModelOptions(container) }
+        // 读库走 IO（原 `remember { loadCompressModelOptions(...) }` 是组合期同步查）。
+        val options = com.psyche.memo.ui.rememberLoaded(emptyList(), container) {
+            loadCompressModelOptions(container)
+        }
         com.psyche.memo.ui.ModelSelectSheet(
             container = container,
             options = options,

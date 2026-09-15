@@ -148,7 +148,8 @@ fun TranslateScreen(
         onDispose { job?.cancel() }
     }
 
-    val modelOptions = remember(container, optionsVersion) {
+    // 同 HomeScreen：模型清单读库不进组合期（消费方只有用户点开的 sheet）。
+    val modelOptions = rememberLoaded(emptyList(), container, optionsVersion) {
         loadModelOptions(container, providerId, modelId)
     }
     val brandAsset = remember(modelId) { modelId?.let { BrandAssets.assetForName(it) } }

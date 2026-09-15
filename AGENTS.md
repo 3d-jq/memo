@@ -130,6 +130,16 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
   `:app:assembleDebug`, then two presence checks: every module with sources must
   have at least one test, and all four generators must produce no diff.
   CI `.github/workflows/android-pr-check.yml` enforces the same gates.
+- **Composition must stay cheap** (2026-09-15 sweep, see PORTING.md §5.13): no
+  SQLite / file / `ContentResolver` call in a `@Composable` body — including
+  `remember { dbCall() }` and composable-call argument expressions. "Read once
+  per key" goes through `ui/AsyncLoad.kt`'s `rememberLoaded(initial, keys…) { … }`
+  (`produceState` + `Dispatchers.IO`, keeps `remember(key)` semantics; pinned by
+  `RememberLoadedTest`), and DB work inside a `LaunchedEffect` needs its own
+  `withContext(Dispatchers.IO)` (the effect body runs on the main thread).
+  Known systemic debt: `PreferenceRepository.readJson` has no cache, so ~195
+  composition-time pref reads are each a SQL query — fix with a
+  `ProviderConfigCache`-style cache, not by editing 195 call sites.
 - Generated resources are committed and must stay in sync: ARB→strings via
   `tools/arb_to_android.py` (brandifies `Kelivo`/`kelivo`→`Memo`/`memo`), drift
   schema→SQL via `tools/drift_schema_to_sql.py`, palettes via

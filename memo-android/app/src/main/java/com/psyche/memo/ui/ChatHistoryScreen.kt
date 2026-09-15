@@ -97,7 +97,10 @@ fun ChatHistoryScreen(
     fun reload() {
         conversations = container.conversationDao.getAll()
     }
-    LaunchedEffect(Unit) { reload() }
+    // reload() 是同步读库（getAll）；事件回调里照旧直接调，只有进页面这第一次放到 IO。
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { reload() }
+    }
 
     // L50-55: filter by search query, split pinned/others.
     val q = query.trim().lowercase(Locale.getDefault())
