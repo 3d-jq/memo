@@ -46,7 +46,7 @@ class AssetDirMigrationTest {
             container.assistantStore.get(id)!!.copy(avatar = legacyFile.absolutePath),
         )
 
-        AssetDirMigration.run(context, container.database)
+        AssetDirMigration.run(context, container.database, container.preferenceRepository)
 
         val moved = File(AppDirs.avatars(context), "assistant_a1_1.jpg")
         assertTrue("file should be moved into avatars/", moved.isFile)
@@ -60,7 +60,7 @@ class AssetDirMigrationTest {
         val legacyFile = File(legacyDir, "avatar_1.jpg").apply { writeText("img") }
         container.preferenceRepository.writeJson("avatar_value", legacyFile.absolutePath)
 
-        AssetDirMigration.run(context, container.database)
+        AssetDirMigration.run(context, container.database, container.preferenceRepository)
 
         val moved = File(AppDirs.avatars(context), "avatar_1.jpg")
         assertTrue(moved.isFile)
@@ -72,7 +72,7 @@ class AssetDirMigrationTest {
         val legacyDir = File(context.filesDir, "assistant_backgrounds").apply { mkdirs() }
         File(legacyDir, "background_1.jpg").writeText("img")
 
-        AssetDirMigration.run(context, container.database)
+        AssetDirMigration.run(context, container.database, container.preferenceRepository)
 
         assertTrue(File(AppDirs.images(context), "background_1.jpg").isFile)
         assertFalse(legacyDir.exists())
@@ -80,7 +80,7 @@ class AssetDirMigrationTest {
 
     @Test
     fun `running with no legacy dirs does nothing`() {
-        AssetDirMigration.run(context, container.database)
+        AssetDirMigration.run(context, container.database, container.preferenceRepository)
 
         // Nothing to move, nothing to rewrite - must not throw.
         assertTrue(AppDirs.avatars(context).isDirectory)

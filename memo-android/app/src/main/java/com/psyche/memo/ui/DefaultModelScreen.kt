@@ -441,27 +441,9 @@ fun DefaultModelScreen(
             PickerSlot.TRANSLATE -> translateSel
             PickerSlot.OCR -> ocrSel
         }
-        val options = remember(slot, selForSlot) {
-            PayloadEntityDao(
-                container.database.readableDatabase,
-                "provider_rows",
-                primaryKey = "provider_key",
-            ).getAll().flatMap { row ->
-                val config = runCatching {
-                    com.psyche.memo.data.model.ProviderConfig.fromJsonString(
-                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
-                        row.payload,
-                    )
-                }.getOrNull() ?: return@flatMap emptyList()
-                config.models.map { id ->
-                    ModelOption(
-                        providerId = config.id,
-                        providerName = config.name,
-                        modelId = id,
-                        selected = id == selForSlot?.second && config.id == selForSlot?.first,
-                    )
-                }
-            }
+        // provider_rows 整表 + 逐条解 JSON 不在组合期做（§5.13）。
+        val options = rememberLoaded(emptyList(), slot, selForSlot) {
+            loadModelOptions(container, selForSlot?.first, selForSlot?.second)
         }
         ModelSelectSheet(
             container = container,

@@ -139,9 +139,16 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
   (`produceState` + `Dispatchers.IO`, keeps `remember(key)` semantics; pinned by
   `RememberLoadedTest`), and DB work inside a `LaunchedEffect` needs its own
   `withContext(Dispatchers.IO)` (the effect body runs on the main thread).
-  Known systemic debt: `PreferenceRepository.readJson` has no cache, so ~195
-  composition-time pref reads are each a SQL query — fix with a
-  `ProviderConfigCache`-style cache, not by editing 195 call sites.
+  **Machine guard**: `app/src/test/.../ui/CompositionThreadingTest.kt` scans every
+  `remember { … }` block and fails on SQL/file/full-table-decode calls (building a
+  DAO or grabbing a DB handle does *not* count); exemptions are registered per
+  file **and** token with a reason, so a new offending call in the same file still
+  fails. Reads are cheap now: `PreferenceRepository.readJson` has a
+  write-invalidated row cache, `AssistantStore.get` has `AssistantCache`
+  (invalidated by `PayloadEntityDao`), and `AppContainerImpl.prewarmConfigCaches()`
+  decodes provider_rows/assistant_rows on IO at startup — so composition-time
+  `providerConfig(key)` / `assistantStore.get(id)` / `readJson(key)` are memory
+  lookups. **Do not** add new `remember { <db/file call> }` sites.
 - Generated resources are committed and must stay in sync: ARB→strings via
   `tools/arb_to_android.py` (brandifies `Kelivo`/`kelivo`→`Memo`/`memo`), drift
   schema→SQL via `tools/drift_schema_to_sql.py`, palettes via

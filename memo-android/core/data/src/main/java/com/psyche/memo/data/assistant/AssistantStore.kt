@@ -1,6 +1,7 @@
 package com.psyche.memo.data.assistant
 
 import android.database.sqlite.SQLiteDatabase
+import com.psyche.memo.data.db.AssistantCache
 import com.psyche.memo.data.db.PayloadEntityDao
 import com.psyche.memo.data.model.Assistant
 import java.util.UUID
@@ -29,9 +30,21 @@ class AssistantStore(private val db: SQLiteDatabase) {
     private fun encode(a: Assistant): String = json.encodeToString(Assistant.serializer(), a)
 
     /** assistants getter — rows already come back sorted by sort_order. */
-    fun getAll(): List<Assistant> = dao.getAll().mapNotNull { row -> decode(row.payload) }
+    fun getAll(): List<Assistant> = dao.getAll().mapNotNull { row ->
+        decode(row.payload)?.also { AssistantCache.put(row.id, it) }
+    }
 
-    fun get(id: String): Assistant? = dao.get(id)?.let { row -> decode(row.payload) }
+    /**
+     * 单条读取走 [AssistantCache]：组合期（抽屉当前助手、消息头归属助手、各种选择
+     * sheet）调用密集，每次「查库 + 解 JSON」都落在主线程那一帧上。缓存由
+     * [PayloadEntityDao] 在 `assistant_rows` 写入时整体失效。
+     */
+    fun get(id: String): Assistant? {
+        AssistantCache.get(id)?.let { return it }
+        val assistant = dao.get(id)?.let { row -> decode(row.payload) } ?: return null
+        AssistantCache.put(id, assistant)
+        return assistant
+    }
 
     /** ensureDefaults guard — seed only when the table has no rows. */
     fun isEmpty(): Boolean = dao.getAll().isEmpty()

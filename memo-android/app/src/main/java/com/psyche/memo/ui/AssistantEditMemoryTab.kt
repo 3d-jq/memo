@@ -384,7 +384,7 @@ fun AssistantEditMemoryTab(
         MemoryEntryEditSheet(
             container = container,
             provider = container.memoryProviderV2,
-            assistants = remember {
+            assistants = rememberLoaded(emptyList()) {
                 com.psyche.memo.data.assistant.AssistantStore(container.database.readableDatabase).getAll()
             },
             existing = editorEntry,

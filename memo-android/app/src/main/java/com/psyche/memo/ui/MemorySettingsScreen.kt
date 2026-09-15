@@ -417,29 +417,11 @@ fun MemorySettingsScreen(
         )
     }
 
-    // Memory model select (L142-157 showModelSelector).
+    // Memory model select (L142-157 showModelSelector). provider_rows 整表 + 逐条解
+    // JSON 不在组合期做（§5.13）—— sheet 打开时早就在 IO 上备好了。
     if (modelSheet) {
-        val options = remember {
-            com.psyche.memo.data.db.PayloadEntityDao(
-                container.database.readableDatabase,
-                "provider_rows",
-                primaryKey = "provider_key",
-            ).getAll().flatMap { row ->
-                val config = runCatching {
-                    com.psyche.memo.data.model.ProviderConfig.fromJsonString(
-                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
-                        row.payload,
-                    )
-                }.getOrNull() ?: return@flatMap emptyList()
-                config.models.map { id ->
-                    ModelOption(
-                        providerId = config.id,
-                        providerName = config.name,
-                        modelId = id,
-                        selected = id == state.memoryModelId && config.id == state.memoryModelProvider,
-                    )
-                }
-            }
+        val options = rememberLoaded(emptyList(), state.memoryModelProvider, state.memoryModelId) {
+            loadModelOptions(container, state.memoryModelProvider, state.memoryModelId)
         }
         ModelSelectSheet(
             container = container,

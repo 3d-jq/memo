@@ -1078,7 +1078,8 @@ fun SideDrawerContent(
             containerColor = cs.surface,
             dragHandle = null,
         ) {
-            val assistants = remember {
+            // assistant_rows 整表 + 逐条解 JSON 不在组合期做（§5.13）。
+            val assistants = rememberLoaded(emptyList(), target.assistantId) {
                 com.psyche.memo.data.db.PayloadEntityDao(
                     container.database.readableDatabase,
                     "assistant_rows",

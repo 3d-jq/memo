@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import coil.decode.SvgDecoder
 import coil.disk.DiskCache
 import java.io.File
+import kotlinx.coroutines.launch
 
 class MemoApplication : Application(), ImageLoaderFactory {
 
@@ -26,7 +27,7 @@ class MemoApplication : Application(), ImageLoaderFactory {
         container.preferenceRepository.migrateLegacyLocalSettings()
         // 旧的自创资产目录（assistant_avatars / user_avatars / assistant_backgrounds）
         // 搬进原版目录名，否则备份与存储页都找不到头像/背景文件。
-        AssetDirMigration.run(this, container.database)
+        AssetDirMigration.run(this, container.database, container.preferenceRepository)
         container.providerRepository.migrateNonCanonicalBuiltinKeys()
         container.providerRepository.ensureBuiltinDefaultsSeeded()
         // 内置技能（skill-creator 等）：首次运行从 assets 播种进 <filesDir>/skills，
@@ -50,6 +51,11 @@ class MemoApplication : Application(), ImageLoaderFactory {
         com.psyche.memo.service.ChatNotificationManager.init(this) { key ->
             container.preferenceRepository.readJson(key)
         }
+        // 供应商/助手配置缓存预热：组合期多处 `remember { providerConfig(key) }`、
+        // `remember { assistantStore.get(id) }`（含列表行级的 ProviderAvatar、抽屉当前助手、
+        // 消息头归属助手）首次要查库 + 解 JSON，落在跑组合的那一帧上。IO 上预热一次即可
+        // （写入侧仍会失效，见 AppContainerImpl.prewarmConfigCaches）。
+        container.appScope.launch { container.prewarmConfigCaches() }
         // 本机副本：启动时按调度决定要不要存一份（不阻塞启动，指纹/计数自己判定）。
         container.maybeRunLocalSnapshot()
         // 备份提醒：读五键调度 + 启动分钟计时（到期驱动抽屉横幅）。

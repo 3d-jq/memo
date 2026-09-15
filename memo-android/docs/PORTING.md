@@ -656,7 +656,17 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | `HomeScreen.kt:348/354`（冷启动选会话） | LaunchedEffect 体里主线程读偏好 + `conversationDao.getAll()` | 两处读 `withContext(IO)` |
 | `ProviderListScreen.kt:202`（进页面清理写 + 读）、`ProviderSettingsScreens.kt:114`、`ChatHistoryScreen.kt:100`、`SideDrawerContent.kt:153`（抽屉列表）、`SideDrawerContent.kt:1504`（全库消息搜索） | LaunchedEffect 体里直接同步读/写库 | 包 `withContext(IO)` |
 
-**仍挂账（下一批，别当没看见）**：`PreferenceRepository.readJson` 是**每次调用一条 SQL**（无缓存），而 ui/ 目录里约 **195 处**「组合期读偏好」的 `remember { readJson(...) }`（`DefaultModelScreen` 22、`BehaviorStartupSettingsScreen` 20、`HomeScreen` 15、`SideDrawerContent` 11…每次重组都重查一遍）。**根治照兄弟实现来**：容器已有 `ProviderConfigCache`（`PayloadEntityDao` 写入时整体失效，见 `AppContainer.providerConfig` 的注释），给 `preference_rows` 配一个同款内存缓存 + 写端失效，一次消掉整类问题——**不要逐个改这 195 处**。**另**：`HomeScreen.kt:402` 的 `currentIsEmpty()`（组合期实参里的 `messageDao.count()`）本批**故意不动**：它的刷新靠「随便哪次重组」，没有 `titleRefreshTick` 那样的键可挂，直接搬进 keyed effect 会让「首条消息发出后 + 号仍按临时聊天处理」——得先有 VM 级「本会话有无消息」信号。
+**仍挂账（下一批，别当没看见）**：~~`PreferenceRepository.readJson` 每次调用一条 SQL，约 195 处组合期读偏好~~ **已修（见下一段）**。**另**：`HomeScreen.kt:402` 的 `currentIsEmpty()`（组合期实参里的 `messageDao.count()`）本批**故意不动**：它的刷新靠「随便哪次重组」，没有 `titleRefreshTick` 那样的键可挂，直接搬进 keyed effect 会让「首条消息发出后 + 号仍按临时聊天处理」——得先有 VM 级「本会话有无消息」信号。
+
+**2026-09-15 第二批（读缓存 + 机器守卫）**：
+
+| 项 | 做法 |
+|---|---|
+| `PreferenceRepository.readJson` | 进程内读缓存（照 `ProviderConfigCache`）：命中即内存查表，**未命中（含"库里有没这行"）也缓存**，写端 `writeJson`/`remove` 单键失效；`AssetDirMigration` 的裸 UPDATE 显式 `invalidateCache()`。`PreferenceRepositoryCacheTest` 4 例钉住契约 |
+| `AssistantStore.get(id)` | 同款解码缓存 `AssistantCache`（`assistant_rows` 写入时由 `PayloadEntityDao` 整体失效，备份恢复也走 DAO）；`getAll()` 顺带预热。`AssistantStoreCacheTest` 5 例 |
+| 启动预热 | `AppContainerImpl.prewarmConfigCaches()`：`MemoApplication.onCreate` 里在 `appScope`（IO）上把 provider_rows / assistant_rows 解一遍 —— 组合期那批 `remember { providerConfig(key) }` / `remember { assistantStore.get(id) }`（含**列表行级**的 `ProviderAvatar`、抽屉当前助手、消息头归属助手）从此都是内存命中 |
+| 移出组合期的重活 | `provider_rows` 整表 + 逐条解 JSON ×3（`DefaultModelScreen` / `AssistantSettingsEditScreen` / `MemorySettingsScreen` → 统一 `loadModelOptions` + `rememberLoaded`）；`assistant_rows` 整表 ×2（抽屉移动会话 sheet、记忆条目编辑 sheet）；本地背景图 `BitmapFactory.decodeFile`；技能详情页的目录遍历 + 技能文件 `readText()` |
+| **机器守卫** | `app/src/test/.../ui/CompositionThreadingTest.kt`：扫所有 `remember { … }` / `remember(keys) { … }` 的 lambda 体（跳过 `rememberLoaded` 等），命中 `.getAll(`/`.query(`/`.rawQuery(`/`.execSQL(`/`.count(`/`loadModelOptions`/`providerConfig(`/`currentAssistant(`/`assistantStore`/`contentResolver`/`decodeFile`/`listFiles(`/`readText()`/`exists()` 等**干活**词就失败（造 DAO/取库句柄**不算**；注释与字符串里的示例代码也不算）。豁免按「文件 + 具体 token」登记并写原因 —— 同一文件里出现**新的**那类调用照样失败 |
 
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 

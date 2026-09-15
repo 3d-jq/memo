@@ -61,8 +61,11 @@ fun SkillDetailScreen(
 ) {
     val cs = MaterialTheme.colorScheme
     var reload by remember { mutableIntStateOf(0) }
-    val files = remember(reload, skillName) { container.skillStore.listFiles(skillName) }
-    val skillExists = remember(reload, skillName) { container.skillStore.skillDir(skillName)?.isDirectory == true }
+    // 技能目录的文件遍历 + 目录存在性判断都是文件 IO，不能放组合期（§5.13）。
+    val files = rememberLoaded(emptyList(), reload, skillName) { container.skillStore.listFiles(skillName) }
+    val skillExists = rememberLoaded(false, reload, skillName) {
+        container.skillStore.skillDir(skillName)?.isDirectory == true
+    }
 
     var editing by remember { mutableStateOf<SkillFileEntry?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -110,7 +113,8 @@ fun SkillDetailScreen(
     editing?.let { entry ->
         SkillFileEditor(
             title = entry.relativePath,
-            initialContent = remember(entry.relativePath, reload) {
+            // 读技能文件是文件 IO，不能放组合期（§5.13）。
+            initialContent = rememberLoaded("", entry.relativePath, reload) {
                 container.skillStore.resolveSkillFile(skillName, entry.relativePath)
                     ?.takeIf { it.isFile }?.readText().orEmpty()
             },

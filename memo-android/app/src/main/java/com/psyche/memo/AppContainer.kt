@@ -248,6 +248,34 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         appScope.launch { runCatching { localSnapshots.runIfDue() } }
     }
 
+    /**
+     * 预热两个解码缓存：在 **IO** 上把 provider_rows / assistant_rows 全表读一遍。
+     *
+     * 组合期有多处 `remember { providerConfig(key) }` / `remember { assistantStore.get(id) }`
+     * —— 供应商头像 `ProviderAvatar` 是**列表行级**、抽屉的当前助手、消息头归属助手、
+     * 各种选择 sheet、顶栏助手头像 —— 首次调用要查库 + 解 JSON，而它落在跑组合的那一帧
+     * 上。启动预热一次之后这些都是内存命中；写入仍走 `PayloadEntityDao`（写时整体失效），
+     * 新建/编辑供应商或助手后下一次读补一次库。见 PORTING §5.13。
+     */
+    fun prewarmConfigCaches() {
+        val providerRows = runCatching {
+            PayloadEntityDao(database.readableDatabase, "provider_rows", primaryKey = "provider_key").getAll()
+        }.getOrDefault(emptyList())
+        for (row in providerRows) {
+            runCatching {
+                com.psyche.memo.data.db.ProviderConfigCache.put(
+                    row.id,
+                    com.psyche.memo.data.model.ProviderConfig.fromJsonString(
+                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
+                        row.payload,
+                    ),
+                )
+            }
+        }
+        // assistantStore.getAll() 会把每行写进 AssistantCache（见 AssistantStore.getAll）。
+        runCatching { assistantStore.getAll() }
+    }
+
     /** `"1.2.5+2073"` — versionName + versionCode, matching Flutter's appVersion. */
     private fun appVersionString(): String = runCatching {
         val info = appContext.packageManager.getPackageInfo(appContext.packageName, 0)

@@ -14,21 +14,46 @@ class PreferenceRepository(
     private val db: MemoDatabase,
     private val prefs: SharedPreferences,
 ) {
+    /**
+     * `preference_rows` 的进程内读缓存 —— 与 `ProviderConfigCache` 同一套路。
+     *
+     * `readJson` 每次调用都是一条 SQLite 查询，而它在 **ui 层的组合期**被调用约 195 处
+     * （`remember { readJson(...) }`）：每次进页面、每次重建都要在主线程上打一轮
+     * SQLite 往返，用户 2026-09-15「我这个 app 只要遇到加载显示场景就会卡」的一半根因
+     * 在这里（另一半见 PORTING §5.13）。
+     *
+     * 失效由写入侧负责：[writeJson] / [remove] 单键失效，另有 [invalidateCache] 给
+     * 「绕过本类直接改 preference_rows」的调用方（目前只有启动期的 `AssetDirMigration`
+     * 一条裸 UPDATE）。**用哨兵记「查过、库里没有」** —— 否则未写过的键（默认值那批，
+     * 恰恰是大多数）每次都要再查一遍。
+     */
+    private class Cached(val value: String?)
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Cached>()
+
     private fun nowMicros(): Long = System.currentTimeMillis() * 1000L
 
     fun readJson(key: String): String? {
         return when (classifyBusinessKey(key)) {
-            KeyDisposition.PREFERENCE, KeyDisposition.UNKNOWN, KeyDisposition.PROVIDER_ORDER ->
-                db.readableDatabase.query(
+            KeyDisposition.PREFERENCE, KeyDisposition.UNKNOWN, KeyDisposition.PROVIDER_ORDER -> {
+                cache[key]?.let { return it.value }
+                val value = db.readableDatabase.query(
                     "preference_rows", arrayOf("value"), "key = ?", arrayOf(key),
                     null, null, null,
                 ).use { cursor ->
                     if (cursor.moveToFirst()) cursor.getString(0) else null
                 }
+                cache[key] = Cached(value)
+                value
+            }
             // Symmetric with writeJson: LOCAL_ONLY keys live in SharedPreferences.
             KeyDisposition.LOCAL_ONLY -> prefs.getString(key, null)
             else -> null
         }
+    }
+
+    /** 给「直接改 preference_rows 的裸 SQL」用（备份恢复走 [writeJson]，不必调）。 */
+    fun invalidateCache(key: String? = null) {
+        if (key == null) cache.clear() else cache.remove(key)
     }
 
     fun writeJson(key: String, valueJson: String) {
@@ -39,6 +64,7 @@ class PreferenceRepository(
                     "INSERT OR REPLACE INTO preference_rows (key, value, updated_at) VALUES (?, ?, ?)",
                     arrayOf<Any>(key, valueJson, nowMicros()),
                 )
+                cache.remove(key)
             }
             KeyDisposition.LOCAL_ONLY -> prefs.edit().putString(key, valueJson).apply()
             else -> Unit
@@ -47,8 +73,10 @@ class PreferenceRepository(
 
     fun remove(key: String) {
         when (classifyBusinessKey(key)) {
-            KeyDisposition.PREFERENCE, KeyDisposition.UNKNOWN, KeyDisposition.PROVIDER_ORDER ->
+            KeyDisposition.PREFERENCE, KeyDisposition.UNKNOWN, KeyDisposition.PROVIDER_ORDER -> {
                 db.writableDatabase.delete("preference_rows", "key = ?", arrayOf(key))
+                cache.remove(key)
+            }
             KeyDisposition.LOCAL_ONLY -> prefs.edit().remove(key).apply()
             else -> Unit
         }
@@ -107,6 +135,7 @@ class PreferenceRepository(
                 prefs.edit().putString(key, value).apply()
             }
             db.writableDatabase.delete("preference_rows", "key = ?", arrayOf(key))
+            cache.remove(key)
         }
 
         // 正向：PREFERENCE 键从 SharedPreferences 搬进 preference_rows。

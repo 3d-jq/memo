@@ -17,8 +17,9 @@ class PayloadEntityDao(
     private val primaryKey: String = "id",
 ) {
     private companion object {
-        /** 只有这张表的 payload 会被解码缓存（[ProviderConfigCache]）。 */
+        /** 会被解码缓存的表（[ProviderConfigCache] / [AssistantCache]）。 */
         const val PROVIDER_ROWS = "provider_rows"
+        const val ASSISTANT_ROWS = "assistant_rows"
     }
 
     data class Row(
@@ -84,12 +85,15 @@ class PayloadEntityDao(
     }
 
     /**
-     * `provider_rows` 变了就让 [ProviderConfigCache] 整表失效 —— 解码缓存与这里
-     * 的写入是同一份真相，写在哪个入口都必须让缓存知道（upsert/delete/replaceAll
-     * 都覆盖到，备份恢复的 replaceAll 也走这里）。
+     * `provider_rows` / `assistant_rows` 变了就让对应的解码缓存整表失效 —— 缓存与
+     * 这里的写入是同一份真相，写在哪个入口都必须让缓存知道（upsert/delete/
+     * replaceAll 都覆盖到，备份恢复的 replaceAll 也走这里）。
      */
     private fun invalidateDecodedCache() {
-        if (table == PROVIDER_ROWS) ProviderConfigCache.invalidate()
+        when (table) {
+            PROVIDER_ROWS -> ProviderConfigCache.invalidate()
+            ASSISTANT_ROWS -> AssistantCache.invalidate()
+        }
     }
 
     /** Next sort_order (max + 1, 0 when empty) — matches drift semantics. */

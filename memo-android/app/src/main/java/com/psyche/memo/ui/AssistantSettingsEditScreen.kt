@@ -731,27 +731,13 @@ private fun BasicSettingsTab(
                     }
                 }
                 if (modelSheet) {
-                    val options = remember {
-                        com.psyche.memo.data.db.PayloadEntityDao(
-                            container.database.readableDatabase,
-                            "provider_rows",
-                            primaryKey = "provider_key",
-                        ).getAll().flatMap { row ->
-                            val config = runCatching {
-                                com.psyche.memo.data.model.ProviderConfig.fromJsonString(
-                                    kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
-                                    row.payload,
-                                )
-                            }.getOrNull() ?: return@flatMap emptyList()
-                            config.models.map { id ->
-                                ModelOption(
-                                    providerId = config.id,
-                                    providerName = config.name,
-                                    modelId = id,
-                                    selected = id == assistant.chatModelId && config.id == assistant.chatModelProvider,
-                                )
-                            }
-                        }
+                    // provider_rows 整表 + 逐条解 JSON 挪出组合期（§5.13）。
+                    val options = rememberLoaded(
+                        emptyList(),
+                        assistant.chatModelProvider,
+                        assistant.chatModelId,
+                    ) {
+                        loadModelOptions(container, assistant.chatModelProvider, assistant.chatModelId)
                     }
                     ModelSelectSheet(
                         container = container,
@@ -853,7 +839,8 @@ private fun BasicSettingsTab(
                             )
                         }
                         Spacer(Modifier.height(12.dp))
-                        val preview = remember(assistant.background) {
+                        // 本地背景图**解码**不能放组合期（文件 IO + 位图分配，§5.13）。
+                        val preview = rememberLoaded<android.graphics.Bitmap?>(null, assistant.background) {
                             assistant.background?.let { path ->
                                 runCatching { BitmapFactory.decodeFile(path) }.getOrNull()
                             }

@@ -2,6 +2,7 @@ package com.psyche.memo
 
 import android.content.Context
 import com.psyche.memo.data.db.MemoDatabase
+import com.psyche.memo.data.settings.PreferenceRepository
 import java.io.File
 
 /**
@@ -22,13 +23,13 @@ internal object AssetDirMigration {
         Triple("assistant_backgrounds", "images", false),
     )
 
-    fun run(context: Context, db: MemoDatabase) {
+    fun run(context: Context, db: MemoDatabase, preferences: PreferenceRepository) {
         val filesDir = context.filesDir
         for ((from, to, isAvatar) in DIR_MOVES) {
             val target = if (isAvatar) AppDirs.avatars(context) else AppDirs.images(context)
             moveInto(File(filesDir, from), target)
         }
-        rewriteReferences(db)
+        rewriteReferences(db, preferences)
     }
 
     /** 把 [from] 里的文件逐个搬进 [to]（同名视为已迁移，直接丢弃旧文件）。 */
@@ -54,7 +55,7 @@ internal object AssetDirMigration {
      * 只替换目录名本身，不含路径分隔符 —— Android 上是 `/`，但 Robolectric 跑在
      * 桌面（Windows 是 `\`），带分隔符的模式会漏改。
      */
-    private fun rewriteReferences(db: MemoDatabase) {
+    private fun rewriteReferences(db: MemoDatabase, preferences: PreferenceRepository) {
         val writable = db.writableDatabase
         for ((from, to, _) in DIR_MOVES) {
             val like = "%$from%"
@@ -67,5 +68,8 @@ internal object AssetDirMigration {
                 arrayOf<Any>(from, to, like),
             )
         }
+        // 裸 SQL 改了 preference_rows ⇒ 必须让 `PreferenceRepository` 的读缓存失效
+        // （否则改过的头像路径在本次进程里读到的还是旧值）。
+        preferences.invalidateCache()
     }
 }
