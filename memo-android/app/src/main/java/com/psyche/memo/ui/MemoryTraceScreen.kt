@@ -404,14 +404,17 @@ private fun TraceDetailOverlay(trace: MemoryTrace, onClose: () -> Unit) {
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose, modifier = Modifier.size(44.dp)) {
-                Icon(
-                    Lucide.ArrowLeft,
-                    contentDescription = stringResource(UiR.string.settings_page_back_button),
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+            // 同 MemoTopBar：返回键要有按压反馈。这里原来是 M3 `IconButton`，本工程
+            // 全局关闭 ripple，所以点下去毫无反应（用户 2026-09-15）。
+            IosIconButton(
+                icon = Lucide.ArrowLeft,
+                onTap = onClose,
+                color = cs.onSurface,
+                size = 22.dp,
+                contentPadding = 0.dp,
+                minSize = 44.dp,
+                semanticLabel = stringResource(UiR.string.settings_page_back_button),
+            )
             Text(
                 text = stringResource(UiR.string.memory_trace_detail_title),
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),

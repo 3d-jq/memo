@@ -1089,9 +1089,18 @@ private fun RankFullPageOverlay(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onDismiss, modifier = Modifier.size(44.dp)) {
-                Icon(Lucide.ArrowLeft, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
-            }
+            // 与 MemoTopBar 的返回键同一套触感（IosIconButton：按压变色 + 缩放）。
+            // 原来是 M3 `IconButton`，而本工程全局关掉了 ripple → 点它没有任何反馈
+            //（用户 2026-09-15「多界面返回箭头带有点击阴影」）。
+            IosIconButton(
+                icon = Lucide.ArrowLeft,
+                onTap = onDismiss,
+                color = cs.onSurface,
+                size = 22.dp,
+                contentPadding = 0.dp,
+                minSize = 44.dp,
+                semanticLabel = stringResource(UiR.string.settings_page_back_button),
+            )
             Text(
                 text = spec.title,
                 style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),

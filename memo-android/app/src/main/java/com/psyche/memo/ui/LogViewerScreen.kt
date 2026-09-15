@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import com.psyche.memo.common.logging.ContextLogMessage
 import com.psyche.memo.common.logging.ContextLogSnapshot
@@ -568,15 +569,23 @@ private fun shareUri(file: LogFileEntry): android.net.Uri {
  * and 22dp ArrowLeft match every other page in the app — without this the
  * overlay felt slightly off (44dp slot, no spacer) and the action icons were
  * 20dp instead of the standard 22dp.
+ *
+ * **系统返回键必须在这里拦掉**：overlay 是「同屏二级页」（不是新的导航目的地，
+ * 只是叠在列表上的一层 composable），不拦的话手机返回键会直接 pop 掉整个路由 ——
+ * 从日志文件页返回直接掉回主设置页（用户 2026-09-15「二级界面返回不是上一个界面，
+ * 直接返回主设置界面」，点名的就是日志这些界面）。按返回应当先回到列表。
+ * [androidx.compose.ui.window.Dialog] 形态的覆盖层（如图片查看器）不需要这个，
+ * 系统返回由 Dialog 自己收掉。
  */
 @Composable
-private fun OverlayScaffold(
+internal fun OverlayScaffold(
     title: String,
     onClose: () -> Unit,
     actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    BackHandler { onClose() }
     Column(
         modifier = Modifier
             .fillMaxSize()

@@ -23,6 +23,9 @@
 - **截图导出两道必过**：hardware bitmap 先 `asAndroidBitmap().copy(ARGB_8888)`；不透明底先 `drawColor(surface)`。半透明色调一律 `alphaBlend` 合成，别直接 `copy(alpha=)`。吞异常必须透出 `e.message`。
 - **Kotlin daemon 崩溃后增量编译会报一堆不相干 Unresolved reference**——先 `git diff` 确认文件没坏，然后 `./gradlew --stop` + 删 `app/build/kotlinCaches` 重建，别慌着重写代码（2026-09-14）。
 - **原版「布局前回调」读几何不能照搬**：Compose `LaunchedEffect` 协程体可能在本帧 layout 之后跑，`layoutInfo` 已是新几何 → 判据静默失效。换组合内等价状态表达（如 `following`），抽纯函数 + 单测（2026-09-13）。
+- **KDoc 里别写 `/**`**：Kotlin 支持嵌套块注释，注释内出现 `/*`（如路径 `xxx/linux/**`）会开一个不闭合的嵌套注释 → `Unclosed comment` + 一堆不相关的 Unresolved reference（2026-09-15）。
+- **组合期禁止查库**：`AppContainer.providerConfig()` 曾经每次「建 DAO + 查库 + 解 JSON」，是「打开界面就卡顿」的元凶；现已加 `ProviderConfigCache`，失效挂在 `PayloadEntityDao` 写 `provider_rows` 时。新写读配置的代码走容器方法，别再自己 new DAO 查。
+- **`filesDir` 里 99% 的文件是沙箱 rootfs**（`workspaces/<助手 id>/linux`，真机 34k/34.6k）：任何遍历 filesDir 的新功能都要跳过它，否则「永远算不完」（2026-09-15 存储统计就是这么卡住的）。
 
 ## 输入栏按钮条件（chat_input_section.dart 规格，2026-09-14 移植完成）
 - `supportsReasoning`/`showMcpButton` 门控：非推理模型 Brain 整颗不显示；无工具能力或无启用 MCP 时 Hammer 不显示。判定 `isReasoningModel`/`isToolModel`（override abilities 优先，否则 ModelRegistry 名称推断）在 HomeScreen.kt 纯函数区。
