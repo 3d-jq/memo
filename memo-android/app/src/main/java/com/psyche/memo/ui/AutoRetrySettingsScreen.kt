@@ -54,6 +54,7 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.X
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.llm.retry.AutoRetryOptions
 import com.psyche.memo.ui.R as UiR
 import kotlin.math.roundToInt
 import kotlinx.serialization.json.Json
@@ -68,22 +69,21 @@ import kotlinx.serialization.json.put
  * retryOnNetworkError switches, and three editable chip sections
  * (status codes / retry keywords / stop keywords) + footer.
  *
- * Defaults mirror auto_retry_options.dart:41-52 (Kotlin runtime
- * AutoRetryOptions also defaults enabled=true): 3 / 1000 / 2.0 / 30000,
- * jitter on. Clamps follow auto_retry_options.dart:119-127: maxRetries 0-10,
+ * Defaults mirror auto_retry_options.dart:41-52 — **enabled 例外**：Dart 是
+ * `false`，Memo 默认 `true`（用户 2026-09-15 拍板出厂即开，有意偏离，见 PORTING
+ * §5.11）。其余照 Dart：3 / 1000 / 2.0 / 30000、jitter on、状态码与两个词表逐字。
+ * 三个默认值**直接引用 `AutoRetryOptions.DEFAULT_*`**（别再抄一份 —— 这里曾有自己的
+ * 一份拷贝，于是「页面显示着正确的触发词、运行时出厂词表却是空的」没人发现，
+ * 就是 2026-09-15「触发条件没做完」那个 bug）。
+ * Clamps follow auto_retry_options.dart:119-127: maxRetries 0-10,
  * multiplier (0,100] else 2.0, delays >= 0.
  */
-private val defaultRetryStatusCodes = listOf("408", "425", "429", "500", "502", "503", "504", "529")
+private val defaultRetryStatusCodes: List<String> =
+    AutoRetryOptions.DEFAULT_RETRY_STATUS_CODES.map { it.toString() }
 
-private val defaultRetryKeywords = listOf(
-    "并发", "稍后", "重试", "访问量过大", "繁忙", "限流",
-    "rate limit", "too many requests", "overloaded", "try again", "timeout", "超时",
-)
+private val defaultRetryKeywords: List<String> = AutoRetryOptions.DEFAULT_RETRY_KEYWORDS
 
-private val defaultStopKeywords = listOf(
-    "余额", "不足", "额度", "欠费", "balance", "insufficient",
-    "quota", "invalid api key", "unauthorized", "permission", "未实名",
-)
+private val defaultStopKeywords: List<String> = AutoRetryOptions.DEFAULT_STOP_KEYWORDS
 
 @Composable
 fun AutoRetrySettingsScreen(

@@ -362,9 +362,12 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         fun intOf(k: String, d: Int) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: d
         fun longOf(k: String, d: Long) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toLongOrNull() ?: d
         fun dblOf(k: String, d: Double) = (obj[k] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: d
-        fun strList(k: String) = (obj[k] as? kotlinx.serialization.json.JsonArray)
+        // 键**缺失**时回落到工厂默认（与上面的 intSet 同款）；键存在但是空数组 =
+        // 用户自己清空了词表，照旧尊重。词表为空 ⇒ 关键词触发永不命中（2026-09-15
+        // 用户报的那个 bug），所以这里的回落必须是 DEFAULT_* 而不是 emptyList()。
+        fun strList(k: String, d: List<String>) = (obj[k] as? kotlinx.serialization.json.JsonArray)
             ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
-            ?: emptyList()
+            ?: d
         fun intSet(k: String) = (obj[k] as? kotlinx.serialization.json.JsonArray)
             ?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() }
             ?.toSet()
@@ -378,8 +381,8 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
             jitter = boolOf("jitter", true),
             retryOnNetworkError = boolOf("retryOnNetworkError", true),
             retryStatusCodes = intSet("retryStatusCodes"),
-            retryKeywords = strList("retryKeywords"),
-            stopKeywords = strList("stopKeywords"),
+            retryKeywords = strList("retryKeywords", AutoRetryOptions.DEFAULT_RETRY_KEYWORDS),
+            stopKeywords = strList("stopKeywords", AutoRetryOptions.DEFAULT_STOP_KEYWORDS),
         )
     }
 

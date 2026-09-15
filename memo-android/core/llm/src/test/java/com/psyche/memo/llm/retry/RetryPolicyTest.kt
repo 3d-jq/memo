@@ -90,4 +90,69 @@ class RetryPolicyTest {
         val opts = AutoRetryOptions()
         assertFalse(shouldRetryError(IllegalStateException("bang"), opts))
     }
+
+    // ---- 出厂默认值（2026-09-15 用户报「自动重试的触发条件这个没有做完吧」：
+    // 链路是通的，但两个词表出厂是空的 ⇒ 关键词触发永不命中）----
+    // 下面几例逐字钉住 lib/core/models/auto_retry_options.dart:41-96，
+    // 防的就是默认值再被改空/改错。
+
+    @Test
+    fun defaultStatusCodesMatchDartSource() {
+        val codes = AutoRetryOptions().retryStatusCodes
+        assertEquals(setOf(408, 425, 429, 500, 502, 503, 504, 529), codes)
+        // 旧 Kotlin 默认值多带了 409、漏了 425/529 —— 这两条专门钉方向。
+        assertFalse("409 不在 Dart 的默认集合里", 409 in codes)
+        assertTrue("425 Too Early 必须在", 425 in codes)
+        assertTrue("529 Overloaded 必须在", 529 in codes)
+    }
+
+    @Test
+    fun defaultKeywordsMatchDartSource() {
+        assertEquals(
+            listOf(
+                "并发", "稍后", "重试", "访问量过大", "繁忙", "限流",
+                "rate limit", "too many requests", "overloaded", "try again", "timeout", "超时",
+            ),
+            AutoRetryOptions().retryKeywords,
+        )
+        assertEquals(
+            listOf(
+                "余额", "不足", "额度", "欠费", "balance", "insufficient", "quota",
+                "invalid api key", "unauthorized", "permission", "未实名",
+            ),
+            AutoRetryOptions().stopKeywords,
+        )
+    }
+
+    @Test
+    fun defaultKeywordsAndDelaysAreNotDegenerate() {
+        val opts = AutoRetryOptions()
+        assertTrue("重试词表不能是空的（空了关键词触发就永不命中）", opts.retryKeywords.isNotEmpty())
+        assertTrue("停止词表不能是空的（空了余额/额度类错误会被重试）", opts.stopKeywords.isNotEmpty())
+        assertEquals(30000L, AutoRetryOptions.DEFAULT_MAX_DELAY_MS)
+        assertEquals(30000L, opts.maxDelayMs)
+        // 有意偏离 Dart（那边 defaults() 是 false）：用户 2026-09-15 拍板出厂即开。
+        assertTrue(opts.enabled)
+    }
+
+    @Test
+    fun defaultKeywordsDriveRetryDecisions() {
+        val opts = AutoRetryOptions()
+        // 命中出厂重试词 → 重试（含中文与英文两条路径）
+        assertTrue(shouldRetryError(IOException("服务繁忙，请稍后重试"), opts))
+        assertTrue(shouldRetryError(IOException("HTTP 429 rate limit exceeded"), opts))
+        assertTrue(shouldRetryError(IOException("request timeout"), opts))
+        // 命中出厂停止词 → 绝不重试（余额/额度/密钥类，重试没有意义）
+        assertFalse(shouldRetryError(IOException("账户余额不足"), opts))
+        assertFalse(shouldRetryError(IOException("insufficient quota"), opts))
+        assertFalse(shouldRetryError(IOException("invalid api key"), opts))
+    }
+
+    @Test
+    fun defaultStatusCodesDriveRetryDecisions() {
+        val opts = AutoRetryOptions()
+        assertTrue(shouldRetryError(IOException("HTTP 425 Too Early"), opts))
+        assertTrue(shouldRetryError(IOException("HTTP 529 Overloaded"), opts))
+        assertFalse(shouldRetryError(IOException("HTTP 409 Conflict"), opts))
+    }
 }
