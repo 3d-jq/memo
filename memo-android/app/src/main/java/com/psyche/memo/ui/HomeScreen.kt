@@ -239,12 +239,12 @@ fun HomeScreen(
             //    屏幕上要么已经是新内容，要么是骨架（`showTimelineSkeleton`），不会是白屏。
             convoFade.animateTo(
                 targetValue = 0f,
-                animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS),
+                animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS, easing = CONVO_FADE_EASING),
             )
             selectedConversationId = target
             convoFade.animateTo(
                 targetValue = 1f,
-                animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS),
+                animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS, easing = CONVO_FADE_EASING),
             )
         }
     }
@@ -4256,10 +4256,13 @@ private fun InputIconAsset(
 internal const val SCROLL_BOTTOM_ITEM_KEY = "scroll-bottom"
 
 /**
- * 会话切换的淡出/淡入时长 —— 原版 `home_page_controller` 的 `_convoFadeController`
- * 用的是默认 `AnimationController` 时长（200ms 量级），这里取 180ms。
+ * 会话切换的淡出/淡入时长与曲线 —— 逐字照原版 `home_page_controller.dart:378-386`：
+ * `AnimationController(duration: 180ms)` + `CurvedAnimation(curve: Curves.easeOutCubic)`。
+ * Compose 侧用等价的 cubic-bezier(0.215, 0.61, 0.355, 1)（CSS `ease-out` cubic）。
  */
 private const val CONVO_FADE_MS = 180
+private val CONVO_FADE_EASING =
+    androidx.compose.animation.core.CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 
 /** `LazyColumn` 的测试标签（`ChatRowRecompositionTest` 用它做手势）。 */
 internal const val CHAT_TIMELINE_TAG = "chat_timeline"
