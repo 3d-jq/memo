@@ -225,6 +225,9 @@ fun HomeScreen(
     // 抽屉关闭动画不再和重活抢帧（用户 2026-09-15「内容多的就会很卡」）。
     // 冷启动/空会话那条（原版 `isLoadingWindow`）由 ChatContent 的加载态负责。
     val convoFade = remember { androidx.compose.animation.core.Animatable(1f) }
+    // 只有**冷启动那一次**窗口加载会露骨架（原版 _startupConversationPending）；+/点会话
+    // 都走 fetch-then-commit，提交时数据已在手 ⇒ 不铺骨架。
+    var startupWindowPending by remember { mutableStateOf(true) }
     fun switchConversation(target: String?) {
         if (target == null || target == selectedConversationId) return
         scope.launch {
@@ -242,6 +245,7 @@ fun HomeScreen(
                 animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS, easing = CONVO_FADE_EASING),
             )
             selectedConversationId = target
+            startupWindowPending = false
             convoFade.animateTo(
                 targetValue = 1f,
                 animationSpec = androidx.compose.animation.core.tween(CONVO_FADE_MS, easing = CONVO_FADE_EASING),
@@ -283,6 +287,7 @@ fun HomeScreen(
             assistantId = container.currentAssistantId.value,
         )
         selectedConversationId = conv.id
+        startupWindowPending = false
     }
 
     /**
@@ -301,6 +306,7 @@ fun HomeScreen(
         ) {
             container.conversationDao.delete(currentId)
             selectedConversationId = null
+            startupWindowPending = false
             temporaryActive = true
             return
         }
@@ -321,6 +327,7 @@ fun HomeScreen(
         val latest = container.conversationDao.getAll().firstOrNull()
         if (latest != null) {
             selectedConversationId = latest.id
+            startupWindowPending = false
         } else {
             newConversation()
         }
@@ -373,6 +380,7 @@ fun HomeScreen(
         val id = pendingOpenConversation?.value
         if (!id.isNullOrEmpty()) {
             selectedConversationId = id
+            startupWindowPending = false
             temporaryActive = false
             pendingOpenConversation.value = null
         }
@@ -402,6 +410,7 @@ fun HomeScreen(
                     title = newChatTitle,
                     assistantId = container.currentAssistantId.value,
                 ).id
+            startupWindowPending = false
         }
     }
 
@@ -458,6 +467,7 @@ fun HomeScreen(
                 titleRefreshTick = titleRefreshTick,
                 injectPresets = pendingPresetInject,
                 timelineAlpha = { convoFade.value },
+                startupWindowPending = startupWindowPending,
             )
             // 12% scrim, alpha driven in the graphics layer (no recomposition).
             // 常驻组合：之前用 `if (presenting)` 插拔节点，开合瞬间要新建布局
@@ -563,14 +573,22 @@ internal fun headerAssistantId(
         ?: currentAssistantId?.takeIf { it.isNotEmpty() }
 
 /**
- * 首屏窗口未就绪时是否铺骨架 —— 判据照原版 `message_list_view.dart:1739`
- * （`_effectiveRenderModels.isEmpty && widget.isLoadingWindow`）。
+ * 是否铺首屏骨架 —— 逐条照原版：
+ * ① 判据 `rendered.isEmpty && isLoadingWindow`（`message_list_view.dart:1739`）；
+ * ② `isLoadingWindow = _startupConversationPending || chatController.isLoadingWindow`
+ *    （`home_page_controller.dart:316-317`），而**点会话那条路是 fetch-then-commit**：
+ *    提交时新窗口已在手（`commitConversationSwitch`），列表不为空 ⇒ **骨架根本不出现**；
+ *    原版注释还写明「cache hits resolve within one frame batch and never surface a skeleton」。
+ *    所以骨架只服务**冷启动**那一次（[startupPending]）。
  *
- * 注意「真的空会话」不算：窗口读完了（`tailLoaded`）就该显示正常空态/临时聊天提示，
- * 不能一直挂着骨架。
+ * 我们曾经在每次切换都铺骨架，属于偏离（用户 2026-09-15「原版这个骨架屏没有这个气泡
+ * 显示吧 这个是点击对话加载骨架屏哦」）。
  */
-internal fun showTimelineSkeleton(tailLoaded: Boolean, messagesEmpty: Boolean): Boolean =
-    !tailLoaded && messagesEmpty
+internal fun showTimelineSkeleton(
+    startupPending: Boolean,
+    tailLoaded: Boolean,
+    messagesEmpty: Boolean,
+): Boolean = startupPending && !tailLoaded && messagesEmpty
 
 /**
  * 首屏骨架 —— 1:1 照原版 `_WindowLoadingSkeleton`（`message_list_view.dart:2779-2850`）：
@@ -603,9 +621,13 @@ private fun TimelineSkeleton(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .padding(
-                start = 16.dp + 12.dp,
+                // 原版 `message_list_view.dart:2829-2835` 用 `horizontalPadding + 12`，而
+                // `horizontalPadding`（`:1670-1672`）= `(宽 − maxContentWidth)/2` ——
+                // **手机上恒为 0** ⇒ 实际左右各 **12dp**（不是我一开始误以为的 16+12）。
+                // 顶部同理：`topContentPadding(8) + 24`。
+                start = 12.dp,
                 top = ChatStyleSpec.LIST_TOP_PADDING_DP.dp + 24.dp,
-                end = 16.dp + 12.dp,
+                end = 12.dp,
             )
             .alpha(pulse),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -666,6 +688,8 @@ fun ChatContent(
      * 为了让每帧的 alpha 变化只脏 `graphicsLayer` 的绘制阶段，不重组合整页。
      */
     timelineAlpha: () -> Float = { 1f },
+    /** 是否处于「冷启动那一次窗口加载」（只有它会露骨架，见 showTimelineSkeleton）。 */
+    startupWindowPending: Boolean = false,
 ) {
     val vm: ChatViewModel = viewModel(
         key = conversationId,
@@ -1768,7 +1792,7 @@ fun ChatContent(
                 // 首屏窗口还没读回来 → 铺骨架，而不是让这一块空着（用户 2026-09-15
                 // 「会白一会 在显示」）。判据同原版 `message_list_view.dart:1739`：
                 // `rendered.isEmpty && isLoadingWindow`。
-                if (showTimelineSkeleton(tailLoaded = tailLoaded, messagesEmpty = messages.isEmpty())) {
+                if (showTimelineSkeleton(startupWindowPending, tailLoaded, messages.isEmpty())) {
                     TimelineSkeleton(modifier = Modifier.fillMaxSize())
                 }
                 // 滚动导航面板（scroll_nav_buttons.dart）：贴输入栏上方右侧。

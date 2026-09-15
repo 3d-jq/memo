@@ -1,4 +1,4 @@
-package com.psyche.memo.ui
+﻿package com.psyche.memo.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.down
@@ -89,14 +89,19 @@ class ChatRowRecompositionTest {
     }
 
     @Test
-    fun `timeline skeleton shows only while the first window is still loading`() {
-        // 原版 `message_list_view.dart:1739`：`rendered.isEmpty && isLoadingWindow`。
-        assertTrue(showTimelineSkeleton(tailLoaded = false, messagesEmpty = true))
-        // 窗口读完了但还是空 → 是「真的空会话」，要显示正常空态，别挂骨架。
-        assertTrue(!showTimelineSkeleton(tailLoaded = true, messagesEmpty = true))
-        // 有内容就一定是内容。
-        assertTrue(!showTimelineSkeleton(tailLoaded = false, messagesEmpty = false))
-        assertTrue(!showTimelineSkeleton(tailLoaded = true, messagesEmpty = false))
+    fun `timeline skeleton shows only for the cold-start window load`() {
+        // 原版 `message_list_view.dart:1739` + `home_page_controller.dart:316-317`：
+        // 骨架= `rendered.isEmpty && isLoadingWindow`，而 isLoadingWindow 里唯一会露骨架的是
+        // `_startupConversationPending`（冷启动那一次）。点会话是 fetch-then-commit，
+        // 提交时数据已在手 ⇒ **不铺骨架**（用户 2026-09-15 指出我们把骨架用在了点击路径上）。
+        assertTrue(showTimelineSkeleton(startupPending = true, tailLoaded = false, messagesEmpty = true))
+        // 非冷启动（点会话/新建）：一律不铺。
+        assertTrue(!showTimelineSkeleton(startupPending = false, tailLoaded = false, messagesEmpty = true))
+        // 窗口读完（含真空会话）→ 正常空态，不挂骨架。
+        assertTrue(!showTimelineSkeleton(startupPending = true, tailLoaded = true, messagesEmpty = true))
+        // 有内容 → 内容优先。
+        assertTrue(!showTimelineSkeleton(startupPending = true, tailLoaded = false, messagesEmpty = false))
+        assertTrue(!showTimelineSkeleton(startupPending = true, tailLoaded = true, messagesEmpty = false))
     }
 
     @Test
