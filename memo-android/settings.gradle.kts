@@ -1,4 +1,4 @@
-pluginManagement {
+﻿pluginManagement {
     repositories {
         google()
         mavenCentral()
@@ -21,6 +21,7 @@ rootProject.name = "memo-android"
 include(":app")
 include(":core:common")
 include(":core:ui")
+include(":core:highlight")
 include(":core:data")
 include(":core:llm")
 include(":core:workspace")

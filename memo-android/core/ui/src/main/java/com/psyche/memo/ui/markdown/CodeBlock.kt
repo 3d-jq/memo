@@ -1,4 +1,4 @@
-﻿package com.psyche.memo.ui.markdown
+package com.psyche.memo.ui.markdown
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -247,8 +247,12 @@ internal fun CodeBlockView(
                     } else {
                         Modifier.horizontalScroll(rememberScrollState())
                     }
+                    // 语法高亮（照 RikkaHub `:highlight` 模块 + 原版
+                    // `markdown_with_highlight.dart:2825-2828` 的流式上限 300 行/12000 字；
+                    // 超限或语言不支持时 `rememberHighlightedCode` 内部退回纯文本）。
+                    val highlighted = rememberHighlightedCode(visible, language, expanded)
                     Text(
-                        text = visible,
+                        text = highlighted,
                         fontSize = 13.sp,
                         lineHeight = 19.5.sp,
                         fontFamily = LocalMarkdownCodeFont.current,

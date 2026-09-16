@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # Memo (memo-android) quality gates — the local mirror of
 # .github/workflows/android-pr-check.yml.
 #
@@ -39,7 +39,7 @@ echo "==> [3/5] Assemble debug APK"
 ./gradlew "${GRADLE_ARGS[@]}" :app:assembleDebug
 
 echo "==> [4/5] Every module with sources has tests"
-MODULES=(app core/common core/ui core/data core/llm core/workspace feature/chat feature/assistant feature/settings feature/utility)
+MODULES=(app core/common core/ui core/highlight core/data core/llm core/workspace feature/chat feature/assistant feature/settings feature/utility)
 
 # find exits 1 on a missing path, which under pipefail would kill the assignment.
 count_files() {
