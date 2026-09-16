@@ -319,6 +319,10 @@ object WorkspaceTools {
      * 触发条件也照上游：助手绑了工作区**且** `shellStatus == READY`（没装好就说有沙箱
      * 会骗模型）。`/skills` 与 `/upload` 那两段对应容器里的 bind mount；`/upload` 特别
      * 写明**只读**，免得模型去改用户上传的原件。
+     *
+     * **本工程新增的一句**（用户 2026-09-16 点头）：沙箱与手机共享内存/CPU，重运行时容易
+     * 起不来 —— 真机上模型就是先给 .NET 设 `DOTNET_GCHeapHardLimit`、再放弃改用
+     * python-docx，白烧了好几轮（取证见 `docs/PORTING.md` §5.16①）。
      */
     fun buildSystemPromptBlock(workspaceName: String, cwd: String? = null): String = buildString {
         appendLine("<workspace>")
@@ -330,6 +334,7 @@ object WorkspaceTools {
         appendLine("  - `workspace_write_file` / `workspace_edit_file`: create files, or make precise edits to existing files.")
         appendLine("  - `workspace_shell`: run shell commands (the files area is mounted at /workspace).")
         appendLine("- Prefer `workspace_shell` for tasks that standard Unix tools handle well, and prefer `workspace_edit_file` for targeted edits over rewriting whole files.")
+        appendLine("- CPU and memory are shared with the host device, which is usually a phone under memory pressure: heavy runtimes (for example .NET or the JVM) often fail to start with out-of-memory errors. Prefer Python, Node, or plain shell tooling, and only install a heavy runtime when the task really requires it.")
         appendLine("- The skills directory is mounted at `/skills`. Each skill is a subdirectory `/skills/<skill-name>/` containing a `SKILL.md` (with `name` and `description` frontmatter) plus any supporting files. Read a skill's `SKILL.md` before using it, and follow its instructions.")
         appendLine("- Files the user uploaded are mounted at `/upload`. Treat `/upload` as READ-ONLY: read uploaded files from `/upload/<file-name>`, but never modify, overwrite, or delete anything there. If you need to change an uploaded file, copy it into `/workspace` first and edit the copy.")
         if (!cwd.isNullOrBlank()) {

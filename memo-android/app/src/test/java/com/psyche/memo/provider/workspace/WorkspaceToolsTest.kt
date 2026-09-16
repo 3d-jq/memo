@@ -299,6 +299,18 @@ class WorkspaceToolsTest {
         )
     }
 
+    /**
+     * 内存/CPU 那句是**本工程新增**（上游提示词没有）：沙箱与手机共享内存，重运行时
+     * 容易 OOM 起不来 —— 真机上模型为这件事白烧了好几轮（§5.16①）。这句不能再掉。
+     */
+    @Test
+    fun promptBlockWarnsThatHeavyRuntimesMayRunOutOfMemory() {
+        val block = WorkspaceTools.buildSystemPromptBlock("Scratch")
+        assertTrue(block.contains("shared with the host device"))
+        assertTrue(block.contains("out-of-memory"))
+        assertTrue(block.contains("Python, Node"))
+    }
+
     // ---- 第三级 block_anchor + 缩进重排（上游 TextReplacers.kt 的细节）----
 
     /**
