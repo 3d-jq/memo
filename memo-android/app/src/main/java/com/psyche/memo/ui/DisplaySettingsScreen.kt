@@ -18,7 +18,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Slider
+import com.psyche.memo.ui.slider.MemoSlider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -424,7 +424,7 @@ fun DisplaySettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("50%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)))
                     Spacer(Modifier.size(8.dp))
-                    Slider(
+                    MemoSlider(
                         value = scale,
                         onValueChange = { v ->
                             scale = (Math.round(v / 0.05f) * 0.05f)
@@ -433,6 +433,7 @@ fun DisplaySettingsScreen(
                         },
                         valueRange = 0.5f..1.5f,
                         modifier = Modifier.weight(1f),
+                        valueLabel = { "${Math.round(it * 100)}%" },
                     )
                     Spacer(Modifier.size(8.dp))
                     Text("${(chatFontScale * 100).toInt()}%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface))
@@ -479,7 +480,7 @@ fun DisplaySettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("2s", style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)))
                     Spacer(Modifier.size(8.dp))
-                    Slider(
+                    MemoSlider(
                         value = seconds,
                         onValueChange = { v ->
                             seconds = Math.round(v / 2f) * 2f
@@ -490,6 +491,7 @@ fun DisplaySettingsScreen(
                         },
                         valueRange = 2f..64f,
                         enabled = enabled,
+                        valueLabel = { "${Math.round(it)}s" },
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.size(8.dp))
@@ -506,7 +508,7 @@ fun DisplaySettingsScreen(
             var strength by remember { mutableFloatStateOf((maskStrength * 100).toFloat()) }
             Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Slider(
+                    MemoSlider(
                         value = strength,
                         onValueChange = { v ->
                             strength = Math.round(v / 5f) * 5f
@@ -518,6 +520,7 @@ fun DisplaySettingsScreen(
                         },
                         valueRange = 0f..200f,
                         modifier = Modifier.weight(1f),
+                        valueLabel = { "${Math.round(it)}%" },
                     )
                     Spacer(Modifier.size(8.dp))
                     Text("${strength.toInt()}%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface))
@@ -613,7 +616,7 @@ private fun OpacitySliderRow(value: Float, onCommit: (Float) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("0%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)))
         Spacer(Modifier.size(8.dp))
-        Slider(
+        MemoSlider(
             value = local,
             onValueChange = { v ->
                 local = Math.round(v / 5f) * 5f
@@ -621,6 +624,7 @@ private fun OpacitySliderRow(value: Float, onCommit: (Float) -> Unit) {
             },
             valueRange = 0f..100f,
             modifier = Modifier.weight(1f),
+            valueLabel = { "${Math.round(it)}%" },
         )
         Spacer(Modifier.size(8.dp))
         Text("${local.toInt()}%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface))

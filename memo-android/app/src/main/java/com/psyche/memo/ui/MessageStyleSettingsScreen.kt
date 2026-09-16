@@ -30,7 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.PlainTooltip
-import androidx.compose.material3.Slider
+import com.psyche.memo.ui.slider.MemoSlider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TooltipBox
@@ -720,11 +720,13 @@ private fun SliderRow(
             Text(label, modifier = Modifier.weight(1f), style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
             Text(valueText, style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.6f)))
         }
-        Slider(
+        MemoSlider(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onChanged,
             valueRange = range,
             steps = steps,
+            // 行内已经有常显的 valueText，拖动胶囊直接复用它，避免两处文案不一致。
+            valueLabel = { valueText },
         )
     }
 }

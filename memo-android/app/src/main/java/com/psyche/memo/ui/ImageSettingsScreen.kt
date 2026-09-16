@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -176,10 +175,11 @@ fun ImageSettingsScreen(
                                         style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.68f)),
                                     )
                                 }
-                                Slider(
+                                com.psyche.memo.ui.slider.MemoSlider(
                                     value = customQuality.toFloat(),
                                     onValueChange = { customQuality = (it.toInt() / 5) * 5 },
                                     valueRange = 10f..100f,
+                                    valueLabel = { it.toInt().toString() },
                                     onValueChangeFinished = {
                                         container.preferenceRepository.writeJson(
                                             "image_compress_custom_quality_v1",

@@ -21,7 +21,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
+import com.psyche.memo.ui.slider.MemoSlider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
@@ -158,11 +158,13 @@ private fun SliderTile(
     val cs = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
-            Slider(
+            MemoSlider(
                 value = value,
                 onValueChange = onValueChange,
                 valueRange = range,
                 steps = steps,
+                // 右侧已有 ValuePill 常显当前值，拖动胶囊复用它（同一份文案）。
+                valueLabel = { valueText },
             )
             if (labelStops.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))

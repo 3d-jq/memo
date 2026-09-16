@@ -30,7 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Slider
+import com.psyche.memo.ui.slider.MemoSlider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -662,17 +662,29 @@ private fun SystemTtsConfigSheet(container: AppContainerImpl, onDismiss: () -> U
                 style = TextStyle(fontSize = 12.sp, color = withAlpha(cs.onSurface, 0.7)),
                 modifier = Modifier.padding(horizontal = 8.dp),
             )
-            Slider(value = rate, onValueChange = { rate = it }, valueRange = 0.1f..1.0f, onValueChangeFinished = {
-                prefs.writeJson("tts_speech_rate_v1", rate.toString())
-            })
+            MemoSlider(
+                value = rate,
+                onValueChange = { rate = it },
+                valueRange = 0.1f..1.0f,
+                valueLabel = { String.format(java.util.Locale.US, "%.2f", it) },
+                onValueChangeFinished = {
+                    prefs.writeJson("tts_speech_rate_v1", rate.toString())
+                },
+            )
             Text(
                 stringResource(UiR.string.tts_services_page_pitch_label),
                 style = TextStyle(fontSize = 12.sp, color = withAlpha(cs.onSurface, 0.7)),
                 modifier = Modifier.padding(horizontal = 8.dp),
             )
-            Slider(value = pitch, onValueChange = { pitch = it }, valueRange = 0.5f..2.0f, onValueChangeFinished = {
-                prefs.writeJson("tts_pitch_v1", pitch.toString())
-            })
+            MemoSlider(
+                value = pitch,
+                onValueChange = { pitch = it },
+                valueRange = 0.5f..2.0f,
+                valueLabel = { String.format(java.util.Locale.US, "%.2f", it) },
+                onValueChangeFinished = {
+                    prefs.writeJson("tts_pitch_v1", pitch.toString())
+                },
+            )
 
             Spacer(Modifier.height(6.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {

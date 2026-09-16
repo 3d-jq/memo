@@ -29,7 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
+import com.psyche.memo.ui.slider.MemoSlider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -339,7 +339,7 @@ fun RenderingSettingsScreen(
                         style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)),
                     )
                     Spacer(Modifier.width(8.dp))
-                    Slider(
+                    MemoSlider(
                         value = value,
                         onValueChange = { raw ->
                             value = ThinkingIndicatorSettings.clampFontSize(raw.toFloat())
@@ -352,6 +352,7 @@ fun RenderingSettingsScreen(
                         valueRange = ThinkingIndicatorSettings.MIN_FONT_SP..ThinkingIndicatorSettings.MAX_FONT_SP,
                         steps = (ThinkingIndicatorSettings.MAX_FONT_SP - ThinkingIndicatorSettings.MIN_FONT_SP).toInt() - 1,
                         modifier = Modifier.weight(1f),
+                        valueLabel = { "${it.roundToInt()}" },
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
