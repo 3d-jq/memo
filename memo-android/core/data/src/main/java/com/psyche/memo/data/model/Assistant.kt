@@ -18,11 +18,8 @@ data class AssistantGenerationBinding(
     /** 图片：覆盖尺寸/张数。 */
     val size: String? = null,
     val count: Int? = null,
-    /** 视频：覆盖时长/分辨率/比例/是否带音。 */
+    /** 视频：覆盖秒数（尺寸共用 [size]）。 */
     val durationSeconds: Int? = null,
-    val resolution: String? = null,
-    val aspectRatio: String? = null,
-    val generateAudio: Boolean? = null,
 ) {
     val isUsable: Boolean get() = enabled && !serviceId.isNullOrBlank()
 }

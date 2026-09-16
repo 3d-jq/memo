@@ -1,6 +1,5 @@
 package com.psyche.memo.data.model
 
-import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -64,8 +63,7 @@ class GenerationServiceTest {
             model = " sora-2 ",
             count = 99,
             durationSeconds = 999,
-            resolution = " 1280x720 ",
-            aspectRatio = " 16:9 ",
+            size = " 1280x720 ",
         )
         val at = 1_700_000_000_000L
         val normalized = raw.normalized(at)
@@ -76,8 +74,7 @@ class GenerationServiceTest {
         assertEquals("sora-2", normalized.model)
         assertEquals(GenerationService.MAX_IMAGE_COUNT, normalized.count)
         assertEquals(GenerationService.MAX_VIDEO_SECONDS, normalized.durationSeconds)
-        assertEquals("1280x720", normalized.resolution)
-        assertEquals("16:9", normalized.aspectRatio)
+        assertEquals("1280x720", normalized.size)
         assertEquals(at, normalized.createdAt)
         assertEquals(at, normalized.updatedAt)
 
@@ -102,8 +99,7 @@ class GenerationServiceTest {
             apiKey = "sk-1",
             model = "sora-2",
             durationSeconds = 8,
-            resolution = "1280x720",
-            generateAudio = false,
+            size = "1280x720",
             createdAt = 1,
             updatedAt = 2,
         )
@@ -120,9 +116,5 @@ class GenerationServiceTest {
             GenerationService.decode("""{"id":"s2","kind":"image","futureKey":"x"}""")?.id,
         )
         assertEquals(null, GenerationService.decode("{oops"))
-
-        // generateAudio 的三态：null = 不传（服务端默认）。
-        val encodedNoAudio = GenerationService.encode(service.copy(generateAudio = null))
-        assertTrue(Json.parseToJsonElement(encodedNoAudio).toString().contains("\"generateAudio\":null"))
     }
 }

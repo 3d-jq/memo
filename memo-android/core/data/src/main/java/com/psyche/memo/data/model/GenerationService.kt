@@ -37,15 +37,12 @@ data class GenerationService(
     val apiKey: String = "",
     val model: String = "",
     // ---- 图片 ----
-    /** "1024x1024" 之类；空 = 不传，用服务端默认。 */
+    /** 图片尺寸 "1024x1024" / 视频尺寸 "1280x720"；空 = 不传，用服务端默认。 */
     val size: String = "",
     val count: Int = 1,
     // ---- 视频 ----
-    /** 0 = 不传。 */
+    /** 秒数；0 = 不传（视频用 [size] 表示尺寸）。 */
     val durationSeconds: Int = 0,
-    val resolution: String = "",
-    val aspectRatio: String = "",
-    val generateAudio: Boolean? = null,
     // ---- 元信息 ----
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
@@ -92,8 +89,6 @@ data class GenerationService(
         size = size.trim(),
         count = count.coerceIn(MIN_IMAGE_COUNT, MAX_IMAGE_COUNT),
         durationSeconds = durationSeconds.coerceIn(0, MAX_VIDEO_SECONDS),
-        resolution = resolution.trim(),
-        aspectRatio = aspectRatio.trim(),
         createdAt = if (createdAt == 0L) now else createdAt,
         updatedAt = now,
     )
