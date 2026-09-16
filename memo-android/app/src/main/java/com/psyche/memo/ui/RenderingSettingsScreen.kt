@@ -350,7 +350,6 @@ fun RenderingSettingsScreen(
                             )
                         },
                         valueRange = ThinkingIndicatorSettings.MIN_FONT_SP..ThinkingIndicatorSettings.MAX_FONT_SP,
-                        steps = (ThinkingIndicatorSettings.MAX_FONT_SP - ThinkingIndicatorSettings.MIN_FONT_SP).toInt() - 1,
                         modifier = Modifier.weight(1f),
                         valueLabel = { "${it.roundToInt()}" },
                     )

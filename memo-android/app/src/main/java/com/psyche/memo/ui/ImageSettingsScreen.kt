@@ -34,6 +34,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Crop
@@ -177,11 +178,10 @@ fun ImageSettingsScreen(
                                 }
                                 com.psyche.memo.ui.slider.MemoSlider(
                                     value = customQuality.toFloat(),
-                                    onValueChange = { customQuality = (it.toInt() / 5) * 5 },
+                                    // 画质本身是整数百分比（10..100），取整是数据粒度、不是档位。
+                                    onValueChange = { customQuality = it.roundToInt().coerceIn(10, 100) },
                                     valueRange = 10f..100f,
-                                    // 步长 5（10..100 → 18 段），与原版 stepSize 同义。
-                                    steps = 17,
-                                    valueLabel = { it.toInt().toString() },
+                                    valueLabel = { it.roundToInt().toString() },
                                     onValueChangeFinished = {
                                         container.preferenceRepository.writeJson(
                                             "image_compress_custom_quality_v1",

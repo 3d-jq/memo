@@ -64,25 +64,24 @@ import androidx.compose.animation.core.EaseOutBack
  * Memo 自己的 slider —— 取代 M3 原生 `Slider`（用户 2026-09-16：「很多界面都是用的 m3 那个
  * 原生 slider 不好看 我们直接自定义个好看的吧」）。
  *
- * **外观照「推理强度」那根滑条**（用户 2026-09-16：「因为这个效果是分级的对吧 要不改成推理
- * 强度那种 slider 吧」）：与 `ui/chat/ReasoningBudgetSheet.kt` 的 `EffortSlider` /
+ * **外观照「推理强度」那根滑条**：与 `ui/chat/ReasoningBudgetSheet.kt` 的 `EffortSlider` /
  * `drawEffortSlider`（= Flutter 原版 `_EffortSlider` + `_SliderPainter`）逐项同值：
  * - 轨道 **34dp 药丸**，底色 `onSurface@10%`；
  * - 已选段 = **`primary` 50% → 100% 横向渐变**，裁剪在药丸内、画到圆钮中心；
- * - **档位圆点**：`steps + 1` 颗（`steps = 0` 时没有），半径 3.5dp，已过的转白（90%）、
- *   未到的 `onSurface@25%` —— 「分级」因此看得见；
  * - **白色大圆钮**：直径 38dp、柔和投影（blur 10dp / offset y 3dp / 黑 25%），拖动时放大
  *   1.14（180ms `EaseOutBack`）；
- * - 两端档位相对轨道各内缩一个圆钮半径（`EffortSlider` 的 `stopInset`），极值处圆钮与轨道齐平。
+ * - 两端各内缩一个圆钮半径（`EffortSlider` 的 `stopInset`），极值处圆钮与轨道齐平。
  *
- * 用户先前选过「简洁款、不画刻度」；现在要的是**看得见档位**，于是档位以圆点呈现（而不是原版
- * SfSlider 的刻度线 + 刻度数字）。取值语义仍与原版一致：`steps` = M3 `Slider.steps`，
- * 落在 `steps + 1` 等分点上（等价于原版各处 `stepSize`）。
+ * **有意偏离原版：本控件是真正无级的**（用户 2026-09-16「改成不分级 就是真实无极滑动那种
+ * 原项目这个有分级这个不好用 改成无极调节」）。原版（以及我们最早的移植）处处带 `stepSize`
+ * 并在回调里取整，拖起来一格一格；现在控件**没有 `steps`、不吸附**，值就是手指位置；
+ * 档位点也不画了（没有档位就没有档位点）。需要「档位感」的地方请由调用方自己取整 ——
+ * 但按用户要求，Memo 里所有 slider 都不取整了（码表/整数类型的值除外，那是数据本身的粒度）。
  *
- * 手势：**单一 `awaitEachGesture` 循环** —— 按下即跟手（SfSlider 同款）、逐帧上报（无级滑动）、
- * 横向累计越过 `touchSlop` 后才 `consume`、纵向累计超 slop 且大于横向则让位给外面的滚动并
- * **回滚**数值、抬手统一回调 `onValueChangeFinished`。`enabled = false` 时整体 38% 透明且不吃
- * 手势；`semantics` 的 `progressBarRangeInfo` / `setProgress` 照给（无障碍与键盘可用）。
+ * 手势：**单一 `awaitEachGesture` 循环** —— 按下即跟手、逐帧上报（无极滑动）、横向累计越过
+ * `touchSlop` 后才 `consume`、纵向累计超 slop 且大于横向则让位给外面的滚动并**回滚**数值、
+ * 抬手统一回调 `onValueChangeFinished`。`enabled = false` 时整体 38% 透明且不吃手势；
+ * `semantics` 的 `progressBarRangeInfo` / `setProgress` 照给（无障碍与键盘可用）。
  */
 @Composable
 fun MemoSlider(
@@ -91,11 +90,9 @@ fun MemoSlider(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
-    steps: Int = 0,
     onValueChangeFinished: (() -> Unit)? = null,
     /**
-     * 拖动时胶囊里的文案（按**吸附后**的值生成）。`null` = 不显示胶囊（行内已有常显数值时
-     * 可以用来避免重复）。
+     * 拖动时胶囊里的文案。`null` = 不显示胶囊（行内已有常显数值时可以用来避免重复）。
      */
     valueLabel: ((Float) -> String)? = null,
 ) {
@@ -126,7 +123,6 @@ fun MemoSlider(
 
     val activeColor = cs.primary
     val trackColor = cs.onSurface.copy(alpha = TRACK_ALPHA)
-    val dotFractions = remember(steps) { sliderDotFractions(steps) }
 
     fun report(x: Float) {
         if (!enabled) return
@@ -137,7 +133,6 @@ fun MemoSlider(
                 thumbRadiusPx = thumbRadiusPx,
                 start = start,
                 end = end,
-                steps = steps,
                 rtl = rtl,
             ),
         )
@@ -151,28 +146,25 @@ fun MemoSlider(
             .onSizeChanged { widthPx = it.width.toFloat() }
             .then(if (enabled) Modifier else Modifier.graphicsLayer { alpha = DISABLED_ALPHA })
             .semantics {
-                progressBarRangeInfo = ProgressBarRangeInfo(coerced, start..end, steps.coerceAtLeast(0))
+                progressBarRangeInfo = ProgressBarRangeInfo(coerced, start..end, 0)
                 if (enabled) {
                     setProgress { target ->
-                        onValueChange(sliderSnapValue(target, start, end, steps))
+                        onValueChange(target.coerceIn(start, end))
                         true
                     }
                 } else {
                     disabled()
                 }
             }
-            // 单一手势循环同时管「点」与「拖」——之前拆成 `detectTapGestures` +
-            // `detectHorizontalDragGestures` 两个 pointerInput，两者会互相吃事件；后来一版又把
-            // slop 判据写成**每帧位移**，真机每帧只走几个像素、永远超不过 `touchSlop`，于是
-            // 只有按下那一下会改值（用户 2026-09-16「怎么是靠点击来的呀 是可以无级滑动那种呀」）。
-            // 现在：
-            //   ① 按下即把圆钮挪到手指处（SfSlider 同款），之后**每一帧都跟手**（无级滑动），
-            //      台阶只来自调用方本来就有的 stepSize/取整（与原版一致，不是手势造成的）；
+            // 单一手势循环同时管「点」与「拖」——曾经拆成两个 pointerInput 会互相吃事件，
+            // 也曾把 slop 判据写成**每帧位移**（真机每帧几像素、永远超不过 touchSlop，
+            // 只有按下那一下改值 ⇒ 用户报「怎么是靠点击来的呀」）。现在：
+            //   ① 按下即把圆钮挪到手指处，之后**每一帧都跟手**（无极滑动，值不吸附）；
             //   ② slop 用**累计位移**判：纵向累计超过 `touchSlop` 且大于横向 → 让位给外面的
             //      滚动容器，并把值**回滚**到按下前的值；
             //   ③ 横向累计越过 `touchSlop` 后才 `consume`，纵向滚动不受影响；
             //   ④ 抬手统一回调 `onValueChangeFinished`（点按也算一次）。
-            .pointerInput(enabled, start, end, steps, widthPx, thumbRadiusPx, rtl) {
+            .pointerInput(enabled, start, end, widthPx, thumbRadiusPx, rtl) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -216,18 +208,15 @@ fun MemoSlider(
         val thumbCenterX = thumbRadiusPx + travel * fraction
 
         Canvas(modifier = Modifier.fillMaxWidth().height(SLIDER_HEIGHT_DP.dp)) {
-            // 轨道 + 渐变填充 + 档位圆点 + 圆钮 —— 全部照推理强度滑条（`EffortSlider` /
-            // Flutter 原版 `_SliderPainter`）的画法，逐项取同一组数值。
+            // 轨道 + 渐变填充 + 圆钮 —— 画法与数值照推理强度滑条（`EffortSlider` /
+            // Flutter 原版 `_SliderPainter`）；**不画档位点**（本控件无级，没有档位）。
             drawMemoSlider(
                 centerY = trackCenterYPx,
                 thumbCenterX = thumbCenterX,
                 thumbRadiusPx = thumbRadiusPx,
                 thumbScale = thumbScale,
-                thumbFraction = fraction,
-                dotFractions = dotFractions,
                 primary = activeColor,
                 trackColor = trackColor,
-                upcomingDotColor = cs.onSurface.copy(alpha = UPCOMING_DOT_ALPHA),
                 // 圆钮固定纯白（原版 `_SliderPainter` 就是 `Color.White`）：暗色主题下
                 // `cs.surface` 是深色，会把圆钮糊在轨道里。
                 thumbColor = Color.White,
@@ -292,11 +281,8 @@ private fun DrawScope.drawMemoSlider(
     thumbCenterX: Float,
     thumbRadiusPx: Float,
     thumbScale: Float,
-    thumbFraction: Float,
-    dotFractions: List<Float>,
     primary: Color,
     trackColor: Color,
-    upcomingDotColor: Color,
     thumbColor: Color,
 ) {
     val trackHeightPx = TRACK_HEIGHT_DP.dp.toPx()
@@ -328,21 +314,6 @@ private fun DrawScope.drawMemoSlider(
         }
     }
 
-    if (dotFractions.isNotEmpty()) {
-        val dotRadiusPx = DOT_RADIUS_DP.dp.toPx()
-        // 档位点相对圆钮行程：两端各内缩一个圆钮半径（`EffortSlider` 的 stopInset）。
-        val span = size.width - 2f * thumbRadiusPx
-        val passedColor = Color.White.copy(alpha = 0.9f)
-        for (dotFraction in dotFractions) {
-            val x = thumbRadiusPx + span * dotFraction
-            drawCircle(
-                color = if (dotFraction <= thumbFraction + 0.0001f) passedColor else upcomingDotColor,
-                radius = dotRadiusPx,
-                center = Offset(x, centerY),
-            )
-        }
-    }
-
     // 圆钮：白色 + 柔和投影（blur 10dp / offset y 3dp / 黑 25%，与推理强度滑条同一套）。
     val radiusPx = thumbRadiusPx * thumbScale
     drawIntoCanvas { canvas ->
@@ -359,38 +330,8 @@ private fun DrawScope.drawMemoSlider(
 }
 
 // ---------------------------------------------------------------------------
-// 几何与吸附（纯函数，`MemoSliderTest` 直接钉住）
+// 几何（纯函数，`MemoSliderTest` 直接钉住）
 // ---------------------------------------------------------------------------
-
-/**
- * 档位圆点的位置（0..1 比例）。
- *
- * - `steps = 0`（无档位，如 TTS 语速）→ 不画点；
- * - 档位少 → **一段一点**，就是「推理强度」那种一眼看出几档的样子（6 档 = 7 颗点）；
- * - 档位多 → 按原版 `_SliderTileNew` 的 `interval` 策略**抽稀到 6–9 颗**（原版是
- *   `total/4`、`total/5`、`total/8` 三档，这里用等价的 `divisions/8` 步长），
- *   免得 32/41 档画成一条虚线；末点离 1 太近时直接并到 1，避免两颗点挤在一起。
- */
-internal fun sliderDotFractions(steps: Int): List<Float> {
-    if (steps <= 0) return emptyList()
-    val divisions = steps + 1
-    val stride = maxOf(1, (divisions / 8f).roundToInt())
-    val fractions = ArrayList<Float>()
-    var i = 0
-    while (i <= divisions) {
-        fractions += i.toFloat() / divisions
-        i += stride
-    }
-    if (fractions.last() < 1f) {
-        val lastGap = 1f - fractions.last()
-        if (lastGap < stride / divisions.toFloat() / 2f) {
-            fractions[fractions.size - 1] = 1f
-        } else {
-            fractions += 1f
-        }
-    }
-    return fractions
-}
 
 /** 值 → 0..1 位置比例；空区间（`start == end`）一律 0。 */
 internal fun sliderFractionForValue(value: Float, start: Float, end: Float): Float {
@@ -400,24 +341,9 @@ internal fun sliderFractionForValue(value: Float, start: Float, end: Float): Flo
 }
 
 /**
- * 值吸附 —— M3 `Slider.steps` 语义：`steps = 0` 连续；`steps > 0` 落在 range 的
- * `steps + 1` 等分点上（与原版 `_SliderTileNew` 传给 SfSlider 的
- * `stepSize = (max - min) / divisions` 等价）。
- */
-internal fun sliderSnapValue(raw: Float, start: Float, end: Float, steps: Int): Float {
-    val span = end - start
-    if (span <= 0f) return start
-    val clamped = raw.coerceIn(start, end)
-    if (steps <= 0) return clamped
-    val divisions = steps + 1
-    val position = ((clamped - start) / span) * divisions
-    val snapped = start + position.roundToInt().toFloat() / divisions * span
-    return snapped.coerceIn(start, end)
-}
-
-/**
- * 手指 x（相对控件左边）→ 吸附后的值。圆钮圆心只在 `[thumbRadius, width - thumbRadius]`
- * 之间移动，所以「行程」要扣掉两端各一个半径（M3 同款）。
+ * 手指 x（相对控件左边）→ 值。**不吸附**（本控件无级，用户 2026-09-16「改成不分级 就是真实
+ * 无极滑动那种」）。圆钮圆心只在 `[thumbRadius, width - thumbRadius]` 之间移动，所以「行程」
+ * 要扣掉两端各一个半径（否则手指到不了两端）。
  */
 internal fun sliderValueForPosition(
     x: Float,
@@ -425,14 +351,13 @@ internal fun sliderValueForPosition(
     thumbRadiusPx: Float,
     start: Float,
     end: Float,
-    steps: Int,
     rtl: Boolean = false,
 ): Float {
     val travel = trackWidthPx - thumbRadiusPx * 2f
-    if (travel <= 0f) return sliderSnapValue(start, start, end, steps)
+    if (travel <= 0f) return start
     val fraction = ((x - thumbRadiusPx) / travel).coerceIn(0f, 1f)
     val directed = if (rtl) 1f - fraction else fraction
-    return sliderSnapValue(start + directed * (end - start), start, end, steps)
+    return (start + directed * (end - start)).coerceIn(start, end)
 }
 
 /**
@@ -448,7 +373,6 @@ private const val TRACK_HEIGHT_DP = 34
 private const val THUMB_DP = 38
 private const val DOT_RADIUS_DP = 3.5f
 private const val TRACK_ALPHA = 0.10f
-private const val UPCOMING_DOT_ALPHA = 0.25f
 private const val THUMB_SHADOW_BLUR_DP = 10
 private const val THUMB_SHADOW_DY_DP = 3
 private const val THUMB_DRAG_SCALE = 1.14f
@@ -456,8 +380,8 @@ private const val THUMB_SCALE_MS = 180
 private const val DISABLED_ALPHA = 0.38f
 
 /**
- * 圆钮的测试锚点 —— `MemoSliderUiTest` 用它断言几何（圆钮 20dp、圆心落在轨道中心线 35dp、
- * 控件总高 50dp）。与 `VOICE_WAVEFORM_TAG` 同一个用途：把「看着对」变成「量得出来」。
+ * 圆钮的测试锚点 —— `MemoSliderUiTest` 用它断言几何（圆钮 38dp、顶边 18dp、控件总高 56dp）。
+ * 与 `VOICE_WAVEFORM_TAG` 同一个用途：把「看着对」变成「量得出来」。
  */
 const val MEMO_SLIDER_THUMB_TAG = "memo_slider_thumb"
 

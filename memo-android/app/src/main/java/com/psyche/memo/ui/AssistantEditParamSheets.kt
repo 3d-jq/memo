@@ -74,7 +74,6 @@ internal fun ParamSliderSheet(
     value: Double,
     minValue: Double,
     maxValue: Double,
-    divisions: Int,
     labelOf: (Double) -> String,
     onEnabledChange: (Boolean) -> Unit,
     onValueChange: (Double) -> Unit,
@@ -121,7 +120,6 @@ internal fun ParamSliderSheet(
                     value = local.toFloat().coerceIn(range.start, range.endInclusive),
                     valueText = labelOf(local),
                     range = range,
-                    steps = (divisions - 1).coerceAtLeast(0),
                     labelStops = customLabelStops.filter { it in minValue..maxValue }.sorted(),
                     onValueChange = { v ->
                         local = v.toDouble()
@@ -151,7 +149,6 @@ private fun SliderTile(
     value: Float,
     valueText: String,
     range: ClosedFloatingPointRange<Float>,
-    steps: Int,
     labelStops: List<Double>,
     onValueChange: (Float) -> Unit,
     onValuePillTap: (() -> Unit)?,
@@ -163,7 +160,6 @@ private fun SliderTile(
                 value = value,
                 onValueChange = onValueChange,
                 valueRange = range,
-                steps = steps,
                 // 右侧已有 ValuePill 常显当前值，拖动胶囊复用它（同一份文案）。
                 valueLabel = { valueText },
             )

@@ -427,13 +427,12 @@ fun DisplaySettingsScreen(
                     MemoSlider(
                         value = scale,
                         onValueChange = { v ->
-                            scale = (Math.round(v / 0.05f) * 0.05f)
+                            // 无极：直接取手指位置的值（原版这里 `stepSize: 0.05` 会吸附）。
+                            scale = v
                             chatFontScale = scale.toDouble()
                             container.preferenceRepository.writeJson("display_chat_font_scale_v1", scale.toString())
                         },
                         valueRange = 0.5f..1.5f,
-                        // 原版这里是 `stepSize: 0.05`（20 段）；传 steps 让档位点画出来。
-                        steps = 19,
                         modifier = Modifier.weight(1f),
                         valueLabel = { "${Math.round(it * 100)}%" },
                     )
@@ -485,15 +484,13 @@ fun DisplaySettingsScreen(
                     MemoSlider(
                         value = seconds,
                         onValueChange = { v ->
-                            seconds = Math.round(v / 2f) * 2f
+                            seconds = v
                             autoScrollIdleSeconds = seconds.toInt()
                             if (enabled) {
                                 container.preferenceRepository.writeJson("display_auto_scroll_idle_seconds_v1", seconds.toInt().toString())
                             }
                         },
                         valueRange = 2f..64f,
-                        // 原版 `stepSize: 2.0`（31 段）。
-                        steps = 30,
                         enabled = enabled,
                         valueLabel = { "${Math.round(it)}s" },
                         modifier = Modifier.weight(1f),
@@ -515,7 +512,7 @@ fun DisplaySettingsScreen(
                     MemoSlider(
                         value = strength,
                         onValueChange = { v ->
-                            strength = Math.round(v / 5f) * 5f
+                            strength = v
                             maskStrength = strength / 100.0
                             container.preferenceRepository.writeJson(
                                 "display_chat_background_mask_strength_v1",
@@ -523,8 +520,6 @@ fun DisplaySettingsScreen(
                             )
                         },
                         valueRange = 0f..200f,
-                        // 原版 `stepSize: 5.0`（40 段）。
-                        steps = 39,
                         modifier = Modifier.weight(1f),
                         valueLabel = { "${Math.round(it)}%" },
                     )
@@ -625,12 +620,10 @@ private fun OpacitySliderRow(value: Float, onCommit: (Float) -> Unit) {
         MemoSlider(
             value = local,
             onValueChange = { v ->
-                local = Math.round(v / 5f) * 5f
+                local = v
                 onCommit(local)
             },
             valueRange = 0f..100f,
-            // 原版 `stepSize: 5.0`（20 段）。
-            steps = 19,
             modifier = Modifier.weight(1f),
             valueLabel = { "${Math.round(it)}%" },
         )

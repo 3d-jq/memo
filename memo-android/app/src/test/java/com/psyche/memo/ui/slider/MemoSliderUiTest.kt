@@ -68,7 +68,7 @@ class MemoSliderUiTest {
     @Test
     fun `drag follows the finger frame by frame`() {
         var value = -1f
-        renderSlider(steps = 0, onValueChange = { value = it })
+        renderSlider(onValueChange = { value = it })
         val slider = compose.onNodeWithTag(MEMO_SLIDER_TAG)
 
         slider.performTouchInput { down(Offset(100f, centerY)) }
@@ -99,7 +99,6 @@ class MemoSliderUiTest {
         var value = -1f
         var finished = 0
         renderSlider(
-            steps = 0,
             onValueChange = { value = it },
             onValueChangeFinished = { finished++ },
         )
@@ -116,22 +115,24 @@ class MemoSliderUiTest {
     }
 
     @Test
-    fun `dragging snaps to steps and reports once finished`() {
+    fun `dragging is continuous and reaches values between old steps`() {
         var value = -1f
         var finished = 0
         renderSlider(
             onValueChange = { value = it },
             onValueChangeFinished = { finished++ },
         )
-        // 按住圆钮往右拖 40px：每一步都吸附到 0.1 的倍数（steps = 9 → 10 等分）。
+        // 按住圆钮往右拖 40px：值必须**不吸附**（用户点名要无极），落在任意小数上。
         compose.onNodeWithTag(MEMO_SLIDER_THUMB_TAG).performTouchInput {
             down(center)
             moveBy(Offset(40f, 0f))
         }
         assertEquals("抬手前不该回调 onValueChangeFinished", 0, finished)
         assertTrue("拖动中必须已经上报过值", value in 0f..1f)
-        val snapped = Math.round(value * 10f) / 10f
-        assertEquals("值必须落在 steps 的等分点上", snapped, value, 0.0001f)
+        assertTrue(
+            "无极：值不该落在 0.1 的档位上（实际 $value）",
+            kotlin.math.abs(value * 10f - Math.round(value * 10f)) > 0.01f,
+        )
 
         compose.onNodeWithTag(MEMO_SLIDER_THUMB_TAG).performTouchInput { up() }
         assertEquals("抬手回调一次", 1, finished)
@@ -166,7 +167,6 @@ class MemoSliderUiTest {
 
     private fun renderSlider(
         enabled: Boolean = true,
-        steps: Int = 9,
         valueLabel: ((Float) -> String)? = { "v" },
         onValueChange: (Float) -> Unit = {},
         onValueChangeFinished: (() -> Unit)? = null,
@@ -184,7 +184,6 @@ class MemoSliderUiTest {
                         },
                         enabled = enabled,
                         valueRange = 0f..1f,
-                        steps = steps,
                         onValueChangeFinished = onValueChangeFinished,
                         valueLabel = valueLabel,
                     )

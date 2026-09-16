@@ -888,7 +888,6 @@ private fun BasicSettingsTab(
             value = assistant.temperature ?: Assistant.DefaultTemperature,
             minValue = 0.0,
             maxValue = 2.0,
-            divisions = 20,
             labelOf = { String.format("%.2f", it) },
             onEnabledChange = { v ->
                 onEdit {
@@ -912,7 +911,6 @@ private fun BasicSettingsTab(
             value = assistant.topP ?: 1.0,
             minValue = 0.0,
             maxValue = 1.0,
-            divisions = 20,
             labelOf = { String.format("%.2f", it) },
             onEnabledChange = { v ->
                 onEdit { if (v) it.copy(topP = 1.0) else it.copy(topP = null) }
@@ -931,7 +929,6 @@ private fun BasicSettingsTab(
                 value = clampContextMessages(assistant.contextMessageSize).toDouble(),
                 minValue = Assistant.MinContextMessageSize.toDouble(),
                 maxValue = Assistant.MaxContextMessageSize.toDouble(),
-                divisions = Assistant.MaxContextMessageSize - Assistant.MinContextMessageSize,
                 labelOf = { it.roundToInt().toString() },
                 customLabelStops = ContextMessageLabelStops,
                 onEnabledChange = { v ->

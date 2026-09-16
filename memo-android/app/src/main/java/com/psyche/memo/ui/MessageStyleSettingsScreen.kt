@@ -348,7 +348,6 @@ fun MessageStyleSettingsScreen(
                                 valueText = (overrides.blurSigma ?: 14.0).roundToInt().toString(),
                                 value = (overrides.blurSigma ?: 14.0).toFloat(),
                                 range = 0f..30f,
-                                steps = 29,
                                 onChanged = { v -> saveOverrides(overrides.copy(blurSigma = v.toDouble())) },
                             )
                             Text(
@@ -372,7 +371,6 @@ fun MessageStyleSettingsScreen(
                             valueText = "${(bgOpacity * 100).roundToInt()}%",
                             value = (bgOpacity * 100).toFloat(),
                             range = 0f..100f,
-                            steps = 19,
                             onChanged = { v ->
                                 val opacity = (v / 100.0)
                                 saveOverrides(
@@ -396,7 +394,6 @@ fun MessageStyleSettingsScreen(
                             valueText = "${(borderOpacity * 100).roundToInt()}%",
                             value = (borderOpacity * 100).toFloat(),
                             range = 0f..100f,
-                            steps = 19,
                             onChanged = { v -> saveOverrides(overrides.copy(borderOpacity = v / 100.0)) },
                         )
                         SettingsIosDivider()
@@ -405,7 +402,6 @@ fun MessageStyleSettingsScreen(
                             valueText = String.format(java.util.Locale.US, "%.1f", overrides.borderWidth ?: 0.8),
                             value = (overrides.borderWidth ?: 0.8).toFloat(),
                             range = 0f..3f,
-                            steps = 29,
                             onChanged = { v -> saveOverrides(overrides.copy(borderWidth = v.toDouble())) },
                         )
                         SettingsIosDivider()
@@ -422,7 +418,6 @@ fun MessageStyleSettingsScreen(
                             valueText = (overrides.cornerRadius ?: 16.0).roundToInt().toString(),
                             value = (overrides.cornerRadius ?: 16.0).toFloat(),
                             range = 0f..28f,
-                            steps = 27,
                             onChanged = { v -> saveOverrides(overrides.copy(cornerRadius = v.toDouble())) },
                         )
                     }
@@ -707,7 +702,6 @@ private fun SliderRow(
     valueText: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
-    steps: Int,
     onChanged: (Float) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -724,7 +718,6 @@ private fun SliderRow(
             value = value.coerceIn(range.start, range.endInclusive),
             onValueChange = onChanged,
             valueRange = range,
-            steps = steps,
             // 行内已经有常显的 valueText，拖动胶囊直接复用它，避免两处文案不一致。
             valueLabel = { valueText },
         )
