@@ -374,19 +374,6 @@ private fun StepperRow(
 }
 
 @Composable
-private fun StepperIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .size(28.dp)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
-    }
-}
-
-@Composable
 private fun SearchSectionHeader(text: String, first: Boolean = false) {
     val cs = MaterialTheme.colorScheme
     Text(

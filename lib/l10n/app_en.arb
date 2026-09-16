@@ -4200,5 +4200,62 @@
   "workspaceEnvCancel": "Cancel",
   "workspaceEnvRemoving": "Removing…",
   "workspaceManage": "Manage workspaces",
-  "workspaceViewFiles": "View files"
+  "workspaceViewFiles": "View files",
+  "settingsPageImageGeneration": "Image generation",
+  "settingsPageVideoGeneration": "Video generation",
+  "generationServicesPageImageTitle": "Image generation",
+  "generationServicesPageVideoTitle": "Video generation",
+  "generationServicesPageAdd": "Add service",
+  "generationServicesPageEmpty": "No services yet. Add one to let the assistant generate images.",
+  "generationServicesPageEmptyVideo": "No services yet. Add one to let the assistant generate videos.",
+  "generationServicesPageTestTooltip": "Test connection",
+  "generationServicesPageTesting": "Testing…",
+  "generationServicesStatusUntested": "Not tested",
+  "generationServicesStatusOk": "Available",
+  "generationServicesStatusFailed": "Failed",
+  "generationServicesDeleteTitle": "Delete service",
+  "generationServicesDeleteMessage": "Delete \"{name}\"? This cannot be undone.",
+  "@generationServicesDeleteMessage": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "generationServiceEditorAddTitle": "New service",
+  "generationServiceEditorEditTitle": "Edit service",
+  "generationServiceEditorBasicSection": "Service",
+  "generationServiceEditorNameLabel": "Name",
+  "generationServiceEditorNameHint": "Shown in the assistant tab",
+  "generationServiceEditorBaseUrlLabel": "Base URL",
+  "generationServiceEditorApiKeyLabel": "API key",
+  "generationServiceEditorModelLabel": "Model",
+  "generationServiceEditorModelHint": "e.g. gpt-image-1",
+  "generationServiceEditorModelHintVideo": "e.g. sora-2",
+  "generationServiceEditorParamsSection": "Defaults",
+  "generationServiceEditorSizeLabel": "Size",
+  "generationServiceEditorSizeHint": "Leave empty for the provider default (e.g. 1024x1024)",
+  "generationServiceEditorCountLabel": "Images per request",
+  "generationServiceEditorSecondsLabel": "Duration",
+  "generationServiceEditorSecondsValue": "{count}s",
+  "@generationServiceEditorSecondsValue": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "generationServiceEditorTestSection": "Connection",
+  "generationServiceEditorTestAction": "Test",
+  "generationServiceEditorTestOk": "Endpoint reachable ({count} models)",
+  "@generationServiceEditorTestOk": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "generationServiceEditorTestNoModels": "Endpoint reachable, but it does not expose /models",
+  "generationServiceEditorTestFailed": "Connection failed: {message}",
+  "@generationServiceEditorTestFailed": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "generationServiceEditorRequired": "Required",
+  "generationServiceEditorSaved": "Saved"
 }

@@ -54,6 +54,7 @@ import com.psyche.memo.ui.HomeScreen
 import com.psyche.memo.ui.ProviderDetailScreen
 import com.psyche.memo.ui.ProvidersScreen
 import com.psyche.memo.ui.SearchServicesScreen
+import com.psyche.memo.ui.GenerationServicesScreen
 import com.psyche.memo.ui.McpServersScreen
 import com.psyche.memo.ui.MemoryAboutScreen
 import com.psyche.memo.ui.InstructionInjectionScreen
@@ -405,6 +406,8 @@ private fun AppThemeAndContent(
                             onOpenDisplay = { navController.navigate("display") },
                             onOpenProviders = { navController.navigate("providers") },
                             onOpenSearchServices = { navController.navigate("search_services") },
+                            onOpenImageGeneration = { navController.navigate("generation_services_image") },
+                            onOpenVideoGeneration = { navController.navigate("generation_services_video") },
                             onOpenDefaultModel = { navController.navigate("default_model") },
                             onOpenStats = { navController.navigate("stats") },
                             onOpenAbout = { navController.navigate("about") },
@@ -657,6 +660,21 @@ private fun AppThemeAndContent(
                     composable("search_services") {
                         SearchServicesScreen(
                             container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    // 生成服务（自研功能）：两个入口共用同一个页面，靠 kind 区分。
+                    composable("generation_services_image") {
+                        GenerationServicesScreen(
+                            container = container,
+                            kind = com.psyche.memo.data.model.GenerationKind.IMAGE,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
+                    composable("generation_services_video") {
+                        GenerationServicesScreen(
+                            container = container,
+                            kind = com.psyche.memo.data.model.GenerationKind.VIDEO,
                             onBack = { navController.popBackStack() },
                         )
                     }

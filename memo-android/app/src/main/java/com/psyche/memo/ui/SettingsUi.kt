@@ -176,6 +176,23 @@ internal fun SettingsRow(
     }
 }
 
+/**
+ * 数值项两侧的 ± 圆钮（搜索服务的最大结果数/超时、生成服务的张数/时长共用）。
+ * 28dp 触摸区 + 18dp 图标，与项目里其它小图标钮一致。
+ */
+@Composable
+internal fun StepperIcon(icon: ImageVector, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.85f), modifier = Modifier.size(18.dp))
+    }
+}
+
 /** Mirrors kelivo's `_iosDivider`: a 0.6dp line centered in a 6dp slot. */
 @Composable
 internal fun DividerRow() {

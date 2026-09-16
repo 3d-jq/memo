@@ -52,6 +52,7 @@ import com.composables.icons.lucide.EthernetPort
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Heart
+import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.Library
@@ -63,6 +64,7 @@ import com.composables.icons.lucide.Sun
 import com.composables.icons.lucide.SunMoon
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Volume2
+import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.Wrench
 import com.composables.icons.lucide.Zap
 import com.psyche.memo.AppContainerImpl
@@ -94,6 +96,9 @@ fun SettingsScreen(
     onOpenDisplay: () -> Unit,
     onOpenProviders: () -> Unit,
     onOpenSearchServices: () -> Unit,
+    /** 生成服务（自研功能）：设置里两个入口。 */
+    onOpenImageGeneration: () -> Unit,
+    onOpenVideoGeneration: () -> Unit,
     onOpenDefaultModel: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -248,6 +253,11 @@ fun SettingsScreen(
                     SettingsRow(Lucide.Boxes, stringResource(UiR.string.settings_page_providers), onTap = onOpenProviders)
                     DividerRow()
                     SettingsRow(Lucide.Earth, stringResource(UiR.string.settings_page_search), onTap = onOpenSearchServices)
+                    DividerRow()
+                    // 生成图片 / 生成视频（自研功能，上游没有）：两个入口各管一类服务。
+                    SettingsRow(Lucide.Image, stringResource(UiR.string.settings_page_image_generation), onTap = onOpenImageGeneration)
+                    DividerRow()
+                    SettingsRow(Lucide.Video, stringResource(UiR.string.settings_page_video_generation), onTap = onOpenVideoGeneration)
                     DividerRow()
                     // settings_page.dart L311: TTS row opens TtsServicesPage directly.
                     SettingsRow(Lucide.Volume2, stringResource(UiR.string.settings_page_tts), onTap = onOpenTtsServices)
