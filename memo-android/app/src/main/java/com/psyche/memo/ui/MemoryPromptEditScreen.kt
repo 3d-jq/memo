@@ -61,6 +61,9 @@ internal fun MemoryPromptEditOverlay(
     val cs = MaterialTheme.colorScheme
     val app = LocalSemanticColors.current
     val state = remember { MemorySettingsState(container) }
+    // 同屏二级页：系统返回要回到「记忆设置」而不是 pop 掉整条 memory_settings 路由
+    //（用户 2026-09-16「提示词模板里面的界面点击没有返回上一级，直接回到主设置界面」）。
+    OverlayBackHandler(onClose)
 
     // didChangeDependencies hydration (L541-553): language resolved once.
     val lang = remember { state.resolvedPromptLang() }

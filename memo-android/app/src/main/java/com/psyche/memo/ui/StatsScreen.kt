@@ -1097,6 +1097,8 @@ private fun RankFullPageOverlay(
     onDismiss: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    // 同屏二级页：系统返回回到统计页，别 pop 掉整个 stats 路由。
+    OverlayBackHandler(onDismiss)
     Column(
         modifier = Modifier
             .fillMaxSize()

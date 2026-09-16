@@ -40,6 +40,8 @@ fun HtmlPreviewScreen(
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
+    // 同屏二级页：从对话里打开的预览，系统返回要回到对话，而不是 pop 掉对话路由。
+    com.psyche.memo.ui.OverlayBackHandler(onBack)
     val html = remember(request, cs) {
         if (request.rawHtml) {
             MarkdownPreviewHtml.wrapHtml(cs, request.content)

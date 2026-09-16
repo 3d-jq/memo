@@ -397,6 +397,8 @@ private fun TraceCard(trace: MemoryTrace, modifier: Modifier = Modifier, onTap: 
 private fun TraceDetailOverlay(trace: MemoryTrace, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val app = LocalSemanticColors.current
+    // 同屏二级页：系统返回回到追踪列表，别 pop 掉整个页面。
+    OverlayBackHandler(onClose)
     Column(
         modifier = Modifier
             .fillMaxSize()

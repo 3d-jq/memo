@@ -1,6 +1,5 @@
 package com.psyche.memo.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import com.psyche.memo.common.logging.ContextLogMessage
 import com.psyche.memo.common.logging.ContextLogSnapshot
@@ -585,7 +584,7 @@ internal fun OverlayScaffold(
     content: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    BackHandler { onClose() }
+    OverlayBackHandler(onClose)
     Column(
         modifier = Modifier
             .fillMaxSize()
