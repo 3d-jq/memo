@@ -808,6 +808,60 @@ bug 先查测量几何再查数据**。
 - 未做（等用户拍板）：把拒绝提示做成**可操作**的（例如提示里点名「长按模型 → 输入模式 → 图片」或直接跳该模型的设置页）。这是可见行为改动，需用户点头。
 
 
+## 5.19 生成图片 / 生成视频（**自研功能，上游 kelivo 没有**，2026-09-16）
+
+用户 2026-09-16：「先做生成视频，图片的两个服务吧」→ 澄清为「这个是我们自己做的功能 上游没有」
+「这个新加的 上游的有问题 我们这个是可以给助手配置的功能 上游的有问题 UI还是根据我们这个项目来 UI要一致」。
+所以**不要**拿 Flutter 原版的 `image_generation` 内置工具当蓝本（那是模型级开关、只在 OpenAI
+Responses 里生效），也**没有**照搬 RikkaHub 的页面结构（用户明确要求 UI 按我们自己的来）。
+
+**接口形状（用户拍板）**：两类服务都按 **OpenAI 兼容**打 —— 图片
+`POST {base}/images/generations`（`{model,prompt,n,size}`，返回 `data[].b64_json` 或
+`data[].url` 两条路径都解析）、视频 `POST {base}/videos` 提交（`seconds` 按官方要求发
+**字符串**）→ `GET {base}/videos/{id}` 轮询 → `GET {base}/videos/{id}/content` 下载
+（失败回退任务里带的 url）。地址留空回落 `https://api.openai.com/v1`。
+**字段名一律容错解析**：status 认 queued/pending/in_progress/completed/failed/canceled/expired
+及别名，id 认 id/task_id/video_id，url 认 url/video_url/output[]/data{}/content{}，
+error 认对象/字符串/数组 —— 这条链路要面对各种中转站。
+
+**存储**：服务记录走 drift v3 的通用表 `extension_entity_rows`
+（`kind = "generation_service"`）——**不能加表**（schema 是 drift 生成 + 门禁校验零 diff，
+同工作区）；一条记录类型按 `kind`（image/video）区分，图片用 size/count、视频用
+size/seconds。助手绑定写在 `assistant_rows` 的 payload 里（`imageGeneration` /
+`videoGeneration`：enabled + serviceId + 覆盖参数，null = 用服务里的值；老记录读出来是
+null = 没配）。产物落盘：图片进 `<filesDir>/images/`（原版目录、随备份走）、视频进
+`<filesDir>/videos/`（新增目录，已加进 `BackupArchiveCodec.ASSET_ROOTS`，
+存储页归到「图片」档）。
+
+**六批落地**（每批门禁全绿后提交）：
+| 批 | 提交 | 内容 |
+|---|---|---|
+| ① | `d8e5d18` | 数据层：`GenerationService` / `GenerationServiceStore` / 助手两个绑定字段 / `GenerationServiceRepository`（version 计数、删服务连带清助手引用） |
+| ② | `6a882e1` | 客户端：`ImageGenerationClient` / `VideoGenerationClient`（提交+轮询+下载）/ `GeneratedMediaStore`；**全部 suspend + IO**（同 §5.18① 的教训）、非 2xx 抛 `GenerationException("… (HTTP 429): {响应体}")` |
+| ③ | `4110f4c` | 设置两个入口（生成图片 / 生成视频）→ 服务列表页 + 编辑页 + 「测试连接」（打 `GET {base}/models`，**不发真实生成请求**，不花钱） |
+| ④ | `6f31dcf` | 助手编辑页两个 tab（单选服务 + 覆盖参数）；顺带修「工具描述页漏了工作区与技能」与 `tool_schema_overrides_v1` 没有消费点 |
+| ⑤ | `c4dfa94` | 对话 ➕ 面板两个入口 → 生成面板 → 结果直接进当前对话 |
+| ⑥ | `ddd21d7` | 助手工具 `generate_image` / `generate_video`（+ 修生成面板缺拖柄） |
+
+**助手工具的三条规矩**：① 助手在该 tab 里**选了服务**才提供对应工具（没选/服务被删 →
+不出现在请求里）；② 参数逐层回落 **工具参数 > 助手覆盖 > 服务默认**；③ 工具执行完把产物
+**作为一条助手消息**插进对话（与 ➕ 面板同一条路径：图片 = 助手图片气泡 + 查看器，
+视频 = 文件卡点开交给系统播放器），**不**再往工具 part 里塞同一张图（否则同一结果出现两次）。
+视频工具是同步等待（轮询到终态再返回，10 分钟上限，超时如实报 `video_timeout`），
+因为现有工具结果是**一次性**写回的 —— 要改成「先返回 task id 再回填」得动工具结果通道，
+那是另一个量级的改动。
+
+**测试**：`GenerationServiceTest` / `GenerationServiceStoreTest` / `GenerationServiceRepositoryTest`
+（数据层与快照）、`ImageGenerationClientTest` / `VideoGenerationClientTest` / `GenerationServiceTesterTest`
+（MockWebServer 走真请求：b64 与 url 两条路径、429 携带响应体、提交与轮询、content 优先与
+url 回退、封面落盘、中转字段名容错）、`AssistantGenerationBindingTest`（绑定判定 + 老 payload 兼容）、
+`GenerationToolsTest`（没选服务不给工具、参数覆盖、视频轮询到终态、空提示词提前拒）。
+
+**留账**：① 生成类工具**没接审批**（与工作区 shell 不同；现在只靠「助手 tab 里选服务」当开关）；
+② 视频卡的封面只落盘没画（`MessageDocCard` 的 FilePart 分支仍是文件卡）；
+③ 参考图 / 图生图（`/images/edits`、`input_reference`）与服务商扩展（阿里百炼、火山方舟、
+MiniMax 等）都没做 —— 用户明确先只做 OpenAI 兼容两条。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)

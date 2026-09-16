@@ -32,8 +32,13 @@ internal object BackupArchiveCodec {
 
     private const val BUFFER_SIZE = 64 * 1024
 
-    /** Directories packed when `includeFiles` is set, in write order. */
-    val ASSET_ROOTS = listOf("upload", "avatars", "images", "fonts")
+    /**
+     * Directories packed when `includeFiles` is set, in write order.
+     *
+     * `videos` 是自研的「生成视频」产出目录（`filesDir/videos/`）—— 不加进来的话，
+     * 归档恢复后对话里的视频卡会全部变成「文件不存在」（消息里的 FilePart 指着它）。
+     */
+    val ASSET_ROOTS = listOf("upload", "avatars", "images", "fonts", "videos")
 
     data class PackResult(val entries: Map<String, EntryMetadata>)
 

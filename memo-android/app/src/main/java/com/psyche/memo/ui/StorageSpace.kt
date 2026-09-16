@@ -252,6 +252,9 @@ object StorageUsage {
                     otherSubs.getValue("local_models").add(bytes)
                 }
                 "images" -> byCat.getValue(StorageCategoryKey.IMAGES).add(bytes)
+                // 生成视频（自研功能）：`filesDir/videos/` 归到「图片」这一档
+                // （同属对话里的媒体产出），否则会掉进「其他」里看不出是什么。
+                "videos" -> byCat.getValue(StorageCategoryKey.IMAGES).add(bytes)
                 "cache" -> {
                     byCat.getValue(StorageCategoryKey.CACHE).add(bytes)
                     if (relParts.size >= 2 && relParts[1].lowercase() == "avatars") {

@@ -301,7 +301,7 @@ class BackupArchiveCodecTest {
     fun `asset directories are packed in the documented root order`() {
         val settings = write(File(tmp.root, "staging/settings.json"), "{}")
         val dirs = linkedMapOf<String, File>()
-        for (root in listOf("fonts", "images", "upload", "avatars")) {
+        for (root in listOf("fonts", "images", "upload", "avatars", "videos")) {
             val d = File(tmp.root, "files/$root").apply { mkdirs() }
             write(File(d, "$root.bin"), root)
             dirs[root] = d
@@ -325,6 +325,8 @@ class BackupArchiveCodecTest {
                 "avatars/avatars.bin",
                 "images/images.bin",
                 "fonts/fonts.bin",
+                // 生成视频（自研功能）的产出目录也要进归档。
+                "videos/videos.bin",
                 "manifest.json",
             ),
             order,
