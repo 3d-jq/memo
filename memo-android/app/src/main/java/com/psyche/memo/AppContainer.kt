@@ -1,4 +1,4 @@
-﻿package com.psyche.memo
+package com.psyche.memo
 
 import android.content.Context
 import com.psyche.memo.data.assistant.AssistantStore
@@ -200,6 +200,32 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     /** HTTP search dispatch (ported provider subset). */
     val searchEngine: com.psyche.memo.provider.search.SearchEngine by lazy {
         com.psyche.memo.provider.search.HttpSearchEngine(httpClient)
+    }
+
+    /**
+     * 搜索服务连通性共享表（原版 `SettingsProvider._searchConnection`）：
+     * 启动时自动测试的结果与手动「测试连接」的结果都落在这里，所以离开搜索服务页
+     * 再回来，行右侧那枚「已连接 / 失败」胶囊还在。见 [com.psyche.memo.provider.search.SearchConnectivityService]。
+     */
+    val searchConnectivity: com.psyche.memo.provider.search.SearchConnectivityService by lazy {
+        com.psyche.memo.provider.search.SearchConnectivityService(
+            scope = appScope,
+            engine = searchEngine,
+            services = { searchSettingsRepository.services() },
+            common = { searchSettingsRepository.commonOptions() },
+        )
+    }
+
+    /**
+     * 启动钩子（原版 `settings_provider.dart:1567-1570` 在设置加载完后
+     * `if (_searchAutoTestOnLaunch) _initSearchConnectivityTests()`）：
+     * 开关打开才探，探测本身不阻塞启动。放在 IO 的 appScope 里跑 ——
+     * 它要读服务列表（DB）和公共选项。
+     */
+    fun maybeRunSearchConnectivityTests() {
+        runCatching {
+            if (searchSettingsRepository.autoTestOnLaunch()) searchConnectivity.testAllOnLaunch()
+        }
     }
 
     /**

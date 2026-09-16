@@ -3,6 +3,9 @@ package com.psyche.memo.provider.search
 import com.psyche.memo.data.model.LinkUpOptions
 import com.psyche.memo.data.model.SearchServiceOptions
 import com.psyche.memo.data.model.TavilyOptions
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -15,6 +18,14 @@ import java.io.IOException
  * providers that expose one (Tavily / LinkUp). Response parsing is pure so
  * fixtures cover it; the fetch retries once on connection-level failures with
  * the upstream 200ms / 600ms backoff.
+ *
+ * **[fetch] 是 `suspend` 且自己切到 `Dispatchers.IO` 的**：它内部是
+ * OkHttp 的阻塞 `execute()`。以前它是个普通函数、调用点直接写在
+ * `rememberCoroutineScope().launch { … }`（= 主线程）里 —— 真机上点「查询用量」
+ * 必炸 `NetworkOnMainThreadException`（2026-09-16 设备日志：`[REQ 22] GET
+ * https://api.tavily.com/usage` → `[RES 22] error=NetworkOnMainThreadException`，
+ * 用户连点 6 次都这样）。Dart 侧是 async http，本来就不在主线程上。
+ * 别把它改回普通函数、也别让调用点在主线程直接调它。
  */
 object SearchUsageService {
 
@@ -25,7 +36,11 @@ object SearchUsageService {
     fun supports(options: SearchServiceOptions): Boolean =
         options is TavilyOptions || options is LinkUpOptions
 
-    fun fetch(options: SearchServiceOptions, client: OkHttpClient, timeoutMs: Int = 10_000): UsageInfo {
+    suspend fun fetch(
+        options: SearchServiceOptions,
+        client: OkHttpClient,
+        timeoutMs: Int = 10_000,
+    ): UsageInfo = withContext(Dispatchers.IO) {
         val url: String
         val key: String
         when (options) {
@@ -44,12 +59,8 @@ object SearchUsageService {
         val delays = longArrayOf(200, 600)
         for (attempt in 0..delays.size) {
             if (attempt > 0) {
-                try {
-                    Thread.sleep(delays[attempt - 1])
-                } catch (e: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    throw UsageException(e.toString())
-                }
+                // delay()（不是 Thread.sleep）：既不占用线程，也只在这个 IO 上下文里等。
+                delay(delays[attempt - 1])
             }
             try {
                 val request = Request.Builder().url(url).header("Authorization", "Bearer $key").get().build()
@@ -60,7 +71,7 @@ object SearchUsageService {
                     if (!response.isSuccessful) {
                         throw UsageException("Usage request failed (HTTP ${response.code})")
                     }
-                    return when (options) {
+                    return@withContext when (options) {
                         is TavilyOptions -> parseTavilyUsage(body)
                             ?: throw UsageException("The provider returned an invalid usage response")
                         else -> parseLinkUpUsage(body)

@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -79,7 +80,10 @@ fun SearchServicesScreen(
     val common = remember(reload) { repo.commonOptions() }
     val autoTest = remember(reload) { repo.autoTestOnLaunch() }
     val testing = remember { mutableStateMapOf<String, Boolean>() }
-    val connection = remember { mutableStateMapOf<String, Boolean>() }
+    // 连接状态住在容器里（原版 SettingsProvider._searchConnection）：启动时自动
+    // 测试的结果与手动测试的结果共用这一份，离开页面再回来还在。
+    val connectivity = container.searchConnectivity
+    val connection by connectivity.states.collectAsState()
     var editing by remember { mutableStateOf<SearchServiceOptions?>(null) }
     var adding by remember { mutableStateOf(false) }
     var actionsFor by remember { mutableStateOf<SearchServiceOptions?>(null) }
@@ -89,14 +93,11 @@ fun SearchServicesScreen(
     fun testConnection(service: SearchServiceOptions) {
         testing[service.id] = true
         scope.launch {
-            val ok = runCatching {
-                container.searchEngine.search(
-                    query = "connectivity test",
-                    options = service,
-                    common = SearchCommonOptions(resultSize = 1, timeout = common.timeout),
-                )
-            }.isSuccess
-            connection[service.id] = ok
+            // 原版手动测试用 resultSize = 1（search_services_page.dart:121-124）。
+            connectivity.probe(
+                service,
+                SearchCommonOptions(resultSize = 1, timeout = common.timeout),
+            )
             testing[service.id] = false
         }
     }

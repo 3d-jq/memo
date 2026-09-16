@@ -500,15 +500,34 @@ fun SearchServiceEditorScreen(
         onClose(true)
     }
 
+    /** 用量请求的身份：换了它就把旧结果丢掉（Dart `_usageCacheKey`）。 */
+    fun usageIdentity(service: SearchServiceOptions): String = when (service) {
+        is TavilyOptions -> "tavily|${service.id}|${service.apiKey.trim()}|${service.resolvedUrl}"
+        is LinkUpOptions -> "linkup|${service.id}|${service.apiKey.trim()}|"
+        else -> ""
+    }
+
     fun queryUsage() {
         val service = currentService()
         if (!SearchUsageService.supports(service) || usageLoading) return
+        // Dart `_queryUsage` 先验表单：key 没填就不发请求（否则只是白跑一趟拿 401）。
+        if (!validate()) return
+        val requested = usageIdentity(service)
         usageLoading = true
         usageError = null
         scope.launch {
             try {
-                usage = SearchUsageService.fetch(service, container.httpClient)
+                // 超时取公共选项（search_service_editor_page.dart L1024-1026 的
+                // clamp(1000, 30000)）；fetch 自己切 IO，这里仍在主线程的
+                // scope 上，别把阻塞调用直接写进来（见 SearchUsageService 注释）。
+                val timeout = repo.commonOptions().timeout.coerceIn(1000, 30000)
+                val info = SearchUsageService.fetch(service, container.httpClient, timeoutMs = timeout)
+                // 期间改了 key/地址/类型 → 这次结果作废（Dart 的 requestGeneration +
+                // cacheKey 比对）。
+                if (usageIdentity(currentService()) != requested) return@launch
+                usage = info
             } catch (e: Exception) {
+                if (usageIdentity(currentService()) != requested) return@launch
                 usageError = e.message ?: e.toString()
             } finally {
                 usageLoading = false
@@ -557,7 +576,15 @@ fun SearchServiceEditorScreen(
         ) {
             if (isAdding) {
                 item { SectionHeaderText(stringResource(R.string.search_service_editor_provider_type_title), first = true) }
-                item { TypeChips(selected = type, onSelect = { type = it; values.clear(); errors.clear() }) }
+                item { TypeChips(selected = type, onSelect = {
+                    type = it
+                    values.clear()
+                    errors.clear()
+                    // 换类型 = 换身份：旧用量/旧错误/在途请求全部作废（_changeType）。
+                    usage = null
+                    usageError = null
+                    usageLoading = false
+                } ) }
             }
             item {
                 SectionHeaderText(
@@ -572,7 +599,14 @@ fun SearchServiceEditorScreen(
                     fields = searchConfigFields(type),
                     values = values,
                     errors = errors,
-                    onValue = { k, v -> values[k] = v; errors.remove(k) },
+                    onValue = { k, v ->
+                        values[k] = v
+                        errors.remove(k)
+                        // 改了任何字段（尤其是 key/地址）= 旧用量不再对应当前配置，
+                        // 清掉而不是继续显示（_markDirty）。
+                        usage = null
+                        usageError = null
+                    },
                     extraKeyCount = extraKeys.size,
                     onOpenApiKeys = { showApiKeys = true },
                 )

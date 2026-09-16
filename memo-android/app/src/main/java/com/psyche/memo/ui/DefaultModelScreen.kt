@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -299,6 +300,11 @@ fun DefaultModelScreen(
 
     var pickerSlot by remember { mutableStateOf<PickerSlot?>(null) }
     var promptSheet by remember { mutableStateOf<PromptTask?>(null) }
+    // 选择器里长按模型 → 模型详情页保存后要重读模型列表（model_select_sheet.dart
+    // L1387-1391：`await showModelDetailSheet(...)` 之后 `_loadModelsAsync()`）。
+    // 不重读的话，刚改完「输入模式」的模型在列表里的能力胶囊还是旧的 —— 用户就会
+    // 以为改了没生效（OCR 那边读的是最新配置，会拒绝一个看起来"已经勾了图片"的模型）。
+    var modelOptionsVersion by remember { mutableIntStateOf(0) }
 
     Column(
         modifier = Modifier
@@ -442,7 +448,7 @@ fun DefaultModelScreen(
             PickerSlot.OCR -> ocrSel
         }
         // provider_rows 整表 + 逐条解 JSON 不在组合期做（§5.13）。
-        val options = rememberLoaded(emptyList(), slot, selForSlot) {
+        val options = rememberLoaded(emptyList(), slot, selForSlot, modelOptionsVersion) {
             loadModelOptions(container, selForSlot?.first, selForSlot?.second)
         }
         ModelSelectSheet(
@@ -452,6 +458,7 @@ fun DefaultModelScreen(
                 pickerSlot = null
                 applyPick(slot, option)
             },
+            onOptionsInvalidated = { modelOptionsVersion++ },
             onDismiss = { pickerSlot = null },
         )
     }
