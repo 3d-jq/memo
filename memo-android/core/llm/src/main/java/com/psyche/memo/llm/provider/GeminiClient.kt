@@ -184,7 +184,8 @@ class GeminiClient(
         val call = newCall(request, body, stream = true)
         val response = await(call)
         try {
-            if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+            // 非 2xx 要带上响应体（原版 `HTTP ${statusCode}: $errorBody`）——见 httpFailure。
+            if (!response.isSuccessful) throw httpFailure(response)
             val source: BufferedSource = response.body?.source() ?: throw IOException("no body")
             val parser = SseEventParser(recoverAdjacentJsonDataRecords = false)
             val state = GeminiStreamState()

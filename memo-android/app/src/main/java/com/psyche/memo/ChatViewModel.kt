@@ -1820,7 +1820,12 @@ class ChatViewModel(
                 )
             } catch (e: Exception) {
                 val segmentsJson = encodeSegments(allSegments)
-                val finalParts = markFailed(assistantId, e.toString(), allParts, segmentsJson)
+                val finalParts = markFailed(
+                    assistantId,
+                    com.psyche.memo.ui.chat.generationErrorText(e),
+                    allParts,
+                    segmentsJson,
+                )
                 persistAssistant(
                     assistantId,
                     finalParts,
@@ -2403,7 +2408,14 @@ class ChatViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) {
                 persistFinal(allParts)
             } catch (e: Exception) {
-                persistFinal(markFailed(messageId, e.toString(), allParts, encodeSegments(allSegments)))
+                persistFinal(
+                    markFailed(
+                        messageId,
+                        com.psyche.memo.ui.chat.generationErrorText(e),
+                        allParts,
+                        encodeSegments(allSegments),
+                    ),
+                )
             } finally {
                 updateAssistantRetry(messageId, null)
                 _streaming.value = false

@@ -172,6 +172,9 @@ class OpenAiClientIntegrationTest {
             throw AssertionError("expected IOException")
         } catch (e: Exception) {
             assertTrue(e.message!!.contains("500"))
+            // 非 2xx 必须带响应体（原版 `HTTP ${statusCode}: $errorBody`）：只报状态码
+            // 就没有任何可诊断信息了（用户 2026-09-16「怎么还是会裸出 …HTTP 429」）。
+            assertTrue("错误里应当带响应体，实际：${e.message}", e.message!!.contains("boom"))
         }
     }
 

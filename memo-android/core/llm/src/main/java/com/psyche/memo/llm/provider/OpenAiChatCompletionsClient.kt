@@ -247,9 +247,8 @@ class OpenAiChatCompletionsClient(
         val call = newCall(request, body)
         val response = await(call)
         try {
-            if (!response.isSuccessful) {
-                throw IOException("HTTP ${response.code}")
-            }
+            // 非 2xx 要带上响应体（原版 `HTTP ${statusCode}: $errorBody`）——见 httpFailure。
+            if (!response.isSuccessful) throw httpFailure(response)
             val source: BufferedSource = response.body?.source() ?: throw IOException("no body")
             val parser = SseEventParser(recoverAdjacentJsonDataRecords = true)
             // Responses 的 SSE 事件名/字段与 chat-completions 完全不同 —— 走
