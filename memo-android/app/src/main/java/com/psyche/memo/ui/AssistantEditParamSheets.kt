@@ -59,9 +59,10 @@ import kotlin.math.round
  * one composable: 40x4 handle, Title + enable switch, `_SliderTileNew`,
  * description — or the "parameter disabled" caption while the switch is off.
  *
- * SfSlider's ticks, interval labels and waterdrop tooltip have no material3
- * equivalent, so all three are dropped (same simplification as
- * `MessageStyleSettingsScreen`); the live value stays visible in [ValuePill].
+ * 原版这里用 Syncfusion `SfSlider`（刻度 + 间隔标签 + 水滴 tooltip）；我们换成
+ * `MemoSlider`（照「推理强度」滑条：药丸轨道 + 档位圆点 + 拖动胶囊），所以**刻度线与
+ * 间隔标签由档位圆点/胶囊承担**，`customLabelStops`（上下文消息那组预设值）仍画在滑条下方
+ * 作为数值参考 —— 但原版按值线性摆位会把前五个档位叠在一起，见 [spreadLabelStops]。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,28 +169,83 @@ private fun SliderTile(
             )
             if (labelStops.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                val span = range.endInclusive - range.start
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(18.dp),
-                ) {
-                    labelStops.forEach { stop ->
-                        val t = if (span == 0f) 0f else ((stop.toFloat() - range.start) / span).coerceIn(0f, 1f)
-                        Text(
-                            text = formatStopLabel(stop),
-                            style = TextStyle(fontSize = 11.sp, color = cs.onSurface.copy(alpha = 0.65f)),
-                            modifier = Modifier.align(
-                                BiasAlignment(horizontalBias = -1f + t * 2f, verticalBias = 0f),
-                            ),
-                        )
-                    }
-                }
+                SliderLabelRow(stops = labelStops, range = range)
             }
         }
         Spacer(Modifier.width(8.dp))
         ValuePill(text = valueText, onTap = onValuePillTap)
     }
+}
+
+/**
+ * 滑条下方的预设值标签行（原版 `_SliderTileNew` L1359-1388 的 `Stack` + `Align`）。
+ *
+ * 位置仍按**真实值**线性摆（`BiasAlignment(-1 + t*2)`，与滑条刻度对齐），但先过一遍
+ * [spreadLabelStops] 把会叠在一起的档位去掉 —— 原版这里直接全画，导致「上下文消息」那组
+ * （1/64/128/256/512/1024/2048/4096）前五个标签挤在左侧 12% 里叠成一团
+ * （用户 2026-09-16「助手里面那个上下文消息这个下面那个数字显示有重叠」）。
+ */
+@Composable
+internal fun SliderLabelRow(
+    stops: List<Double>,
+    range: ClosedFloatingPointRange<Float>,
+) {
+    val cs = MaterialTheme.colorScheme
+    val span = range.endInclusive - range.start
+    val visible = remember(stops, range) {
+        spreadLabelStops(stops, range.start, range.endInclusive)
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(18.dp),
+    ) {
+        visible.forEach { stop ->
+            val t = if (span == 0f) 0f else ((stop.toFloat() - range.start) / span).coerceIn(0f, 1f)
+            Text(
+                text = formatStopLabel(stop),
+                style = TextStyle(fontSize = 11.sp, color = cs.onSurface.copy(alpha = 0.65f)),
+                maxLines = 1,
+                modifier = Modifier.align(
+                    BiasAlignment(horizontalBias = -1f + t * 2f, verticalBias = 0f),
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * 预设值标签去重叠（纯逻辑，`AssistantParamLabelStopsTest` 钉住）。
+ *
+ * 原版按值线性摆位；档位值若是「1、64、128、256、512、1024、2048、4096」这种密集起步的
+ * 序列，前几个（1/64/128/256 全在左侧 6%）与 512（12.5%）会挤在同一处，11sp 的标签直接
+ * 叠在一起。规则：从左到右贪心保留，与前一个保留项的**位置差**不足 [minGap]（默认 12% 行宽）
+ * 就跳过；首项与末项一定保留（末项与前一项太近时**顶替**它，保证最大档位始终可见）。
+ */
+internal fun spreadLabelStops(
+    stops: List<Double>,
+    minValue: Float,
+    maxValue: Float,
+    minGap: Float = 0.12f,
+): List<Double> {
+    val span = maxValue - minValue
+    if (span <= 0f || stops.size <= 1) return stops
+    val out = ArrayList<Double>(stops.size)
+    var lastFraction = Float.NEGATIVE_INFINITY
+    stops.forEachIndexed { index, stop ->
+        val fraction = ((stop.toFloat() - minValue) / span).coerceIn(0f, 1f)
+        val isLast = index == stops.lastIndex
+        if (isLast) {
+            if (out.isNotEmpty() && fraction - lastFraction < minGap) out.removeAt(out.size - 1)
+            out += stop
+            return@forEachIndexed
+        }
+        if (out.isEmpty() || fraction - lastFraction >= minGap) {
+            out += stop
+            lastFraction = fraction
+        }
+    }
+    return out
 }
 
 /** `_ValuePill` L1403-1439. */
