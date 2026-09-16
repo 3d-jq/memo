@@ -606,6 +606,8 @@ Updating Memo first is the safer choice.</string>
     <string name="chat_message_widget_create_memory">Create Memory</string>
     <string name="chat_message_widget_deep_thinking">Deep Thinking</string>
     <string name="chat_message_widget_file_not_found">File not found: %1$s</string>
+    <string name="chat_message_widget_generate_image">Generate image: %1$s</string>
+    <string name="chat_message_widget_generate_video">Generate video: %1$s</string>
     <string name="chat_message_widget_images">Images</string>
     <string name="chat_message_widget_memory_delete">Delete Memory</string>
     <string name="chat_message_widget_memory_edit">Edit Memory</string>

@@ -111,6 +111,52 @@ class ToolHandler(
                 }
             }
 
+            // 生成图片 / 生成视频（GenerationTools，自研功能）：助手在「生成图片 /
+            // 生成视频」tab 里选了服务才提供。图片结果作为工具附带的图片挂进工具 part；
+            // 视频是异步长任务，这里一直等到终态（或超时）再返回，产物是一个 mp4 路径。
+            if (container != null && assistant != null &&
+                name in com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES
+            ) {
+                val tools = com.psyche.memo.provider.generation.GenerationTools
+                val isImage = name == tools.GENERATE_IMAGE
+                val binding = if (isImage) assistant.imageGeneration else assistant.videoGeneration
+                val service = tools.serviceFor(container.generationServices, binding)
+                    ?: return toolError(
+                        error = "generation_unavailable",
+                        message = "No $name service is configured for this assistant. " +
+                            "Ask the user to pick one in the assistant's generation tab.",
+                        tool = name,
+                    )
+                return try {
+                    val result = tools.execute(
+                        service = service,
+                        binding = binding,
+                        name = name,
+                        args = args,
+                        clients = com.psyche.memo.provider.generation.GenerationTools.Clients(
+                            images = com.psyche.memo.provider.generation.ImageGenerationClient(
+                                container.httpClient,
+                                container.generatedMediaStore,
+                            ),
+                            videos = com.psyche.memo.provider.generation.VideoGenerationClient(
+                                container.httpClient,
+                                container.generatedMediaStore,
+                            ),
+                        ),
+                    )
+                    // 产物不挂工具 part：由调用方（ChatViewModel）把生成结果作为一条
+                    // 消息插进对话（与 ➕ 面板同一条路径），避免同一张图出现两次。
+                    result.json
+                } catch (e: Exception) {
+                    toolError(
+                        error = "generation_failed",
+                        message = e.message ?: e.toString(),
+                        tool = name,
+                        instruction = "Image/video generation failed. Tell the user what went wrong.",
+                    )
+                }
+            }
+
             // Creating calendar events or changing reminders modifies user data,
             // so those tools always require explicit user approval first.
             if (LocalToolNames.requiresUserApproval.contains(name) &&

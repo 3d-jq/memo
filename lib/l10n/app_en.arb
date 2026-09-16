@@ -4279,5 +4279,17 @@
       "message": { "type": "String" }
     }
   },
-  "generationSheetInserted": "Added to the conversation"
+  "generationSheetInserted": "Added to the conversation",
+  "chatMessageWidgetGenerateImage": "Generate image: {prompt}",
+  "@chatMessageWidgetGenerateImage": {
+    "placeholders": {
+      "prompt": { "type": "String" }
+    }
+  },
+  "chatMessageWidgetGenerateVideo": "Generate video: {prompt}",
+  "@chatMessageWidgetGenerateVideo": {
+    "placeholders": {
+      "prompt": { "type": "String" }
+    }
+  }
 }

@@ -606,6 +606,8 @@
     <string name="chat_message_widget_create_memory">建立記憶</string>
     <string name="chat_message_widget_deep_thinking">深度思考</string>
     <string name="chat_message_widget_file_not_found">檔案不存在: %1$s</string>
+    <string name="chat_message_widget_generate_image">生成圖片：%1$s</string>
+    <string name="chat_message_widget_generate_video">生成影片：%1$s</string>
     <string name="chat_message_widget_images">圖片</string>
     <string name="chat_message_widget_memory_delete">刪除記憶</string>
     <string name="chat_message_widget_memory_edit">編輯記憶</string>

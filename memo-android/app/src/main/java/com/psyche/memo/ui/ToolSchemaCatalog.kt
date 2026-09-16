@@ -136,6 +136,10 @@ object BuiltInToolCatalog {
         for (spec in WorkspaceTools.catalogDefinitions()) {
             out.add(BuiltInToolCatalogEntry(spec.name, definitionOf(spec), BuiltInToolGroup.WORKSPACE))
         }
+        // 生成工具（自研功能）：图片 / 视频各一条，描述可在「工具描述」页改。
+        for (spec in com.psyche.memo.provider.generation.GenerationTools.catalogDefinitions()) {
+            out.add(BuiltInToolCatalogEntry(spec.name, definitionOf(spec), BuiltInToolGroup.GENERATION))
+        }
         return out
     }
 

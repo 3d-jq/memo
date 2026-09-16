@@ -81,6 +81,8 @@ import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.CloudSun
 import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.Earth
+import com.composables.icons.lucide.Image
+import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.HeartPulse
 import com.composables.icons.lucide.Link
 import com.composables.icons.lucide.ListPlus
@@ -212,6 +214,9 @@ fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
         "memory_delete", "delete_memory" -> Lucide.BookDashed
         "chat_search", "builtin_search" -> Lucide.Search
         "search_web" -> Lucide.Earth
+        // 生成工具（自研功能）：与设置里两个入口同一个图标语言。
+        com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE -> Lucide.Image
+        com.psyche.memo.provider.generation.GenerationTools.GENERATE_VIDEO -> Lucide.Video
         // Provider 内置服务端工具（chat_message_widget.dart:444-453）。
         "web_fetch" -> Lucide.Link
         "code_execution", "code_interpreter", "text_editor_code_execution" -> Lucide.Code
@@ -264,6 +269,15 @@ fun toolTitleFor(name: String, args: JsonObject?, isResult: Boolean): String {
         "chat_search" -> stringResource(UiR.string.chat_message_widget_chat_search)
         "create_memory" -> stringResource(UiR.string.chat_message_widget_create_memory)
         "search_web" -> stringResource(UiR.string.chat_message_widget_web_search, args?.str("query").orEmpty())
+        // 生成工具：标题带提示词（照 search_web 带 query 的写法）。
+        com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE -> stringResource(
+            UiR.string.chat_message_widget_generate_image,
+            args?.str("prompt").orEmpty(),
+        )
+        com.psyche.memo.provider.generation.GenerationTools.GENERATE_VIDEO -> stringResource(
+            UiR.string.chat_message_widget_generate_video,
+            args?.str("prompt").orEmpty(),
+        )
         "builtin_search" -> stringResource(UiR.string.chat_message_widget_builtin_search)
         else -> stringResource(
             if (isResult) UiR.string.chat_message_widget_tool_result

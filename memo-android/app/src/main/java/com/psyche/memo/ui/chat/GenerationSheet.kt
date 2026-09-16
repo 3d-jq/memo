@@ -3,6 +3,7 @@ package com.psyche.memo.ui.chat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -151,8 +152,19 @@ fun GenerationSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
+            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
     ) {
+        // 拖柄（40×4、onSurface@20%、全圆）—— 与「+」面板 / 其它 sheet 同一根。
+        // dragHandle 交给自绘：用户 2026-09-16「这个 sheet 怎么没有把手呀」。
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .height(4.dp)
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
                 if (isImage) Lucide.Image else Lucide.Video,

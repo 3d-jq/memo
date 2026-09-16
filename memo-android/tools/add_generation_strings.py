@@ -122,6 +122,17 @@ PLACEHOLDERS_PHASE4 = {
     "generationSheetFailed": [("message", "String")],
 }
 
+# 第 5 阶段：助手的生成工具（工具卡标题 + 工具描述）。
+KEYS_PHASE5 = [
+    ("chatMessageWidgetGenerateImage", "Generate image: {prompt}", "生成图片：{prompt}", "生成圖片：{prompt}"),
+    ("chatMessageWidgetGenerateVideo", "Generate video: {prompt}", "生成视频：{prompt}", "生成影片：{prompt}"),
+]
+
+PLACEHOLDERS_PHASE5 = {
+    "chatMessageWidgetGenerateImage": [("prompt", "String")],
+    "chatMessageWidgetGenerateVideo": [("prompt", "String")],
+}
+
 # 需要占位符的键（key -> [(name, type)]）
 PLACEHOLDERS = {
     "generationServicesDeleteMessage": [("name", "String")],
@@ -164,6 +175,7 @@ def patch(file_name, locale_index):
     todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE2) for (k, en, zh, hant) in KEYS_PHASE2]
     todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE3) for (k, en, zh, hant) in KEYS_PHASE3]
     todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE4) for (k, en, zh, hant) in KEYS_PHASE4]
+    todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE5) for (k, en, zh, hant) in KEYS_PHASE5]
     missing = [entry for entry in todo if ('"%s"' % entry[0]) not in text]
     if not missing:
         print('    %s already has every key — skipped' % file_name)

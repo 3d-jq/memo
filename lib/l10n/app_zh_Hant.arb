@@ -3525,5 +3525,7 @@
   "generationSheetGenerate": "生成",
   "generationSheetGenerating": "生成中…",
   "generationSheetFailed": "生成失敗：{message}",
-  "generationSheetInserted": "已加入對話"
+  "generationSheetInserted": "已加入對話",
+  "chatMessageWidgetGenerateImage": "生成圖片：{prompt}",
+  "chatMessageWidgetGenerateVideo": "生成影片：{prompt}"
 }

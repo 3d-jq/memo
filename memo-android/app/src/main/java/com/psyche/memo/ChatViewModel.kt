@@ -2244,6 +2244,11 @@ class ChatViewModel(
                     parseToolArguments(call.arguments),
                     call.id,
                 ) { images += it }
+                // 生成类工具：产物（图片 / 视频）作为一条助手消息进对话 —— 与输入栏
+                // ➕ 面板的「生成」走同一条路径，所以图片有气泡 + 查看器、视频有文件卡。
+                if (call.name in com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES) {
+                    appendGeneratedMediaFromToolResult(call.arguments, result)
+                }
                 roundHandler.foldToolResult(call.id, JsonPrimitive(result), images)
                 result to images
             }
@@ -2511,13 +2516,22 @@ class ChatViewModel(
                 cwd = assistant.workspaceCwd,
             ),
         )
+        // 生成图片 / 生成视频（GenerationTools，自研功能）：助手在生成 tab 里选了
+        // 服务才提供对应工具（没选就不出现在请求里）。
+        out.addAll(
+            com.psyche.memo.provider.generation.GenerationTools.buildDefinitions(
+                repo = container.generationServices,
+                assistant = assistant,
+            ),
+        )
         // MCP 工具（mcp_tool_service）：助手绑定且已连接的服务器，仅启用的工具；
         // 与内置工具同名的条目按原版保留名规则剔除。
         val reserved = com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all.toSet() + setOf(
             com.psyche.memo.provider.search.SearchToolService.TOOL_NAME,
         ) + com.psyche.memo.provider.MemoryTools.ALL_TOOL_NAMES +
             com.psyche.memo.provider.SkillTools.ALL_TOOL_NAMES +
-            com.psyche.memo.provider.workspace.WorkspaceTools.ALL_TOOL_NAMES
+            com.psyche.memo.provider.workspace.WorkspaceTools.ALL_TOOL_NAMES +
+            com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES
         for (serverId in assistant.mcpServerIds) {
             if (!container.mcpConnections.isConnected(serverId)) continue
             val config = container.mcpRepository.server(serverId) ?: continue
@@ -3087,6 +3101,26 @@ class ChatViewModel(
         "jpg", "jpeg" -> "image/jpeg"
         "webp" -> "image/webp"
         else -> "image/png"
+    }
+
+    /**
+     * 生成类工具的结果 JSON → 往对话里插一条媒体消息。
+     *
+     * 结果形如 `{"type":"image_generation_result","paths":[…]}` 或
+     * `{"type":"video_generation_result","path":"…"}`；解析失败/没有产物时静默跳过
+     * （工具 JSON 本身已经把错误讲清楚了，模型据此回话）。
+     */
+    private fun appendGeneratedMediaFromToolResult(argumentsJson: String, resultJson: String) {
+        val result = runCatching { Json.parseToJsonElement(resultJson).jsonObject }.getOrNull() ?: return
+        val prompt = runCatching {
+            (Json.parseToJsonElement(argumentsJson).jsonObject["prompt"] as? JsonPrimitive)?.contentOrNull
+        }.getOrNull().orEmpty()
+        val imagePaths = (result["paths"] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            .orEmpty()
+        val videoPath = (result["path"] as? JsonPrimitive)?.contentOrNull
+        if (imagePaths.isEmpty() && videoPath == null) return
+        appendGeneratedMedia(prompt = prompt, imagePaths = imagePaths, videoPath = videoPath)
     }
 
     private fun ChatMessage.toUi(): UiMessage = UiMessage(
