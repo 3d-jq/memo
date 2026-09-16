@@ -179,6 +179,8 @@ fun ImageSettingsScreen(
                                     value = customQuality.toFloat(),
                                     onValueChange = { customQuality = (it.toInt() / 5) * 5 },
                                     valueRange = 10f..100f,
+                                    // 步长 5（10..100 → 18 段），与原版 stepSize 同义。
+                                    steps = 17,
                                     valueLabel = { it.toInt().toString() },
                                     onValueChangeFinished = {
                                         container.preferenceRepository.writeJson(

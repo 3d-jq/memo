@@ -432,6 +432,8 @@ fun DisplaySettingsScreen(
                             container.preferenceRepository.writeJson("display_chat_font_scale_v1", scale.toString())
                         },
                         valueRange = 0.5f..1.5f,
+                        // 原版这里是 `stepSize: 0.05`（20 段）；传 steps 让档位点画出来。
+                        steps = 19,
                         modifier = Modifier.weight(1f),
                         valueLabel = { "${Math.round(it * 100)}%" },
                     )
@@ -490,6 +492,8 @@ fun DisplaySettingsScreen(
                             }
                         },
                         valueRange = 2f..64f,
+                        // 原版 `stepSize: 2.0`（31 段）。
+                        steps = 30,
                         enabled = enabled,
                         valueLabel = { "${Math.round(it)}s" },
                         modifier = Modifier.weight(1f),
@@ -519,6 +523,8 @@ fun DisplaySettingsScreen(
                             )
                         },
                         valueRange = 0f..200f,
+                        // 原版 `stepSize: 5.0`（40 段）。
+                        steps = 39,
                         modifier = Modifier.weight(1f),
                         valueLabel = { "${Math.round(it)}%" },
                     )
@@ -623,6 +629,8 @@ private fun OpacitySliderRow(value: Float, onCommit: (Float) -> Unit) {
                 onCommit(local)
             },
             valueRange = 0f..100f,
+            // 原版 `stepSize: 5.0`（20 段）。
+            steps = 19,
             modifier = Modifier.weight(1f),
             valueLabel = { "${Math.round(it)}%" },
         )
