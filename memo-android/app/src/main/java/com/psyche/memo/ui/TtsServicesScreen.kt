@@ -357,6 +357,51 @@ private fun AvatarBadge(letter: String, overlay: Color) {
     }
 }
 
+/**
+ * `_AvatarBrandBadge` L444-505 —— provider 语音服务的徽章：**有品牌图标就画图标**
+ *（`BrandAssets.assetForName(name)`，取不到时按名字首词再试一次，与上游同序），
+ * 都没有才回落到首字母。深色模式下对「需要反色」的图标套 `onSurface` tint。
+ *
+ * 用户 2026-09-16「语音服务那部分人家是有对应的图标」：此前这里只画首字母 ——
+ * 原实现自己写着「brand assets are a later batch」，那个批次一直没补上。
+ */
+@Composable
+private fun AvatarBrandBadge(name: String, overlay: Color) {
+    val cs = MaterialTheme.colorScheme
+    val app = LocalSemanticColors.current
+    val asset = remember(name) {
+        BrandAssets.assetForName(name)
+            ?: BrandAssets.assetForName(name.split(' ').first())
+    }
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .background(withAlpha(cs.primary, if (app.isDark) 0.18 else 0.1), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (asset == null) {
+            Text(
+                name.ifEmpty { "?" }.first().uppercaseChar().toString(),
+                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
+            )
+        } else {
+            coil.compose.AsyncImage(
+                model = asset,
+                contentDescription = null,
+                colorFilter = if (app.isDark && BrandAssets.assetNeedsDarkInvert(asset)) {
+                    androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
+                } else {
+                    null
+                },
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        if (overlay != Color.Transparent) {
+            Box(Modifier.size(36.dp).background(overlay, CircleShape))
+        }
+    }
+}
+
 /** _SmallTactileIcon L368-411 (shared with AsrServicesSection). */
 @Composable
 internal fun SmallTactileIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, enabled: Boolean = true, onTap: () -> Unit) {
@@ -396,7 +441,7 @@ private fun NetworkTtsRow(
                     .padding(horizontal = 12.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                AvatarBadge(letter = displayName.take(1), overlay = overlay)
+                AvatarBrandBadge(name = displayName, overlay = overlay)
                 Spacer(Modifier.width(12.dp))
                 Text(
                     displayName,

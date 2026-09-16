@@ -249,6 +249,21 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     }
 
     /**
+     * 日志清理（原版 `settings_provider.dart:1156` 在设置加载完后调
+     * `RequestLogger.cleanupLogs(autoDeleteDays, maxSizeMB)`）：删掉超过保留期的
+     * 轮转日志，再把总量压到体积上限。
+     *
+     * 此前 `LogBootstrap.cleanup` 写好了却**没有任何调用点** —— 日志设置里的
+     * 「自动删除」「日志大小上限」两项是死的（用户 2026-09-16「日志设置里面的功能
+     * 做了没有呀」）。启动时跑一次、改设置时再跑一次，与上游两处调用对齐。
+     */
+    fun maybeCleanupLogs() {
+        appScope.launch {
+            runCatching { com.psyche.memo.logging.LogBootstrap.cleanup(preferenceRepository) }
+        }
+    }
+
+    /**
      * 会话切换的**准备阶段** —— 照原版 `home_page_controller.switchConversationAnimated`
      * 的「fetch-then-commit」：`prepareConversationSwitch` 在列表**淡出（opacity 0）**期间
      * 把目标会话的首屏数据读出来，并把即将可见的 Markdown 在 Default 线程预热好；

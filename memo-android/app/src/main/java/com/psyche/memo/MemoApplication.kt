@@ -44,6 +44,8 @@ class MemoApplication : Application(), ImageLoaderFactory {
         // Wire request/flutter/context log writers to <filesDir>/logs and apply
         // the per-source enable prefs + install the uncaught-exception hook.
         com.psyche.memo.logging.LogBootstrap.init(this, container.preferenceRepository)
+        // 原版 settings_provider.dart:1156 —— 启动后按「自动删除 / 体积上限」清一次日志。
+        container.maybeCleanupLogs()
         // 后台聊天生成：通知渠道 + app 前后台观察（ChatBackgroundController）。
         com.psyche.memo.service.ChatBackgroundController.init(this)
         // Live Update 进度通知管理器（RikkaHub ChatNotificationManager）：

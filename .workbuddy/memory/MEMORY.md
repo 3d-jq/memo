@@ -26,6 +26,8 @@
 - **KDoc 里别写 `/**`**：Kotlin 支持嵌套块注释，注释内出现 `/*`（如路径 `xxx/linux/**`）会开一个不闭合的嵌套注释 → `Unclosed comment` + 一堆不相关的 Unresolved reference（2026-09-15）。
 - **组合期禁止查库**：`AppContainer.providerConfig()` 曾经每次「建 DAO + 查库 + 解 JSON」，是「打开界面就卡顿」的元凶；现已加 `ProviderConfigCache`，失效挂在 `PayloadEntityDao` 写 `provider_rows` 时。新写读配置的代码走容器方法，别再自己 new DAO 查。
 - **`filesDir` 里 99% 的文件是沙箱 rootfs**（`workspaces/<助手 id>/linux`，真机 34k/34.6k）：任何遍历 filesDir 的新功能都要跳过它，否则「永远算不完」（2026-09-15 存储统计就是这么卡住的）。
+- **同屏二级页必须拦系统返回**：一批「二级页」是同屏叠在宿主上的一层 composable（记忆提示词模板、记忆追踪详情、统计榜单全屏页、HTML 预览、日志文件页…），不是导航目的地 —— 自己的返回箭头好使，但系统返回会穿透 pop 掉宿主整条路由（表现为「返回跳回主设置」/「HTML 预览退出对话」）。判据：页面用 `MemoTopBar(onBack = { 本地状态 = null })` 就必须配一次 `OverlayBackHandler(onClose)`；Dialog / ModalBottomSheet 形态**不要**配。测试范式 `OverlayBackNavigationTest`（`createAndroidComposeRule<ComponentActivity>` + `onBackPressedDispatcher.onBackPressed()`）。
+- **导航回调参数别给 `= {}` 默认值**：`home` 路由漏传 `onOpenWorkspaces` 时，默认空 lambda 把点击静默吞掉（用户点半天没反应）。去掉默认值后漏传直接编译不过。
 
 ## 输入栏按钮条件（chat_input_section.dart 规格，2026-09-14 移植完成）
 - `supportsReasoning`/`showMcpButton` 门控：非推理模型 Brain 整颗不显示；无工具能力或无启用 MCP 时 Hammer 不显示。判定 `isReasoningModel`/`isToolModel`（override abilities 优先，否则 ModelRegistry 名称推断）在 HomeScreen.kt 纯函数区。

@@ -1874,12 +1874,8 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
                 .fillMaxWidth()
                 .padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 16.dp),
         ) {
-            MemoSheetHandle()
-            Text(
-                text = stringResource(UiR.string.log_settings_title),
-                style = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = cs.onSurface),
-                modifier = Modifier.padding(bottom = 16.dp),
-            )
+            // 用户 2026-09-16：「日志设置 sheet 那个 title 去掉吧」——把手下面直接是设置项。
+            MemoSheetHandle(trailingGap = 12.dp)
             SettingsTileCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -1944,6 +1940,8 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
                 onSelected = { i ->
                     autoDeleteDays = autoDeleteOptions[i]
                     bs.setAutoDeleteDays(prefs, autoDeleteOptions[i])
+                    // 上游 settings_provider.dart:5563 —— 改完立刻按新阈值清理一次。
+                    container.maybeCleanupLogs()
                     onChanged()
                 },
             )
@@ -1957,6 +1955,8 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
                 onSelected = { i ->
                     maxSizeMB = maxSizeOptions[i]
                     bs.setMaxSizeMB(prefs, maxSizeOptions[i])
+                    // 上游 settings_provider.dart:5575 同上。
+                    container.maybeCleanupLogs()
                     onChanged()
                 },
             )
