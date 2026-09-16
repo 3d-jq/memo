@@ -1,4 +1,4 @@
-﻿package com.psyche.memo.ui
+package com.psyche.memo.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.down
@@ -13,6 +13,7 @@ import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.data.model.TextPart
+import com.psyche.memo.ui.chat.ChatRecompositionProbe
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -83,7 +84,15 @@ class ChatRowRecompositionTest {
                 )
             }
         }
+        compose.waitForIdle()
+        // **必须自己排空主线程 looper**：首屏窗口是 `ChatViewModel.init` →
+        // `viewModelScope.launch`（Dispatchers.Main → Robolectric 的**暂停** looper）
+        // 读出来的，而 `compose.waitUntil` 只推 Compose 的帧时钟、不排空 looper ⇒
+        // 消息永远到不了、消息行永远不会组合。这条曾经"能过"是因为整套测试同一个
+        // JVM 里别的用例把 looper 排空过 —— 单独跑这个类（`--tests`）或 CI 分片
+        // 时它就是红的，而红的原因与「消息行是否可跳过重组」无关（2026-09-16 查清）。
         compose.waitUntil(timeoutMillis = 5_000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
             ChatRecompositionProbe.messageRows > 0
         }
     }

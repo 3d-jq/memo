@@ -572,6 +572,7 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | **解不出的引用标记** | 回落显示一颗 `?` 胶囊 | **整段标记不渲染**（`resolveCitationCapsule` 返回空 display text ⇒ 调用方直接 `return`；`[citation](id)` 内联分支同理） | 用户 2026-09-12 同一次决定：正文旁边挂一个 `?` 读起来像故障。注意：**数字型 label 元数据仍照旧优先显示**（它本身就是可用序号），只有真正解不出的才丢 |
 | **参数不可用的写入调用不再弹审批** | `pathOutsideWritableRoots` = `runCatching { … }.getOrDefault(true)`（`WorkspaceTools.kt:410-413`）⇒ 模型发来的 tool call 参数被截断/没有 `path` 时**先弹一次审批**，用户点完只收到「path is required」 | `WorkspaceTools.pathOutsideWritableRoots` 改成**三态**（`Boolean?`）：能解析出绝对路径 → 按 `/workspace`、`/tmp` 前缀判内外；解析不出（缺键 / 相对路径 / 带 `\0`）→ `null`，闸门判据用 `== true` ⇒ **不弹审批**，直接让工具报参数错误 | 用户 2026-09-16「沙箱里面工具的权限我关闭了确认 为什么还有确认呀」——真机库里那条 `workspace_write_file` 的 `arguments` 就是被截断的 `"{\"path\": \"/workspace/make_docx.py\""`（`path` 解析不出） ⇒ 参数坏掉的调用无论路径是什么都执行不了，占用户一次确认纯属摩擦。`WorkspaceToolsTest.pathOutsideWritableRootsIsTriState` / `unusablePathArgumentsDoNotAskForApproval` 钉住 |
 | **关掉审批开关会放行正在等的那一个** | 上游切开关只改记录，屏上已弹出的审批面板照旧拦着 | `ToolApprovalService.approvePendingForTool(toolName)`：工作区详情页把某个工具的审批开关**关掉**时，把该工具**已弹出**的待审批请求直接批准（按工具名匹配，同名即同一助手的同一工作区） | 同上那句用户反馈的另一半：面板是在关开关**之前**建出来的（真机时间线：审批请求 18:43:16、开关写入 18:43:31），用户本意是「以后不用问我」，已弹出的那个不该继续卡住生成。`ToolApprovalServiceTest.approvePendingForTool_releasesOnlyThatTool` 钉住「只放行同名、其他工具照旧等」 |
+| **工作区提示词多一句内存提醒** | `WorkspaceReminderTransformer.buildWorkspacePrompt` 没有关于宿主资源的任何说明 | `buildSystemPromptBlock` 多一行：CPU/内存与手机共享、`.NET`/JVM 这类重运行时常常 OOM 起不来、优先 Python/Node/纯 shell | 用户 2026-09-16 点头（出处见 §5.16①）。真机代价：模型为 `.NET CoreCLR 0x8007000E` 白烧了好几轮才改用 python-docx。**别删这句**（`promptBlockWarnsThatHeavyRuntimesMayRunOutOfMemory` 钉住） |
 
 | **自动重试的出厂默认** | `AutoRetryOptions.defaults()`（`lib/core/models/auto_retry_options.dart:41-96`）：`enabled = false`、`maxDelayMs = 30000`、`defaultRetryStatusCodes` = {408,425,429,500,502,503,504,529}、`defaultRetryKeywords` 12 条、`defaultStopKeywords` 11 条 | **只有 `enabled` 偏离：默认 `true`**，其余逐字照 Dart。唯一源头是 `core/llm/.../retry/AutoRetryOptions.kt` 的 `DEFAULT_RETRY_STATUS_CODES` / `DEFAULT_RETRY_KEYWORDS` / `DEFAULT_STOP_KEYWORDS` / `DEFAULT_MAX_DELAY_MS`，设置页（`AutoRetrySettingsScreen`）与容器解码（`AppContainer.currentRetryOptions`）都引用它们、**不再各抄一份** | 用户 2026-09-15「自动重试这个触发条件这个没有做完吧」→「触发条件这个和原项目人家有触发字的呀」，随后拍板 `enabled` 保持 `true`。真因不在链路（`shouldRetryError` 的网络错误/关键词/状态码三档与容器实时读盘都在），而在 Kotlin 侧出厂默认**两个词表是空的**（关键词这档永不命中）、状态码多带 409 又漏了 425/529、`maxDelayMs` 是 15000（Dart 30000）；设置页当时有自己一份 private 拷贝所以「页面看着对、实际不重试」。`RetryPolicyTest` 5 例逐字钉住默认值与「409 不重试 / 425·529 重试 / 命中"限流"重试 / 命中"余额"不重试」 |
 
@@ -745,7 +746,7 @@ bug 先查测量几何再查数据**。
 - 证据链：`adb shell run-as com.psyche.memo.dev ulimit -a` → 无限制；proot 参数段（`ProotShellRunner.prootPrefix`）只有 `--root-id/--link2symlink/--kill-on-exit/-r/-w/-b`，**没有任何内存/CPU 限制**；cgroup 侧 `/dev/memcg/apps/uid_*/memory.limit_in_bytes`、`/sys/fs/cgroup/memory.max` **都不存在**（本机是 cgroup v1 应用组 + LMK，本来就没有 per-app 内存上限，`/proc/self/cgroup` = `4:memory:/`）。
 - 沙箱里 `free`/`/proc/meminfo` 之所以"很小"，是因为我们把宿主内核伪文件系统 `-b /dev /proc /sys` 挂进去了（`WorkspaceManager.KERNEL_FS_MOUNTS`），读到的是**整机**状态。真机抓取：`MemTotal 11.65GB / MemFree 135MB / MemAvailable 1.97GB`，zram swap 接近满 —— 那台手机当时确实吃紧。
 - 用户看到「内存很小」的来源是**模型自己的推理文字**（库里 `reasoning` part）：「the environment has about 11GB total but only 2.9GB available with swap at 10/11GB」，随后模型自己给 `.NET` 设 `DOTNET_GCHeapHardLimit=1000000000`/`DOTNET_GCServer=0` 绕，最后放弃改用 `python-docx`。CoreCLR 报 `0x8007000E`（E_OUTOFMEMORY）是它启动时预留大块虚拟地址空间失败，**不是我们限制了它**。
-- 结论：**不用改代码**（改也没有上限可调）。真要减少这类失败，只能让模型少挑重型运行时 —— 可选项（待用户点头）：在**工作区系统提示词块**里加一句「内存/CPU 与手机共享，.NET / JVM 这类重运行时有较大概率起不来，优先 Python/Node」。
+- 结论：**没有上限可调，不改代码**。为减少这类失败，按用户点头加了一句工作区提示词（同日落地）：`buildSystemPromptBlock` 里「CPU and memory are shared with the host device… heavy runtimes (for example .NET or the JVM) often fail to start with out-of-memory errors… Prefer Python, Node, or plain shell tooling」——**上游提示词没有这句，是我们新增的**，`WorkspaceToolsTest.promptBlockWarnsThatHeavyRuntimesMayRunOutOfMemory` 钉住；`buildSystemPromptBlock` 的 KDoc 也标了这句的来源。
 
 **② 「自动回到底部」是做完的**（`display_auto_scroll_enabled_v1` + `_idle_seconds_v1`）。
 - UI：显示设置 → 行为 → 「自动回到底部延迟」（detail = `已关闭` 或 `Ns`）→ sheet 内开关 + 2–64s 滑杆（`DisplaySettingsScreen.kt:120-121/148-149/328-337/456-500`，照 `display_settings_page.dart:729-858`）。
@@ -757,6 +758,23 @@ bug 先查测量几何再查数据**。
 - 真机取证：工作区 `7beb11d3…`（助手「管家」绑定）的 `toolApprovals` = `{"workspace_shell":false}`（写入时刻 18:43:31），而最后一批 `workspace_shell` 调用在 **18:43:16**（早 15 秒）—— 那次审批请求是在开关关掉**之前**建出来的，屏上那个面板不会因为之后关开关而消失 ⇒ 本轮加 `approvePendingForTool`。
 - 另一条：`workspace_write_file` 那条 `arguments` 是**被截断的**（`"{\"path\": \"/workspace/make_docx.py\""`，缺 `}`），`absolutePath` 解析失败 ⇒ 上游 `getOrDefault(true)` 判成"越界" ⇒ 即使开关是关的也弹审批，点完只收到 `execution_error: path is required` ⇒ 本轮改成三态，参数不可用**不弹审批**。
 - 剩下一条是**保留的**（上游同款）：写到 `/workspace`、`/tmp` **之外**时无条件要求审批（`pathOutsideWritableRoots`），修的是判定边界，不是这条规则。
+
+## 5.17 聊天页巨型文件重构（2026-09-16，用户定序）
+
+**动因**：`ui/HomeScreen.kt` 一个文件 4500 行、`ChatContent` 一个 composable 吃掉 1600 行、消息行又占 930 行 —— 改一行要在大文件里来回跳，卡顿审计里几次改动都撞到它。
+
+**用户拍板的顺序**（2026-09-16）：① Markdown 层（上限 + 拆分）→ ② `MessageRow` 摘出 `HomeScreen.kt` → ③ 时间线 / 顶栏拆出 → ④ `ChatViewModel` 按关注点拆（`ChatWindowLoader` / `GenerationController` / `CompactionController` / `TranslationController`，facade 保留公开面）。
+
+| 步 | 状态 | 内容 / 判据 |
+|---|---|---|
+| ① Markdown 层 | ✅ | 上限：高亮 300 行·12000 字 + 表 30 行（`c3b4c93`）；拆分：`MarkdownRenderer.kt` 1030 → 640 行 + `MarkdownInline.kt`(353) + `MarkdownCitations.kt`(120)（`d09a97d`）。**未做**：原版 `IncrementalMarkdownDocument` 那种「流式按块增量解析」（当前靠 `parsedCache` LRU + `conflate` + 8k 字 50ms 去抖达到同档，若日后再撞流式卡顿再补，需先写「流式 vs 定稿排版一致」的布局对比测试） |
+| ② `MessageRow` | ✅ | 新建 `ui/chat/MessageRow.kt`（1032 行）：`MessageModelIcon` + `MessageRow` + `MessageActionIcon` + `ChatRecompositionProbe` + `timeStr`（后两者原本是 `HomeScreen.kt` 的私有件，随行搬走；`MessageRow` 改 `internal`，调用点写全限定名）。`HomeScreen.kt` 4525 → 3570 行。**纯搬运**：依赖只有 `BrandAssets`/`ChatStyleSpec`/`UserProfileStore`/`AssistantListAvatar`/`UserAvatar` 五个 `com.psyche.memo.ui` 里的公开件（补了 import） |
+| ③ 时间线 / 顶栏 | ⬜ | 目标：`HomeScreen.kt` < 1000 行（`ChatTimelineList.kt` / `ChatTopBar.kt`） |
+| ④ `ChatViewModel` 拆分 | ⬜ | 3127 行 → 按关注点拆四个控制器，facade 不变 |
+
+**②的回归判据**：`:app:compileDebugKotlin --rerun-tasks` 后 `app/build/compose_reports/app_debug-composables.txt` 里 `MessageRow` 仍是 `restartable skippable`（实参全 stable，靠 `compose_compiler_config.conf`），且 `ChatRowRecompositionTest` 绿。
+
+**顺手修掉的测试环境坑（2026-09-16）**：`ChatRowRecompositionTest` 曾经「在整套测试里绿、单跑必红」。真因不是被它守护的代码：首屏窗口由 `ChatViewModel.init` → `viewModelScope.launch`（`Dispatchers.Main` → Robolectric 的**暂停** main looper）读出，而 `compose.waitUntil` 只推 Compose 帧时钟、**不排空 looper**，于是消息永远到不了、消息行永不组合、探针恒 0；整套跑时别的用例把 looper 排空过，它才"顺风过"。现在条件里显式 `shadowOf(Looper.getMainLooper()).idle()`（`ChatRowRecompositionTest.render` 有注释）。**教训：Robolectric + Compose 里"等异步库读取"，必须自己排空 looper，别依赖同 JVM 里别的用例留下的状态。**
 
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
