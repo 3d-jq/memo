@@ -2246,14 +2246,17 @@ class ChatViewModel(
             allSegments += roundHandler.reasoningSegments
             updateStreaming(allParts, encodeSegments(allSegments)) // folded results now visible
             // Append the assistant tool_calls + tool result transcript
-            // (chat_completions_api.dart _buildAssistantToolCallMessage;
-            // empty assistant text normalizes to "\n\n").
+            // (chat_completions_api.dart `_buildAssistantToolCallMessage`).
+            //
+            // **正文只取本轮响应的文本**（Dart 传的是 `msg['content']` —— 当前这次响应的
+            // message.content），不能传 `allParts`：那是**跨轮累计**的全文，会让模型在
+            // 第 2 轮往后的 assistant 轮里又看到一遍自己第 1 轮的正文，于是经常把旧正文
+            // 复述出来（用户 2026-09-16「为什么我看他经常输出重复正文呀 是结果反馈没有
+            // 做好吗」）。空正文按原版归一成 "\n\n"（`:132-136`）。
             history.add(
                 LlmMessage(
                     role = "assistant",
-                    content = allParts.filterIsInstance<TextPart>()
-                        .joinToString("") { it.text }
-                        .ifEmpty { "\n\n" },
+                    content = assistantToolCallTranscriptContent(roundHandler.parts),
                     toolCalls = calls.map { LlmToolCall(it.id, it.name, it.arguments) },
                 ),
             )
@@ -3039,6 +3042,19 @@ class ChatViewModel(
     )
 
     companion object {
+        /**
+         * assistant 工具调用轮次的正文（`chat_completions_api.dart:125-151`
+         * `_buildAssistantToolCallMessage` 的 `normalizedContent`）：
+         *
+         * - 只取**本轮响应**的 TextPart 拼接（调用点传 `roundHandler.parts`，
+         *   **绝不能传跨轮累计的 allParts** —— 那会让模型又看到自己上一轮的正文并复述出来）；
+         * - 空正文归一成 `"\n\n"`（Dart `:135`，内容为空时才用，非空原样）。
+         */
+        internal fun assistantToolCallTranscriptContent(parts: List<MessagePart>): String {
+            val text = parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+            return text.ifEmpty { "\n\n" }
+        }
+
         /** `display_auto_collapse_thinking_v1` — "auto-collapse thinking" setting. */
         private const val AUTO_COLLAPSE_THINKING_KEY = "display_auto_collapse_thinking_v1"
 
