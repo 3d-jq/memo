@@ -2,8 +2,8 @@ package com.psyche.memo.ui.slider
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
@@ -30,7 +31,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -99,6 +102,9 @@ fun MemoSlider(
     val start = valueRange.start
     val end = valueRange.endInclusive
     val coerced = value.coerceIn(start, end)
+    // 手势循环里要读**按下那一刻**的值（取消时回滚用），用 updatedState 免得把值塞进
+    // pointerInput 的 key（那会每帧重启手势、拖动直接断掉）。
+    val currentValue by rememberUpdatedState(coerced)
     val fraction = sliderFractionForValue(coerced, start, end)
 
     val thumbRadiusPx = with(density) { THUMB_DP.dp.toPx() } / 2f
@@ -127,6 +133,7 @@ fun MemoSlider(
         modifier = modifier
             .fillMaxWidth()
             .height(SLIDER_HEIGHT_DP.dp)
+            .testTag(MEMO_SLIDER_TAG)
             .onSizeChanged { widthPx = it.width.toFloat() }
             .then(if (enabled) Modifier else Modifier.graphicsLayer { alpha = DISABLED_ALPHA })
             .semantics {
@@ -140,33 +147,51 @@ fun MemoSlider(
                     disabled()
                 }
             }
-            // 拖动只认横向 slop：纵向手势（列表/抽屉）不受影响。
+            // 单一手势循环同时管「点」与「拖」——之前拆成 `detectTapGestures` +
+            // `detectHorizontalDragGestures` 两个 pointerInput，两者会互相吃事件
+            // （用户 2026-09-16「好看是好看 但是怎么不能自由滑动呀」），而且拖动要等横向
+            // slop 越过才跟手，小幅调整像拖不动。现在：
+            //   ① 按下即把圆钮挪到手指处（SfSlider 同款），拖动全程跟手（不再有 slop 跳变）；
+            //   ② 只让纵向意图让位：纵向位移超过 touchSlop 就退出并把值**回滚**到按下时的值
+            //      （这样在可滚动的 sheet 里划过滑块不会误改数值）；
+            //   ③ 横向意图确立后才 consume，纵向滚动不受影响；
+            //   ④ 抬手统一回调 `onValueChangeFinished`（点按也算一次）。
             .pointerInput(enabled, start, end, steps, widthPx, thumbRadiusPx, rtl) {
                 if (!enabled) return@pointerInput
-                detectHorizontalDragGestures(
-                    onDragStart = { offset ->
-                        dragging = true
-                        report(offset.x)
-                    },
-                    onHorizontalDrag = { change, _ ->
-                        change.consume()
-                        report(change.position.x)
-                    },
-                    onDragEnd = {
-                        dragging = false
-                        onValueChangeFinished?.invoke()
-                    },
-                    onDragCancel = {
-                        dragging = false
-                        onValueChangeFinished?.invoke()
-                    },
-                )
-            }
-            // 点轨道直接跳过去（M3 Slider 同款；与拖动分开两个 pointerInput 是 Compose 官方做法）。
-            .pointerInput(enabled, start, end, steps, widthPx, thumbRadiusPx, rtl) {
-                if (!enabled) return@pointerInput
-                detectTapGestures { offset ->
-                    report(offset.x)
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val valueAtDown = currentValue
+                    dragging = true
+                    report(down.position.x)
+                    var horizontal = false
+                    var cancelled = false
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.isConsumed) {
+                            // 被父级（sheet 拖拽 / 列表滚动）拿走 → 让位并回滚。
+                            cancelled = true
+                            break
+                        }
+                        if (change.changedToUpIgnoreConsumed() || !change.pressed) break
+                        val delta = change.positionChange()
+                        if (!horizontal) {
+                            if (kotlin.math.abs(delta.y) > viewConfiguration.touchSlop) {
+                                // 纵向意图：让给外面的滚动容器，值回滚。
+                                cancelled = true
+                                break
+                            }
+                            if (kotlin.math.abs(delta.x) > viewConfiguration.touchSlop) {
+                                horizontal = true
+                            }
+                        }
+                        if (horizontal) {
+                            change.consume()
+                            report(change.position.x)
+                        }
+                    }
+                    dragging = false
+                    if (cancelled) onValueChange(valueAtDown)
                     onValueChangeFinished?.invoke()
                 }
             },
@@ -345,3 +370,6 @@ private val MEMO_THUMB_SHADOW = Color.Black.copy(alpha = 0.08f)
  * 控件总高 50dp）。与 `VOICE_WAVEFORM_TAG` 同一个用途：把「看着对」变成「量得出来」。
  */
 const val MEMO_SLIDER_THUMB_TAG = "memo_slider_thumb"
+
+/** 整块滑块的测试锚点（手势测试从轨道任意处按下用）。 */
+const val MEMO_SLIDER_TAG = "memo_slider"
