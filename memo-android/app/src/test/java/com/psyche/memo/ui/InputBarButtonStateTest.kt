@@ -3,6 +3,8 @@ package com.psyche.memo.ui
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.psyche.memo.ui.chat.mcpButtonActive
+import com.psyche.memo.ui.chat.quickPhraseButtonVisible
 
 /**
  * 输入栏左排按钮的可用/选中态（用户 2026-09-14：「选择了对应颜色要变吧」

@@ -19,6 +19,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.psyche.memo.ui.chat.headerAssistantId
+import com.psyche.memo.ui.chat.ChatContent
 
 /**
  * 消息头的助手归属（用户实测：「新建对话聊天后 助手对应的名字，头像没有及时显示」）。

@@ -21,6 +21,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.psyche.memo.ui.chat.CHAT_TIMELINE_TAG
+import com.psyche.memo.ui.chat.showTimelineSkeleton
+import com.psyche.memo.ui.chat.ChatContent
 
 /**
  * 交互状态不该重渲染消息行。

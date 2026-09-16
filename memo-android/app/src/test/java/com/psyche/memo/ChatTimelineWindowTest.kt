@@ -6,6 +6,7 @@ import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.data.model.TextPart
+import com.psyche.memo.ui.chat.newActionToggleable
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -188,7 +189,7 @@ class ChatTimelineWindowTest {
     fun `the empty-chat toggle only turns on after the first window was read`() {
         // 首屏还没回来：即使窗口为空也**不能**当成空会话（否则有消息的会话会先闪一下图标）。
         assertFalse(
-            com.psyche.memo.ui.newActionToggleable(
+            newActionToggleable(
                 isTemporary = false,
                 tailLoaded = false,
                 messagesEmpty = true,
@@ -200,7 +201,7 @@ class ChatTimelineWindowTest {
         val vm = open(withMessages)
         assertTrue("首屏读完必须置位", vm.tailLoaded.value)
         assertFalse(
-            com.psyche.memo.ui.newActionToggleable(
+            newActionToggleable(
                 isTemporary = false,
                 tailLoaded = vm.tailLoaded.value,
                 messagesEmpty = vm.messages.value.isEmpty(),
@@ -211,7 +212,7 @@ class ChatTimelineWindowTest {
         val emptyVm = open(empty)
         assertTrue(emptyVm.tailLoaded.value)
         assertTrue(
-            com.psyche.memo.ui.newActionToggleable(
+            newActionToggleable(
                 isTemporary = false,
                 tailLoaded = emptyVm.tailLoaded.value,
                 messagesEmpty = emptyVm.messages.value.isEmpty(),
@@ -220,7 +221,7 @@ class ChatTimelineWindowTest {
 
         // 临时会话恒为开关态（不落库，所以「有没有消息」永远是空）。
         assertTrue(
-            com.psyche.memo.ui.newActionToggleable(
+            newActionToggleable(
                 isTemporary = true,
                 tailLoaded = false,
                 messagesEmpty = true,

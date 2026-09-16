@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.psyche.memo.ui.chat.loadQuickPhrases
 
 /**
  * 「组合期不许干重活」的**机器守卫**（PORTING §5.13）。
@@ -83,9 +84,12 @@ class CompositionThreadingTest {
 
     private val exemptions = listOf(
         // --- 启动已预热解码缓存（AppContainerImpl.prewarmConfigCaches，IO）---
-        Exemption("ui/HomeScreen.kt", "providerConfig(", "启动预热 ProviderConfigCache；命中即内存读"),
-        Exemption("ui/HomeScreen.kt", "currentAssistant(", "启动预热 AssistantCache；未命中是一次单行查询"),
-        Exemption("ui/HomeScreen.kt", "assistantStore", "启动预热 AssistantCache"),
+        // 2026-09-16 第 3 步：会话页从 ui/HomeScreen.kt 拆成 ui/chat/ChatContent.kt 与
+        // ui/chat/ChatInputBar.kt，豁免按**文件**登记，所以跟着搬（三条 providerConfig/
+        // currentAssistant/assistantStore 现在都在 ChatContent.kt 里）。
+        Exemption("ui/chat/ChatContent.kt", "providerConfig(", "启动预热 ProviderConfigCache；命中即内存读"),
+        Exemption("ui/chat/ChatContent.kt", "currentAssistant(", "启动预热 AssistantCache；未命中是一次单行查询"),
+        Exemption("ui/chat/ChatContent.kt", "assistantStore", "启动预热 AssistantCache"),
         Exemption("ui/SideDrawerContent.kt", "assistantStore", "启动预热 AssistantCache"),
         Exemption("ui/ModelDetailSheet.kt", "providerConfig(", "启动预热 ProviderConfigCache"),
         Exemption("ui/ModelSelectSheet.kt", "providerConfig(", "启动预热 ProviderConfigCache"),

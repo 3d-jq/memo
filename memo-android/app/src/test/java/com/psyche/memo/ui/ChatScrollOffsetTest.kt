@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import java.io.File
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.psyche.memo.ui.chat.SCROLL_BOTTOM_ITEM_KEY
 
 /**
  * 滚动命令**不许**带越界偏移。

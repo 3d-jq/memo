@@ -6,6 +6,8 @@ import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.psyche.memo.ui.chat.isToolModel
+import com.psyche.memo.ui.chat.isReasoningModel
 
 /**
  * 输入栏按钮的**能力门控**（用户 2026-09-14：「没有勾选推理 怎么会在输入框
