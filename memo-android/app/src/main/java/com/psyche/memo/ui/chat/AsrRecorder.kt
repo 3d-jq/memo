@@ -34,15 +34,20 @@ internal class AsrRecorder(
             AudioFormat.ENCODING_PCM_16BIT,
         )
         if (minBuffer <= 0) return false
-        // 200ms 一块：既够 provider 攒段，也不会让 partial 太迟钝。
-        val bufferSize = maxOf(minBuffer, sampleRate / 5 * 2)
+        // 采集参数对齐 RikkaHub 的 speech 模块（`MiMoASRController.startRecorder`
+        // L137-156，用户同一台机器实测好用）：读块 100ms 且 ≥4KB，AudioRecord 缓冲
+        // = 读缓冲 × 2。
+        val readBuffer = maxOf(minBuffer, sampleRate / 10 * 2, 4096)
         val recorder = runCatching {
             AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                // **别改回 VOICE_RECOGNITION**：小米/MIUI 上这个源常常静音或被限制
+                // —— 表现就是「波形不动、识别不出字」（用户 2026-09-16）。RikkaHub
+                // 在同一台设备上用 VOICE_COMMUNICATION 是好的。
+                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
                 sampleRate,
                 AudioFormat.CHANNEL_IN_MONO,
                 AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize,
+                readBuffer * 2,
             )
         }.getOrNull() ?: return false
         if (recorder.state != AudioRecord.STATE_INITIALIZED) {
@@ -52,7 +57,7 @@ internal class AsrRecorder(
         record = recorder
         running = true
         recorder.startRecording()
-        val buffer = ByteArray(bufferSize)
+        val buffer = ByteArray(readBuffer)
         thread = Thread {
             while (running) {
                 val read = runCatching { recorder.read(buffer, 0, buffer.size) }.getOrDefault(-1)
