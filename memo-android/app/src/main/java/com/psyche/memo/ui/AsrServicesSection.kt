@@ -209,16 +209,60 @@ private fun AsrServiceCard(
     }
 }
 
-/** _ProviderBadge L444-482 (icon variant — brand assets are a later batch). */
+/**
+ * `_ProviderBadge` L444-482 —— **有品牌图标就画图标、否则回落该种类图标**。
+ *
+ * 用户 2026-09-16「语音识别这个图标你怎么没有弄呀」：此前这里只画种类图标
+ *（原注释写着 brand assets are a later batch，那个批次一直没补）。上游按
+ * [asrKindBrandAsset] 的 hint 取品牌图：OpenAI / Qwen / Doubao / MiMo / Step；
+ * sherpa(本地) 与 system(系统) 没有品牌，仍旧用种类图标。
+ */
 @Composable
 private fun AsrProviderBadge(kind: AsrServiceKind, badgeSize: androidx.compose.ui.unit.Dp) {
     val cs = MaterialTheme.colorScheme
+    val isDark = LocalSemanticColors.current.isDark
+    val asset = remember(kind) { asrKindBrandAsset(kind) }
     Box(
         modifier = Modifier.size(badgeSize).background(withAlpha(cs.primary, 0.11), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(asrKindIcon(kind), contentDescription = null, modifier = Modifier.size(badgeSize * 0.5f), tint = cs.primary)
+        if (asset == null) {
+            Icon(
+                asrKindIcon(kind),
+                contentDescription = null,
+                modifier = Modifier.size(badgeSize * 0.5f),
+                tint = cs.primary,
+            )
+        } else {
+            coil.compose.AsyncImage(
+                model = asset,
+                contentDescription = null,
+                colorFilter = if (isDark && BrandAssets.assetNeedsDarkInvert(asset)) {
+                    androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
+                } else {
+                    null
+                },
+                modifier = Modifier.size(badgeSize * 0.56f),
+            )
+        }
     }
+}
+
+/**
+ * `_kindBrandAsset` L484-495 —— 每种服务的品牌图标 hint（照抄上游的对应关系）。
+ * 返回 null 表示这种服务没有品牌图标（本地/系统），调用方回落种类图标。
+ */
+private fun asrKindBrandAsset(kind: AsrServiceKind): String? {
+    val hint = when (kind) {
+        AsrServiceKind.openAiRealtime -> "OpenAI"
+        AsrServiceKind.dashScope -> "Qwen"
+        AsrServiceKind.qwenAudio -> "Qwen"
+        AsrServiceKind.volcengine -> "Doubao"
+        AsrServiceKind.mimo -> "MiMo"
+        AsrServiceKind.step -> "Step"
+        AsrServiceKind.sherpaOnnx, AsrServiceKind.system -> ""
+    }
+    return if (hint.isEmpty()) null else BrandAssets.assetForName(hint)
 }
 
 /** _showAsrEditor (L524-565) + _AsrEditor (L589-1178) moved to
