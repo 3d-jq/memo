@@ -107,9 +107,6 @@ fun MemoSlider(
     val start = valueRange.start
     val end = valueRange.endInclusive
     val coerced = value.coerceIn(start, end)
-    // 手势循环里要读**按下那一刻**的值（取消时回滚用），用 updatedState 免得把值塞进
-    // pointerInput 的 key（那会每帧重启手势、拖动直接断掉）。
-    val currentValue by rememberUpdatedState(coerced)
     val fraction = sliderFractionForValue(coerced, start, end)
 
     val thumbRadiusPx = with(density) { THUMB_DP.dp.toPx() } / 2f
@@ -156,50 +153,57 @@ fun MemoSlider(
                     disabled()
                 }
             }
-            // 单一手势循环同时管「点」与「拖」——曾经拆成两个 pointerInput 会互相吃事件，
-            // 也曾把 slop 判据写成**每帧位移**（真机每帧几像素、永远超不过 touchSlop，
-            // 只有按下那一下改值 ⇒ 用户报「怎么是靠点击来的呀」）。现在：
-            //   ① 按下即把圆钮挪到手指处，之后**每一帧都跟手**（无极滑动，值不吸附）；
-            //   ② slop 用**累计位移**判：纵向累计超过 `touchSlop` 且大于横向 → 让位给外面的
-            //      滚动容器，并把值**回滚**到按下前的值；
-            //   ③ 横向累计越过 `touchSlop` 后才 `consume`，纵向滚动不受影响；
-            //   ④ 抬手统一回调 `onValueChangeFinished`（点按也算一次）。
-            .pointerInput(enabled, start, end, widthPx, thumbRadiusPx, rtl) {
+            // 手势仲裁照 Android 的习惯：**谁先过 slop 谁赢**。
+            //   ① 按下只让圆钮放大 / 显示胶囊，**不改值** —— 曾经「按下即改值 + 纵向偏移就回滚」
+            //      在真机上会「一按就跳、手指划弧就跳回来」，观感就是拖不动（用户 2026-09-16
+            //      连报两次「不能随意左右滑动」）；
+            //   ② 横向先过 `touchSlop` → 判定为拖动：先把圆钮落到按下点，再逐帧跟手（无极）；
+            //   ③ 纵向先过 `touchSlop` → 让位给外面的滚动容器，**全程一个值都不改**（不回滚，
+            //      所以没有跳变）；
+            //   ④ 一直没定方向就抬手 = 点按 → 值落到按下的位置（M3 同款）；
+            //   ⑤ 抬手统一回调 `onValueChangeFinished`。
+            // **key 只放会改变手势语义的量**（enabled / 范围 / 方向）：宽度绝不能进 key ——
+            // 拖动时旁边那个「当前值」文本会随值变宽变窄，滑条宽度跟着变，key 一变 Compose 就
+            // 重启这段手势（= 取消进行中的拖动）。宽度/半径在 lambda 里现读（`widthPx` 是 state，
+            // `onSizeChanged` 写入；`thumbRadiusPx` 只随 density 变）。
+            .pointerInput(enabled, start, end, rtl) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    val valueAtDown = currentValue
-                    val startX = down.position.x
-                    val startY = down.position.y
-                    dragging = true
-                    report(startX)
-                    var horizontal = false
+                    val downX = down.position.x
+                    val downY = down.position.y
+                    var resolved = false
                     var cancelled = false
+                    dragging = true
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (change.isConsumed) {
-                            // 被父级（sheet 拖拽 / 列表滚动）拿走 → 让位并回滚。
+                            // 被父级（sheet 拖拽 / 列表滚动）拿走 → 让位；值没改过，无需回滚。
                             cancelled = true
                             break
                         }
                         if (change.changedToUpIgnoreConsumed() || !change.pressed) break
-                        // 累计位移，不是每帧位移（每帧位移判 slop 是上面那个 bug 的根因）。
-                        val totalX = change.position.x - startX
-                        val totalY = change.position.y - startY
-                        if (!horizontal) {
-                            if (abs(totalY) > viewConfiguration.touchSlop && abs(totalY) > abs(totalX)) {
-                                // 纵向意图：让给外面的滚动容器，值回滚。
+                        val dx = change.position.x - downX
+                        val dy = change.position.y - downY
+                        if (!resolved) {
+                            val horizontalSlop = abs(dx) >= viewConfiguration.touchSlop
+                            val verticalSlop = abs(dy) >= viewConfiguration.touchSlop
+                            if (horizontalSlop && (!verticalSlop || abs(dx) >= abs(dy))) {
+                                resolved = true
+                                report(downX)
+                            } else if (verticalSlop) {
                                 cancelled = true
                                 break
                             }
-                            if (abs(totalX) > viewConfiguration.touchSlop) horizontal = true
                         }
-                        if (horizontal) change.consume()
-                        report(change.position.x)
+                        if (resolved) {
+                            change.consume()
+                            report(change.position.x)
+                        }
                     }
                     dragging = false
-                    if (cancelled) onValueChange(valueAtDown)
+                    if (!resolved && !cancelled) report(downX)
                     onValueChangeFinished?.invoke()
                 }
             },

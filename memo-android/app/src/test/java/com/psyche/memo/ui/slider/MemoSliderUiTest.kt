@@ -18,6 +18,7 @@ import androidx.compose.ui.test.moveTo
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.up
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -58,12 +59,12 @@ class MemoSliderUiTest {
     }
 
     /**
-     * 无级滑动：从轨道左端按下（按下即跟手）→ **每步只走几个像素**（真机每帧的位移量）
-     * 连续拖到中段，值必须一路单调跟随。
+     * 无级滑动：从轨道左侧按下 → **每步只走几个像素**（真机每帧的位移量）连续拖到右侧，值必须
+     * 一路单调跟随。
      *
-     * 这条是「怎么是靠点击来的呀」那个 bug 的回归判据：上一版 slop 判据写成了**每帧位移**，
-     * 每帧几像素永远超不过 `touchSlop`，于是只有按下那一下会改值 —— 而之前的测试每步跳 23px，
-     * 正好越过 slop，所以没抓到。
+     * 这条是「怎么是靠点击来的呀」那个 bug 的回归判据：有一版 slop 判据写成了**每帧位移**，
+     * 每帧几像素永远超不过 `touchSlop`，于是只有按下那一下会改值。现在的仲裁是「横向累计过
+     * slop 才判定为拖动」，所以头一两步不动、之后必须每步都跟 —— 两条都要钉住。
      */
     @Test
     fun `drag follows the finger frame by frame`() {
@@ -72,30 +73,32 @@ class MemoSliderUiTest {
         val slider = compose.onNodeWithTag(MEMO_SLIDER_TAG)
 
         slider.performTouchInput { down(Offset(100f, centerY)) }
-        val afterDown = value
-        assertEquals("按下即跟手（x=100 → ≈0.32）", 0.32f, afterDown, 0.03f)
+        assertEquals("按下不改值、也不回调（避免一按就跳）", -1f, value, 0.0001f)
 
-        // 每步 4px（远小于 slop）：必须每步都跟。
-        var previous = afterDown
-        var monotonic = true
-        var movedEveryStep = true
+        // 每步 4px：前几步用来越过 slop，之后**每一步都必须跟**。
+        var previous = value
+        var movedEveryStepAfterSlop = true
+        var stepsSeen = 0
         for (step in 1..30) {
             slider.performTouchInput { moveBy(Offset(4f, 0f)) }
-            if (value < previous - 0.0001f) monotonic = false
-            if (value - previous < 0.0001f) movedEveryStep = false
+            if (value != previous) stepsSeen++
+            if (step > 4 && value - previous < 0.0001f) movedEveryStepAfterSlop = false
             previous = value
         }
-        assertTrue("每一帧都要跟手（不是只有越过 slop 才跳一次）", movedEveryStep)
-        assertTrue("拖动过程必须单调", monotonic)
-        // 100 + 30*4 = 220 → (220-10)/280 ≈ 0.75
-        assertEquals("终点要落在手指处", 0.75f, value, 0.04f)
+        assertTrue("越过 slop 之后每一帧都要跟手（不是只跳一次）", movedEveryStepAfterSlop)
+        assertTrue("整段拖动至少要真的动过（实际 $stepsSeen 步有变化）", stepsSeen >= 20)
+        // 100 + 30*4 = 220px → 约 (220-19)/(300-38) ≈ 0.77（圆钮行程两端各扣一个半径）。
+        assertTrue("终点要落在手指处（实际 $value）", value > 0.7f)
 
         slider.performTouchInput { up() }
     }
 
-    /** 划过滑块去滚 sheet：纵向意图必须让位，且把按下时改掉的值**回滚**。 */
+    /**
+     * 划过滑块去滚 sheet：纵向意图必须让位，而且**一个值都不许改**（曾经的做法是「按下即改值 +
+     * 纵向偏移就回滚」，真机上表现为「一按就跳、划弧就跳回来」，用户报「不能随意左右滑动」）。
+     */
     @Test
-    fun `vertical drag gives way and reverts the value`() {
+    fun `vertical drag gives way without touching the value`() {
         var value = -1f
         var finished = 0
         renderSlider(
@@ -105,12 +108,10 @@ class MemoSliderUiTest {
         val slider = compose.onNodeWithTag(MEMO_SLIDER_TAG)
 
         slider.performTouchInput { down(Offset(10f, centerY)) }
-        assertEquals("按下把值挪到手指处", 0f, value, 0.03f)
-
-        // 纵向为主的一次滑动：让给外面（滚动），值回滚到按下之前。
+        // 纵向为主的一次滑动：让给外面（滚动），值保持原样。
         slider.performTouchInput { moveBy(Offset(4f, 120f)) }
         slider.performTouchInput { up() }
-        assertEquals("纵向滑动要回滚到按下前的值", 0.5f, value, 0.001f)
+        assertEquals("纵向滑动一个回调都不该有", -1f, value, 0.0001f)
         assertEquals("抬手仍然回调一次", 1, finished)
     }
 
@@ -136,6 +137,44 @@ class MemoSliderUiTest {
 
         compose.onNodeWithTag(MEMO_SLIDER_THUMB_TAG).performTouchInput { up() }
         assertEquals("抬手回调一次", 1, finished)
+    }
+
+    /**
+     * **真机上「不能随意左右滑动」的复现**：滑条右侧那个「当前值」文本会随值变宽变窄
+     * （"50%" → "100%"），于是滑条自身宽度在拖动过程中变化 —— 只要 `pointerInput` 把宽度
+     * 当 key，Compose 就会**重启这块手势代码（=取消进行中的拖动）**，表现为「每碰一下只动
+     * 一点点、像只能点」。测试里滑条宽度原本固定，所以一直测不出来，这里专门放一个会变宽的
+     * 兄弟节点。
+     */
+    @Test
+    fun `drag survives a sibling value label that changes width`() {
+        var value = 0.5f
+        compose.setContent {
+            MaterialTheme {
+                Box(modifier = Modifier.width(320.dp)) {
+                    androidx.compose.foundation.layout.Row {
+                        MemoSlider(
+                            value = value,
+                            onValueChange = { value = it },
+                            valueRange = 0f..1f,
+                            modifier = Modifier.weight(1f).testTag(MEMO_SLIDER_TAG),
+                        )
+                        // 宽度随值变化（"0%" 与 "100%" 差 ~10dp），复现真机的重排。
+                        androidx.compose.material3.Text(
+                            text = if (value < 0.5f) "0%" else "100%",
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+        }
+        val slider = compose.onNodeWithTag(MEMO_SLIDER_TAG)
+        // 从左侧按下，分多步拖到**最右端** —— 每一步都会触发上面那次重排（宽度变化）。
+        slider.performTouchInput { down(Offset(20f, centerY)) }
+        repeat(12) { slider.performTouchInput { moveBy(Offset(24f, 0f)) } }
+        slider.performTouchInput { up() }
+        assertTrue("拖到最右后值必须接近 1（实际 $value）—— 中途被取消就会停在中途", value > 0.9f)
+        assertTrue("拖到最右后值必须接近 1（实际 $value）—— 中途被取消就会停在中途", value > 0.9f)
     }
 
     @Test
