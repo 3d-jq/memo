@@ -73,7 +73,9 @@ class SystemTtsEngine(private val context: Context) : TtsEngine {
     override fun speak(text: String, utteranceId: String, rate: Float) {
         val tts = engine ?: return
         tts.language = Locale.getDefault()
-        tts.setSpeechRate(rate)
+        // rate 是内部轴（显示倍速 / 2）—— Android 的 1.0 才是正常语速，必须还原，
+        // 否则一律半速播放（见 TtsPlaybackSpeed.toAndroidSpeechRate）。
+        tts.setSpeechRate(TtsPlaybackSpeed.toAndroidSpeechRate(rate.toDouble()))
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
 

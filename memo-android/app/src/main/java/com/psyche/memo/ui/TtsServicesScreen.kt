@@ -234,10 +234,11 @@ fun TtsServicesScreen(
                                 tint = withAlpha(cs.onSurface, 0.9),
                                 enabled = available,
                                 onTap = {
-                                    // tts.speakSystem(demo) via Android TTS.
+                                    // 原版 `tts_services_page.dart:158` `tts.speakSystem(demo)`
+                                    // —— 走与对话同一条播放管线，所以「听测试」也会出悬浮播放
+                                    // 胶囊。此前这里直连裸 TextToSpeech，状态机不动 → 没胶囊。
                                     val demo = context.getString(UiR.string.tts_services_page_test_speech_text)
-                                    systemTtsRef?.language = java.util.Locale.getDefault()
-                                    systemTtsRef?.speak(demo, TextToSpeech.QUEUE_FLUSH, null, "memo_demo")
+                                    com.psyche.memo.ui.chat.TtsPlayer.speakSystem(context, demo)
                                 },
                             )
                             Spacer(Modifier.width(6.dp))
@@ -273,8 +274,12 @@ fun TtsServicesScreen(
                             onSelect = { store.selectedServiceId = service.id },
                             onEdit = { onOpenTtsEditor(service.id) },
                             onTest = { demo ->
-                                // Cloud synthesis call belongs to the later
-                                // TTS-service batch — no request is made yet.
+                                // 原版 `tts_services_page.dart:158` 的
+                                // `tts.speakWithNetworkService(...)`：用**这一行**的服务试播。
+                                // 之前这里是空实现（「later batch」），点了什么都不发生。
+                                com.psyche.memo.ui.chat.TtsPlayer.speakWithService(context, demo, service)
+                                // 网络合成的失败会走播放器的 errorMessage（悬浮胶囊上显示），
+                                // 不再由这里同步返回。
                                 null
                             },
                             onDelete = { store.removeAt(i) },

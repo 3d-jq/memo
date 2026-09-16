@@ -247,11 +247,47 @@ internal fun shouldUseNetworkEngine(options: TtsServiceOptions?): Boolean =
  * 所以引擎做成可切换的代理 —— 每次 [speak] 现读设置选一个委托，并把 Listener 同时
  * 挂到两个委托上（[TtsPlaybackController] 只认识一个引擎实例）。
  */
+/**
+ * 单次朗读会话的引擎覆盖 —— 对应原版 `tts_provider.dart` 的两个入口：
+ * `speakSystem(text)`（→ `_speakQueued(text, flush)`，**networkService = null**，即强制系统
+ * 引擎）与 `speakWithNetworkService(service, text)`（用**指定**服务，不看当前选中项）。
+ *
+ * 用在「语音服务」页的「听测试」：让测试播放走同一条播放管线，从而和对话里一样出现
+ * 悬浮播放胶囊（用户 2026-09-16「语音点击听测试那个没有我们那个胶囊呀」）。
+ */
+sealed interface TtsSessionOverride {
+    /** 本次强制用系统 TTS（原版 `speakSystem`）。 */
+    data object System : TtsSessionOverride
+
+    /** 本次用这个网络服务（原版 `speakWithNetworkService`）。 */
+    data class Service(val options: TtsServiceOptions) : TtsSessionOverride
+}
+
+/**
+ * 本次会话该用哪个网络服务（纯函数，好单测）：
+ * 覆盖优先 —— [TtsSessionOverride.System] 强制回落系统引擎、[TtsSessionOverride.Service]
+ * 直接用指定服务；没有覆盖才按 store 里选中的那一项（停用/找不到都回落系统）。
+ */
+internal fun resolveSessionService(
+    override: TtsSessionOverride?,
+    selectedServiceId: String?,
+    services: List<TtsServiceOptions>,
+): TtsServiceOptions? = when (override) {
+    is TtsSessionOverride.System -> null
+    is TtsSessionOverride.Service -> override.options
+    null -> {
+        val id = selectedServiceId ?: return null
+        val service = services.firstOrNull { it.id == id } ?: return null
+        service.takeIf { it.enabled }
+    }
+}
+
 class SwitchableTtsEngine(
     context: Context,
     client: OkHttpClient,
     private val store: TtsServicesStore,
 ) : TtsEngine {
+
 
     private val system = SystemTtsEngine(context.applicationContext)
     private val network = NetworkTtsEngine(
@@ -271,13 +307,17 @@ class SwitchableTtsEngine(
 
     override val isNetwork: Boolean get() = active.isNetwork
 
-    /** 选中的网络服务；没选 / 已停用 / 服务不存在 → null（走系统 TTS）。 */
-    fun selectedNetworkOptions(): TtsServiceOptions? {
-        val id = store.selectedServiceId ?: return null
-        val service = store.services.firstOrNull { it.id == id } ?: return null
-        if (!service.enabled) return null
-        return service
+    /** 本次会话的引擎覆盖（on-speak 设置，普通朗读会清掉它）。 */
+    @Volatile private var sessionOverride: TtsSessionOverride? = null
+
+    /** 原版两个入口用它把「这次用哪个引擎」钉住；null＝按当前选中项。 */
+    fun setSessionOverride(value: TtsSessionOverride?) {
+        sessionOverride = value
     }
+
+    /** 选中的网络服务；没选 / 已停用 / 服务不存在 → null（走系统 TTS）。 */
+    fun selectedNetworkOptions(): TtsServiceOptions? =
+        resolveSessionService(sessionOverride, store.selectedServiceId, store.services)
 
     override fun prepare(onReady: (Boolean) -> Unit) {
         // 网络服务就绪时不必等系统引擎；否则按系统引擎的可用性。

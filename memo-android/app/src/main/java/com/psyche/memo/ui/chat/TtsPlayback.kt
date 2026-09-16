@@ -247,6 +247,20 @@ object TtsPlaybackSpeed {
 
     /** The engine's own rate axis runs 0.1–1.0, i.e. half the displayed speed. */
     fun toSystemRate(speed: Double): Double = (speed / 2).coerceIn(0.1, 1.0)
+
+    /**
+     * 引擎 rate（内部轴 = 显示倍速 / 2）→ **Android `TextToSpeech.setSpeechRate`** 的倍速。
+     *
+     * 内部轴是从上游的 `flutter_tts` 抄来的：那个包的 rate 轴 **0.5 才是正常语速**
+     *（`tts_provider.dart:79` 「flutter_tts platform value, 0.5 is normal」），所以上游
+     * 存 0.5、显示时 ×2。**但我们直连 Android 的 API，它的 1.0 才是正常语速** —— 把 0.5
+     * 原样传下去就是**半速播放**（用户 2026-09-16「在对话界面点击 速度这么慢呀」）。
+     * 这里还原成显示倍速：1.0× → Android 1.0、2.0× → 2.0。
+     *
+     * 网络引擎走的是 [mediaPlayerSpeed]（同样是 ×2 还原），两边语义现在一致了。
+     */
+    fun toAndroidSpeechRate(rate: Double): Float =
+        (rate * 2.0).toFloat().coerceIn(0.1f, 4.0f)
 }
 
 /**

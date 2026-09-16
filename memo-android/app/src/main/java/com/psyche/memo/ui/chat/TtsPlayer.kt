@@ -123,6 +123,37 @@ object TtsPlayer {
 
     /** [ownerId] is the chat message the playback belongs to, when there is one. */
     fun speak(context: Context, text: String, ownerId: String? = null) {
+        // 普通朗读按**当前选中**的服务：清掉上一次「听测试」留下的会话覆盖。
+        switchableRef?.setSessionOverride(null)
+        speakNow(context, text, ownerId)
+    }
+
+    /**
+     * 用**系统引擎**朗读（原版 `tts_provider.dart:413` `speakSystem(text, flush)` →
+     * `_speakQueued(text, flush)`，networkService = null）。
+     *
+     * 「语音服务」页系统行的「听测试」走这里 —— 和对话里同一条播放管线，所以会出
+     * 悬浮播放胶囊（用户 2026-09-16「语音点击听测试那个没有我们那个胶囊呀」）。
+     */
+    fun speakSystem(context: Context, text: String) {
+        switchableRef?.setSessionOverride(TtsSessionOverride.System)
+        speakNow(context, text, ownerId = null)
+    }
+
+    /**
+     * 用**指定的**网络服务朗读（原版 `speakWithNetworkService(service, text)`）：
+     * 不看当前选中项 —— 服务行自己的「听测试」就该用这一行的服务试。
+     */
+    fun speakWithService(
+        context: Context,
+        text: String,
+        service: com.psyche.memo.ui.TtsServiceOptions,
+    ) {
+        switchableRef?.setSessionOverride(TtsSessionOverride.Service(service))
+        speakNow(context, text, ownerId = null)
+    }
+
+    private fun speakNow(context: Context, text: String, ownerId: String?) {
         lastText = text
         controller(context)?.speak(text, ownerId)
     }
