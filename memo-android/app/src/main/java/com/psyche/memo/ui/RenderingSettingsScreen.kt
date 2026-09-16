@@ -354,8 +354,10 @@ fun RenderingSettingsScreen(
                         valueLabel = { "${it.roundToInt()}" },
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(
+                    com.psyche.memo.ui.slider.SliderValueLabel(
                         text = "${value.roundToInt()}",
+                        // 定宽（最宽是最大字号 "28"）：数值变宽不会挤短左边的 slider。
+                        widest = "${ThinkingIndicatorSettings.MAX_FONT_SP.roundToInt()}",
                         style = TextStyle(fontSize = 12.sp, color = cs.onSurface),
                     )
                 }

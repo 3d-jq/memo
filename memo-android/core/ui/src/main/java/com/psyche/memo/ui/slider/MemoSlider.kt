@@ -59,6 +59,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.EaseOutBack
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.widthIn
 
 /**
  * Memo 自己的 slider —— 取代 M3 原生 `Slider`（用户 2026-09-16：「很多界面都是用的 m3 那个
@@ -391,3 +394,49 @@ const val MEMO_SLIDER_THUMB_TAG = "memo_slider_thumb"
 
 /** 整块滑块的测试锚点（手势测试从轨道任意处按下用）。 */
 const val MEMO_SLIDER_TAG = "memo_slider"
+
+/**
+ * 与 slider 同一行的「当前值」文本 —— **按最宽文案预留宽度**。
+ *
+ * 为什么需要它：`Row { Text(当前值) … MemoSlider(Modifier.weight(1f)) }` 这种排法里，数值一变宽
+ * （"9" → "100"、"50%" → "100%"），`weight(1f)` 的 slider 就被挤短，于是拖动时**滑条本身跟着变长
+ * 变短**、圆钮在手指下的位置也跟着漂（用户 2026-09-16：「左右数字会变 导致这个 slider 也会变
+ * 这个不太好 有解决方法吗？」）。
+ *
+ * 用法：把**可能出现的最大数值文案**作为 [widest] 传进来（例如范围上限的格式化结果），
+ * 本控件把它量成最小宽度；文案再变也不会撑动同排的 slider。真的更宽时（[widest] 传小了）
+ * 它仍会正常长大，不会裁剪。
+ */
+@Composable
+fun SliderValueLabel(
+    text: String,
+    widest: String,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+    /** 胶囊那种居中的容器传 `Alignment.Center` + `TextAlign.Center`。 */
+    contentAlignment: Alignment = Alignment.CenterEnd,
+    textAlign: TextAlign = TextAlign.End,
+) {
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer()
+    val widestWidthPx = remember(widest, style, density) {
+        measurer.measure(
+            text = widest,
+            style = style,
+            maxLines = 1,
+            softWrap = false,
+        ).size.width
+    }
+    Box(
+        modifier = modifier.widthIn(min = with(density) { widestWidthPx.toDp() }),
+        contentAlignment = contentAlignment,
+    ) {
+        Text(
+            text = text,
+            style = style,
+            maxLines = 1,
+            softWrap = false,
+            textAlign = textAlign,
+        )
+    }
+}

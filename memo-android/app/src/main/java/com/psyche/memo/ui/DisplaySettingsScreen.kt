@@ -437,7 +437,12 @@ fun DisplaySettingsScreen(
                         valueLabel = { "${Math.round(it * 100)}%" },
                     )
                     Spacer(Modifier.size(8.dp))
-                    Text("${(chatFontScale * 100).toInt()}%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface))
+                    com.psyche.memo.ui.slider.SliderValueLabel(
+                        text = "${(chatFontScale * 100).toInt()}%",
+                        // 定宽：数值从 "50%" 变 "100%" 时不再把左边的 slider 挤短。
+                        widest = "100%",
+                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface),
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 androidx.compose.material3.Surface(
@@ -496,7 +501,11 @@ fun DisplaySettingsScreen(
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.size(8.dp))
-                    Text("${seconds.toInt()}s", style = TextStyle(fontSize = 12.sp, color = cs.onSurface))
+                    com.psyche.memo.ui.slider.SliderValueLabel(
+                        text = "${seconds.toInt()}s",
+                        widest = "64s",
+                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface),
+                    )
                 }
             }
         }
@@ -524,7 +533,11 @@ fun DisplaySettingsScreen(
                         valueLabel = { "${Math.round(it)}%" },
                     )
                     Spacer(Modifier.size(8.dp))
-                    Text("${strength.toInt()}%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface))
+                    com.psyche.memo.ui.slider.SliderValueLabel(
+                        text = "${strength.toInt()}%",
+                        widest = "200%",
+                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface),
+                    )
                 }
             }
         }
@@ -628,7 +641,11 @@ private fun OpacitySliderRow(value: Float, onCommit: (Float) -> Unit) {
             valueLabel = { "${Math.round(it)}%" },
         )
         Spacer(Modifier.size(8.dp))
-        Text("${local.toInt()}%", style = TextStyle(fontSize = 12.sp, color = cs.onSurface))
+        com.psyche.memo.ui.slider.SliderValueLabel(
+            text = "${local.toInt()}%",
+            widest = "100%",
+            style = TextStyle(fontSize = 12.sp, color = cs.onSurface),
+        )
     }
 }
 

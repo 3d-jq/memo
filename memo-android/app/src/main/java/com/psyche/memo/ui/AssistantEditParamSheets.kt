@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -119,6 +120,8 @@ internal fun ParamSliderSheet(
                 SliderTile(
                     value = local.toFloat().coerceIn(range.start, range.endInclusive),
                     valueText = labelOf(local),
+                    // 范围上限的文案即最宽文案：胶囊按它预留宽度，拖动时不会挤动滑条。
+                    widestValueText = labelOf(maxValue),
                     range = range,
                     labelStops = customLabelStops.filter { it in minValue..maxValue }.sorted(),
                     onValueChange = { v ->
@@ -148,6 +151,8 @@ internal fun ParamSliderSheet(
 private fun SliderTile(
     value: Float,
     valueText: String,
+    /** 该参数**最宽**的数值文案（= 范围上限的格式化结果），用来给胶囊预留固定宽度。 */
+    widestValueText: String,
     range: ClosedFloatingPointRange<Float>,
     labelStops: List<Double>,
     onValueChange: (Float) -> Unit,
@@ -169,7 +174,9 @@ private fun SliderTile(
             }
         }
         Spacer(Modifier.width(8.dp))
-        ValuePill(text = valueText, onTap = onValuePillTap)
+        // 胶囊宽度按最宽文案预留（"0.50" → "1.00"、"9" → "4096" 都会变宽，不能挤动左边的滑条）；
+        // 点胶囊仍可打开精确输入。
+        ValuePill(text = valueText, widest = widestValueText, onTap = onValuePillTap)
     }
 }
 
@@ -244,9 +251,9 @@ internal fun spreadLabelStops(
     return out
 }
 
-/** `_ValuePill` L1403-1439. */
+/** `_ValuePill` L1403-1439 —— 宽度按 [widest]（该参数最宽的数值文案）预留，避免拖动时挤动滑条。 */
 @Composable
-private fun ValuePill(text: String, onTap: (() -> Unit)?) {
+private fun ValuePill(text: String, widest: String, onTap: (() -> Unit)?) {
     val cs = MaterialTheme.colorScheme
     val isDark = LocalSemanticColors.current.isDark
     val shape = RoundedCornerShape(10.dp)
@@ -258,9 +265,12 @@ private fun ValuePill(text: String, onTap: (() -> Unit)?) {
             .then(if (onTap != null) Modifier.clickable { onTap() } else Modifier)
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
-        Text(
+        com.psyche.memo.ui.slider.SliderValueLabel(
             text = text,
+            widest = widest,
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
+            contentAlignment = Alignment.Center,
+            textAlign = TextAlign.Center,
         )
     }
 }

@@ -177,6 +177,49 @@ class MemoSliderUiTest {
         assertTrue("拖到最右后值必须接近 1（实际 $value）—— 中途被取消就会停在中途", value > 0.9f)
     }
 
+    /**
+     * 用户 2026-09-16：「左右数字会变 导致这个 slider 也会变 这个不太好 有解决方法吗？」
+     * —— 数值文本从 "9" 变 "100" 时，`weight(1f)` 的滑条宽度**不能**跟着变。
+     */
+    @Test
+    fun `fixed width value label keeps the slider width stable`() {
+        var value = 0.1f
+        compose.setContent {
+            MaterialTheme {
+                Box(modifier = Modifier.width(320.dp)) {
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        MemoSlider(
+                            value = value,
+                            onValueChange = { value = it },
+                            valueRange = 0f..1f,
+                            modifier = Modifier.weight(1f).testTag(MEMO_SLIDER_TAG),
+                        )
+                        SliderValueLabel(
+                            text = if (value < 0.5f) "9" else "100",
+                            widest = "100",
+                            style = androidx.compose.ui.text.TextStyle(),
+                        )
+                    }
+                }
+            }
+        }
+        fun sliderWidth(): Float {
+            val b = compose.onNodeWithTag(MEMO_SLIDER_TAG).getUnclippedBoundsInRoot()
+            return b.right.value - b.left.value
+        }
+        val narrowLabelWidth = sliderWidth()
+
+        // 拖到右侧：数值文本变成更宽的 "100"，滑条宽度必须一模一样。
+        val slider = compose.onNodeWithTag(MEMO_SLIDER_TAG)
+        slider.performTouchInput { down(Offset(30f, centerY)) }
+        repeat(10) { slider.performTouchInput { moveBy(Offset(25f, 0f)) } }
+        slider.performTouchInput { up() }
+        assertTrue("拖到最右（实际 $value）", value > 0.9f)
+        assertEquals("数值文案变宽不能改变滑条宽度", narrowLabelWidth, sliderWidth(), 0.5f)
+    }
+
     @Test
     fun `value capsule only shows while dragging`() {
         renderSlider(valueLabel = { "42%" })
