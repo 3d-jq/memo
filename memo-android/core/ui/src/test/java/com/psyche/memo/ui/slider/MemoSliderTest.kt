@@ -88,4 +88,37 @@ class MemoSliderTest {
         assertEquals(0.5f, value, eps)
         assertTrue(value in 0f..1f)
     }
+
+    /** 无档位（TTS 语速这种）不画圆点。 */
+    @Test
+    fun noStepsMeansNoDots() {
+        assertTrue(sliderDotFractions(0).isEmpty())
+    }
+
+    /** 少档位：一段一点 —— 推理强度那种「一眼看出几档」。 */
+    @Test
+    fun fewStepsGetOneDotPerStop() {
+        // steps = 4 → 5 段 → 6 个端点：0, .2, .4, .6, .8, 1
+        assertEquals(listOf(0f, 0.2f, 0.4f, 0.6f, 0.8f, 1f), sliderDotFractions(4))
+        // 推理强度那种 6 档（steps = 5）→ 7 个点
+        assertEquals(7, sliderDotFractions(5).size)
+    }
+
+    /** 多档位按原版 `interval` 策略抽稀，绝不能画成虚线。 */
+    @Test
+    fun manyStepsGetThinnedDots() {
+        // steps = 31 → 32 段（回到底部延迟 2..64）
+        val dots = sliderDotFractions(31)
+        assertTrue("档位点多会画成虚线（实际 ${dots.size} 颗）", dots.size in 6..9)
+        assertEquals(0f, dots.first(), eps)
+        assertEquals(1f, dots.last(), eps)
+        assertTrue("必须单调", dots.zipWithNext().all { (a, b) -> a < b })
+
+        // steps = 40 → 41 段（背景蒙版 0..200 步长 5）：末点并到 1，不会两颗挤在一起
+        val maskDots = sliderDotFractions(40)
+        assertTrue("41 档要抽到 6–9 颗（实际 ${maskDots.size} 颗）", maskDots.size in 6..9)
+        assertEquals(0f, maskDots.first(), eps)
+        assertEquals(1f, maskDots.last(), eps)
+        assertTrue("任意两点不能挤在一起", maskDots.zipWithNext().all { (a, b) -> b - a > 0.05f })
+    }
 }

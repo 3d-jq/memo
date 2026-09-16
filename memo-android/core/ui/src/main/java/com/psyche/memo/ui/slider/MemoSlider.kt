@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -51,29 +49,40 @@ import androidx.compose.ui.unit.sp
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.EaseOutBack
 
 /**
  * Memo 自己的 slider —— 取代 M3 原生 `Slider`（用户 2026-09-16：「很多界面都是用的 m3 那个
  * 原生 slider 不好看 我们直接自定义个好看的吧」）。
  *
- * **取值来自 Flutter 原版的 `SfSliderThemeData`**（原版整套设置页用的都是 Syncfusion
- * `SfSlider`：显示设置 4 处、图片处理、消息样式、助手参数 sheet、渲染页，与我们这 10 处
- * 调用点一一对应）：
- * - 轨道高 **8dp**（原版 `activeTrackHeight`/`inactiveTrackHeight` = 8），全圆角；
- *   已选段 `primary`，未选段 `onSurface` 暗色 25% / 亮色 20%（原版同值）；
- * - 圆钮 **20dp** 实心 `primary`，**亮色**主题带一层柔和投影（原版 `thumbIcon` 的
- *   `BoxShadow`：shadow 8%、blur 8、偏移 (0,2)）；暗色不带投影（原版同样是空列表）；
- * - 按下时的光晕半径 14（原版 `overlayRadius`）。
+ * **外观照「推理强度」那根滑条**（用户 2026-09-16：「因为这个效果是分级的对吧 要不改成推理
+ * 强度那种 slider 吧」）：与 `ui/chat/ReasoningBudgetSheet.kt` 的 `EffortSlider` /
+ * `drawEffortSlider`（= Flutter 原版 `_EffortSlider` + `_SliderPainter`）逐项同值：
+ * - 轨道 **34dp 药丸**，底色 `onSurface@10%`；
+ * - 已选段 = **`primary` 50% → 100% 横向渐变**，裁剪在药丸内、画到圆钮中心；
+ * - **档位圆点**：`steps + 1` 颗（`steps = 0` 时没有），半径 3.5dp，已过的转白（90%）、
+ *   未到的 `onSurface@25%` —— 「分级」因此看得见；
+ * - **白色大圆钮**：直径 38dp、柔和投影（blur 10dp / offset y 3dp / 黑 25%），拖动时放大
+ *   1.14（180ms `EaseOutBack`）；
+ * - 两端档位相对轨道各内缩一个圆钮半径（`EffortSlider` 的 `stopInset`），极值处圆钮与轨道齐平。
  *
- * **与用户当面确认过的一处简化**：**不画刻度与刻度数字**（原版 `showTicks: true` /
- * `showLabels: true`），拖动时用一枚跟随圆钮的胶囊显示当前值（原版这里是
- * `SfPaddleTooltipShape` 水滴气泡 —— 同一信息、更简洁的形态）。所以本控件不是「原版 1:1」，
- * 而是**按原版取值、按用户选择收形**（记在 PORTING §5.11）。
+ * 用户先前选过「简洁款、不画刻度」；现在要的是**看得见档位**，于是档位以圆点呈现（而不是原版
+ * SfSlider 的刻度线 + 刻度数字）。取值语义仍与原版一致：`steps` = M3 `Slider.steps`，
+ * 落在 `steps + 1` 等分点上（等价于原版各处 `stepSize`）。
  *
- * 行为与 M3 `Slider` 对齐（drop-in）：点轨道即跳到该处、横向拖动、`steps` 吸附
- * （`steps = 0` 连续；`steps > 0` 落在 `steps + 1` 等分点上，M3 同义）、抬手时
- * `onValueChangeFinished`、`enabled = false` 时整体 38% 透明且不吃手势。纵向手势不受影响
- * （拖动只认横向 slop）。
+ * 手势：**单一 `awaitEachGesture` 循环** —— 按下即跟手（SfSlider 同款）、逐帧上报（无级滑动）、
+ * 横向累计越过 `touchSlop` 后才 `consume`、纵向累计超 slop 且大于横向则让位给外面的滚动并
+ * **回滚**数值、抬手统一回调 `onValueChangeFinished`。`enabled = false` 时整体 38% 透明且不吃
+ * 手势；`semantics` 的 `progressBarRangeInfo` / `setProgress` 照给（无障碍与键盘可用）。
  */
 @Composable
 fun MemoSlider(
@@ -91,7 +100,6 @@ fun MemoSlider(
     valueLabel: ((Float) -> String)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
-    val isDark = LocalSemanticColors.current.isDark
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val rtl = layoutDirection == LayoutDirection.Rtl
@@ -108,11 +116,17 @@ fun MemoSlider(
     val fraction = sliderFractionForValue(coerced, start, end)
 
     val thumbRadiusPx = with(density) { THUMB_DP.dp.toPx() } / 2f
-    val haloRadiusPx = with(density) { HALO_RADIUS_DP.dp.toPx() }
     val trackCenterYPx = with(density) { (CAPSULE_ZONE_DP + TRACK_ZONE_DP / 2f).dp.toPx() }
+    // 拖动时圆钮放大 1.14（180ms EaseOutBack）—— 推理强度滑条同款反馈。
+    val thumbScale by animateFloatAsState(
+        targetValue = if (dragging) THUMB_DRAG_SCALE else 1f,
+        animationSpec = tween(durationMillis = THUMB_SCALE_MS, easing = EaseOutBack),
+        label = "memoSliderThumbScale",
+    )
 
     val activeColor = cs.primary
-    val inactiveColor = cs.onSurface.copy(alpha = if (isDark) 0.25f else 0.20f)
+    val trackColor = cs.onSurface.copy(alpha = TRACK_ALPHA)
+    val dotFractions = remember(steps) { sliderDotFractions(steps) }
 
     fun report(x: Float) {
         if (!enabled) return
@@ -202,23 +216,26 @@ fun MemoSlider(
         val thumbCenterX = thumbRadiusPx + travel * fraction
 
         Canvas(modifier = Modifier.fillMaxWidth().height(SLIDER_HEIGHT_DP.dp)) {
-            drawMemoTrack(
+            // 轨道 + 渐变填充 + 档位圆点 + 圆钮 —— 全部照推理强度滑条（`EffortSlider` /
+            // Flutter 原版 `_SliderPainter`）的画法，逐项取同一组数值。
+            drawMemoSlider(
                 centerY = trackCenterYPx,
                 thumbCenterX = thumbCenterX,
-                activeColor = activeColor,
-                inactiveColor = inactiveColor,
+                thumbRadiusPx = thumbRadiusPx,
+                thumbScale = thumbScale,
+                thumbFraction = fraction,
+                dotFractions = dotFractions,
+                primary = activeColor,
+                trackColor = trackColor,
+                upcomingDotColor = cs.onSurface.copy(alpha = UPCOMING_DOT_ALPHA),
+                // 圆钮固定纯白（原版 `_SliderPainter` 就是 `Color.White`）：暗色主题下
+                // `cs.surface` 是深色，会把圆钮糊在轨道里。
+                thumbColor = Color.White,
             )
-            if (dragging) {
-                drawCircle(
-                    color = activeColor.copy(alpha = PRESS_HALO_ALPHA),
-                    radius = haloRadiusPx,
-                    center = Offset(thumbCenterX, trackCenterYPx),
-                )
-            }
         }
 
-        // 拖动时的数值胶囊（原版水滴 tooltip 的简洁形态）：贴在圆钮正上方，左右不出界
-        // （`BiasAlignment` 天然把溢出的量收回来，和标签行用的是同一招）。
+        // 拖动时的数值胶囊：贴在圆钮正上方，左右不出界（`BiasAlignment` 天然把溢出的量
+        // 收回来，和标签行用的是同一招）。
         if (dragging && valueLabel != null) {
             Box(
                 modifier = Modifier
@@ -235,7 +252,7 @@ fun MemoSlider(
                 Text(
                     text = valueLabel(coerced),
                     style = TextStyle(
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = cs.onPrimary,
                     ),
@@ -245,9 +262,10 @@ fun MemoSlider(
             }
         }
 
-        // 圆钮：亮色主题带一层柔和投影（原版 thumbIcon 的 BoxShadow）。
+        // 圆钮本身画在 Canvas 里（白色 + 柔和投影，与推理强度滑条同一套），这里只留一个
+        // 尺寸/位置的**不可见锚点**：几何断言与无障碍都靠它（`EffortSlider` 同款做法）。
         // `testTag` 放在 `offset` **之后**：语义节点报的是它左边那段的布局结果，挂在
-        // offset 前面会报未偏移的位置（`MemoSliderUiTest` 的几何断言就量错了）。
+        // offset 前面会报未偏移的位置（`MemoSliderUiTest` 的几何断言就量错过）。
         Box(
             modifier = Modifier
                 .offset {
@@ -257,58 +275,122 @@ fun MemoSlider(
                     )
                 }
                 .size(THUMB_DP.dp)
-                .testTag(MEMO_SLIDER_THUMB_TAG)
-                .then(
-                    if (isDark) {
-                        Modifier
-                    } else {
-                        // 原版圆钮的 `BoxShadow(color: cs.shadow @8%, blur 8, offset (0,2))`。
-                        // 本工程这版 Compose 的 `ColorScheme` **没有 `shadow`**（同
-                        // `ChatAssistantBackground.kt:35` 的记载：用近黑等价，原版 shadow 即近黑）。
-                        Modifier.shadow(
-                            elevation = 8.dp,
-                            shape = CircleShape,
-                            clip = false,
-                            ambientColor = MEMO_THUMB_SHADOW,
-                            spotColor = MEMO_THUMB_SHADOW,
-                        )
-                    },
-                )
-                .background(activeColor, CircleShape),
+                .testTag(MEMO_SLIDER_THUMB_TAG),
         )
     }
 }
 
-/** 轨道 + 已选段：8dp 全圆角，画在轨道区的垂直中心。 */
-private fun DrawScope.drawMemoTrack(
+/**
+ * 轨道 + 渐变填充 + 档位圆点 + 圆钮 —— **照推理强度滑条**（`ui/chat/ReasoningBudgetSheet.kt` 的
+ * `EffortSlider`/`drawEffortSlider`，即 Flutter 原版 `_SliderPainter`）的画法与数值：
+ * 34dp 药丸轨道、`primary` 50%→100% 的横向渐变填充（裁剪在药丸内、画到圆钮中心）、
+ * 每个档位一颗 3.5dp 圆点（已过的转白、未到的 `onSurface@25%`）、
+ * 白色大圆钮（直径 38dp、柔和投影 blur 10 / dy 3 / 黑 25%、拖动放大 1.14）。
+ */
+private fun DrawScope.drawMemoSlider(
     centerY: Float,
     thumbCenterX: Float,
-    activeColor: Color,
-    inactiveColor: Color,
+    thumbRadiusPx: Float,
+    thumbScale: Float,
+    thumbFraction: Float,
+    dotFractions: List<Float>,
+    primary: Color,
+    trackColor: Color,
+    upcomingDotColor: Color,
+    thumbColor: Color,
 ) {
     val trackHeightPx = TRACK_HEIGHT_DP.dp.toPx()
-    val corner = CornerRadius(trackHeightPx / 2f, trackHeightPx / 2f)
+    val trackRadius = CornerRadius(trackHeightPx / 2f, trackHeightPx / 2f)
     val top = centerY - trackHeightPx / 2f
+    val trackRect = Rect(0f, top, size.width, top + trackHeightPx)
+
     drawRoundRect(
-        color = inactiveColor,
-        topLeft = Offset(0f, top),
-        size = Size(size.width, trackHeightPx),
-        cornerRadius = corner,
+        color = trackColor,
+        topLeft = trackRect.topLeft,
+        size = trackRect.size,
+        cornerRadius = trackRadius,
     )
-    val activeWidth = thumbCenterX.coerceIn(0f, size.width)
-    if (activeWidth > 0f) {
-        drawRoundRect(
-            color = activeColor,
-            topLeft = Offset(0f, top),
-            size = Size(activeWidth, trackHeightPx),
-            cornerRadius = corner,
+
+    val thumbX = thumbCenterX.coerceIn(0f, size.width)
+    if (thumbX > 0f) {
+        val brush = Brush.horizontalGradient(
+            colors = listOf(primary.copy(alpha = 0.5f), primary),
+            startX = 0f,
+            endX = thumbX,
         )
+        // 填充必须贴轨道矩形（从 Canvas 顶部画会被裁成上半截细条 —— `EffortSlider` 踩过）。
+        clipPath(Path().apply { addRoundRect(RoundRect(rect = trackRect, cornerRadius = trackRadius)) }) {
+            drawRect(
+                brush = brush,
+                topLeft = trackRect.topLeft,
+                size = Size(thumbX, trackHeightPx),
+            )
+        }
     }
+
+    if (dotFractions.isNotEmpty()) {
+        val dotRadiusPx = DOT_RADIUS_DP.dp.toPx()
+        // 档位点相对圆钮行程：两端各内缩一个圆钮半径（`EffortSlider` 的 stopInset）。
+        val span = size.width - 2f * thumbRadiusPx
+        val passedColor = Color.White.copy(alpha = 0.9f)
+        for (dotFraction in dotFractions) {
+            val x = thumbRadiusPx + span * dotFraction
+            drawCircle(
+                color = if (dotFraction <= thumbFraction + 0.0001f) passedColor else upcomingDotColor,
+                radius = dotRadiusPx,
+                center = Offset(x, centerY),
+            )
+        }
+    }
+
+    // 圆钮：白色 + 柔和投影（blur 10dp / offset y 3dp / 黑 25%，与推理强度滑条同一套）。
+    val radiusPx = thumbRadiusPx * thumbScale
+    drawIntoCanvas { canvas ->
+        val paint = android.graphics.Paint().apply {
+            isAntiAlias = true
+            color = android.graphics.Color.argb((0.25f * 255).toInt(), 0, 0, 0)
+            setMaskFilter(
+                android.graphics.BlurMaskFilter(THUMB_SHADOW_BLUR_DP.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL),
+            )
+        }
+        canvas.nativeCanvas.drawCircle(thumbX, centerY + THUMB_SHADOW_DY_DP.dp.toPx(), radiusPx, paint)
+    }
+    drawCircle(color = thumbColor, radius = radiusPx, center = Offset(thumbX, centerY))
 }
 
 // ---------------------------------------------------------------------------
 // 几何与吸附（纯函数，`MemoSliderTest` 直接钉住）
 // ---------------------------------------------------------------------------
+
+/**
+ * 档位圆点的位置（0..1 比例）。
+ *
+ * - `steps = 0`（无档位，如 TTS 语速）→ 不画点；
+ * - 档位少 → **一段一点**，就是「推理强度」那种一眼看出几档的样子（6 档 = 7 颗点）；
+ * - 档位多 → 按原版 `_SliderTileNew` 的 `interval` 策略**抽稀到 6–9 颗**（原版是
+ *   `total/4`、`total/5`、`total/8` 三档，这里用等价的 `divisions/8` 步长），
+ *   免得 32/41 档画成一条虚线；末点离 1 太近时直接并到 1，避免两颗点挤在一起。
+ */
+internal fun sliderDotFractions(steps: Int): List<Float> {
+    if (steps <= 0) return emptyList()
+    val divisions = steps + 1
+    val stride = maxOf(1, (divisions / 8f).roundToInt())
+    val fractions = ArrayList<Float>()
+    var i = 0
+    while (i <= divisions) {
+        fractions += i.toFloat() / divisions
+        i += stride
+    }
+    if (fractions.last() < 1f) {
+        val lastGap = 1f - fractions.last()
+        if (lastGap < stride / divisions.toFloat() / 2f) {
+            fractions[fractions.size - 1] = 1f
+        } else {
+            fractions += 1f
+        }
+    }
+    return fractions
+}
 
 /** 值 → 0..1 位置比例；空区间（`start == end`）一律 0。 */
 internal fun sliderFractionForValue(value: Float, start: Float, end: Float): Float {
@@ -353,19 +435,25 @@ internal fun sliderValueForPosition(
     return sliderSnapValue(start + directed * (end - start), start, end, steps)
 }
 
-/** 控件总高 = 胶囊区 20 + 轨道区 30（20dp 圆钮、28dp 光晕都装得下）。 */
-private const val SLIDER_HEIGHT_DP = 50
-private const val TRACK_ZONE_DP = 30
-private const val CAPSULE_ZONE_DP = 20
-private const val CAPSULE_HEIGHT_DP = 20
-private const val TRACK_HEIGHT_DP = 8
-private const val THUMB_DP = 20
-private const val HALO_RADIUS_DP = 14
-private const val PRESS_HALO_ALPHA = 0.12f
+/**
+ * 几何/配色常量 —— **取值与推理强度滑条（`EffortSlider`）一致**：
+ * 控件总高 = 胶囊区 18 + 轨道区 38（38dp 圆钮正好填满轨道区，圆钮顶边落在 18dp）；
+ * 轨道高 34、圆钮直径 38、档位点半径 3.5、投影 blur 10 / dy 3、拖动放大 1.14。
+ */
+private const val SLIDER_HEIGHT_DP = 56
+private const val TRACK_ZONE_DP = 38
+private const val CAPSULE_ZONE_DP = 18
+private const val CAPSULE_HEIGHT_DP = 18
+private const val TRACK_HEIGHT_DP = 34
+private const val THUMB_DP = 38
+private const val DOT_RADIUS_DP = 3.5f
+private const val TRACK_ALPHA = 0.10f
+private const val UPCOMING_DOT_ALPHA = 0.25f
+private const val THUMB_SHADOW_BLUR_DP = 10
+private const val THUMB_SHADOW_DY_DP = 3
+private const val THUMB_DRAG_SCALE = 1.14f
+private const val THUMB_SCALE_MS = 180
 private const val DISABLED_ALPHA = 0.38f
-
-/** 圆钮投影色（近黑 8%，见 `MemoSlider` 里的说明）。 */
-private val MEMO_THUMB_SHADOW = Color.Black.copy(alpha = 0.08f)
 
 /**
  * 圆钮的测试锚点 —— `MemoSliderUiTest` 用它断言几何（圆钮 20dp、圆心落在轨道中心线 35dp、

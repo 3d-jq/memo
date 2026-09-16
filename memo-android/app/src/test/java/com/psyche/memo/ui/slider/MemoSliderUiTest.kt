@@ -46,15 +46,15 @@ class MemoSliderUiTest {
     val compose = createComposeRule()
 
     @Test
-    fun `thumb and track keep the original SfSlider geometry`() {
+    fun `thumb and track keep the reasoning-slider geometry`() {
         renderSlider()
         val bounds = compose.onNodeWithTag(MEMO_SLIDER_THUMB_TAG).getUnclippedBoundsInRoot()
         val width = bounds.right.value - bounds.left.value
         val height = bounds.bottom.value - bounds.top.value
-        assertEquals("圆钮 20dp", 20f, width, 0.5f)
-        assertEquals("圆钮 20dp", 20f, height, 0.5f)
-        // 圆心 = 25 + 10 = 35dp（轨道中心线）；容器从 (0,0) 起，故圆钮顶边 25dp。
-        assertEquals("圆钮圆心落在轨道中心线", 25f, bounds.top.value, 0.5f)
+        assertEquals("圆钮 38dp", 38f, width, 0.5f)
+        assertEquals("圆钮 38dp", 38f, height, 0.5f)
+        // 圆心 = 胶囊区 18 + 轨道区一半 19 = 距顶 37dp，故圆钮顶边 18dp（与胶囊区下沿齐平）。
+        assertEquals("圆钮顶边贴着胶囊区", 18f, bounds.top.value, 0.5f)
     }
 
     /**
