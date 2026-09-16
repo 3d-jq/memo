@@ -30,13 +30,33 @@ private fun isRetryableNetworkError(error: Throwable, status: Int?): Boolean {
     ) {
         return true
     }
+    // Dart `_isRetryableDioError` 的 connectionError/connectionTimeout/sendTimeout/
+    // receiveTimeout，以及 `error is http.ClientException && status == null` —— 也就是
+    // 「**没有 HTTP 状态码**的传输层异常一律算网络错误」。我们原来只认上面四种 + 四个固定
+    // 文案，于是 DNS 解析失败 / TLS 握手失败 / 连接被中断 / 流被截断 这些真实故障全部落到
+    // "不重试"（用户 2026-09-16「自动重试这个没做完吧」）。这些类型都天然不带状态码，
+    // 所以直接判真即可；带状态码的 HTTP 错误仍走下面的状态码/关键词判据。
+    if (error is java.net.UnknownHostException ||
+        error is java.net.NoRouteToHostException ||
+        error is java.net.PortUnreachableException ||
+        error is javax.net.ssl.SSLException ||
+        error is java.io.EOFException
+    ) {
+        return true
+    }
     if (error is IOException) {
         val msg = error.message?.lowercase() ?: return false
         return msg.contains("connection closed") ||
             msg.contains("while receiving data") ||
             msg.contains("connection reset") ||
             msg.contains("broken pipe") ||
-            msg.contains("unexpected end of stream")
+            msg.contains("unexpected end of stream") ||
+            // OkHttp 的 HTTP/2 reset / Okio 截断（都是 IOException，属于传输层）。
+            msg.contains("stream was reset") ||
+            msg.contains("cancelled") ||
+            msg.contains("unable to resolve host") ||
+            msg.contains("handshake") ||
+            msg.contains("software caused connection abort")
     }
     return false
 }

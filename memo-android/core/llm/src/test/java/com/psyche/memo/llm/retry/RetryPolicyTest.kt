@@ -56,6 +56,39 @@ class RetryPolicyTest {
         assertFalse(shouldRetryError(SocketException("connection reset"), opts))
     }
 
+    /**
+     * 原版 `retry_policy.dart:96-105`：**没有 HTTP 状态码的传输层异常**一律算网络错误
+     * （`DioExceptionType` 的 connectionError / connectionTimeout / sendTimeout /
+     * receiveTimeout 四种，以及 `http.ClientException && status == null`）。
+     * 我们原来只认 Socket/Connect/InterruptedIO + 四个固定文案 ⇒ DNS/TLS/截断这类真实故障
+     * 全都不重试（用户 2026-09-16「自动重试这个没做完吧」）。
+     */
+    @Test
+    fun transportFailuresWithoutAStatusAreRetryable() {
+        val on = AutoRetryOptions(retryOnNetworkError = true)
+        val off = AutoRetryOptions(retryOnNetworkError = false)
+        val cases = listOf(
+            java.net.UnknownHostException("Unable to resolve host \"api.example.com\""),
+            java.net.NoRouteToHostException("No route to host"),
+            javax.net.ssl.SSLException("Handshake failed"),
+            java.io.EOFException("unexpected end of stream"),
+            IOException("stream was reset: CANCEL"),
+        )
+        for (error in cases) {
+            assertTrue("${error.javaClass.simpleName} 应该算网络错误", shouldRetryError(error, on))
+            assertFalse("${error.javaClass.simpleName} 关掉网络重试后不该重试", shouldRetryError(error, off))
+        }
+    }
+
+    /** 带状态码的 HTTP 错误仍按状态码/关键词判，别被"传输层"这条错判成重试。 */
+    @Test
+    fun httpErrorsWithAStatusStillFollowStatusCodes() {
+        val opts = AutoRetryOptions()
+        assertFalse(shouldRetryError(IOException("HTTP 400 bad request"), opts))
+        assertFalse(shouldRetryError(IOException("HTTP 401 unauthorized"), opts))
+        assertTrue(shouldRetryError(IOException("HTTP 503 service unavailable"), opts))
+    }
+
     @Test
     fun retryStatusCodesMatch() {
         val opts = AutoRetryOptions(retryStatusCodes = setOf(408, 429, 500, 502, 503, 504))
