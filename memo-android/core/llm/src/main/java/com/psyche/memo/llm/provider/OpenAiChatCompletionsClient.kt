@@ -78,8 +78,21 @@ class OpenAiChatCompletionsClient(
                 if (isCancelled(request)) throw kotlinx.coroutines.CancellationException("cancelled")
                 if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions())) throw e
                 val delayMs = backoffDelay(attemptCount - 1, retryOptions())
-                emit(StreamChunk.Error("retrying in ${delayMs}ms: ${e.message}"))
+                // Dart chat_api_service.dart:215-222 —— 结构化 RetryPending 事件，
+                // UI 显示「N 秒后重试 (attempt/maxRetries)」倒计时；绝不发裸 Error
+                //（裸 Error 会被 ChatViewModel markFailed 当成真失败终止整条流）。
+                emit(
+                    StreamChunk.RetryPending(
+                        attempt = attemptCount,
+                        maxRetries = maxRetries,
+                        delayMs = delayMs,
+                        retryAtMs = System.currentTimeMillis() + delayMs,
+                        errorText = e.toString(),
+                    ),
+                )
                 delay(delayMs)
+                // Dart attemptStartEvent —— 退避结束、下一次尝试开始，UI 清倒计时。
+                emit(StreamChunk.RetryAttemptStart)
             }
         }
     }.flowOn(Dispatchers.IO) // 阻塞式 SSE 读必须离开收集者线程（NetworkOnMainThreadException 根因）
@@ -179,8 +192,21 @@ class OpenAiChatCompletionsClient(
                 if (isCancelled(request)) throw kotlinx.coroutines.CancellationException("cancelled")
                 if (yielded || attemptCount > maxRetries || !shouldRetryError(e, retryOptions())) throw e
                 val delayMs = backoffDelay(attemptCount - 1, retryOptions())
-                emit(StreamChunk.Error("retrying in ${delayMs}ms: ${e.message}"))
+                // Dart chat_api_service.dart:215-222 —— 结构化 RetryPending 事件，
+                // UI 显示「N 秒后重试 (attempt/maxRetries)」倒计时；绝不发裸 Error
+                //（裸 Error 会被 ChatViewModel markFailed 当成真失败终止整条流）。
+                emit(
+                    StreamChunk.RetryPending(
+                        attempt = attemptCount,
+                        maxRetries = maxRetries,
+                        delayMs = delayMs,
+                        retryAtMs = System.currentTimeMillis() + delayMs,
+                        errorText = e.toString(),
+                    ),
+                )
                 delay(delayMs)
+                // Dart attemptStartEvent —— 退避结束、下一次尝试开始，UI 清倒计时。
+                emit(StreamChunk.RetryAttemptStart)
             }
         }
     }.flowOn(Dispatchers.IO)

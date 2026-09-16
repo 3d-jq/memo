@@ -129,6 +129,13 @@ class ChatViewModel(
         /** Reasoning segment timings (`reasoning_segments_json`), zipped with
          * the message's ReasoningParts; the thinking card shows (X.Xs) from it. */
         val reasoningSegmentsJson: String? = null,
+        /**
+         * 气泡内自动重试倒计时（Dart streaming_content_notifier.dart:34 RetryStatus
+         * 等价物）：attempt/maxRetries 显示 "(2/3)"，retryAtMs 是退避结束的绝对时刻
+         *（倒计时用它算剩余秒数，而不是 now+delay —— 消费延迟后仍准确）。
+         * null = 不在重试等待中。仅流式期间短暂存在，不落库。
+         */
+        val retryStatus: RetryStatus? = null,
     ) {
         val content: String
             get() = parts.filterIsInstance<TextPart>().joinToString("") { it.text }
@@ -151,6 +158,15 @@ class ChatViewModel(
             completionTokens = completionTokens ?: this.completionTokens,
             cachedTokens = cachedTokens ?: this.cachedTokens,
             durationMs = durationMs ?: this.durationMs,
+        )
+
+        /** In-bubble countdown while auto-retry waits for the next attempt
+         *（Dart streaming_content_notifier.dart:34 RetryStatus 等价物）。 */
+        data class RetryStatus(
+            val attempt: Int,
+            val maxRetries: Int,
+            /** Absolute epoch-ms deadline when backoff ends. */
+            val retryAtMs: Long,
         )
     }
 
@@ -1812,6 +1828,9 @@ class ChatViewModel(
                     segmentsJson = segmentsJson,
                 )
             } finally {
+                // 终止路径（正常结束 / 用户停止 / 真失败）都要把倒计时清掉，
+                // 否则「N 秒后重试」会停在一个已经结束的消息上。
+                updateAssistantRetry(assistantId, null)
                 _streaming.value = false
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
@@ -2169,6 +2188,21 @@ class ChatViewModel(
                         )
                         onPersist(finalParts, finishUsage, errorSegmentsJson)
                     }
+                    // 自动重试等待（Dart chat_api_service.dart RetryPending）：
+                    // 只驱动气泡内「N 秒后重试 (2/3)」倒计时，不进 parts、不落库、
+                    // 不 markFailed —— 之前裸 Error 文案被当成失败写进消息就是根因。
+                    is StreamChunk.RetryPending -> {
+                        updateAssistantRetry(
+                            assistantId,
+                            UiMessage.RetryStatus(
+                                attempt = chunk.attempt,
+                                maxRetries = chunk.maxRetries,
+                                retryAtMs = chunk.retryAtMs,
+                            ),
+                        )
+                    }
+                    // 退避结束、下一次尝试开始：清掉倒计时。
+                    is StreamChunk.RetryAttemptStart -> updateAssistantRetry(assistantId, null)
                 }
             }
             if (failed) break
@@ -2368,6 +2402,7 @@ class ChatViewModel(
             } catch (e: Exception) {
                 persistFinal(markFailed(messageId, e.toString(), allParts, encodeSegments(allSegments)))
             } finally {
+                updateAssistantRetry(messageId, null)
                 _streaming.value = false
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
@@ -2778,6 +2813,20 @@ class ChatViewModel(
         )
     }
 
+    /**
+     * 只更新助手消息的自动重试倒计时（[UiMessage.retryStatus]），不碰
+     * parts/segments —— RetryPending 事件与内容更新并行到达，独立通道互不覆盖
+     *（copy() 保留其余字段，靠它自然合并）。null = 清除倒计时（RetryAttemptStart）。
+     */
+    private fun updateAssistantRetry(assistantId: String, retry: UiMessage.RetryStatus?) {
+        val msgs = _messages.value
+        val index = msgs.indexOfLast { it.id == assistantId }
+        if (index < 0) return
+        _messages.value = msgs.toMutableList().apply {
+            set(index, msgs[index].copy(retryStatus = retry))
+        }
+    }
+
     private fun finishAssistant(
         assistantId: String,
         parts: List<MessagePart>,
@@ -2792,6 +2841,7 @@ class ChatViewModel(
             parts = parts,
             isStreaming = false,
             reasoningSegmentsJson = segmentsJson,
+            retryStatus = null, // 正常结束：倒计时随之消失。
         ).withTokenStats(
             totalTokens = usage?.totalTokens,
             promptTokens = usage?.promptTokens,
@@ -2827,6 +2877,7 @@ class ChatViewModel(
                         isStreaming = false,
                         failed = true,
                         reasoningSegmentsJson = segmentsJson,
+                        retryStatus = null, // 真失败：倒计时随之消失。
                     ),
                 )
             }

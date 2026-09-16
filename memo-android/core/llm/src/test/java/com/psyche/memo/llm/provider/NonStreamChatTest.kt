@@ -214,7 +214,12 @@ class NonStreamChatTest {
             baseRequest(server.url("/").toString(), "openai", "gpt-4o"),
         ).toList()
 
-        assertTrue(chunks.any { it is StreamChunk.Error && it.message.contains("retrying") })
+        // 2026-09-16 起 RetryPending 是结构化事件（attempt/maxRetries/retryAtMs），
+        // 重试等待不再发裸 Error 文案 —— 那会被 ChatViewModel markFailed 写进消息。
+        val pending = chunks.filterIsInstance<StreamChunk.RetryPending>().single()
+        assertEquals(1, pending.attempt)
+        assertEquals(1, pending.maxRetries)
+        assertTrue(pending.errorText.contains("HTTP 429"))
         assertEquals("重试后的回答", textOf(chunks))
         assertEquals(2, server.requestCount)
     }

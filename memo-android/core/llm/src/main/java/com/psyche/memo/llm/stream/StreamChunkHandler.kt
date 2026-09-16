@@ -72,6 +72,11 @@ class StreamChunkHandler(
                 closeOpenSegment()
             }
             is StreamChunk.Error -> Unit // surfaced by caller
+            // 重试不是内容也不是失败：内容折叠、失败标记都不碰（Dart 侧
+            // RetryPending/RetryAttemptStart 同样不进 parts）。倒计时 UI 由
+            // ChatViewModel 直接消费这两个事件驱动。
+            is StreamChunk.RetryPending -> Unit
+            is StreamChunk.RetryAttemptStart -> Unit
         }
     }
 

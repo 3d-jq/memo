@@ -538,6 +538,64 @@ fun ThinkingShimmerText(
 const val VOICE_WAVEFORM_TAG = "voice_waveform"
 
 /**
+ * 气泡内自动重试倒计时（1:1 移植 `_RetryCountdownHint`，chat_message_widget.dart
+ * L4071-4102）：「N 秒后重试 (attempt/maxRetries)」，12sp、onSurface@55%。剩余
+ * 秒数用 Animatable 从起始秒线性降到 0（一次性动画；retryAtMs 变化 → remember key
+ * 变 → 动画重启），文案走 core:ui 既有 `auto_retry_countdown`（zh「%1$s 秒后重试
+ * (%2$s/%3$s)」）。到 0 显示 0，下一次尝试开始由上层清 retryStatus 切回扫光。
+ */
+/**
+ * 是否显示重试倒计时 —— 必须有状态**且**消息还在流式。
+ *
+ * 终止路径（正常结束 / 用户停止 / 真失败）都会把 `retryStatus` 清掉，这里再要一道
+ * `isStreaming`：即使哪天漏清，也绝不会把一个「N 秒后重试」停在已经结束的消息上
+ * （用户 2026-09-16 报的是裸 http 文案，同类问题的另一面就是倒计时残留）。
+ */
+internal fun shouldShowRetryCountdown(status: Any?, isStreaming: Boolean): Boolean =
+    status != null && isStreaming
+
+@Composable
+fun RetryCountdownHint(
+    status: com.psyche.memo.ChatViewModel.UiMessage.RetryStatus,
+    modifier: Modifier = Modifier,
+) {
+    val cs = MaterialTheme.colorScheme
+    // retryAtMs 是退避结束的绝对时刻（Dart RetryStatus.retryAt 等价物）；
+    // remember 锚定一个起点避免重组反复取 now。
+    val nowMs = remember(status.retryAtMs) { System.currentTimeMillis() }
+    val remainingMs = (status.retryAtMs - nowMs).coerceAtLeast(0L)
+    val startSeconds = remainingMs / 1000f
+    val style = TextStyle(
+        fontSize = 12.sp,
+        color = cs.onSurface.copy(alpha = 0.55f),
+    )
+    val countdown = remember(status.retryAtMs) {
+        androidx.compose.animation.core.Animatable(startSeconds)
+    }
+    LaunchedEffect(status.retryAtMs) {
+        if (startSeconds > 0f) {
+            countdown.animateTo(
+                0f,
+                androidx.compose.animation.core.tween(
+                    durationMillis = remainingMs.toInt(),
+                    easing = androidx.compose.animation.core.LinearEasing,
+                ),
+            )
+        }
+    }
+    Text(
+        text = androidx.compose.ui.res.stringResource(
+            UiR.string.auto_retry_countdown,
+            (if (countdown.value <= 0f) 0 else kotlin.math.ceil(countdown.value)).toInt().toString(),
+            status.attempt.toString(),
+            status.maxRetries.toString(),
+        ),
+        style = style,
+        modifier = modifier,
+    )
+}
+
+/**
  * 语音录音波形 —— 1:1 移植 chat_input_bar.dart `_VoiceWaveformPainter`
  * (CIB:3400-3459)：条宽 3、条距 3.5，最新样本靠右、旧样本向左滚动；
  * 振幅 levels[i]∈[0,1] → 高度 max(2, maxH·level·envelope)，maxH = 高·0.92；

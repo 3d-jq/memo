@@ -14,5 +14,5 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 suspend fun LlmClient.probeStream(request: LlmRequest, timeoutMs: Long = 60_000L): Boolean =
     withTimeoutOrNull(timeoutMs) {
-        streamChat(request).firstOrNull { it !is StreamChunk.Error }
+        streamChat(request).firstOrNull { it !is StreamChunk.Error && it !is StreamChunk.RetryPending }
     } != null

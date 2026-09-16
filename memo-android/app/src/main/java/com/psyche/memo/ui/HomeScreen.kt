@@ -1,4 +1,4 @@
-﻿package com.psyche.memo.ui
+package com.psyche.memo.ui
 
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
@@ -3115,12 +3115,28 @@ private fun MessageRow(
                 ) {
                     Column {
                         Spacer(Modifier.height(6.dp))
-                        com.psyche.memo.ui.chat.ThinkingShimmerText(
-                            modifier = Modifier.padding(start = 2.dp),
-                            phrases = timelineSettings.thinkingIndicator.phrases,
-                            fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
-                            colorArgb = timelineSettings.thinkingIndicator.colorArgb,
-                        )
+                        // 自动重试等待中（Dart CMW:2885-2925 RetryStatus 分支）：
+                        // 扫光文字换成「N 秒后重试 (2/3)」倒计时（1s 步进、到 0 显示
+                        // 0），下一次尝试开始（RetryAttemptStart）后 retryStatus=null
+                        // 自动切回扫光文字。
+                        // 另外要求 `isStreaming`：消息已结束/被停止/已失败时**绝不**再显示
+                        // 倒计时（终止路径都会清 retryStatus，这里是第二道保险）。
+                        val retry = msg.retryStatus
+                        if (retry != null &&
+                            com.psyche.memo.ui.chat.shouldShowRetryCountdown(retry, msg.isStreaming)
+                        ) {
+                            com.psyche.memo.ui.chat.RetryCountdownHint(
+                                status = retry,
+                                modifier = Modifier.padding(start = 2.dp),
+                            )
+                        } else {
+                            com.psyche.memo.ui.chat.ThinkingShimmerText(
+                                modifier = Modifier.padding(start = 2.dp),
+                                phrases = timelineSettings.thinkingIndicator.phrases,
+                                fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
+                                colorArgb = timelineSettings.thinkingIndicator.colorArgb,
+                            )
+                        }
                     }
                 }
                 if (msg.failed) {
