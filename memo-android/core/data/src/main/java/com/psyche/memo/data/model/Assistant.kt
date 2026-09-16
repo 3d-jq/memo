@@ -4,6 +4,30 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
 /**
+ * 助手绑定的生成服务（自研功能，见 [GenerationService]）：图片/视频各一份。
+ *
+ * 只有「开关 + 选哪个服务 + 覆盖哪些参数」—— key/地址留在服务里，所以多个助手
+ * 可以共用一份配置（和 TTS 服务、工作区一个路子）。字段为 null = 用服务里的值。
+ */
+@Serializable
+data class AssistantGenerationBinding(
+    val enabled: Boolean = false,
+    val serviceId: String? = null,
+    /** 覆盖服务里的模型（空 = 用服务里的）。 */
+    val model: String? = null,
+    /** 图片：覆盖尺寸/张数。 */
+    val size: String? = null,
+    val count: Int? = null,
+    /** 视频：覆盖时长/分辨率/比例/是否带音。 */
+    val durationSeconds: Int? = null,
+    val resolution: String? = null,
+    val aspectRatio: String? = null,
+    val generateAudio: Boolean? = null,
+) {
+    val isUsable: Boolean get() = enabled && !serviceId.isNullOrBlank()
+}
+
+/**
  * Assistant entity DTO — mirrors Flutter Assistant.toJson keys
  * (stored in assistant_rows.payload). Missing/unknown keys are tolerated:
  * the serializer maps the core fields and keeps unknown keys in [raw] for
@@ -35,6 +59,9 @@ data class Assistant(
     /** 沙箱工作区绑定（RikkaHub `assistant.workspaceId` / `workspaceCwd`）。 */
     val workspaceId: String? = null,
     val workspaceCwd: String? = null,
+    /** 生成图片 / 生成视频服务绑定（自研功能）：开关 + 选服务 + 覆盖参数。 */
+    val imageGeneration: AssistantGenerationBinding? = null,
+    val videoGeneration: AssistantGenerationBinding? = null,
     val healthDataTypeIds: List<String> = emptyList(),
     val background: String? = null,
     val customHeaders: List<Map<String, String>> = emptyList(),

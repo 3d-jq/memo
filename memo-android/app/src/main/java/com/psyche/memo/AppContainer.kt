@@ -176,6 +176,18 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         com.psyche.memo.data.repo.McpRepository(database.writableDatabase)
     }
 
+    /**
+     * 生成服务（图片 / 视频）—— 自研功能，上游 kelivo 没有。设置里的两个入口
+     * （「生成图片」「生成视频」）与助手编辑页的两个 tab 共用这一份：
+     * 记录存 `extension_entity_rows`（kind = `generation_service`），变更走 [version]。
+     */
+    val generationServices: com.psyche.memo.provider.generation.GenerationServiceRepository by lazy {
+        com.psyche.memo.provider.generation.GenerationServiceRepository(
+            store = com.psyche.memo.data.generation.GenerationServiceStore(database.writableDatabase),
+            assistants = assistantStore,
+        )
+    }
+
     /** World book (lorebook) data layer. */
     val worldBookRepository: com.psyche.memo.data.repo.WorldBookRepository by lazy {
         com.psyche.memo.data.repo.WorldBookRepository(database.writableDatabase, preferenceRepository)
