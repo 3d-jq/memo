@@ -123,6 +123,27 @@ class ToolApprovalService {
         notifyPending()
     }
 
+    /**
+     * 放行某个工具**正挂着**的全部待审批请求，返回放行条数。
+     *
+     * 用在「用户在工作区详情页把某个工具的审批开关关掉」那一刻：屏上那个面板是在开关
+     * 关掉**之前**建出来的，用户的本意是「这个工具以后不用问我」，已经弹出来的那一个
+     * 不该继续拦着（用户 2026-09-16「我关闭了确认 为什么还有确认呀」）。按工具名匹配
+     * （工具名是全局常量，同名工具属于同一个助手的同一个工作区，够用）。
+     */
+    fun approvePendingForTool(toolName: String): Int {
+        val matches = pending.values.filter { it.toolName == toolName }
+        if (matches.isEmpty()) return 0
+        for (req in matches) {
+            pending.entries.removeAll { it.value === req }
+            if (!req.completer.isCompleted) {
+                req.completer.complete(ToolApprovalResult.approved())
+            }
+        }
+        notifyPending()
+        return matches.size
+    }
+
     /** 取消全部待审批（如流被取消时）。 */
     fun cancelAll() {
         for (req in pending.values) {

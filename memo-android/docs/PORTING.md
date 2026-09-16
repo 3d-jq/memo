@@ -570,6 +570,8 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 | **内置主题集** | `lib/theme/palettes.dart` 的 9 套调色板（`core/ui/.../theme/Palettes.kt`，由 `tools/palettes_gen.py` 生成，脚本硬校验「正好 9 套」） | **列表 = Memo 默认 + RikkaHub 7 套预设**（`RikkaHubPresets.kt` 的 `themeChoices`，共 8 条），主题选择页做成 RikkaHub 那种**四列彩色色卡**（1:1）；预设走「原样表面」通道且角色映射照真机取色：**页面 = `surfaceContainer`、卡片 = `surfaceBright`**；Memo 旧 8 套不再列出但 id 仍可解析（`themePaletteById`）；设置页分组标题改跟随 `primary`（`settingsSectionHeaderColor`，见 §4-44） | 用户 2026-09-13「我们这个八个效果不好，用 RikkaHub 那个主题，他那个更全面」+「我们这个默认也要保留 主题按照我们这个 UI 和 UX 不改」→ 2026-09-14「跟着人家一比一做 不然做出来不好看」（实测发现我们把页面/卡片做反了）、「主题设置里面那个分类的字的颜色没有跟着主题走呀 rikkhub就可以呀」。详见 §4-44；**不要改回只列原来 9 套**、不要改回单色圆点列表、也不要把页面/卡片角色换回 M3 默认关系、也不要把分组标题改回 `onSurface@80%` |
 | **Agent Skills（技能系统）** | 原版（kelivo）**没有** skill 系统，也没有对应 ARB/页面 | **新增**（照 RikkaHub `data/files/SkillManager` + `data/ai/tools/SkillsTools`）：技能在 `<filesDir>/skills/<名>/SKILL.md`、`use_skill` 工具 + `<available_skills>` 系统提示词块、助手 `enabledSkills`、设置→技能 管理页 + 技能详情页 + 助手编辑页「技能」tab。工具名与工具描述**逐字照上游**；**外壳是 Memo 风格**（`MemoTopBar`/`SectionCard`/长按操作面板），不搬上游的 `LargeFlexibleTopAppBar` + FAB | 用户 2026-09-14 点名移植。**手动粘贴 / 从文件（.md/.zip）/ 从 GitHub 仓库**三种导入方式齐；三处被单测逼出来的实现偏离见 §4-45。**工具卡的标题也照上游 `UseSkillToolUI.title`**（用户 2026-09-14「加载 skill…我这个怎么是调用工具呀显示 应该是加载吧，你看看 rikkhub 就是显示加载 skill」）：`技能：<技能名>`，带 `path` 时追加 ` / <路径>`（`skillToolTitle`/`skillNameFrom`，名字缺失退回 `skill`，别出现空的「技能：」），图标用 `Lucide.Puzzle`（与设置→技能页同一个；上游用 `MagicWand01`，icons-lucide 1.1.0 没收录）—— **勿让它落回默认的「调用工具 use_skill」** |
 | **解不出的引用标记** | 回落显示一颗 `?` 胶囊 | **整段标记不渲染**（`resolveCitationCapsule` 返回空 display text ⇒ 调用方直接 `return`；`[citation](id)` 内联分支同理） | 用户 2026-09-12 同一次决定：正文旁边挂一个 `?` 读起来像故障。注意：**数字型 label 元数据仍照旧优先显示**（它本身就是可用序号），只有真正解不出的才丢 |
+| **参数不可用的写入调用不再弹审批** | `pathOutsideWritableRoots` = `runCatching { … }.getOrDefault(true)`（`WorkspaceTools.kt:410-413`）⇒ 模型发来的 tool call 参数被截断/没有 `path` 时**先弹一次审批**，用户点完只收到「path is required」 | `WorkspaceTools.pathOutsideWritableRoots` 改成**三态**（`Boolean?`）：能解析出绝对路径 → 按 `/workspace`、`/tmp` 前缀判内外；解析不出（缺键 / 相对路径 / 带 `\0`）→ `null`，闸门判据用 `== true` ⇒ **不弹审批**，直接让工具报参数错误 | 用户 2026-09-16「沙箱里面工具的权限我关闭了确认 为什么还有确认呀」——真机库里那条 `workspace_write_file` 的 `arguments` 就是被截断的 `"{\"path\": \"/workspace/make_docx.py\""`（`path` 解析不出） ⇒ 参数坏掉的调用无论路径是什么都执行不了，占用户一次确认纯属摩擦。`WorkspaceToolsTest.pathOutsideWritableRootsIsTriState` / `unusablePathArgumentsDoNotAskForApproval` 钉住 |
+| **关掉审批开关会放行正在等的那一个** | 上游切开关只改记录，屏上已弹出的审批面板照旧拦着 | `ToolApprovalService.approvePendingForTool(toolName)`：工作区详情页把某个工具的审批开关**关掉**时，把该工具**已弹出**的待审批请求直接批准（按工具名匹配，同名即同一助手的同一工作区） | 同上那句用户反馈的另一半：面板是在关开关**之前**建出来的（真机时间线：审批请求 18:43:16、开关写入 18:43:31），用户本意是「以后不用问我」，已弹出的那个不该继续卡住生成。`ToolApprovalServiceTest.approvePendingForTool_releasesOnlyThatTool` 钉住「只放行同名、其他工具照旧等」 |
 
 | **自动重试的出厂默认** | `AutoRetryOptions.defaults()`（`lib/core/models/auto_retry_options.dart:41-96`）：`enabled = false`、`maxDelayMs = 30000`、`defaultRetryStatusCodes` = {408,425,429,500,502,503,504,529}、`defaultRetryKeywords` 12 条、`defaultStopKeywords` 11 条 | **只有 `enabled` 偏离：默认 `true`**，其余逐字照 Dart。唯一源头是 `core/llm/.../retry/AutoRetryOptions.kt` 的 `DEFAULT_RETRY_STATUS_CODES` / `DEFAULT_RETRY_KEYWORDS` / `DEFAULT_STOP_KEYWORDS` / `DEFAULT_MAX_DELAY_MS`，设置页（`AutoRetrySettingsScreen`）与容器解码（`AppContainer.currentRetryOptions`）都引用它们、**不再各抄一份** | 用户 2026-09-15「自动重试这个触发条件这个没有做完吧」→「触发条件这个和原项目人家有触发字的呀」，随后拍板 `enabled` 保持 `true`。真因不在链路（`shouldRetryError` 的网络错误/关键词/状态码三档与容器实时读盘都在），而在 Kotlin 侧出厂默认**两个词表是空的**（关键词这档永不命中）、状态码多带 409 又漏了 425/529、`maxDelayMs` 是 15000（Dart 30000）；设置页当时有自己一份 private 拷贝所以「页面看着对、实际不重试」。`RetryPolicyTest` 5 例逐字钉住默认值与「409 不重试 / 425·529 重试 / 命中"限流"重试 / 命中"余额"不重试」 |
 
@@ -734,6 +736,27 @@ bug 先查测量几何再查数据**。
 触感（`LocalHapticsSettings.globalEnabled` 门控）；✓ 对勾不再直接发送，一律回填
 输入框（用户拍板，■ 与 ✓ 行为统一）。测试：`AsrRecorderLevelTest`（4 例）+
 `VoiceWaveformLayoutTest`（2 例）+ `VoiceInputDispatchTest` 断言随 dB 语义更新。
+
+## 5.16 沙箱内存 / 「自动回到底部」/ 工具审批 三问取证（2026-09-16）
+
+用户三问：「沙箱的内存是不是很少呀」「设置偏好里面的回到底部这个做完了吗」「沙箱里面工具的权限我关闭了确认 为什么还有确认呀」。三问都先取证再答，结论与判据记在这里，别重复侦察。
+
+**① 沙箱没有内存上限 —— 模型看到的是**手机真实**的内存状态。**
+- 证据链：`adb shell run-as com.psyche.memo.dev ulimit -a` → 无限制；proot 参数段（`ProotShellRunner.prootPrefix`）只有 `--root-id/--link2symlink/--kill-on-exit/-r/-w/-b`，**没有任何内存/CPU 限制**；cgroup 侧 `/dev/memcg/apps/uid_*/memory.limit_in_bytes`、`/sys/fs/cgroup/memory.max` **都不存在**（本机是 cgroup v1 应用组 + LMK，本来就没有 per-app 内存上限，`/proc/self/cgroup` = `4:memory:/`）。
+- 沙箱里 `free`/`/proc/meminfo` 之所以"很小"，是因为我们把宿主内核伪文件系统 `-b /dev /proc /sys` 挂进去了（`WorkspaceManager.KERNEL_FS_MOUNTS`），读到的是**整机**状态。真机抓取：`MemTotal 11.65GB / MemFree 135MB / MemAvailable 1.97GB`，zram swap 接近满 —— 那台手机当时确实吃紧。
+- 用户看到「内存很小」的来源是**模型自己的推理文字**（库里 `reasoning` part）：「the environment has about 11GB total but only 2.9GB available with swap at 10/11GB」，随后模型自己给 `.NET` 设 `DOTNET_GCHeapHardLimit=1000000000`/`DOTNET_GCServer=0` 绕，最后放弃改用 `python-docx`。CoreCLR 报 `0x8007000E`（E_OUTOFMEMORY）是它启动时预留大块虚拟地址空间失败，**不是我们限制了它**。
+- 结论：**不用改代码**（改也没有上限可调）。真要减少这类失败，只能让模型少挑重型运行时 —— 可选项（待用户点头）：在**工作区系统提示词块**里加一句「内存/CPU 与手机共享，.NET / JVM 这类重运行时有较大概率起不来，优先 Python/Node」。
+
+**② 「自动回到底部」是做完的**（`display_auto_scroll_enabled_v1` + `_idle_seconds_v1`）。
+- UI：显示设置 → 行为 → 「自动回到底部延迟」（detail = `已关闭` 或 `Ns`）→ sheet 内开关 + 2–64s 滑杆（`DisplaySettingsScreen.kt:120-121/148-149/328-337/456-500`，照 `display_settings_page.dart:729-858`）。
+- 消费点（`HomeScreen.kt`，对应 `scroll_controller.dart`）：流式跟随 `:1211-1224`（≈ `shouldAutoFollow` `:217-222`）、收手后按延迟恢复跟随 `armIdleStickTimer`（≈ `refreshAutoStickToBottom` `:332-344` + `handleUserScrollIntent` 的 `_userScrollTimer` `:384-392`，**本轮补上 `enabled || following` 那一项**）、滚回底部即时恢复 `:1168-1179`（≈ `_onScrollControllerChanged` `:346-365`）、生成结束后补一次贴底 `:1229-1247`（≈ `stickToBottomAfterGeneration` `:518-533`）。
+- **它不控制**（原版也不控制）：进入会话落到最新一条、自己发消息后落到最新、键盘抬起时的贴底钉住。
+- 判据：`armIdleStickTimer` 里少了开关那一项时，「关掉开关 → 上滑 → 等 8s」仍会把 `following` 翻回 true（虽然两条滚动 effect 还要 `autoScrollEnabled` 才真滚，代码语义已经偏了）。
+
+**③ 审批「关了还问」有三条路径，已修两条（详见 §5.11 两张表）。**
+- 真机取证：工作区 `7beb11d3…`（助手「管家」绑定）的 `toolApprovals` = `{"workspace_shell":false}`（写入时刻 18:43:31），而最后一批 `workspace_shell` 调用在 **18:43:16**（早 15 秒）—— 那次审批请求是在开关关掉**之前**建出来的，屏上那个面板不会因为之后关开关而消失 ⇒ 本轮加 `approvePendingForTool`。
+- 另一条：`workspace_write_file` 那条 `arguments` 是**被截断的**（`"{\"path\": \"/workspace/make_docx.py\""`，缺 `}`），`absolutePath` 解析失败 ⇒ 上游 `getOrDefault(true)` 判成"越界" ⇒ 即使开关是关的也弹审批，点完只收到 `execution_error: path is required` ⇒ 本轮改成三态，参数不可用**不弹审批**。
+- 剩下一条是**保留的**（上游同款）：写到 `/workspace`、`/tmp` **之外**时无条件要求审批（`pathOutsideWritableRoots`），修的是判定边界，不是这条规则。
 
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 

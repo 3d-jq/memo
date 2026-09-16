@@ -196,10 +196,19 @@ object WorkspaceTools {
         return path
     }
 
-    /** 写到 `/workspace`、`/tmp` 之外要不要额外审批（上游 `pathOutsideWritableRoots`）。 */
-    fun pathOutsideWritableRoots(args: JsonObject, name: String): Boolean = runCatching {
+    /**
+     * 写到 `/workspace`、`/tmp` 之外要不要额外审批（上游 `pathOutsideWritableRoots`）。
+     *
+     * **有意偏离上游的一处**：参数里根本解析不出绝对路径时返回 `null`（上游那版在这里是
+     * `getOrDefault(true)`，于是这个调用会先弹一次审批、用户点完只会收到
+     * 「path is required」）。这种调用无论路径是什么都执行不了 —— 模型发来一个截断/坏掉的
+     * tool call 参数就会走到这里（用户 2026-09-16「我关闭了确认 为什么还有确认呀」，
+     * 库里那条 `workspace_write_file` 的 arguments 就是被截断的），不该占用用户一次确认。
+     * 调用方判据用 `== true`，`null` 表示「参数不可用，直接让工具报参数错误」。
+     */
+    fun pathOutsideWritableRoots(args: JsonObject, name: String): Boolean? = runCatching {
         isOutsideWritableRoots(absolutePath(args, name))
-    }.getOrDefault(true)
+    }.getOrNull()
 
     fun isOutsideWritableRoots(path: String): Boolean {
         val normalized = path.trimEnd('/').ifBlank { "/" }

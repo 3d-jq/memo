@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -79,13 +80,28 @@ class WorkspaceToolsTest {
         }
     }
 
-    /** 参数坏掉时必须**失败关闭**（当成越界、要求审批），不能默默放行。 */
+    /**
+     * 路径判定的三态：
+     * - 能解析出绝对路径 → 按前缀判内外；
+     * - 解析不出（缺 `path`、相对路径、带 `\0`）→ `null`，调用方**不弹审批**，直接让
+     *   工具报参数错误（上游这里返回 true ⇒ 先弹一次审批、点完只收到「path is required」）。
+     */
     @Test
-    fun pathOutsideWritableRootsFailsClosed() {
-        assertTrue(WorkspaceTools.pathOutsideWritableRoots(buildJsonObject { }, "path"))
-        assertTrue(WorkspaceTools.pathOutsideWritableRoots(args("path" to "relative"), "path"))
-        assertTrue(WorkspaceTools.pathOutsideWritableRoots(args("path" to "/etc/x"), "path"))
-        assertFalse(WorkspaceTools.pathOutsideWritableRoots(args("path" to "/workspace/x"), "path"))
+    fun pathOutsideWritableRootsIsTriState() {
+        assertNull(WorkspaceTools.pathOutsideWritableRoots(buildJsonObject { }, "path"))
+        assertNull(WorkspaceTools.pathOutsideWritableRoots(args("path" to "relative"), "path"))
+        assertEquals(true, WorkspaceTools.pathOutsideWritableRoots(args("path" to "/etc/x"), "path"))
+        assertEquals(false, WorkspaceTools.pathOutsideWritableRoots(args("path" to "/workspace/x"), "path"))
+    }
+
+    /** 闸门判据只认 `== true`；`null`（参数不可用）不进审批。 */
+    @Test
+    fun unusablePathArgumentsDoNotAskForApproval() {
+        fun gate(args: JsonObject) = WorkspaceTools.pathOutsideWritableRoots(args, "path") == true
+        assertFalse(gate(buildJsonObject { }))
+        assertFalse(gate(args("path" to "relative/x")))
+        assertTrue(gate(args("path" to "/etc/passwd")))
+        assertFalse(gate(args("path" to "/workspace/a.txt")))
     }
 
     // ---- 定义 ----

@@ -270,6 +270,11 @@ fun WorkspaceDetailScreen(
                         scope.launch {
                             withContext(Dispatchers.IO) { repo.setToolApproval(workspaceId, tool, value) }
                         }
+                        // 关掉审批开关的那一刻，屏上可能还挂着这个工具**之前**建出来的
+                        // 审批面板（用户 2026-09-16「我关闭了确认 为什么还有确认呀」）。
+                        // 用户的意图就是「这个工具以后不用问我」→ 把待审批的直接放行，
+                        // 别让它继续卡住这一轮生成。
+                        if (!value) container.toolApprovalService.approvePendingForTool(tool)
                     },
                 )
             } else {

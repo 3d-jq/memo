@@ -74,7 +74,7 @@ class ToolHandler(
                     val overrides = container.workspaceRepository
                         .get(workspaceId)?.toolApprovalOverrides().orEmpty()
                     val outsideRoots = (name == tools.WRITE_FILE || name == tools.EDIT_FILE) &&
-                        tools.pathOutsideWritableRoots(args, "path")
+                        tools.pathOutsideWritableRoots(args, "path") == true
                     if ((tools.resolveApproval(name, overrides) || outsideRoots) && approvalService != null) {
                         val approval = approvalService.requestApproval(
                             toolCallId = approvalIdFor(name, toolCallId),

@@ -1153,12 +1153,20 @@ fun ChatContent(
     /**
      * scroll_controller.dart:384-392 / 332-344 —— 收手 `autoScrollIdleSeconds` 秒后再按
      * 56 容差判一次贴底（收手那刻惯性还没滑完，或用户又挪回底部一点）。
+     *
+     * 恢复跟随的条件照原版 `refreshAutoStickToBottom()`：贴底 ∧ 不在滚动 ∧
+     * `enabled || _autoStickToBottom`。少了开关那一项的话，「自动回到底部」关掉之后
+     * 这条路径仍会把 `following` 翻回 true（恢复成上游 `:338-341` 之前的行为）。
      */
     fun armIdleStickTimer() {
         idleStickJob?.cancel()
         idleStickJob = coroutineScope.launch {
             kotlinx.coroutines.delay(autoScrollIdleSeconds.coerceAtLeast(1) * 1000L)
-            if (!pointerDown && !timelineListState.isScrollInProgress && tailAtBottom(56)) following = true
+            if (!pointerDown && !timelineListState.isScrollInProgress && tailAtBottom(56) &&
+                (autoScrollEnabled || following)
+            ) {
+                following = true
+            }
         }
     }
     // 位置判据（scroll_controller.dart:346-362「滚回底部立刻恢复」+ 24 容差）：只有

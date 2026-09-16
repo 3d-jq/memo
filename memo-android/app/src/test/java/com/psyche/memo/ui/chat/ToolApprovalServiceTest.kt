@@ -159,4 +159,28 @@ class ToolApprovalServiceTest {
         assertNull(service.pendingFor("", "conv-1"))
         assertFalse(service.isPending("", "conv-1"))
     }
+
+    /**
+     * 工作区详情页把某个工具的审批开关关掉 → 该工具**已弹出**的待审批直接放行，
+     * 别让它继续拦着这一轮生成（用户 2026-09-16「我关闭了确认 为什么还有确认呀」）。
+     * 只放行同名的，其他工具/其他会话的请求原样等着。
+     */
+    @Test
+    fun approvePendingForTool_releasesOnlyThatTool() = runBlocking {
+        val service = ToolApprovalService()
+        val shell = service.requestApproval("call-1", "workspace_shell", emptyArgs, "conv-1")
+        val shell2 = service.requestApproval("call-2", "workspace_shell", emptyArgs, "conv-2")
+        val write = service.requestApproval("call-3", "workspace_write_file", emptyArgs, "conv-1")
+
+        assertEquals(2, service.approvePendingForTool("workspace_shell"))
+
+        assertTrue(shell.await().approved)
+        assertTrue(shell2.await().approved)
+        assertFalse(write.isCompleted)
+        assertEquals(1, service.pendingRequests.value.size)
+        assertEquals("workspace_write_file", service.pendingRequests.value.single().toolName)
+        // 没有该工具的待审批时是 no-op。
+        assertEquals(0, service.approvePendingForTool("workspace_shell"))
+        assertEquals(1, service.pendingRequests.value.size)
+    }
 }
