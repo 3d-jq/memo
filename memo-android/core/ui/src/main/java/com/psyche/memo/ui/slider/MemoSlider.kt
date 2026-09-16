@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -50,6 +49,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.psyche.memo.ui.theme.LocalSemanticColors
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -148,21 +148,25 @@ fun MemoSlider(
                 }
             }
             // 单一手势循环同时管「点」与「拖」——之前拆成 `detectTapGestures` +
-            // `detectHorizontalDragGestures` 两个 pointerInput，两者会互相吃事件
-            // （用户 2026-09-16「好看是好看 但是怎么不能自由滑动呀」），而且拖动要等横向
-            // slop 越过才跟手，小幅调整像拖不动。现在：
-            //   ① 按下即把圆钮挪到手指处（SfSlider 同款），拖动全程跟手（不再有 slop 跳变）；
-            //   ② 只让纵向意图让位：纵向位移超过 touchSlop 就退出并把值**回滚**到按下时的值
-            //      （这样在可滚动的 sheet 里划过滑块不会误改数值）；
-            //   ③ 横向意图确立后才 consume，纵向滚动不受影响；
+            // `detectHorizontalDragGestures` 两个 pointerInput，两者会互相吃事件；后来一版又把
+            // slop 判据写成**每帧位移**，真机每帧只走几个像素、永远超不过 `touchSlop`，于是
+            // 只有按下那一下会改值（用户 2026-09-16「怎么是靠点击来的呀 是可以无级滑动那种呀」）。
+            // 现在：
+            //   ① 按下即把圆钮挪到手指处（SfSlider 同款），之后**每一帧都跟手**（无级滑动），
+            //      台阶只来自调用方本来就有的 stepSize/取整（与原版一致，不是手势造成的）；
+            //   ② slop 用**累计位移**判：纵向累计超过 `touchSlop` 且大于横向 → 让位给外面的
+            //      滚动容器，并把值**回滚**到按下前的值；
+            //   ③ 横向累计越过 `touchSlop` 后才 `consume`，纵向滚动不受影响；
             //   ④ 抬手统一回调 `onValueChangeFinished`（点按也算一次）。
             .pointerInput(enabled, start, end, steps, widthPx, thumbRadiusPx, rtl) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val valueAtDown = currentValue
+                    val startX = down.position.x
+                    val startY = down.position.y
                     dragging = true
-                    report(down.position.x)
+                    report(startX)
                     var horizontal = false
                     var cancelled = false
                     while (true) {
@@ -174,21 +178,19 @@ fun MemoSlider(
                             break
                         }
                         if (change.changedToUpIgnoreConsumed() || !change.pressed) break
-                        val delta = change.positionChange()
+                        // 累计位移，不是每帧位移（每帧位移判 slop 是上面那个 bug 的根因）。
+                        val totalX = change.position.x - startX
+                        val totalY = change.position.y - startY
                         if (!horizontal) {
-                            if (kotlin.math.abs(delta.y) > viewConfiguration.touchSlop) {
+                            if (abs(totalY) > viewConfiguration.touchSlop && abs(totalY) > abs(totalX)) {
                                 // 纵向意图：让给外面的滚动容器，值回滚。
                                 cancelled = true
                                 break
                             }
-                            if (kotlin.math.abs(delta.x) > viewConfiguration.touchSlop) {
-                                horizontal = true
-                            }
+                            if (abs(totalX) > viewConfiguration.touchSlop) horizontal = true
                         }
-                        if (horizontal) {
-                            change.consume()
-                            report(change.position.x)
-                        }
+                        if (horizontal) change.consume()
+                        report(change.position.x)
                     }
                     dragging = false
                     if (cancelled) onValueChange(valueAtDown)

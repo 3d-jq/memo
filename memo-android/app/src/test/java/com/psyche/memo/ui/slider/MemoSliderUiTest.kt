@@ -58,30 +58,37 @@ class MemoSliderUiTest {
     }
 
     /**
-     * 自由滑动：从轨道左端按下（按下即跟手）→ 分 6 步拖到中间，值必须**单调递增**且最终
-     * 落在手指处。修之前这里是「等横向 slop 越过才跟手」，小幅调整像拖不动。
+     * 无级滑动：从轨道左端按下（按下即跟手）→ **每步只走几个像素**（真机每帧的位移量）
+     * 连续拖到中段，值必须一路单调跟随。
+     *
+     * 这条是「怎么是靠点击来的呀」那个 bug 的回归判据：上一版 slop 判据写成了**每帧位移**，
+     * 每帧几像素永远超不过 `touchSlop`，于是只有按下那一下会改值 —— 而之前的测试每步跳 23px，
+     * 正好越过 slop，所以没抓到。
      */
     @Test
-    fun `drag follows the finger the whole way`() {
+    fun `drag follows the finger frame by frame`() {
         var value = -1f
         renderSlider(steps = 0, onValueChange = { value = it })
         val slider = compose.onNodeWithTag(MEMO_SLIDER_TAG)
 
-        slider.performTouchInput { down(Offset(10f, centerY)) }
-        assertEquals("按下即跟手（左端 ≈ 0）", 0f, value, 0.03f)
+        slider.performTouchInput { down(Offset(100f, centerY)) }
+        val afterDown = value
+        assertEquals("按下即跟手（x=100 → ≈0.32）", 0.32f, afterDown, 0.03f)
 
-        var previous = value
+        // 每步 4px（远小于 slop）：必须每步都跟。
+        var previous = afterDown
         var monotonic = true
-        for (step in 1..6) {
-            slider.performTouchInput {
-                moveTo(Offset(10f + (width - 20f) * step / 12f, centerY))
-            }
-            if (value < previous - 0.001f) monotonic = false
+        var movedEveryStep = true
+        for (step in 1..30) {
+            slider.performTouchInput { moveBy(Offset(4f, 0f)) }
+            if (value < previous - 0.0001f) monotonic = false
+            if (value - previous < 0.0001f) movedEveryStep = false
             previous = value
         }
-        assertTrue("拖动过程必须单调跟手（实际 $value）", monotonic)
-        // 6/12 = 正好一半行程 → 值 ≈ 0.5（圆钮行程两端各扣一个半径，误差给足）。
-        assertEquals("拖到中间 ≈ 0.5", 0.5f, value, 0.06f)
+        assertTrue("每一帧都要跟手（不是只有越过 slop 才跳一次）", movedEveryStep)
+        assertTrue("拖动过程必须单调", monotonic)
+        // 100 + 30*4 = 220 → (220-10)/280 ≈ 0.75
+        assertEquals("终点要落在手指处", 0.75f, value, 0.04f)
 
         slider.performTouchInput { up() }
     }
