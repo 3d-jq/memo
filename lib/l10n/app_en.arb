@@ -4268,5 +4268,16 @@
   "assistantGenerationDisabledHint": "The assistant only gets this tool while a service is selected.",
   "toolSchemaSettingsGroupWorkspace": "Workspace tools",
   "toolSchemaSettingsGroupSkill": "Skills",
-  "toolSchemaSettingsGroupGeneration": "Generation"
+  "toolSchemaSettingsGroupGeneration": "Generation",
+  "generationSheetPromptHint": "Describe the image you want",
+  "generationSheetPromptHintVideo": "Describe the video you want",
+  "generationSheetGenerate": "Generate",
+  "generationSheetGenerating": "Generating…",
+  "generationSheetFailed": "Generation failed: {message}",
+  "@generationSheetFailed": {
+    "placeholders": {
+      "message": { "type": "String" }
+    }
+  },
+  "generationSheetInserted": "Added to the conversation"
 }

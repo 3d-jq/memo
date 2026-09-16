@@ -3519,5 +3519,11 @@
   "assistantGenerationDisabledHint": "只有選了服務，助手才會拿到這個工具。",
   "toolSchemaSettingsGroupWorkspace": "工作區工具",
   "toolSchemaSettingsGroupSkill": "技能",
-  "toolSchemaSettingsGroupGeneration": "生成"
+  "toolSchemaSettingsGroupGeneration": "生成",
+  "generationSheetPromptHint": "描述你想要的畫面",
+  "generationSheetPromptHintVideo": "描述你想要的影片",
+  "generationSheetGenerate": "生成",
+  "generationSheetGenerating": "生成中…",
+  "generationSheetFailed": "生成失敗：{message}",
+  "generationSheetInserted": "已加入對話"
 }

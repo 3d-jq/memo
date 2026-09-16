@@ -16,13 +16,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,8 +35,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Activity
@@ -57,7 +52,6 @@ import com.psyche.memo.provider.generation.GenerationServiceTester
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
-import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.launch
 
 /**
@@ -76,7 +70,6 @@ fun GenerationServiceEditorScreen(
     onClose: (saved: Boolean) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
     val scope = rememberCoroutineScope()
     val repo = container.generationServices
     val isImage = kind == GenerationKind.IMAGE
@@ -185,14 +178,14 @@ fun GenerationServiceEditorScreen(
             SectionHeader(stringResource(R.string.generation_service_editor_basic_section), first = true)
             SectionCard {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    EditorField(
+                    SettingsTextField(
                         label = stringResource(R.string.generation_service_editor_name_label),
                         value = name,
                         onValueChange = { name = it },
                         hint = stringResource(R.string.generation_service_editor_name_hint),
                     )
                     Spacer(Modifier.height(10.dp))
-                    EditorField(
+                    SettingsTextField(
                         label = stringResource(R.string.generation_service_editor_base_url_label),
                         value = baseUrl,
                         onValueChange = { baseUrl = it },
@@ -200,7 +193,7 @@ fun GenerationServiceEditorScreen(
                         keyboardType = KeyboardType.Uri,
                     )
                     Spacer(Modifier.height(10.dp))
-                    EditorField(
+                    SettingsTextField(
                         label = stringResource(R.string.generation_service_editor_api_key_label),
                         value = apiKey,
                         onValueChange = { apiKey = it },
@@ -221,7 +214,7 @@ fun GenerationServiceEditorScreen(
                         },
                     )
                     Spacer(Modifier.height(10.dp))
-                    EditorField(
+                    SettingsTextField(
                         label = stringResource(R.string.generation_service_editor_model_label),
                         value = model,
                         onValueChange = { model = it },
@@ -237,7 +230,7 @@ fun GenerationServiceEditorScreen(
             SectionHeader(stringResource(R.string.generation_service_editor_params_section))
             SectionCard {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    EditorField(
+                    SettingsTextField(
                         label = stringResource(R.string.generation_service_editor_size_label),
                         value = size,
                         onValueChange = { size = it },
@@ -322,47 +315,6 @@ fun GenerationServiceEditorScreen(
                     Text(stringResource(R.string.custom_theme_cancel))
                 }
             },
-        )
-    }
-}
-
-/** 带标签的输入框（样式与搜索服务编辑器一致：surfaceFill + 聚焦 primary + r12）。 */
-@Composable
-private fun EditorField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    hint: String,
-    obscure: Boolean = false,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
-    Column(Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.72f)),
-        )
-        Spacer(Modifier.height(6.dp))
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            visualTransformation = if (obscure) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            placeholder = {
-                Text(hint, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f)))
-            },
-            trailingIcon = trailing,
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = semantic.surfaceFill,
-                unfocusedContainerColor = semantic.surfaceFill,
-                focusedBorderColor = cs.primary.copy(alpha = 0.5f),
-                unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
-            ),
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

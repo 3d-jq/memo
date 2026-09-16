@@ -108,6 +108,20 @@ KEYS_PHASE3 = [
 
 PLACEHOLDERS_PHASE3 = {}
 
+# 第 4 阶段：对话 ➕ 面板的生成入口（sheet 文案）。
+KEYS_PHASE4 = [
+    ("generationSheetPromptHint", "Describe the image you want", "描述你想要的画面", "描述你想要的畫面"),
+    ("generationSheetPromptHintVideo", "Describe the video you want", "描述你想要的视频", "描述你想要的影片"),
+    ("generationSheetGenerate", "Generate", "生成", "生成"),
+    ("generationSheetGenerating", "Generating…", "生成中…", "生成中…"),
+    ("generationSheetFailed", "Generation failed: {message}", "生成失败：{message}", "生成失敗：{message}"),
+    ("generationSheetInserted", "Added to the conversation", "已加入对话", "已加入對話"),
+]
+
+PLACEHOLDERS_PHASE4 = {
+    "generationSheetFailed": [("message", "String")],
+}
+
 # 需要占位符的键（key -> [(name, type)]）
 PLACEHOLDERS = {
     "generationServicesDeleteMessage": [("name", "String")],
@@ -149,6 +163,7 @@ def patch(file_name, locale_index):
     todo = [(k, en, zh, hant, PLACEHOLDERS) for (k, en, zh, hant) in KEYS]
     todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE2) for (k, en, zh, hant) in KEYS_PHASE2]
     todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE3) for (k, en, zh, hant) in KEYS_PHASE3]
+    todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE4) for (k, en, zh, hant) in KEYS_PHASE4]
     missing = [entry for entry in todo if ('"%s"' % entry[0]) not in text]
     if not missing:
         print('    %s already has every key — skipped' % file_name)

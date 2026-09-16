@@ -39,6 +39,7 @@ import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Paperclip
+import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.Workflow
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.theme.LocalSemanticColors
@@ -67,6 +68,9 @@ fun BottomToolsSheet(
     onOpenMcp: () -> Unit = {},
     /** 工作区入口 —— 开工作区选择面板（照 RikkaHub 的 `WorkspacePickerListItem`）。 */
     onOpenWorkspace: () -> Unit = {},
+    /** 生成图片 / 生成视频入口（自研功能）—— 开生成面板，结果直接进当前对话。 */
+    onOpenImageGeneration: () -> Unit = {},
+    onOpenVideoGeneration: () -> Unit = {},
     worldBooksAvailable: Boolean = false,
     onOpenWorldBook: () -> Unit = {},
     onOpenWorldBookPage: () -> Unit = {},
@@ -250,6 +254,52 @@ fun BottomToolsSheet(
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = stringResource(R.string.workspace_page_title),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+            }
+            // 生成图片 / 生成视频（自研功能）：两行入口，开各自的生成面板，
+            // 结果直接插进当前对话（图片 = 助手图片气泡、视频 = 文件卡交给系统播放器）。
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .clickable {
+                        Haptics.light(view)
+                        onOpenImageGeneration()
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Image, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.settings_page_image_generation),
+                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .clickable {
+                        Haptics.light(view)
+                        onOpenVideoGeneration()
+                    }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Video, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.settings_page_video_generation),
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
                     modifier = Modifier.weight(1f),
                 )

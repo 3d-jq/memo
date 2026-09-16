@@ -265,6 +265,8 @@ fun ChatContent(
     var showSearchSheet by remember { mutableStateOf(false) }
     var showToolsSheet by remember { mutableStateOf(false) }
     var showWorkspaceSheet by remember { mutableStateOf(false) }
+    /** 生成图片 / 生成视频面板（自研功能）；null = 关着，否则是 image / video。 */
+    var generationKind by remember { mutableStateOf<String?>(null) }
     var quickPhrases by remember { mutableStateOf<List<com.psyche.memo.data.model.QuickPhrase>?>(null) }
     var showInstructionSheet by remember { mutableStateOf(false) }
     var showWorldBookSheet by remember { mutableStateOf(false) }
@@ -1639,6 +1641,14 @@ fun ChatContent(
                 showToolsSheet = false
                 showWorkspaceSheet = true
             },
+            onOpenImageGeneration = {
+                showToolsSheet = false
+                generationKind = com.psyche.memo.data.model.GenerationKind.IMAGE
+            },
+            onOpenVideoGeneration = {
+                showToolsSheet = false
+                generationKind = com.psyche.memo.data.model.GenerationKind.VIDEO
+            },
             onOpenContextManagement = {
                 showToolsSheet = false
                 showContextSheet = true
@@ -1652,6 +1662,18 @@ fun ChatContent(
             container = container,
             onDismiss = { showWorkspaceSheet = false },
             onOpenManage = { showWorkspaceSheet = false; onOpenWorkspaces() },
+        )
+    }
+
+    // 生成图片 / 生成视频（自研功能）：面板里生成完直接插进当前对话。
+    generationKind?.let { kind ->
+        GenerationSheet(
+            container = container,
+            kind = kind,
+            onInsert = { prompt, images, video ->
+                vm.appendGeneratedMedia(prompt, images, video)
+            },
+            onDismiss = { generationKind = null },
         )
     }
 

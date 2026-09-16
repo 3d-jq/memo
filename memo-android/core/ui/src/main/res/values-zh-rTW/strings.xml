@@ -1004,6 +1004,12 @@
     <string name="generation_services_status_failed">連線失敗</string>
     <string name="generation_services_status_ok">可用</string>
     <string name="generation_services_status_untested">未測試</string>
+    <string name="generation_sheet_failed">生成失敗：%1$s</string>
+    <string name="generation_sheet_generate">生成</string>
+    <string name="generation_sheet_generating">生成中…</string>
+    <string name="generation_sheet_inserted">已加入對話</string>
+    <string name="generation_sheet_prompt_hint">描述你想要的畫面</string>
+    <string name="generation_sheet_prompt_hint_video">描述你想要的影片</string>
     <string name="haptics_section_generation">生成觸感</string>
     <string name="haptics_section_interaction">互動觸感</string>
     <string name="haptics_section_master">總開關</string>

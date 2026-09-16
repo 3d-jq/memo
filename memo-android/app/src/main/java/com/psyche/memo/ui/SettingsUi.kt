@@ -4,6 +4,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
@@ -601,6 +602,62 @@ fun SettingsSectionCard(content: @Composable () -> Unit) {
     ) { content() }
 }
 
+
+/**
+ * 带标签的输入框 —— 全站编辑页统一这一种：`surfaceFill` 底、聚焦时 primary 描边、
+ * 圆角 12、可选的行尾图标（如密钥的明文开关）。搜索服务编辑器、生成服务编辑器与
+ * 对话里的生成面板都用它，保证观感一致。
+ */
+@Composable
+internal fun SettingsTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    hint: String,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    obscure: Boolean = false,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    minLines: Int = 1,
+    maxLines: Int = 1,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
+    Column(modifier.fillMaxWidth()) {
+        if (label != null) {
+            Text(
+                text = label,
+                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface.copy(alpha = 0.72f)),
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+        androidx.compose.material3.OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = maxLines == 1,
+            minLines = minLines,
+            maxLines = maxLines,
+            visualTransformation = if (obscure) {
+                androidx.compose.ui.text.input.PasswordVisualTransformation()
+            } else {
+                androidx.compose.ui.text.input.VisualTransformation.None
+            },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboardType),
+            placeholder = {
+                Text(hint, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f)))
+            },
+            trailingIcon = trailing,
+            shape = RoundedCornerShape(12.dp),
+            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = semantic.surfaceFill,
+                unfocusedContainerColor = semantic.surfaceFill,
+                focusedBorderColor = cs.primary.copy(alpha = 0.5f),
+                unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.4f),
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
 
 /** AppSemanticColors.surfaceCard（AppSemanticColors.kt L29）。 */
 internal fun androidx.compose.material3.ColorScheme.surfaceCardColorCompat(): androidx.compose.ui.graphics.Color {
