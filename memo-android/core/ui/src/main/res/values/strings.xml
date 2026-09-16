@@ -223,6 +223,7 @@
     <string name="assistant_edit_outline_mode_title">Section list style</string>
     <string name="assistant_edit_page_basic_tab">Basic</string>
     <string name="assistant_edit_page_custom_tab">Custom</string>
+    <string name="assistant_edit_page_image_generation_tab">Image generation</string>
     <string name="assistant_edit_page_local_tools_tab">Local Tools</string>
     <string name="assistant_edit_page_mcp_tab">MCP</string>
     <string name="assistant_edit_page_memory_tab">Memory</string>
@@ -232,6 +233,7 @@
     <string name="assistant_edit_page_regex_tab">Regex Replace</string>
     <string name="assistant_edit_page_skills_tab">Skills</string>
     <string name="assistant_edit_page_title">Assistant</string>
+    <string name="assistant_edit_page_video_generation_tab">Video generation</string>
     <string name="assistant_edit_page_workspace_tab">Workspace</string>
     <string name="assistant_edit_parameter_disabled">Disabled (uses provider default)</string>
     <string name="assistant_edit_parameter_disabled2">Disabled (no restrictions)</string>
@@ -330,6 +332,12 @@ The timestamp is that message’s own send time, so it stays stable when you ret
     <string name="assistant_edit_write_scope_tool_default_assistant_subtitle">The model may pick global or this assistant; default is this assistant</string>
     <string name="assistant_edit_write_scope_tool_default_global">Model chooses (default global)</string>
     <string name="assistant_edit_write_scope_tool_default_global_subtitle">The model may pick global or this assistant; default is global</string>
+    <string name="assistant_generation_disabled_hint">The assistant only gets this tool while a service is selected.</string>
+    <string name="assistant_generation_no_services">No service yet. Add one in Settings → Image generation.</string>
+    <string name="assistant_generation_no_services_video">No service yet. Add one in Settings → Video generation.</string>
+    <string name="assistant_generation_override_hint">Leave empty to use the service value</string>
+    <string name="assistant_generation_overrides_section">Overrides</string>
+    <string name="assistant_generation_section">Service</string>
     <string name="assistant_provider_default_assistant_name">Default Assistant</string>
     <string name="assistant_provider_new_assistant_name">New Assistant</string>
     <string name="assistant_provider_sample_assistant_name">Sample Assistant</string>
@@ -2651,9 +2659,12 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="tool_schema_editor_page_title">Edit description</string>
     <string name="tool_schema_settings_cancel">Cancel</string>
     <string name="tool_schema_settings_description_label">Description</string>
+    <string name="tool_schema_settings_group_generation">Generation</string>
     <string name="tool_schema_settings_group_local">Device tools</string>
     <string name="tool_schema_settings_group_memory">Memory</string>
     <string name="tool_schema_settings_group_search">Search</string>
+    <string name="tool_schema_settings_group_skill">Skills</string>
+    <string name="tool_schema_settings_group_workspace">Workspace tools</string>
     <string name="tool_schema_settings_memory_lang_note">Memory tool defaults follow the memory prompt language. A custom description is stored once per tool and will not switch when you change that language.</string>
     <string name="tool_schema_settings_modified">Modified</string>
     <string name="tool_schema_settings_page_title">Tool Descriptions</string>

@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Activity
 import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.Eye
+import com.composables.icons.lucide.EyeOff
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Minus
 import com.composables.icons.lucide.Plus
@@ -205,12 +207,16 @@ fun GenerationServiceEditorScreen(
                         hint = "sk-…",
                         obscure = !showKey,
                         trailing = {
-                            Text(
-                                text = if (showKey) "🙈" else "👁",
-                                fontSize = 16.sp,
+                            // 明文/密文切换：用 Lucide 的 Eye / EyeOff（项目统一图标），
+                            // 别用 emoji（2026-09-16 用户点名）。
+                            Icon(
+                                if (showKey) Lucide.EyeOff else Lucide.Eye,
+                                contentDescription = null,
+                                tint = cs.onSurface.copy(alpha = 0.7f),
                                 modifier = Modifier
                                     .clickable { showKey = !showKey }
-                                    .padding(end = 12.dp),
+                                    .padding(horizontal = 4.dp)
+                                    .size(20.dp),
                             )
                         },
                     )

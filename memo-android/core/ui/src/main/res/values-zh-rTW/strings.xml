@@ -223,6 +223,7 @@
     <string name="assistant_edit_outline_mode_title">二級列表樣式</string>
     <string name="assistant_edit_page_basic_tab">基礎設定</string>
     <string name="assistant_edit_page_custom_tab">自訂請求</string>
+    <string name="assistant_edit_page_image_generation_tab">生成圖片</string>
     <string name="assistant_edit_page_local_tools_tab">本機工具</string>
     <string name="assistant_edit_page_mcp_tab">MCP</string>
     <string name="assistant_edit_page_memory_tab">記憶</string>
@@ -232,6 +233,7 @@
     <string name="assistant_edit_page_regex_tab">正則替換</string>
     <string name="assistant_edit_page_skills_tab">技能</string>
     <string name="assistant_edit_page_title">助理</string>
+    <string name="assistant_edit_page_video_generation_tab">生成影片</string>
     <string name="assistant_edit_page_workspace_tab">工作區</string>
     <string name="assistant_edit_parameter_disabled">已關閉（使用服務商預設）</string>
     <string name="assistant_edit_parameter_disabled2">已關閉（無限制）</string>
@@ -330,6 +332,12 @@
     <string name="assistant_edit_write_scope_tool_default_assistant_subtitle">模型可選擇全域或本助手，缺省寫入本助手</string>
     <string name="assistant_edit_write_scope_tool_default_global">模型自選（預設全域）</string>
     <string name="assistant_edit_write_scope_tool_default_global_subtitle">模型可選擇全域或本助手，缺省寫入全域</string>
+    <string name="assistant_generation_disabled_hint">只有選了服務，助手才會拿到這個工具。</string>
+    <string name="assistant_generation_no_services">還沒有服務。先到「設定 → 生成圖片」裡新增。</string>
+    <string name="assistant_generation_no_services_video">還沒有服務。先到「設定 → 生成影片」裡新增。</string>
+    <string name="assistant_generation_override_hint">留空用服務裡的值</string>
+    <string name="assistant_generation_overrides_section">參數覆寫</string>
+    <string name="assistant_generation_section">服務</string>
     <string name="assistant_provider_default_assistant_name">預設助理</string>
     <string name="assistant_provider_new_assistant_name">新助理</string>
     <string name="assistant_provider_sample_assistant_name">範例助理</string>
@@ -2651,9 +2659,12 @@
     <string name="tool_schema_editor_page_title">編輯描述</string>
     <string name="tool_schema_settings_cancel">取消</string>
     <string name="tool_schema_settings_description_label">描述</string>
+    <string name="tool_schema_settings_group_generation">生成</string>
     <string name="tool_schema_settings_group_local">本機工具</string>
     <string name="tool_schema_settings_group_memory">記憶</string>
     <string name="tool_schema_settings_group_search">搜尋</string>
+    <string name="tool_schema_settings_group_skill">技能</string>
+    <string name="tool_schema_settings_group_workspace">工作區工具</string>
     <string name="tool_schema_settings_memory_lang_note">記憶工具的預設描述會隨記憶提示語言在中/英之間切換。自訂描述依工具名只存一份，切換語言後不會跟著變。</string>
     <string name="tool_schema_settings_modified">已修改</string>
     <string name="tool_schema_settings_page_title">工具描述</string>

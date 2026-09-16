@@ -46,12 +46,14 @@ import com.composables.icons.lucide.EthernetPort
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.HardDrive
+import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.ListTree
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.RotateCcw
 import com.composables.icons.lucide.Settings2
 import com.composables.icons.lucide.Terminal
+import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.Wrench
 import com.composables.icons.lucide.Zap
 import com.psyche.memo.AppContainerImpl
@@ -80,6 +82,9 @@ enum class AssistantEditTab(val id: String, val labelRes: Int, val icon: ImageVe
     LOCAL_TOOLS("localTools", UiR.string.assistant_edit_page_local_tools_tab, Lucide.Wrench),
     SKILLS("skills", UiR.string.assistant_edit_page_skills_tab, Lucide.Puzzle),
     WORKSPACE("workspace", UiR.string.assistant_edit_page_workspace_tab, Lucide.HardDrive),
+    /** 生成服务（自研功能）：图片/视频各一个 tab。 */
+    IMAGE_GENERATION("imageGeneration", UiR.string.assistant_edit_page_image_generation_tab, Lucide.Image),
+    VIDEO_GENERATION("videoGeneration", UiR.string.assistant_edit_page_video_generation_tab, Lucide.Video),
     MCP("mcp", UiR.string.assistant_edit_page_mcp_tab, Lucide.Terminal),
     QUICK_PHRASE("quickPhrase", UiR.string.assistant_edit_page_quick_phrase_tab, Lucide.Zap),
     CUSTOM("custom", UiR.string.assistant_edit_page_custom_tab, Lucide.EthernetPort),
@@ -93,7 +98,7 @@ enum class AssistantEditTab(val id: String, val labelRes: Int, val icon: ImageVe
 /** `defaultAssistantEditTabIds` — the display order when nothing is saved. */
 val DEFAULT_ASSISTANT_EDIT_TAB_ORDER: List<String> = listOf(
     "basic", "prompts", "memory", "quickPhrase", "custom", "regex", "localTools", "skills",
-    "workspace", "mcp",
+    "workspace", "imageGeneration", "videoGeneration", "mcp",
 )
 
 /**

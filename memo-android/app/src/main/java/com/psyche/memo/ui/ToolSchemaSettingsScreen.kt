@@ -344,6 +344,9 @@ fun ToolSchemaSettingsScreen(
                                 BuiltInToolGroup.SEARCH -> UiR.string.tool_schema_settings_group_search
                                 BuiltInToolGroup.MEMORY -> UiR.string.tool_schema_settings_group_memory
                                 BuiltInToolGroup.LOCAL -> UiR.string.tool_schema_settings_group_local
+                                BuiltInToolGroup.SKILL -> UiR.string.tool_schema_settings_group_skill
+                                BuiltInToolGroup.WORKSPACE -> UiR.string.tool_schema_settings_group_workspace
+                                BuiltInToolGroup.GENERATION -> UiR.string.tool_schema_settings_group_generation
                             },
                         ),
                         modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 6.dp),

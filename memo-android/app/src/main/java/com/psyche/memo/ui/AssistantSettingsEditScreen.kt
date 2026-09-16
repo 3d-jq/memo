@@ -264,6 +264,19 @@ private fun AssistantEditTabContent(
             assistant = assistant,
             onEdit = onEdit,
         )
+        // 生成服务（自研功能）：两个 tab 共用一份实现，靠 kind 区分。
+        AssistantEditTab.IMAGE_GENERATION.id -> AssistantEditGenerationTab(
+            container = container,
+            kind = com.psyche.memo.data.model.GenerationKind.IMAGE,
+            assistant = assistant,
+            onEdit = onEdit,
+        )
+        AssistantEditTab.VIDEO_GENERATION.id -> AssistantEditGenerationTab(
+            container = container,
+            kind = com.psyche.memo.data.model.GenerationKind.VIDEO,
+            assistant = assistant,
+            onEdit = onEdit,
+        )
         AssistantEditTab.MCP.id -> AssistantEditMcpTab(
             container = container,
             assistant = assistant,

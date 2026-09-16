@@ -2544,7 +2544,15 @@ class ChatViewModel(
             val parameters = fn["parameters"] as? JsonObject
             out.add(LlmToolSpec(specName, description, parameters?.toString() ?: "{}"))
         }
-        return out
+        // 「设置 → 工具描述」里改过的描述套上去（tool_handler_service.dart:284-286 的
+        // `ToolSchemaOverrides.apply`）。**只作用于内置工具名** —— MCP 工具是动态的，
+        // 名字不在目录里，原样保留。此前这个键只有写没有读，改了完全不起作用。
+        val schemaLang = com.psyche.memo.ui.MemorySettingsState(container).resolvedPromptLang()
+        return com.psyche.memo.provider.ToolSchemaOverrides.apply(
+            definitions = out,
+            overrides = com.psyche.memo.ui.readOverrides(container),
+            builtInNames = com.psyche.memo.ui.BuiltInToolCatalog.allBuiltInNames(schemaLang),
+        )
     }
 
     /**

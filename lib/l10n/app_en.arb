@@ -4257,5 +4257,16 @@
     }
   },
   "generationServiceEditorRequired": "Required",
-  "generationServiceEditorSaved": "Saved"
+  "generationServiceEditorSaved": "Saved",
+  "assistantEditPageImageGenerationTab": "Image generation",
+  "assistantEditPageVideoGenerationTab": "Video generation",
+  "assistantGenerationSection": "Service",
+  "assistantGenerationOverridesSection": "Overrides",
+  "assistantGenerationOverrideHint": "Leave empty to use the service value",
+  "assistantGenerationNoServices": "No service yet. Add one in Settings → Image generation.",
+  "assistantGenerationNoServicesVideo": "No service yet. Add one in Settings → Video generation.",
+  "assistantGenerationDisabledHint": "The assistant only gets this tool while a service is selected.",
+  "toolSchemaSettingsGroupWorkspace": "Workspace tools",
+  "toolSchemaSettingsGroupSkill": "Skills",
+  "toolSchemaSettingsGroupGeneration": "Generation"
 }

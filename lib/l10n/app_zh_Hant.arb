@@ -3508,5 +3508,16 @@
   "generationServiceEditorTestNoModels": "介面可達，但沒有 /models 清單",
   "generationServiceEditorTestFailed": "連線失敗：{message}",
   "generationServiceEditorRequired": "必填",
-  "generationServiceEditorSaved": "已儲存"
+  "generationServiceEditorSaved": "已儲存",
+  "assistantEditPageImageGenerationTab": "生成圖片",
+  "assistantEditPageVideoGenerationTab": "生成影片",
+  "assistantGenerationSection": "服務",
+  "assistantGenerationOverridesSection": "參數覆寫",
+  "assistantGenerationOverrideHint": "留空用服務裡的值",
+  "assistantGenerationNoServices": "還沒有服務。先到「設定 → 生成圖片」裡新增。",
+  "assistantGenerationNoServicesVideo": "還沒有服務。先到「設定 → 生成影片」裡新增。",
+  "assistantGenerationDisabledHint": "只有選了服務，助手才會拿到這個工具。",
+  "toolSchemaSettingsGroupWorkspace": "工作區工具",
+  "toolSchemaSettingsGroupSkill": "技能",
+  "toolSchemaSettingsGroupGeneration": "生成"
 }

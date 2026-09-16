@@ -3508,5 +3508,16 @@
   "generationServiceEditorTestNoModels": "接口可达，但没有 /models 列表",
   "generationServiceEditorTestFailed": "连接失败：{message}",
   "generationServiceEditorRequired": "必填",
-  "generationServiceEditorSaved": "已保存"
+  "generationServiceEditorSaved": "已保存",
+  "assistantEditPageImageGenerationTab": "生成图片",
+  "assistantEditPageVideoGenerationTab": "生成视频",
+  "assistantGenerationSection": "服务",
+  "assistantGenerationOverridesSection": "参数覆盖",
+  "assistantGenerationOverrideHint": "留空用服务里的值",
+  "assistantGenerationNoServices": "还没有服务。先到「设置 → 生成图片」里添加。",
+  "assistantGenerationNoServicesVideo": "还没有服务。先到「设置 → 生成视频」里添加。",
+  "assistantGenerationDisabledHint": "只有选了服务，助手才会拿到这个工具。",
+  "toolSchemaSettingsGroupWorkspace": "工作区工具",
+  "toolSchemaSettingsGroupSkill": "技能",
+  "toolSchemaSettingsGroupGeneration": "生成"
 }

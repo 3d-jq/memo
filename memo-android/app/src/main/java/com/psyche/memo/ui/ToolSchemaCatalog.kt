@@ -1,5 +1,7 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.provider.SkillTools
+import com.psyche.memo.provider.workspace.WorkspaceTools
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -66,7 +68,7 @@ data class ToolParamDescriptor(
     val defaultDescription: String?,
 )
 
-enum class BuiltInToolGroup { SEARCH, MEMORY, LOCAL }
+enum class BuiltInToolGroup { SEARCH, MEMORY, LOCAL, SKILL, WORKSPACE, GENERATION }
 
 /** built_in_tool_catalog.dart BuiltInToolCatalogEntry (schema as JSON). */
 data class BuiltInToolCatalogEntry(
@@ -124,8 +126,40 @@ object BuiltInToolCatalog {
             if (!isAvailableOnThisPlatform(name)) continue
             out.add(BuiltInToolCatalogEntry(name, localDefinition(name), BuiltInToolGroup.LOCAL))
         }
+        // Memo 自己加的两类工具（上游没有）：Agent Skills 与沙箱工作区。
+        // 用户 2026-09-16：「设置里面的工具描述是不是没有跟新还有工作区工具呀」——
+        // 之前这个目录只列了搜索/记忆/本地工具，工作区和技能的工具在「工具描述」页
+        // 根本看不到，describeParams 也拿不到它们的参数。
+        for (spec in SkillTools.catalogDefinitions()) {
+            out.add(BuiltInToolCatalogEntry(spec.name, definitionOf(spec), BuiltInToolGroup.SKILL))
+        }
+        for (spec in WorkspaceTools.catalogDefinitions()) {
+            out.add(BuiltInToolCatalogEntry(spec.name, definitionOf(spec), BuiltInToolGroup.WORKSPACE))
+        }
         return out
     }
+
+    /** 运行时工具（[LlmToolSpec]）→ 目录里的 `{"type":"function","function":{…}}` JSON。 */
+    fun definitionOf(spec: com.psyche.memo.llm.client.LlmToolSpec): JsonObject {
+        val parameters = runCatching { Json.parseToJsonElement(spec.inputSchemaJson) as? JsonObject }
+            .getOrNull()
+            ?: JsonObject(emptyMap())
+        return kotlinx.serialization.json.buildJsonObject {
+            put("type", JsonPrimitive("function"))
+            put(
+                "function",
+                kotlinx.serialization.json.buildJsonObject {
+                    put("name", JsonPrimitive(spec.name))
+                    put("description", JsonPrimitive(spec.description))
+                    put("parameters", parameters)
+                },
+            )
+        }
+    }
+
+    /** 目录里全部内置工具名（工具描述覆盖只认这些名字，MCP 工具不动）。 */
+    fun allBuiltInNames(lang: MemoryPromptLang): Set<String> =
+        entries(lang).map { it.name }.toSet()
 
     /** ToolSchemaOverrides.describeParams — walk the default schema. */
     fun describeParams(def: JsonObject): List<ToolParamDescriptor> {

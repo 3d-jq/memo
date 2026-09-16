@@ -43,14 +43,20 @@ object SkillTools {
         allSkills: List<SkillMetadata>,
     ): List<LlmToolSpec> {
         if (availableSkills(enabledSkills, allSkills).isEmpty()) return emptyList()
-        return listOf(
-            LlmToolSpec(
-                name = USE_SKILL,
-                description = DESCRIPTION,
-                inputSchemaJson = parametersJson(),
-            ),
-        )
+        return catalogDefinitions()
     }
+
+    /**
+     * 不依赖「助手开了哪些技能 / 磁盘上有没有」的定义副本 ——
+     * 设置 →「工具描述」的工具目录要用它列条目（那边是全局一份，不该跟着某个助手变）。
+     */
+    fun catalogDefinitions(): List<LlmToolSpec> = listOf(
+        LlmToolSpec(
+            name = USE_SKILL,
+            description = DESCRIPTION,
+            inputSchemaJson = parametersJson(),
+        ),
+    )
 
     /** 上游 `Tool.systemPrompt` 的等价物；没有可用技能时返回 null（不注入空块）。 */
     fun systemPromptBlock(

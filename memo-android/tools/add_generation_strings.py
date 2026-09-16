@@ -73,7 +73,42 @@ KEYS = [
     ("generationServiceEditorSaved", "Saved", "已保存", "已儲存"),
 ]
 
-# key -> [(placeholder, type)]
+# 第 2 阶段（助手编辑页两个 tab）。同一个脚本继续追加，已存在的键自动跳过。
+KEYS_PHASE2 = [
+    ("assistantEditPageImageGenerationTab", "Image generation", "生成图片", "生成圖片"),
+    ("assistantEditPageVideoGenerationTab", "Video generation", "生成视频", "生成影片"),
+    ("assistantGenerationSection", "Service", "服务", "服務"),
+    ("assistantGenerationOverridesSection", "Overrides", "参数覆盖", "參數覆寫"),
+    ("assistantGenerationOverrideHint",
+     "Leave empty to use the service value",
+     "留空用服务里的值",
+     "留空用服務裡的值"),
+    ("assistantGenerationNoServices",
+     "No service yet. Add one in Settings → Image generation.",
+     "还没有服务。先到「设置 → 生成图片」里添加。",
+     "還沒有服務。先到「設定 → 生成圖片」裡新增。"),
+    ("assistantGenerationNoServicesVideo",
+     "No service yet. Add one in Settings → Video generation.",
+     "还没有服务。先到「设置 → 生成视频」里添加。",
+     "還沒有服務。先到「設定 → 生成影片」裡新增。"),
+    ("assistantGenerationDisabledHint",
+     "The assistant only gets this tool while a service is selected.",
+     "只有选了服务，助手才会拿到这个工具。",
+     "只有選了服務，助手才會拿到這個工具。"),
+]
+
+PLACEHOLDERS_PHASE2 = {}
+
+# 第 3 阶段：工具描述页的新分组标题（工作区/技能/生成工具）。
+KEYS_PHASE3 = [
+    ("toolSchemaSettingsGroupWorkspace", "Workspace tools", "工作区工具", "工作區工具"),
+    ("toolSchemaSettingsGroupSkill", "Skills", "技能", "技能"),
+    ("toolSchemaSettingsGroupGeneration", "Generation", "生成", "生成"),
+]
+
+PLACEHOLDERS_PHASE3 = {}
+
+# 需要占位符的键（key -> [(name, type)]）
 PLACEHOLDERS = {
     "generationServicesDeleteMessage": [("name", "String")],
     "generationServiceEditorSecondsValue": [("count", "int")],
@@ -92,13 +127,13 @@ def esc(text):
     return text.replace('\\', '\\\\').replace('"', '\\"')
 
 
-def block_for(key, value, locale_index):
+def block_for(key, value, locale_index, placeholders):
     lines = ['  "%s": "%s"' % (key, esc(value))]
-    if locale_index == 1 and key in PLACEHOLDERS:
+    if locale_index == 1 and key in placeholders:
         lines[-1] += ','
         lines.append('  "@%s": {' % key)
         lines.append('    "placeholders": {')
-        ph = PLACEHOLDERS[key]
+        ph = placeholders[key]
         for i, (name, ptype) in enumerate(ph):
             comma = ',' if i != len(ph) - 1 else ''
             lines.append('      "%s": { "type": "%s" }%s' % (name, ptype, comma))
@@ -111,9 +146,12 @@ def patch(file_name, locale_index):
     path = os.path.join(L10N, file_name)
     with io.open(path, 'r', encoding='utf-8') as fh:
         text = fh.read()
-    existing = [line for line in text.splitlines() if '"%s"' % KEYS[0][0] in line]
-    if existing:
-        print('    %s already has the new keys — skipped' % file_name)
+    todo = [(k, en, zh, hant, PLACEHOLDERS) for (k, en, zh, hant) in KEYS]
+    todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE2) for (k, en, zh, hant) in KEYS_PHASE2]
+    todo += [(k, en, zh, hant, PLACEHOLDERS_PHASE3) for (k, en, zh, hant) in KEYS_PHASE3]
+    missing = [entry for entry in todo if ('"%s"' % entry[0]) not in text]
+    if not missing:
+        print('    %s already has every key — skipped' % file_name)
         return
     stripped = text.rstrip()
     assert stripped.endswith('}'), 'unexpected ARB tail in %s' % file_name
@@ -121,15 +159,16 @@ def patch(file_name, locale_index):
     if not head.endswith(','):
         head += ','
     out_lines = [head]
-    for i, entry in enumerate(KEYS):
-        new_lines = block_for(entry[0], entry[locale_index], locale_index)
-        if i != len(KEYS) - 1:
+    for i, (key, en, zh, hant, placeholders) in enumerate(missing):
+        value = (en, zh, hant)[locale_index - 1]
+        new_lines = block_for(key, value, locale_index, placeholders)
+        if i != len(missing) - 1:
             new_lines[-1] += ','
         out_lines.extend(new_lines)
     out_lines.append('}')
     with io.open(path, 'w', encoding='utf-8', newline='\n') as fh:
         fh.write('\n'.join(out_lines) + '\n')
-    print('    %s: +%d keys' % (file_name, len(KEYS)))
+    print('    %s: +%d keys' % (file_name, len(missing)))
 
 
 def main():

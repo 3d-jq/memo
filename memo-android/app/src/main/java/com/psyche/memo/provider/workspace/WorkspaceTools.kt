@@ -61,6 +61,14 @@ object WorkspaceTools {
     /** 助手没绑工作区（`workspaceId` 为空）时整颗不提供。 */
     fun buildDefinitions(workspaceId: String?, cwd: String? = null): List<LlmToolSpec> {
         if (workspaceId.isNullOrBlank()) return emptyList()
+        return catalogDefinitions(cwd)
+    }
+
+    /**
+     * 不依赖「助手绑没绑工作区」的定义副本 —— 设置 →「工具描述」的工具目录用它列条目。
+     * [cwd] 只影响 `workspace_shell` 描述里那句「默认工作目录」，目录里用默认值。
+     */
+    fun catalogDefinitions(cwd: String? = null): List<LlmToolSpec> {
         val defaultCwd = shellCwd(cwd)
         return listOf(
             LlmToolSpec(READ_FILE, READ_DESCRIPTION, readParametersJson()),
