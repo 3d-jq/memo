@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -533,6 +534,9 @@ fun ThinkingShimmerText(
     }
 }
 
+/** VoiceWaveform 的布局断言锚点（波形槽位高度回归测试用）。 */
+const val VOICE_WAVEFORM_TAG = "voice_waveform"
+
 /**
  * 语音录音波形 —— 1:1 移植 chat_input_bar.dart `_VoiceWaveformPainter`
  * (CIB:3400-3459)：条宽 3、条距 3.5，最新样本靠右、旧样本向左滚动；
@@ -546,7 +550,13 @@ fun VoiceWaveform(
     color: Color,
     modifier: Modifier = Modifier,
 ) {
-    Canvas(modifier = modifier) {
+    // 高度兜底（上游 StackFit.expand 语义）：Canvas 本体是 Spacer，高度约束
+    // 宽松时测量为 0 → maxH=0 → 所有条贴 2px，「波形不动」。兜底后组件在
+    // 只有 fillMaxWidth 的容器里也有真实槽高；调用方显式 .height() 时以其为准。
+    val resolved = modifier
+        .testTag(VOICE_WAVEFORM_TAG)
+        .height(com.psyche.memo.ui.ChatStyleSpec.WAVE_SLOT_HEIGHT_DP.dp)
+    Canvas(modifier = resolved) {
         val barW = ChatStyleSpec.WAVE_BAR_WIDTH_DP.dp.toPx()
         val barGap = ChatStyleSpec.WAVE_BAR_GAP_DP.dp.toPx()
         val step = barW + barGap

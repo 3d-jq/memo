@@ -243,6 +243,15 @@ object ChatStyleSpec {
     const val WAVE_MIN_BAR_HEIGHT_DP = 2f
 
     /**
+     * 录音行波形槽位高度 —— 上游容器的 SizedBox(height: 32)（CIB:866-870），且
+     * AnimatedSwitcher 用 StackFit.expand 把内容撑满。Compose 的 Canvas 本体是
+     * Spacer：高度约束宽松（min=0）时测量为 0 → maxH=0 → 所有条贴 2px 最小值，
+     * 视觉就是「波形出现但永远不动」（用户 2026-09-16 二次实测）。组件内以此
+     * 兜底高度；调用方显式给 height 时其约束优先生效。
+     */
+    const val WAVE_SLOT_HEIGHT_DP = 32f
+
+    /**
      * Capsule cross-section envelope (CIB:3433-3446): with r = maxBarHeight/2,
      * return sqrt(max(0, r² − (r − dCenter)²)) / r when dCenter < r else 1.
      * [dCenter] is the bar-center distance to the nearest edge in px.

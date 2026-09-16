@@ -83,7 +83,14 @@ internal class AsrRecorder(
     }
 
     companion object {
-        /** PCM16 的 RMS 归一到 0..1（32767 满量程）。 */
+        /**
+         * PCM16 的 RMS → **dB 归一化**到 0..1（驱动输入栏的波形）。
+         *
+         * 上游的 `soundLevel` 来自 `record` 包，是分贝刻度上的 0..1（静音 ≈ -60dB → 0，
+         * 正常说话 ≈ -20~-10dB → 0.67~0.83）。我们最初用线性 RMS/32767，正常说话只有
+         * 0.02~0.2 —— 条子几乎贴着最小高度，肉眼就是「波形不动」（用户 2026-09-16）。
+         * 这里按 `20·log10(rms/满量程)` 折成 dB 再线性抬回 0..1。
+         */
         internal fun levelOf(pcm: ByteArray): Float {
             if (pcm.size < 2) return 0f
             var sum = 0.0
@@ -97,7 +104,9 @@ internal class AsrRecorder(
             }
             if (count == 0) return 0f
             val rms = sqrt(sum / count)
-            return (rms / Short.MAX_VALUE).toFloat().coerceIn(0f, 1f)
+            val db = 20.0 * kotlin.math.log10(maxOf(rms, 1.0) / Short.MAX_VALUE)
+            val normalized = ((db.coerceIn(-60.0, 0.0) + 60.0) / 60.0)
+            return normalized.toFloat()
         }
     }
 }

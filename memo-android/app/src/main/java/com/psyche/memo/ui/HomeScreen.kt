@@ -4136,6 +4136,12 @@ private fun ChatVoiceRecordingRow(
 ) {
     // CIB:854-855 canFinish = isListening && !_finishingVoice。
     val canFinish = state is com.psyche.memo.ui.chat.VoiceInputController.State.Listening
+    // 触感（项目惯例：Haptics + LocalHapticsSettings 门控）。三键轻点反馈。
+    val hapticsView = androidx.compose.ui.platform.LocalView.current
+    val hapticsSettings = com.psyche.memo.ui.LocalHapticsSettings.current
+    fun tapHaptic() {
+        if (hapticsSettings.globalEnabled) com.psyche.memo.common.Haptics.light(hapticsView)
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -4144,7 +4150,10 @@ private fun ChatVoiceRecordingRow(
         InputIcon(
             Lucide.X,
             stringResource(UiR.string.chat_input_bar_voice_cancel_tooltip),
-            onClick = { voice.cancel() },
+            onClick = {
+                tapHaptic()
+                voice.cancel()
+            },
             cs = cs,
             enabled = canFinish,
         )
@@ -4183,7 +4192,10 @@ private fun ChatVoiceRecordingRow(
             else ChatStyleSpec.COMPACT_ICON_ALPHA_LIGHT,
         )
         IconButton(
-            onClick = { voice.finish { text -> onFinalText(text, false) } },
+            onClick = {
+                tapHaptic()
+                voice.finish { text -> onFinalText(text, false) }
+            },
             enabled = canFinish,
             modifier = Modifier.size(32.dp),
         ) {
@@ -4205,7 +4217,10 @@ private fun ChatVoiceRecordingRow(
                     CircleShape,
                 )
                 .clickable(enabled = canFinish) {
-                    voice.finish { text -> onFinalText(text, true) }
+                    // 用户 2026-09-16：「对勾改成显示在输入框里面，不要直接发送」——
+                    // 识别结果一律回填输入框，发送交给用户按常规发送键。
+                    tapHaptic()
+                    voice.finish { text -> onFinalText(text, false) }
                 },
             contentAlignment = Alignment.Center,
         ) {

@@ -60,9 +60,26 @@ class VoiceInputController(
     private var cloudSession: com.psyche.memo.provider.CloudAsrSession? = null
     private var cloudWorker: Thread? = null
     private val cloudQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
-    @Volatile private var cloudRunning = false
     @Volatile private var cloudTranscript = ""
     private var mainHandler: android.os.Handler? = null
+
+    /**
+     * **每代会话独立的取消标志**（原全局 `cloudRunning` 有跨代竞态：停止后 UI 立即回
+     * Idle，用户马上再点麦克风会开出新一代会话，老一代收尾线程把全局标志翻 false
+     * 会误杀新一代的 worker 循环）。worker 循环、isCancelled、回调守卫都认它。
+     */
+    private var cloudActive: java.util.concurrent.atomic.AtomicBoolean? = null
+
+    /** 会话工厂 —— 测试注入 fake 用；null 时走生产的
+     * [com.psyche.memo.provider.CloudAsrService.startSession]。 */
+    internal var sessionFactory: (
+        (okhttp3.OkHttpClient, com.psyche.memo.ui.AsrServiceOptions) -> com.psyche.memo.provider.CloudAsrSession?
+    )? = null
+
+    /** 采集器工厂 —— 测试注入 fake 用（Robolectric 下真 AudioRecord 不可靠）。 */
+    internal var recorderFactory: (
+        (Int, (ByteArray) -> Unit, (Float) -> Unit) -> AsrRecorder?
+    )? = null
 
     val isActive: Boolean
         get() = _state.value != State.Idle
@@ -92,36 +109,38 @@ class VoiceInputController(
         options: com.psyche.memo.ui.AsrServiceOptions,
         client: okhttp3.OkHttpClient,
     ) {
+        // 本代独立取消标志：isCancelled / worker 循环 / partial 守卫全认它。
+        val active = java.util.concurrent.atomic.AtomicBoolean(true)
+        cloudActive = active
         val session = runCatching {
-            com.psyche.memo.provider.CloudAsrService.startSession(
-                client,
-                options,
-                isCancelled = { !cloudRunning },
-            )
+            sessionFactory?.invoke(client, options)
+                ?: com.psyche.memo.provider.CloudAsrService.startSession(
+                    client,
+                    options,
+                    isCancelled = { !active.get() },
+                )
         }.getOrNull()
         if (session == null) {
             destroy()
             return
         }
         cloudSession = session
-        cloudRunning = true
         _state.value = State.Listening("")
         session.observePartials(
             onPartial = { text ->
                 cloudTranscript = text
-                main().post { if (cloudRunning) _state.value = State.Listening(text) }
+                main().post { if (active.get()) _state.value = State.Listening(text) }
             },
             onError = {
                 // 终态错误：回 Idle（原版把错误塞进 partial 的 error 通道，UI 只收起录音行）。
                 main().post {
-                    cloudRunning = false
-                    destroy()
+                    if (active.get()) destroy()
                 }
             },
         )
         // 队列消费者：串行把音频喂给会话（会话内部按 provider 攒段发 HTTP）。
         cloudWorker = Thread {
-            while (cloudRunning) {
+            while (active.get()) {
                 val chunk = runCatching { cloudQueue.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS) }
                     .getOrNull() ?: continue
                 runCatching { session.addPcm16(chunk) }
@@ -133,15 +152,18 @@ class VoiceInputController(
             is com.psyche.memo.ui.StepAsrOptions -> options.sampleRate
             else -> 16000
         }
-        val rec = AsrRecorder(
-            sampleRate = sampleRate,
-            onChunk = { if (cloudRunning) cloudQueue.offer(it) },
-            onLevel = { level -> pushLevel(level) },
-        )
+        val rec = recorderFactory?.invoke(sampleRate, { chunk ->
+            if (active.get()) cloudQueue.offer(chunk)
+        }, { level -> pushLevel(level) })
+            ?: AsrRecorder(
+                sampleRate = sampleRate,
+                onChunk = { if (active.get()) cloudQueue.offer(it) },
+                onLevel = { level -> pushLevel(level) },
+            )
         recorder = rec
         if (!rec.start()) {
             // 权限缺失 / 麦克风被占用：原版同样只是回 Idle。
-            cloudRunning = false
+            active.set(false)
             destroy()
         }
     }
@@ -174,12 +196,15 @@ class VoiceInputController(
      * 是否发送——sendAfter 语义由调用方在回调里处理：文本进输入框，发送再触发）。
      */
     fun finish(onFinal: (String) -> Unit) {
-        _state.value = State.Transcribing
         val session = cloudSession
         if (session != null) {
+            // 云端路径：先进「识别中」（用户 2026-09-16：点打勾后转写指示要**马上**
+            // 显示，不能等后台 finish() 完成才动），录音行保持展开直到文字回填。
+            _state.value = State.Transcribing
             finishCloud(session, onFinal)
             return
         }
+        _state.value = State.Transcribing
         val text = finalText
         recognizer?.stopListening()
         if (text.isNotEmpty()) {
@@ -192,24 +217,39 @@ class VoiceInputController(
         }
     }
 
-    /** 云端收尾：停采集 → 冲掉队列 → `finish()` 拿最终转写（都在后台线程）。 */
+    /**
+     * 云端收尾：点停止后立刻切「识别中」指示（[State.Transcribing] 由 [finish] 设置，
+     * 用户 2026-09-16「打勾马上显示这个提示」），最终转写在后台线程 `finish()` 完成
+     * 后回填输入框并收起录音行。主线程零阻塞（join / HTTP 都不在主线程）。
+     */
     private fun finishCloud(
         session: com.psyche.memo.provider.CloudAsrSession,
         onFinal: (String) -> Unit,
     ) {
-        cloudRunning = false
+        val active = cloudActive
+        // **收尾线程里绝不能先翻取消标志**：会话的取消判据就是 `!active.get()`
+        //（isCancelled），先翻的话 `session.finish()` 在 ensureActive() 里就被当成
+        // 「已取消」直接丢弃 —— 最后一段永远不发，云端识别**永远拿不到文字**
+        //（用户 2026-09-16「语音识别根本用不了」；AsrProbe 实测 finish 时连
+        // mimo flush 都没打出来）。顺序必须是：停采集 → finish() → 再翻标志。
         recorder?.stop()
         recorder = null
-        cloudWorker?.join(500)
-        cloudWorker = null
         cloudSession = null
+        _levels.value = List(WAVE_BAR_COUNT) { 0f }
+        val worker = cloudWorker
+        cloudWorker = null
         Thread {
+            // 只等 worker 把队列里的最后几块喂完（喂不到也不死等，最终转写
+            // 以 partial 累积为准，最后一段由 finish() 冲出去）。
+            runCatching { worker?.join(500) }
             val text = runCatching { session.finish() }
                 .getOrElse { cloudTranscript }
                 .ifBlank { cloudTranscript }
+            // finish() 完成后才能翻标志（worker 循环靠它退出）。
+            active?.set(false)
             main().post {
+                // 文字就绪才收起录音行（回 Idle）——「识别中」期间行保持展开。
                 _state.value = State.Idle
-                _levels.value = List(WAVE_BAR_COUNT) { 0f }
                 if (text.isNotEmpty()) onFinal(text)
             }
         }.start()
@@ -218,7 +258,8 @@ class VoiceInputController(
     private var pendingFinalCallback: ((String) -> Unit)? = null
 
     private fun destroy() {
-        cloudRunning = false
+        cloudActive?.set(false)
+        cloudActive = null
         recorder?.stop()
         recorder = null
         runCatching { cloudSession?.cancel() }

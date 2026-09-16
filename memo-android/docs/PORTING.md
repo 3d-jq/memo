@@ -699,6 +699,42 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 `scrollTimelineToBottom()`。上面第 ①③ 条挂账至此关闭，剩下的见报告 §7（真机 frame trace、
 自定义高度估算、首屏骨架行、抽屉路径、图片路径、打字重组）。
 
+## 5.15 语音输入三连修：不出字 / 波形不动 / 「识别中」时序（2026-09-16）
+
+**触发**：用户实测「语音识别根本用不了」（修好后）「波形怎么不动呀」「点击打勾
+这个提示词没有马上显示」。三轮修复跨越数据层与 UI 层，根因各不相同。
+
+**① 不出字（收尾顺序 bug）**：`finishCloud()` 在调 `session.finish()` **之前**就把
+会话标记为取消（旧全局 `cloudRunning`），而 `isCancelled` 判据恰是它 —— `finish()`
+一进 `ensureActive()` 就被丢弃，连 MiMo flush 都没发，最终转写永远拿不到。
+**修**：顺序改为停采集 → `finish()` → 再翻标志；且取消标志换成**每代会话独立的
+`AtomicBoolean cloudActive`**（否则「停止后立刻再点麦克风」时，老一代收尾线程翻
+全局标志会误杀新一代 worker 循环）。
+
+**② 波形「出现但不动」（布局 bug，不是数据 bug）**：电平探针实测 0.02~0.22 一直在
+变、partial 也实时上屏 —— 数据链路全通。真根因：`VoiceWaveform` 调用点只给
+`fillMaxWidth()`，Compose `Canvas` 本体是 `Spacer`，高度约束宽松（min=0, max=32dp）
+时**测量高度 = 0** → `maxH = 0` → 所有条贴 2px 最小值 = 一条静止细线（0 高布局不
+裁剪绘制，细线可见）。上游没事是因为 `AnimatedSwitcher` 的 **`StackFit.expand`**
+强制内容撑满 32dp 槽位 —— 移植时漏了这个约束语义。**修**：`ChatStyleSpec
+.WAVE_SLOT_HEIGHT_DP = 32f`，组件内兜底 `.height(32.dp)`（调用方显式给高度时以其
+为准）。`VoiceWaveformLayoutTest` 用 `@Config(qualifiers = "...160dpi")`（1dp=1px）
+锁「宽松约束下槽高必须 32dp / 显式高度优先」。**教训：上一轮把根因误判成电平刻度
+（改 dB 归一化），几何没验证（没跑布局断言）就先动了数据层 —— 「出现但不动」类
+bug 先查测量几何再查数据**。
+
+**③ 「识别中」提示要马上出现（交互时序）**：点 ■/✓ 后 `finish()` 云端路径先进
+`State.Transcribing`（转写指示 180ms fade 马上出现，三键禁用），后台线程
+`join(500)` + `finish()`（HTTP）完成后才回 Idle + 回填文字 —— 主线程零阻塞，
+指示语义与上游 `_finishingVoice` 一致。**教训：中间态不是技术细节，是用户可感知
+的反馈，不能为了「快」跳过**。
+
+**顺带**：电平归一化照上游 `record` 包语义改成 dB 刻度（-60dB→0，正常说话
+-20~-10dB→0.67~0.83，`AsrRecorder.levelOf`）；■/✓/✕ 三键加 `Haptics.light`
+触感（`LocalHapticsSettings.globalEnabled` 门控）；✓ 对勾不再直接发送，一律回填
+输入框（用户拍板，■ 与 ✓ 行为统一）。测试：`AsrRecorderLevelTest`（4 例）+
+`VoiceWaveformLayoutTest`（2 例）+ `VoiceInputDispatchTest` 断言随 dB 语义更新。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)

@@ -44,21 +44,21 @@ class VoiceInputDispatchTest {
         }
         assertEquals(1f, AsrRecorder.levelOf(loud), 0.01f)
 
-        // 一半振幅 → RMS ≈ 0.5。
+        // 一半振幅 → -6dB → (60-6.02)/60 ≈ 0.90（dB 归一化，不是线性的 0.5）。
         val half = ByteArray(8)
         for (i in 0 until 4) {
             half[i * 2] = 0x00
             half[i * 2 + 1] = 0x40 // 16384
         }
-        assertEquals(0.5f, AsrRecorder.levelOf(half), 0.02f)
+        assertEquals(0.90f, AsrRecorder.levelOf(half), 0.02f)
     }
 
     @Test
     fun pcmLevelReadsLittleEndianSamples() {
-        // 0x0100 小端是 00 01 → 样本 256 → 很小但不为零。
+        // 0x0100 小端是 00 01 → 样本 256 → -42dB → (60-42.14)/60 ≈ 0.30（dB 刻度，不是线性的 <0.02）。
         val pcm = byteArrayOf(0x00, 0x01, 0x00, 0x01)
         val level = AsrRecorder.levelOf(pcm)
-        assertTrue("expected a small positive level, got $level", level > 0f && level < 0.02f)
+        assertTrue("expected a small positive level, got $level", level > 0.2f && level < 0.4f)
     }
 
     // ---- 系统识别的电平换算保持不变 ----
