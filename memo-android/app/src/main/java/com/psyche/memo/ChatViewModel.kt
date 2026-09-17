@@ -1806,7 +1806,14 @@ class ChatViewModel(
                 if (readBoolPref("tts_auto_play_assistant_replies_v1")) {
                     val text = allParts.filterIsInstance<TextPart>().joinToString("") { it.text }
                     if (text.isNotBlank()) {
-                        com.psyche.memo.ui.chat.TtsPlayer.speak(text, ownerId = assistantId)
+                        // 走 `speak(appContext, ...)` 拿 Context，让 TtsPlayer 的
+                        // `controller(context)` 懒初始化兜底能命中——之前 `TtsPlayer.init`
+                        // 已挪到 IO，冷启+长时间空载→首次自动播放这条路径不再 no-op。
+                        com.psyche.memo.ui.chat.TtsPlayer.speak(
+                            context = container.appContext,
+                            text = text,
+                            ownerId = assistantId,
+                        )
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {

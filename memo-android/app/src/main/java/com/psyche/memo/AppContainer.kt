@@ -44,29 +44,41 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         )
     }
 
-    val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(300, TimeUnit.SECONDS) // long SSE reads
-        .writeTimeout(30, TimeUnit.SECONDS)
-        // 全局网络代理（network_proxy_page 的 global_proxy_*_v1 键）：selector
-        // 每次连接都读当前配置 ⇒ 设置改动立即生效，无需重建客户端。绕过规则
-        // （localhost/127.0.0.1/网段）在这里生效——上游 dio 没消费 bypass，但
-        // 本地模型服务器挂代理时必须直连。
-        .proxySelector(GlobalProxy.selector(preferenceRepository))
-        .proxyAuthenticator { _, response ->
-            val credentials = GlobalProxy.credentialsFor(preferenceRepository)
-            if (credentials == null) {
-                null
-            } else {
-                response.request.newBuilder()
-                    .header("Proxy-Authorization", credentials)
-                    .build()
+    /**
+     * Shared OkHttpClient — built on first network call, not at app construction.
+     *
+     * `[AppContainerImpl]` 自身是 lazy-all，但 `httpClient` 之前是 **eager**：
+     * `proxySelector(GlobalProxy.selector(preferenceRepository))` 立刻读 `preferenceRepository` →
+     * 它又是 `by lazy { ... PreferenceRepository(database, ...) }` → 首次解引就把 SQLite cold-open
+     * 拽进 `Application.onCreate` 的主线程。冷启时用户点输入框那一刻恰好赶上那一波读，IME
+     * inset 动画就跟着打嗝。改成 `by lazy` 后，`AppContainerImpl(this)` 构造只 set self-ref，
+     * 真正的 OkHttp 构造推迟到第一次 `OkHttpClient.newCall(...)` 时——已在 IO 调度上。
+     */
+    val httpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(300, TimeUnit.SECONDS) // long SSE reads
+            .writeTimeout(30, TimeUnit.SECONDS)
+            // 全局网络代理（network_proxy_page 的 global_proxy_*_v1 键）：selector
+            // 每次连接都读当前配置 ⇒ 设置改动立即生效，无需重建客户端。绕过规则
+            // （localhost/127.0.0.1/网段）在这里生效——上游 dio 没消费 bypass，但
+            // 本地模型服务器挂代理时必须直连。
+            .proxySelector(GlobalProxy.selector(preferenceRepository))
+            .proxyAuthenticator { _, response ->
+                val credentials = GlobalProxy.credentialsFor(preferenceRepository)
+                if (credentials == null) {
+                    null
+                } else {
+                    response.request.newBuilder()
+                        .header("Proxy-Authorization", credentials)
+                        .build()
+                }
             }
-        }
-        // RequestLogInterceptor is a no-op when com.psyche.memo.common.logging.RequestLogger
-        // is disabled; safe to keep installed regardless of the toggle.
-        .addInterceptor(com.psyche.memo.llm.logging.RequestLogInterceptor())
-        .build()
+            // RequestLogInterceptor is a no-op when com.psyche.memo.common.logging.RequestLogger
+            // is disabled; safe to keep installed regardless of the toggle.
+            .addInterceptor(com.psyche.memo.llm.logging.RequestLogInterceptor())
+            .build()
+    }
 
     val appLocaleStore: AppLocaleStore by lazy { AppLocaleStore(preferenceRepository) }
 
@@ -351,15 +363,40 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
             runCatching {
                 com.psyche.memo.data.db.ProviderConfigCache.put(
                     row.id,
-                    com.psyche.memo.data.model.ProviderConfig.fromJsonString(
-                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
-                        row.payload,
-                    ),
+                    com.psyche.memo.data.model.ProviderConfig.fromJsonString(providerPreWarmJson, row.payload),
                 )
             }
         }
         // assistantStore.getAll() 会把每行写进 AssistantCache（见 AssistantStore.getAll）。
         runCatching { assistantStore.getAll() }
+    }
+
+    /**
+     * Single-instance `Json` reused by [prewarmConfigCaches]; mirrors the
+     * `[AssistantRegexApplier.decodeJson]` / `[AskUserCard.askUserDecodeJson]`
+     * pattern from the warning-cleanup batch. The earlier `[kotlinx.serialization.json.Json { ignoreUnknownKeys = true }]`
+     * literal inside the for-loop rebuilt per provider row and would also fire
+     * the redundant-format warning under a recompile.
+     */
+    private val providerPreWarmJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+    /**
+     * Calls [prewarmConfigCaches] **after** Android's main-thread [android.os.MessageQueue]
+     * reports idle — i.e. once the first `Application.onCreate` work, the activity's
+     * first composition, and the IME-rise animation (if any user taps input right
+     * after launch) have all settled. Cold-start paths on the previous version
+     * fired `prewarmConfigCaches` immediately inside `appScope.launch` so the IO
+     * thread was already shuttling the provider rows while the IME inset animation
+     * was trying to drive the chat-input-bar layout. The idle queue gives the
+     * launcher frame a clear runway, only then does the warm-up IO start.
+     *
+     * Returned bool=false: the handler runs exactly once, then removes itself.
+     */
+    fun prewarmConfigCachesOnMainIdle() {
+        android.os.Looper.myQueue().addIdleHandler {
+            appScope.launch { prewarmConfigCaches() }
+            false
+        }
     }
 
     /** `"1.2.5+2073"` — versionName + versionCode, matching Flutter's appVersion. */
