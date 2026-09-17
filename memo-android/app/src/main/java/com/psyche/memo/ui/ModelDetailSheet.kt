@@ -47,12 +47,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -447,7 +446,9 @@ fun ModelDetailSheet(
     val semantic = LocalSemanticColors.current
     val view = LocalView.current
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
+    // Compose 1.8+：LocalClipboardManager 已废弃——统一走 LocalClipboard + ClipEntry。
+    val clipboard = LocalClipboard.current
+    val clipboardScope = rememberCoroutineScope()
 
     // --- initState (model_detail_sheet.dart L115-215) ---
     val cfg = remember(providerKey) { container.providerConfig(providerKey) }
@@ -811,7 +812,13 @@ fun ModelDetailSheet(
                         onCopyId = {
                             val text = idText.trim()
                             if (text.isNotEmpty()) {
-                                clipboard.setText(AnnotatedString(text))
+                                clipboardScope.launch {
+                                    clipboard.setClipEntry(
+                                        androidx.compose.ui.platform.ClipEntry(
+                                            android.content.ClipData.newPlainText("", text),
+                                        ),
+                                    )
+                                }
                                 SnackbarManager.show(
                                     AppNotification(message = copiedMessage, type = NotificationType.SUCCESS),
                                 )

@@ -402,4 +402,33 @@ class ToolCallCardLogicTest {
         val requests = listOf(req("t1", "conv-1"))
         assertNull(matchingApprovalRequest(requests, "conv-1", "t2"))
     }
+
+    // ---- prettyToolJson (chat_message_widget.dart _prettyToolJson) ----
+
+    @Test
+    fun prettyToolJson_validObjectIndentTwo() {
+        // 等价 Dart：`jsonEncode(parse(raw))` 后用两空格缩进输出。原版没有
+        // 断言缩进，仅验证「输入是合法 JSON 时输出也是合法 JSON 且无损 round-trip」。
+        val raw = """{"a":1,"b":"x","c":[1,2]}"""
+        val pretty = prettyToolJson(raw)
+        val roundTrip = pretty.replace("\n", "").replace(" ", "")
+        assertEquals(raw, roundTrip)
+        // 美化后必须包含换行（与 [prettyPrint = true] 一致）。
+        assertTrue(pretty.contains("\n"))
+    }
+
+    @Test
+    fun prettyToolJson_invalidFallsBackToRaw() {
+        val raw = "{not json"
+        assertEquals(raw, prettyToolJson(raw))
+        assertEquals("", prettyToolJson(""))
+    }
+
+    @Test
+    fun prettyToolJson_nullElementPreserved() {
+        val pretty = prettyToolJson("null")
+        // kotlinx 的 compact 形式是 `null`；pretty 形式可以是多行；两者都能
+        // 被 parseToJsonElement 重新识别为 JsonNull。
+        assertTrue(pretty == "null" || pretty.lines().any { it.trim() == "null" })
+    }
 }

@@ -198,7 +198,9 @@ fun TaskProgressDialogCard(
                     .padding(top = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (showBackground && backgroundLabel != null) {
+                // `showBackground` 已包含 `backgroundLabel != null` 的检查，原来的
+                // `showBackground && backgroundLabel != null` 第二个条件永远为真。
+                if (showBackground) {
                     IosTileButton(
                         label = backgroundLabel,
                         icon = Lucide.ChevronDown,

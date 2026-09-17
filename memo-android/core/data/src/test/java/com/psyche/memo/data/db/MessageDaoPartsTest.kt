@@ -47,7 +47,7 @@ class MessageDaoPartsTest {
         db.execSQL(
             "INSERT INTO message_rows (id, conversation_id, role, timestamp, message_order) " +
                 "VALUES (?, ?, 'user', ?, ?)",
-            arrayOf(id, conversationId, 1_700_000_000_000_000L + order, order),
+            arrayOf<Any?>(id, conversationId, 1_700_000_000_000_000L + order, order),
         )
     }
 
@@ -58,7 +58,7 @@ class MessageDaoPartsTest {
             "INSERT INTO message_part_rows " +
                 "(conversation_id, revision_id, ordinal, kind, payload, created_at, updated_at) " +
                 "VALUES (?, ?, ?, 'text', ?, 1, 1)",
-            arrayOf(conversationId, revisionId, ordinal, text),
+            arrayOf<Any?>(conversationId, revisionId, ordinal, text),
         )
     }
 

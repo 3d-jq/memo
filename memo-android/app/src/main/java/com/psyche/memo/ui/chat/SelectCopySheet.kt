@@ -21,13 +21,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,6 +38,7 @@ import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.R as UiR
+import kotlinx.coroutines.launch
 
 /**
  * Port of select_copy_sheet.dart: 80%-height sheet with a selectable rendering
@@ -53,7 +54,9 @@ fun SelectCopySheet(
     val semantic = LocalSemanticColors.current
     val view = LocalView.current
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
+    // Compose 1.8+：LocalClipboardManager 已废弃——统一走 LocalClipboard + ClipEntry。
+    val clipboard = LocalClipboard.current
+    val clipboardScope = rememberCoroutineScope()
 
     ModalBottomSheet(
         sheetState = rememberMemoSheetState(),
@@ -90,7 +93,13 @@ fun SelectCopySheet(
                         .align(Alignment.CenterEnd)
                         .clickable {
                             Haptics.light(view)
-                            clipboard.setText(AnnotatedString(content))
+                            clipboardScope.launch {
+                                clipboard.setClipEntry(
+                                    androidx.compose.ui.platform.ClipEntry(
+                                        android.content.ClipData.newPlainText("", content),
+                                    ),
+                                )
+                            }
                             SnackbarManager.show(
                                 AppNotification(
                                     context.getString(UiR.string.select_copy_page_copied_all),

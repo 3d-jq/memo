@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,10 +53,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -81,6 +81,7 @@ import com.psyche.memo.ui.theme.Palette
 import com.psyche.memo.ui.theme.buildCustomThemePalette
 import com.psyche.memo.ui.theme.allPalettes
 import com.psyche.memo.ui.theme.themeChoices
+import kotlinx.coroutines.launch
 
 /**
  * 1:1 port of theme_settings_page.dart — dynamic color (Android), pure
@@ -100,7 +101,9 @@ fun ThemeSettingsScreen(
     val currentDark = com.psyche.memo.ui.theme.MemoTheme
         .resolve(paletteId = null, mode = ThemeState.mode, systemDark = isSystemInDarkTheme())
         .second
-    val clipboard = LocalClipboardManager.current
+    // Compose 1.8+：LocalClipboardManager 已废弃——统一走 LocalClipboard + ClipEntry。
+    val clipboard = LocalClipboard.current
+    val clipboardScope = rememberCoroutineScope()
     val copyMsg = stringResource(UiR.string.custom_theme_copied)
 
     var editorTheme by remember { mutableStateOf<CustomTheme?>(null) }
@@ -248,7 +251,14 @@ fun ThemeSettingsScreen(
                                 },
                                 onTap = { ThemeState.selectCustomTheme(container, theme.id) },
                                 onCopy = {
-                                    clipboard.setText(AnnotatedString(theme.export()))
+                                    val payload = theme.export()
+                                    clipboardScope.launch {
+                                        clipboard.setClipEntry(
+                                            androidx.compose.ui.platform.ClipEntry(
+                                                android.content.ClipData.newPlainText("", payload),
+                                            ),
+                                        )
+                                    }
                                     SnackbarManager.show(
                                         AppNotification(
                                             message = copyMsg,

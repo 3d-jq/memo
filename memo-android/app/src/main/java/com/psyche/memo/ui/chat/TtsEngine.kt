@@ -103,6 +103,7 @@ class SystemTtsEngine(private val context: Context) : TtsEngine {
             if (utteranceId != null) target.onDone(utteranceId)
         }
 
+        @Deprecated("Use onError(utteranceId, errorCode).", level = DeprecationLevel.WARNING)
         override fun onError(utteranceId: String?) {
             if (utteranceId != null) target.onError(utteranceId, -1)
         }

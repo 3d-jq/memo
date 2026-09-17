@@ -44,10 +44,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,7 +94,8 @@ fun TranslateScreen(
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val clipboard = LocalClipboardManager.current
+    // Compose 1.8+：LocalClipboardManager 已废弃——统一走 LocalClipboard + ClipEntry。
+    val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
 
     var src by remember { mutableStateOf("") }
@@ -241,8 +241,15 @@ fun TranslateScreen(
                     IosIconButton(
                         icon = Lucide.Clipboard,
                         onTap = {
-                            val text = clipboard.getText()?.text ?: ""
-                            if (text.isNotEmpty()) src = text
+                            scope.launch {
+                                val text = clipboard.getClipEntry()
+                                    ?.clipData
+                                    ?.getItemAt(0)
+                                    ?.text
+                                    ?.toString()
+                                    ?: ""
+                                if (text.isNotEmpty()) src = text
+                            }
                         },
                         color = cs.onSurface,
                         size = 20.dp,
@@ -253,7 +260,14 @@ fun TranslateScreen(
                     IosIconButton(
                         icon = Lucide.Copy,
                         onTap = {
-                            clipboard.setText(AnnotatedString(dst))
+                            scope.launch {
+                                val payload = dst
+                                clipboard.setClipEntry(
+                                    androidx.compose.ui.platform.ClipEntry(
+                                        android.content.ClipData.newPlainText("", payload),
+                                    ),
+                                )
+                            }
                             SnackbarManager.show(
                                 AppNotification(
                                     container.appContext.getString(R.string.chat_message_widget_copied_to_clipboard),

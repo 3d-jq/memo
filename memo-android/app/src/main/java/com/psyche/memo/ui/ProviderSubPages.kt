@@ -224,10 +224,12 @@ fun ProviderNetworkPage(
     var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(providerId) { loaded = true }
 
-    // Debounced immediate save.
+    // Debounced immediate save. `<Any?>` 显式指定 snapshotFlow 重整 T
+    // 之外的元素类型（避免与 Boolean/String 共同父类回退）。
+    @OptIn(FlowPreview::class)
     LaunchedEffect(loaded) {
         if (!loaded) return@LaunchedEffect
-        snapshotFlow { arrayOf(proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword) }
+        snapshotFlow { arrayOf<Any?>(proxyEnabled, proxyType, proxyHost, proxyPort, proxyUsername, proxyPassword) }
             .debounce(400)
             .collect {
                 onCfgChange(

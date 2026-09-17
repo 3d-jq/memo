@@ -183,10 +183,13 @@ internal fun buildAskUserAnswers(
     return out
 }
 
+/** 复用：[parseAnsweredValues] 的解码器，多次调用不重建。 */
+private val askUserDecodeJson = Json { ignoreUnknownKeys = true }
+
 /** chat_message_widget.dart `_answeredValues` (6224-6231)：解析 `{answers: {...}}`。 */
 internal fun parseAnsweredValues(content: String): Map<String, JsonObject> {
     return try {
-        val obj = Json { ignoreUnknownKeys = true }.parseToJsonElement(content).jsonObject
+        val obj = askUserDecodeJson.parseToJsonElement(content).jsonObject
         (obj["answers"] as? JsonObject)?.mapValues { (_, v) ->
             (v as? JsonObject) ?: JsonObject(emptyMap())
         } ?: emptyMap()
@@ -441,10 +444,12 @@ internal fun AskUserInlineBody(
                     AskUserSubmitButton(
                         label = stringResource(UiR.string.ask_user_card_submit),
                         color = cs.primary,
-                        enabled = questions.isNotEmpty() &&
+                        // 进行中的请求由 line 373 的早返回拦截了；这里只剩
+                        // recovered 提交路径——按钮只在 [onSubmit] 接入时才亮。
+                        enabled = onSubmit != null &&
+                            questions.isNotEmpty() &&
                             questions.all { hasAnswer(it) } &&
-                            !submitting &&
-                            (pendingRequest != null || onSubmit != null),
+                            !submitting,
                         onTap = {
                             val answers = buildAskUserAnswers(
                                 questions,
@@ -453,14 +458,12 @@ internal fun AskUserInlineBody(
                                 textValues,
                                 skipped,
                             )
-                            if (pendingRequest != null && askUser != null) {
-                                // 进行中：直接回调服务完成 deferred（Dart 6243-6245）。
-                                askUser.answer(part.id, answers)
-                            } else if (onSubmit != null) {
-                                // 恢复路径（无进行中请求）：走 recovered 提交回调。
+                            // early-return at the top of `when { ... else -> ... }`
+                            // guarantees `pendingRequest == null` here.
+                            onSubmit?.let { cb ->
                                 submitting = true
                                 try {
-                                    onSubmit(AskUserResult.answer(answers))
+                                    cb(AskUserResult.answer(answers))
                                 } finally {
                                     submitting = false
                                 }

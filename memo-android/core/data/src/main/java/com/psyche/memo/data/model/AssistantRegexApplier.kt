@@ -19,6 +19,10 @@ object AssistantRegexApplier {
 
     enum class Target { PERSIST, VISUAL, SEND }
 
+    // Reused across [decodeRules] calls; rebuilding per-call is the warning
+    // Kotlin emits from `Json { ... }` literals.
+    private val decodeJson = Json { ignoreUnknownKeys = true }
+
     private val compiledCache = LinkedHashMap<String, Regex?>()
     private const val MAX_COMPILED = 256
 
@@ -52,8 +56,7 @@ object AssistantRegexApplier {
     fun decodeRules(raw: List<JsonElement>): List<AssistantRegex> =
         raw.mapNotNull { element ->
             runCatching {
-                Json { ignoreUnknownKeys = true }
-                    .decodeFromString(AssistantRegex.serializer(), element.toString())
+                decodeJson.decodeFromString(AssistantRegex.serializer(), element.toString())
             }.getOrNull()
         }
 

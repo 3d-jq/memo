@@ -991,6 +991,7 @@ internal fun chunkText(text: String): List<String> {
     return chunks.ifEmpty { listOf(text) }
 }
 
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 private val prettyJson = Json {
     prettyPrint = true
     prettyPrintIndent = "  "
@@ -998,7 +999,8 @@ private val prettyJson = Json {
 }
 
 /** chat_message_widget.dart _prettyToolJson — 失败时原样返回。 */
-private fun prettyToolJson(raw: String): String = try {
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+internal fun prettyToolJson(raw: String): String = try {
     prettyJson.encodeToString(JsonElement.serializer(), prettyJson.parseToJsonElement(raw))
 } catch (e: Exception) {
     raw
@@ -1009,7 +1011,7 @@ private fun prettyToolJson(raw: String): String = try {
  * 32×4 抓手 + 15sp 标题 / 24dp 关闭键），正文 LTRB(16,8,16,24)。
  * screen_time 有 apps 时整块换成 ScreenTimeToolDetailBody。
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, kotlinx.serialization.ExperimentalSerializationApi::class)
 @Composable
 fun ToolDetailSheet(part: ToolUiPart, onDismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme

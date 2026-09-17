@@ -119,7 +119,6 @@ object NetworkTts {
             is QwenAudioTtsOptions -> throw TtsException(
                 "Qwen Audio TTS (WebSocket) is not ported yet",
             )
-            else -> throw TtsException("Unsupported TTS service: ${options.kind.wire}")
         }
     }
 
