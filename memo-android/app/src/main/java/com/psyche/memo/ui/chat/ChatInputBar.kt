@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -192,6 +193,63 @@ private fun inputFillColor(
     return alphaBlend(overlayTint, base).copy(alpha = targetOpacity)
 }
 
+/**
+ * 输入框高度上限 —— `chat_input_bar.dart:2569-2586` 的 `maxInputHeight` 的**布局期**版本。
+ *
+ * 公式与源码逐字一致：
+ * ```
+ * visibleHeight  = size.height - viewInsets.bottom
+ * available      = visibleHeight - attachmentPreview - baseChrome
+ * softCap        = visibleHeight * SOFT_CAP_RATIO
+ * maxInputHeight = available > 0
+ *     ? min(available, max(MIN_INPUT_HEIGHT, min(softCap, available)))
+ *     : max(MIN_INPUT_HEIGHT, softCap)
+ * ```
+ * 与源码的唯一区别是**求值时机**：`viewInsets.bottom`（= `WindowInsets.ime`）在
+ * measure 阶段读，而不是组合阶段。键盘动画期间这个值每帧都在变，组合期读它会让
+ * 整个输入栏（输入框 + 图标行 + 建议气泡 + 语音 UI）按帧重组；布局期读只让这一个
+ * 节点重排 —— 而重排本来就每帧都在发生（列表视口随键盘收缩），所以是净赚。
+ *
+ * 组合期的 `WindowInsets.ime` 读取是本文件历史上「键盘抬起一顿一顿」的根因
+ * （用户 2026-09-17）。**后续改动不要把它挪回组合体**。
+ */
+private fun Modifier.imeCappedInputHeight(
+    windowInfo: androidx.compose.ui.platform.WindowInfo,
+    imeInsets: WindowInsets,
+    attachmentPreviewHeightDp: Float,
+): Modifier = layout { measurable, constraints ->
+    // 源码 chat_input_bar.dart:2560 —— isMobileLayout = size.width < AppBreakpoints.tablet
+    val isMobileLayout = windowInfo.containerSize.width.toDp() < BREAKPOINT_TABLET_DP.dp
+    if (!isMobileLayout) {
+        // 桌面/平板宽度下 `maxInputHeight` 是 +∞，等价于不约束。
+        val placeable = measurable.measure(constraints)
+        return@layout layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+    }
+    // `WindowInsets.ime` 这个**属性 getter 是 @Composable**（所以由调用方在组合期取好
+    // 实例传进来）；而 `getBottom()` 本身是普通函数，在这里调 = 布局期读快照状态，
+    // 只会让这个节点重排，不会让输入栏整体重组。这正是本次修复的关键。
+    val visibleHeightDp = windowInfo.containerSize.height.toDp().value -
+        imeInsets.getBottom(this) / density
+    val available = visibleHeightDp - attachmentPreviewHeightDp - BASE_CHROME_HEIGHT_DP
+    val softCap = visibleHeightDp * SOFT_CAP_RATIO
+    val maxInputHeightDp = if (available > 0) {
+        val capped = minOf(softCap, available)
+        minOf(available, maxOf(MIN_INPUT_HEIGHT_DP, capped))
+    } else {
+        maxOf(MIN_INPUT_HEIGHT_DP, softCap)
+    }
+    // 源码 2583-2586：只有高度有限且 > 0 才约束。
+    val maxHeightPx = if (maxInputHeightDp.isFinite() && maxInputHeightDp > 0) {
+        maxInputHeightDp.dp.roundToPx()
+    } else {
+        constraints.maxHeight
+    }
+    val placeable = measurable.measure(
+        constraints.copy(maxHeight = minOf(constraints.maxHeight, maxHeightPx)),
+    )
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
+
 @Composable
 internal fun ChatInputBar(
     input: String,
@@ -277,15 +335,12 @@ internal fun ChatInputBar(
 
     val density = LocalDensity.current
     val windowInfo = LocalWindowInfo.current
-    // 源码 chat_input_bar.dart:2558-2561
-    //   size        = MediaQuery.sizeOf(context)
-    //   viewInsets  = MediaQuery.viewInsetsOf(context)
-    //   visibleHeight = size.height - viewInsets.bottom
-    val visibleHeightDp = with(density) { windowInfo.containerSize.height.toDp().value } -
-        WindowInsets.ime.getBottom(density) / density.density
-    // 源码 chat_input_bar.dart:2560 —— isMobileLayout = size.width < AppBreakpoints.tablet
-    val isMobileLayout =
-        with(density) { windowInfo.containerSize.width.toDp() } < BREAKPOINT_TABLET_DP.dp
+    // 源码 chat_input_bar.dart:2558-2561 的 `visibleHeight = size.height - viewInsets.bottom`
+    // 与 2569-2586 的 `maxInputHeight` 计算**整体搬到布局期**（见 `imeCappedInputHeight`）。
+    // `WindowInsets.ime` 在键盘动画期间每帧都在变，在组合体里读它会让整个 ChatInputBar
+    // （输入框 + 图标行 + 建议气泡 + 语音 UI）按帧重组；放到 measure 阶段读只触发重排，
+    // 而重排本来就每帧都在做（列表视口在缩）。用户 2026-09-17「点输入框、键盘抬起
+    // 一顿一顿」的另一半根因（另一半在 `ChatContent` 的 `ImeRisePinEffect`）。
 
     // 源码 chat_input_bar.dart:2555-2556 / 2641-2642 —— 附件（图片 / 文档）内联预览。
     // 移植版当前没有附件数据，两个列表恒为空：预览高度按源码公式算得 0，
@@ -305,27 +360,13 @@ internal fun ChatInputBar(
         0f
     }
 
-    // 源码 chat_input_bar.dart:2569-2581 —— maxInputHeight 计算（照搬）
-    val maxInputHeightDp = if (isMobileLayout) {
-        val available = visibleHeightDp - attachmentPreviewHeight - BASE_CHROME_HEIGHT_DP
-        val softCap = visibleHeightDp * SOFT_CAP_RATIO
-        if (available > 0) {
-            val capped = minOf(softCap, available)
-            minOf(available, maxOf(MIN_INPUT_HEIGHT_DP, capped))
-        } else {
-            maxOf(MIN_INPUT_HEIGHT_DP, softCap)
-        }
-    } else {
-        Float.POSITIVE_INFINITY
-    }
-    // 源码 chat_input_bar.dart:2583-2586：只有 isMobileLayout 且高度有限且 > 0 才约束。
-    val textFieldModifier = if (
-        isMobileLayout && maxInputHeightDp.isFinite() && maxInputHeightDp > 0
-    ) {
-        Modifier.fillMaxWidth().heightIn(max = maxInputHeightDp.dp)
-    } else {
-        Modifier.fillMaxWidth()
-    }
+    // 源码 chat_input_bar.dart:2569-2586 —— maxInputHeight 与 heightIn 约束。
+    // 公式逐字保留，只把求值时机从组合期挪到布局期（见 `imeCappedInputHeight`）。
+    // `WindowInsets.ime` 在这里取 holder（@Composable getter，只能组合期取），
+    // 真正的 inset 数值到 measure 阶段才读。
+    val textFieldModifier = Modifier
+        .fillMaxWidth()
+        .imeCappedInputHeight(windowInfo, WindowInsets.ime, attachmentPreviewHeight)
 
     // 源码 chat_input_bar.dart:2588-2599
     //   SafeArea(top:false, left:false, right:false, bottom:true)

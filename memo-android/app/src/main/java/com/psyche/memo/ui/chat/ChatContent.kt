@@ -119,6 +119,52 @@ import com.psyche.memo.ui.loadModelOptions
 import com.psyche.memo.ui.LocalHapticsSettings
 
 /**
+ * 键盘抬起「把对话内容一起顶上去」的钉底副作用（原版
+ * `scroll_controller.dart:312-321 pinBottomDuringViewportResizeIfNeeded`）。
+ *
+ * **为什么必须是一个独立 composable**：`WindowInsets.ime` 的每个类型都挂在
+ * 快照状态上，在组合体里读 `getBottom()` 等于**订阅**了 IME inset 的变化 ——
+ * 键盘动画期间 inset 每帧都在变，读它的那个 composable 就会每帧重组。
+ * 原先这段直接写在 `ChatContent` 里，而 `ChatContent` 是个约 1700 行的组合
+ * （顶栏 + 整条时间线 + 输入栏接线 + 所有 sheet/dialog 挂载），于是「点输入框、
+ * 键盘抬起」的每一次动画都带动它整体重组约 60 次 —— 用户 2026-09-17 报的
+ * 「输入框抬起一顿一顿」就是这个。
+ *
+ * 抽成独立函数后，按帧重组的只剩这个**不渲染任何东西**的函数；`ChatContent`
+ * 自身不再订阅 inset，键盘动画期间不再重组。语义与抽出前逐字一致：
+ * - inset 的读取时机不变（composition 期，位置与原先相同）
+ * - `tailNearBottom` / `pointerDown` 仍在组合期读（由调用方以 lambda 传入，
+ *   读取点依旧是组合期，`derivedStateOf` 的「只在新视口布局之前取值」语义不变）
+ * - `record` 在组合期、`consume` 在 `LaunchedEffect` 里，与原先一致
+ * - `ImePinTracker` 的初值仍是「本 composable 首次组合时观察到的 inset」，
+ *   对齐 `home_page.dart:739-742` 的 post-frame 播种
+ */
+@Composable
+private fun ImeRisePinEffect(
+    tailNearBottom: () -> Boolean,
+    pointerDown: () -> Boolean,
+    scrollTimelineToBottom: () -> Unit,
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    // 初值取当前 inset（对齐 home_page.dart:739-742 的 post-frame 播种）：否则「启动时
+    // 键盘已经开着」会被当成一次抬起。
+    val imePin = remember { ImePinTracker(imeBottomPx) }
+    imePin.record(
+        imeBottomPx = imeBottomPx,
+        shouldPin = shouldPinTimelineOnImeRise(
+            previousImeBottomPx = imePin.previousImeBottomPx,
+            nextImeBottomPx = imeBottomPx,
+            pointerDown = pointerDown(),
+            tailNearBottom = tailNearBottom(),
+        ),
+    )
+    androidx.compose.runtime.LaunchedEffect(imeBottomPx) {
+        if (imePin.consume(imeBottomPx)) scrollTimelineToBottom()
+    }
+}
+
+/**
  * 聊天会话页主体 —— 第 3 步从 `ui/HomeScreen.kt` 摘出（纯搬运）：VM 取数与状态接线、
  * 顶栏、时间线（LazyColumn + 末尾哨兵 + 骨架 + 导航面板）、输入栏接线、以及各个
  * sheet/dialog 的挂载。时间线/顶栏的进一步拆分留作第 3 步的后半段（那时才需要把状态
@@ -723,22 +769,15 @@ fun ChatContent(
             tailBottomGapPx() <= with(scrollDensity) { 24.dp.toPx() }
         }
     }
-    val imeBottomPx = WindowInsets.ime.getBottom(scrollDensity)
-    // 初值取当前 inset（对齐 home_page.dart:739-742 的 post-frame 播种）：否则「启动时
-    // 键盘已经开着」会被当成一次抬起。
-    val imePin = remember { ImePinTracker(imeBottomPx) }
-    imePin.record(
-        imeBottomPx = imeBottomPx,
-        shouldPin = shouldPinTimelineOnImeRise(
-            previousImeBottomPx = imePin.previousImeBottomPx,
-            nextImeBottomPx = imeBottomPx,
-            pointerDown = pointerDown,
-            tailNearBottom = tailNearBottomForIme.value,
-        ),
+    // 键盘抬起钉底 —— 交给独立 composable 承接，避免 ChatContent 按 IME 帧重组。
+    // 详见 `ImeRisePinEffect` 的注释（用户 2026-09-17「输入框抬起一顿一顿」的根因）。
+    // **注意：这里绝不能出现 `WindowInsets.ime.getBottom(...)`** —— 在 ChatContent
+    // 的组合体里读它会让这个约 1700 行的组合按帧重组，正是本 bug 的根因。
+    ImeRisePinEffect(
+        tailNearBottom = { tailNearBottomForIme.value },
+        pointerDown = { pointerDown },
+        scrollTimelineToBottom = { scrollTimelineToBottom() },
     )
-    androidx.compose.runtime.LaunchedEffect(imeBottomPx) {
-        if (imePin.consume(imeBottomPx)) scrollTimelineToBottom()
-    }
     // 滚到顶部附近自动加载更早的历史 —— message_list_view.dart:1816-1830
     // （isNearTop = 距顶 <= 96 逻辑像素，120ms 节流；Compose 侧用
     // index==0 + firstVisibleItemScrollOffset 表达同样的判定）。
