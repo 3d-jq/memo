@@ -123,7 +123,7 @@ class VideoGenerationClientTest {
         assertEquals("/v1/videos/v1/content", server.takeRequest().path)
         assertEquals("MP4BYTES", media.file.readText())
         assertEquals("video/mp4", media.mimeType)
-        assertTrue(media.file.parentFile.name == "videos")
+        assertEquals("videos", media.file.parentFile?.name)
         assertNull(media.thumbnailPath)
     }
 

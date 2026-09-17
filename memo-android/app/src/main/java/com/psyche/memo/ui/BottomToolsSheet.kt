@@ -259,8 +259,9 @@ fun BottomToolsSheet(
                 )
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
             }
-            // 生成图片 / 生成视频（自研功能）：两行入口，开各自的生成面板，
-            // 结果直接插进当前对话（图片 = 助手图片气泡、视频 = 文件卡交给系统播放器）。
+            // 生成图片 / 生成视频（自研功能）：两行入口，各开一个**模型选择**面板
+            //（选服务 = 绑当前助手；用户 2026-09-17「点击是选择对应的模型，不是点击
+            // 使用」）。真正出图/出片由模型调 generate_image / generate_video 完成。
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier

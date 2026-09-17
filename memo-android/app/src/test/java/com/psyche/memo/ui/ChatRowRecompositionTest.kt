@@ -84,6 +84,7 @@ class ChatRowRecompositionTest {
                     onOpenDrawer = {},
                     onNew = {},
                     onOpenWorkspaces = {},
+                    onOpenGenerationServices = {},
                 )
             }
         }

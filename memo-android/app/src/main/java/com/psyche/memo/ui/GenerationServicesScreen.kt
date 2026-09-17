@@ -46,6 +46,7 @@ import com.composables.icons.lucide.Video
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.GenerationKind
 import com.psyche.memo.data.model.GenerationService
+import com.psyche.memo.data.model.GenerationTestState
 import com.psyche.memo.provider.generation.GenerationServiceTester
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -89,7 +90,8 @@ fun GenerationServicesScreen(
         scope.launch {
             val result = GenerationServiceTester.test(service, container.httpClient)
             testing[service.id] = false
-            repo.setTestResult(service.id, result is GenerationServiceTester.Result.Ok)
+            // 三态落库：可达（没有 /models）不再被写成「连接失败」（见 tester 注释）。
+            repo.setTestState(service.id, result.state)
             when (result) {
                 is GenerationServiceTester.Result.Ok -> SnackbarManager.show(
                     AppNotification(
@@ -238,15 +240,22 @@ private fun GenerationServiceRow(
             statusBg = cs.primary.copy(alpha = 0.12f)
             statusFg = cs.primary
         }
-        service.lastTestOk == true -> {
+        service.lastTestState == GenerationTestState.OK -> {
             statusText = stringResource(R.string.generation_services_status_ok)
             statusBg = semantic.success.copy(alpha = 0.12f)
             statusFg = semantic.success
         }
-        service.lastTestOk == false -> {
+        // 「可达」= 地址/key 通、但该中转没有 /models 接口（生成类服务的常态）。
+        // 之前这里被并进「连接失败」，用户 2026-09-17 报的就是这条。
+        service.lastTestState == GenerationTestState.REACHABLE -> {
+            statusText = stringResource(R.string.generation_services_status_reachable)
+            statusBg = cs.primary.copy(alpha = 0.12f)
+            statusFg = cs.primary
+        }
+        service.lastTestState == GenerationTestState.FAILED -> {
             statusText = stringResource(R.string.generation_services_status_failed)
-            statusBg = semantic.warning.copy(alpha = 0.12f)
-            statusFg = semantic.warning
+            statusBg = cs.error.copy(alpha = 0.12f)
+            statusFg = cs.error
         }
         else -> {
             statusText = stringResource(R.string.generation_services_status_untested)

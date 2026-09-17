@@ -143,3 +143,21 @@ android {
         lintConfig = file("lint.xml")
     }
 }
+
+/**
+ * 关掉 release 变体的单元测试。
+ *
+ * 理由：Compose UI 测试靠 `androidx.compose.ui:ui-test-manifest` 在**合并清单**里
+ * 声明 `androidx.activity.ComponentActivity`（`createAndroidComposeRule` 要启动它），
+ * 而它只能挂在 debug —— 那是测试脚手架，不能进 release 清单。于是 release 变体里
+ * 所有 ActivityScenario 用例必然全红（2026-09-17 实测 65 例，`./gradlew test` 一片
+ * 红的假警报就是这么来的）。
+ *
+ * release 单测对本题没有额外价值：本工程没有 BuildConfig / debug 专属分支，两个变体
+ * 跑的是同一份代码；真正有意义的门禁是 `:app:testDebugUnitTest`（全绿）。
+ */
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { builder ->
+        builder.enableUnitTest = false
+    }
+}

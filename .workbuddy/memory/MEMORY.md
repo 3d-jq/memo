@@ -45,6 +45,20 @@
 - XML 解析测试放 app 模块（Robolectric）——core:data 纯 JUnit 里 XmlPullParser 是 stub。流式上传签 `UNSIGNED-PAYLOAD`；错误文档用 `peekBody`。
 - 远端配置键（`webdav_config_v1`/`s3_config_v1`）必须在 `SettingsKeyRegistry` preference 集合里才进备份。
 
+## 主题色「没跟主题走」的排查顺序（2026-09-17 血泪）
+- 用户说某处「没跟着主题色」时，**先查遗留的白色 lerp**：`SettingsUi.kt` 的 `SettingsSectionCard` 与 `surfaceCardColorCompat()` 曾是 `lerp(surface, Color.White, 0.96f/0.10f)`（浅色下=死白），影响工具描述卡片、供应商「管理」下卡片、日志 tab 条、11 处输入框底色 —— 现已统一为主题语义卡色 `LocalSemanticColors.surfaceCard`（+ `semantic.hairline`）。**新写卡片容器一律走 `SectionCard` / `SettingsSectionCard` / `semantic.surfaceCard`，别再抄 lerp**。
+- 分组标题/分区标题一律 `settingsSectionHeaderColor(scheme)`（= primary）：日志页 `DetailSectionCard`、供应商详情「配置」tab 的「管理」标题已补上；**表单字段标签（`onSurface@80%`）不动**。
+- 例外：`ProviderSheets.kt` 的 `Color.White` 是**二维码白底**（扫码需要），别改。
+
+## 助手消息里的媒体（图片/视频）渲染位置（2026-09-17 用户拍板）
+- 媒体 part 现在是投影里的 **`AssistantBlock.Media` 块**（连续媒体合并成一块），按 part 顺序渲染 → `[正文][工具卡][图/视频][正文]`；**不再**整条消息的图组挂在气泡上方（那是旧行为，用户「怎么在上面了」）。用户侧附件仍挂气泡上方。
+- 生成类工具（`generate_image`/`generate_video`）的产物并进**同一条**助手消息（`generatedMediaParts()` 纯函数 + `allParts += generatedParts`），**不**另开消息；视频与图片同一条路径。
+
+## 生成服务（图片/视频，自研功能）的关键口径（2026-09-17 用户实测后定）
+- **「测试连接」三态：可达 ≠ 连接失败**。探针只有 `GET {base}/models`，而生成类中转大多没这个接口（404/405）——那种情况必须落 `GenerationTestState.REACHABLE`（列表显示「可达」），**不许**再像老的两态实现那样写成 `lastTestOk=false` 标红「连接失败」（用户 2026-09-17「视频，图片 显示连接失败」的根因）。失败文案必须带**探测的 URL + 状态码 + 响应体截断**；新增服务时测出的结果要跟着保存。
+- **➕ 面板的生成入口只做「选模型」**（绑当前助手），真正生成由模型调 `generate_image`/`generate_video` 工具完成。手动生成面板 `GenerationSheet` 已删（用户 2026-09-17 拍板），**勿加回**；选择规则走纯函数 `AssistantGenerationBinding.select` / `Assistant.generationBinding|withGenerationBinding`（+ 面板与助手编辑页共用，别在两处各写一遍）。
+- **`:app:testReleaseUnitTest` 已关闭**（`app/build.gradle.kts` 的 `androidComponents`）：Compose UI 测试要的 `ui-test-manifest` 只能挂 debug，release 变体 65 例必红、是假警报。门禁口径 = `:app:testDebugUnitTest`（debug 全绿）+ lint 0 error + assembleDebug；`./gradlew test` 现在全绿。
+
 ## 设备验证纪律：不许猜坐标点击（2026-09-10 事故定规）
 - 先 `adb shell uiautomator dump` 取 bounds 再点，或只装机让用户实测（用户 2026-09-12 明确「你装机就行 我来实测」）。装机后 `dumpsys package com.psyche.memo.dev | grep versionCode` 记版本。
 

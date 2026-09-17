@@ -49,9 +49,9 @@ class GenerationServiceRepository(
         removed
     }
 
-    /** 「测试连接」结果落库（列表/编辑页的状态显示）。 */
-    suspend fun setTestResult(id: String, ok: Boolean): GenerationService? = withContext(Dispatchers.IO) {
-        store.setTestResult(id, ok)?.also { bump() }
+    /** 「测试连接」结果落库（列表/编辑页的状态显示；[state] = [GenerationTestState] 三态）。 */
+    suspend fun setTestState(id: String, state: String): GenerationService? = withContext(Dispatchers.IO) {
+        store.setTestState(id, state)?.also { bump() }
     }
 
     /**

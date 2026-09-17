@@ -33,7 +33,7 @@ class DatabaseSnapshotMergerTest {
     private val insertConversation = { db: SQLiteDatabase, id: String, title: String ->
         db.execSQL(
             "INSERT INTO conversation_rows (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)",
-            arrayOf(id, title, 1_700_000_000_000_000L, 1_700_000_000_000_000L),
+            arrayOf<Any>(id, title, 1_700_000_000_000_000L, 1_700_000_000_000_000L),
         )
     }
 
@@ -41,12 +41,12 @@ class DatabaseSnapshotMergerTest {
         db.execSQL(
             "INSERT INTO message_rows (id, conversation_id, role, timestamp, message_order) " +
                 "VALUES (?, ?, 'user', ?, ?)",
-            arrayOf(id, conversationId, 1_700_000_000_100_000L + order, order),
+            arrayOf<Any>(id, conversationId, 1_700_000_000_100_000L + order, order),
         )
         db.execSQL(
             "INSERT INTO message_part_rows (conversation_id, revision_id, ordinal, kind, payload, created_at, updated_at) " +
                 "VALUES (?, ?, 0, 'text', ?, ?, ?)",
-            arrayOf(conversationId, id, """{"text":"$text"}""", 1_700_000_000_000_000L, 1_700_000_000_000_000L),
+            arrayOf<Any>(conversationId, id, """{"text":"$text"}""", 1_700_000_000_000_000L, 1_700_000_000_000_000L),
         )
     }
 

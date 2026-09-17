@@ -513,26 +513,9 @@ internal fun MessageRow(
                         )
                     }
                 } else {
-                    // 助手侧：图片仍按原版走「整块图片气泡」，文档走裸附件预览
-                    // （原版 fromParts 时 mediaPreview 只收 FilePart）。
-                    if (msg.parts.any { it is ImagePart }) {
-                        com.psyche.memo.ui.chat.ChatBubbleSurface(
-                            isUser = false,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            com.psyche.memo.ui.chat.MessageImageAttachments(
-                                parts = msg.parts,
-                                onOpenViewer = { uris, index -> viewerState = uris to index },
-                            )
-                        }
-                    }
-                    if (msg.parts.any { it is com.psyche.memo.data.model.FilePart }) {
-                        com.psyche.memo.ui.chat.MessageAttachmentPreview(
-                            parts = msg.parts,
-                            alignEnd = false,
-                            onOpenViewer = { uris, index -> viewerState = uris to index },
-                        )
-                    }
+                    // 助手侧的图片 / 文档**不再挂在气泡上方**：它们已经是投影里的
+                    // [com.psyche.memo.ui.chat.AssistantBlock.Media] 块，按 part 顺序
+                    // 在正文之间渲染（用户 2026-09-17「生成结果怎么在上面了」）。
                 }
                 if (isUser) {
                     // CMW:1752-1765 —— 只有正文非空才有文本气泡；纯图片的用户消息
@@ -574,7 +557,7 @@ internal fun MessageRow(
                                         )
                                     }
                                 }
-                                is ImagePart -> Unit // 已整组渲染在气泡上方
+                                is ImagePart -> Unit // 用户侧附件：整组渲染在气泡上方（见上面 userAttachmentParts）
                                 is com.psyche.memo.data.model.FilePart -> Unit // 同上（附件预览）
                                 else -> Text("‹${part.kind}›", style = MaterialTheme.typography.bodySmall)
                             }
@@ -591,12 +574,6 @@ internal fun MessageRow(
                         com.psyche.memo.ui.chat.ChatBubbleSurface(isUser = true) { userContent() }
                     }
                 } else {
-                    if (msg.parts.any { it is ImagePart } ||
-                        msg.parts.any { it is com.psyche.memo.data.model.FilePart }
-                    ) {
-                        // 附件块与正文块之间 8pt（CMW:2848-2851）。
-                        Spacer(Modifier.height(8.dp))
-                    }
                     // CMW:2951-3009 —— 文本气泡与思考卡按 part 到达顺序交替出现，
                     // addVisible 在相邻块之间插 8pt；每段文本各自一个气泡
                     // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs
@@ -604,6 +581,27 @@ internal fun MessageRow(
                     assistantBlocks.forEachIndexed { index, block ->
                         if (index > 0) Spacer(Modifier.height(8.dp))
                         when (block) {
+                            is com.psyche.memo.ui.chat.AssistantBlock.Media -> {
+                                // 媒体块：与正文块同序（工具产出的图紧跟工具卡）。
+                                if (block.parts.any { it is ImagePart }) {
+                                    com.psyche.memo.ui.chat.ChatBubbleSurface(
+                                        isUser = false,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        com.psyche.memo.ui.chat.MessageImageAttachments(
+                                            parts = block.parts,
+                                            onOpenViewer = { uris, at -> viewerState = uris to at },
+                                        )
+                                    }
+                                }
+                                if (block.parts.any { it is com.psyche.memo.data.model.FilePart }) {
+                                    com.psyche.memo.ui.chat.MessageAttachmentPreview(
+                                        parts = block.parts,
+                                        alignEnd = false,
+                                        onOpenViewer = { uris, at -> viewerState = uris to at },
+                                    )
+                                }
+                            }
                             is com.psyche.memo.ui.chat.AssistantBlock.Text -> {
                                 // visual 规则（chat_message_widget.dart L1276）。
                                 val visual = remember(block.text) {

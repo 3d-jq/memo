@@ -67,19 +67,15 @@ fun AssistantEditGenerationTab(
         container.generationServices.list(kind)
     }
 
-    val binding = if (isImage) assistant.imageGeneration else assistant.videoGeneration
+    val binding = assistant.generationBinding(kind)
     val selectedId = binding?.serviceId
 
     fun update(next: AssistantGenerationBinding?) = onEdit { current ->
-        if (isImage) current.copy(imageGeneration = next) else current.copy(videoGeneration = next)
+        current.withGenerationBinding(kind, next)
     }
 
-    fun select(serviceId: String?) = update(
-        (binding ?: AssistantGenerationBinding()).copy(
-            enabled = serviceId != null,
-            serviceId = serviceId,
-        ),
-    )
+    // 与 + 面板的生成选择器同一条规则（只翻 enabled、保留上次选的 id）。
+    fun select(serviceId: String?) = update(AssistantGenerationBinding.select(binding, serviceId))
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),

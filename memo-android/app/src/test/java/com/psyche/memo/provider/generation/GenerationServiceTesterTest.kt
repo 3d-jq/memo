@@ -2,6 +2,7 @@ package com.psyche.memo.provider.generation
 
 import com.psyche.memo.data.model.GenerationKind
 import com.psyche.memo.data.model.GenerationService
+import com.psyche.memo.data.model.GenerationTestState
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -63,14 +64,40 @@ class GenerationServiceTesterTest {
         )
     }
 
+    /**
+     * 三态映射是用户 2026-09-17「视频、图片显示连接失败」的修复点：可达**必须**
+     * 落成 REACHABLE，不能塌成 FAILED（生成类中转大多没有 /models）。
+     */
     @Test
-    fun `an http error carries the status and body`() = runBlocking {
+    fun `each result maps to its own persisted state`() = runBlocking {
+        server.enqueue(MockResponse().setBody("""{"data":[{}]}"""))
+        assertEquals(
+            GenerationTestState.OK,
+            GenerationServiceTester.test(service(), client).state,
+        )
+        server.enqueue(MockResponse().setResponseCode(404))
+        assertEquals(
+            GenerationTestState.REACHABLE,
+            GenerationServiceTester.test(service(), client).state,
+        )
+        server.enqueue(MockResponse().setResponseCode(500).setBody("boom"))
+        assertEquals(
+            GenerationTestState.FAILED,
+            GenerationServiceTester.test(service(), client).state,
+        )
+    }
+
+    @Test
+    fun `an http error carries the status the probed url and the body`() = runBlocking {
         server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"bad key"}"""))
         val result = GenerationServiceTester.test(service(), client)
         assertTrue(result is GenerationServiceTester.Result.Failed)
         val message = (result as GenerationServiceTester.Result.Failed).message
         assertTrue(message, message.contains("401"))
         assertTrue(message, message.contains("bad key"))
+        // 探测的 URL 要露出来，用户才知道自家地址被拼成了什么（排查靠它）。
+        assertTrue(message, message.contains("/v1/models"))
+        assertTrue(message, message.contains("key"))
     }
 
     @Test

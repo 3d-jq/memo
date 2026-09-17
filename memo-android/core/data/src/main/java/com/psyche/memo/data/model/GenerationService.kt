@@ -15,6 +15,28 @@ object GenerationKind {
 }
 
 /**
+ * 「测试连接」的结果三态（自研功能）。
+ *
+ * 为什么必须三态：**生成类中转大多不提供 `/models` 列表接口**（回 404/405）——
+ * 服务本身是好的，只是没有这个探针接口。两态（成功/失败）会把这类服务直接标成
+ * 「连接失败」（用户 2026-09-17「视频、图片显示连接失败，但服务是能用的」就是
+ * 这条），所以「接口可达但没有 /models」要单列 [REACHABLE]，与真失败区分开。
+ */
+object GenerationTestState {
+    const val OK = "ok"
+    const val REACHABLE = "reachable"
+    const val FAILED = "failed"
+
+    /** 认不出的值一律当「没测过」——免得脏数据在列表里显示成怪状态。 */
+    fun normalize(raw: String?): String? = when (raw?.trim()?.lowercase()) {
+        OK -> OK
+        REACHABLE -> REACHABLE
+        FAILED -> FAILED
+        else -> null
+    }
+}
+
+/**
  * 生成服务（自研功能，上游 kelivo 没有）：一份「OpenAI 兼容」的图片/视频生成端点配置。
  *
  * 存储：drift v3 的通用表 `extension_entity_rows`（`kind = "generation_service"`），
@@ -46,8 +68,8 @@ data class GenerationService(
     // ---- 元信息 ----
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
-    /** 最近一次「测试连接」的结果；null = 没测过。 */
-    val lastTestOk: Boolean? = null,
+    /** 最近一次「测试连接」的结果（[GenerationTestState] 三态之一）；null = 没测过。 */
+    val lastTestState: String? = null,
     val lastTestAt: Long = 0,
 ) {
     val isImage: Boolean get() = kind == GenerationKind.IMAGE
@@ -89,6 +111,7 @@ data class GenerationService(
         size = size.trim(),
         count = count.coerceIn(MIN_IMAGE_COUNT, MAX_IMAGE_COUNT),
         durationSeconds = durationSeconds.coerceIn(0, MAX_VIDEO_SECONDS),
+        lastTestState = GenerationTestState.normalize(lastTestState),
         createdAt = if (createdAt == 0L) now else createdAt,
         updatedAt = now,
     )

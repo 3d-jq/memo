@@ -138,6 +138,11 @@ fun ChatContent(
     onOpenWorldBookPage: () -> Unit = {},
     onOpenSkills: () -> Unit = {},
     onOpenWorkspaces: () -> Unit,
+    /**
+     * 生成服务的「管理」出口（+ 面板选择器末尾那行；kind = image/video）。
+     * **不给默认值**：漏传的话这一行会被静默吞掉（见 onOpenWorkspaces 的教训）。
+     */
+    onOpenGenerationServices: (String) -> Unit,
     titleRefreshTick: Int = 0,
     injectPresets: Boolean = false,
     /**
@@ -1665,15 +1670,18 @@ fun ChatContent(
         )
     }
 
-    // 生成图片 / 生成视频（自研功能）：面板里生成完直接插进当前对话。
+    // 生成图片 / 生成视频（自研功能）：+ 面板里**只选模型**（绑当前助手），
+    // 真正生成由模型调 `generate_image` / `generate_video` 工具完成
+    //（用户 2026-09-17「点击是选择对应的模型，不是点击使用」）。
     generationKind?.let { kind ->
-        GenerationSheet(
+        com.psyche.memo.ui.GenerationSelectorSheet(
             container = container,
             kind = kind,
-            onInsert = { prompt, images, video ->
-                vm.appendGeneratedMedia(prompt, images, video)
-            },
             onDismiss = { generationKind = null },
+            onOpenManage = {
+                generationKind = null
+                onOpenGenerationServices(kind)
+            },
         )
     }
 

@@ -1004,14 +1004,11 @@ Updating Memo first is the safer choice.</string>
     <string name="generation_services_page_testing">Testing…</string>
     <string name="generation_services_page_video_title">Video generation</string>
     <string name="generation_services_status_failed">Failed</string>
+    <string name="generation_services_status_reachable">Reachable</string>
+    <string name="generation_selector_hint">Pick a service, then just ask the model to generate — it calls the generation tool.</string>
+    <string name="generation_selector_manage">Manage generation services</string>
     <string name="generation_services_status_ok">Available</string>
     <string name="generation_services_status_untested">Not tested</string>
-    <string name="generation_sheet_failed">Generation failed: %1$s</string>
-    <string name="generation_sheet_generate">Generate</string>
-    <string name="generation_sheet_generating">Generating…</string>
-    <string name="generation_sheet_inserted">Added to the conversation</string>
-    <string name="generation_sheet_prompt_hint">Describe the image you want</string>
-    <string name="generation_sheet_prompt_hint_video">Describe the video you want</string>
     <string name="haptics_section_generation">Generation</string>
     <string name="haptics_section_interaction">Interaction</string>
     <string name="haptics_section_master">Master</string>

@@ -11,6 +11,7 @@ import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.data.model.AssistantGenerationBinding
 import com.psyche.memo.data.model.GenerationKind
 import com.psyche.memo.data.model.GenerationService
+import com.psyche.memo.data.model.GenerationTestState
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -81,8 +82,8 @@ class GenerationServiceRepositoryTest {
         repo.update(created.copy(name = "画图2"))
         assertEquals("画图2", repo.get(created.id)?.name)
 
-        repo.setTestResult(created.id, ok = true)
-        assertEquals(true, repo.get(created.id)?.lastTestOk)
+        repo.setTestState(created.id, GenerationTestState.OK)
+        assertEquals(GenerationTestState.OK, repo.get(created.id)?.lastTestState)
         assertEquals(start + 3, repo.version.value)
     }
 

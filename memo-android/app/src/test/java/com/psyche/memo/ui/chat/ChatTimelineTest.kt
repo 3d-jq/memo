@@ -59,7 +59,7 @@ class ChatTimelineTest {
     }
 
     @Test
-    fun imagePartBreaksAThinkingBlock() {
+    fun imagePartBreaksAThinkingBlockAndBecomesItsOwnBlock() {
         val blocks = projectAssistantBlocks(
             parts = listOf(
                 ReasoningPart("a"),
@@ -69,9 +69,61 @@ class ChatTimelineTest {
             segmentsJson = null,
             isStreaming = false,
         )
-        assertEquals(2, blocks.size)
+        assertEquals(3, blocks.size)
         assertEquals(1, (blocks[0] as AssistantBlock.Thinking).steps.size)
+        // 图片**自己成块**（2026-09-17 起）：按 part 顺序夹在两块思考之间，
+        // 而不是被整条消息的「图组」提到气泡上方去。
+        assertEquals(
+            listOf("file:///x.png"),
+            (blocks[1] as AssistantBlock.Media).parts.map { (it as ImagePart).uri },
+        )
+        assertEquals(1, (blocks[2] as AssistantBlock.Thinking).steps.size)
+    }
+
+    /**
+     * 生成类工具的产物必须**紧跟工具卡**（用户 2026-09-17「在一轮了 但是位置不对呀
+     * 怎么在上面了」），连续多张合并成一块，且视频（FilePart）走同一条路。
+     */
+    @Test
+    fun mediaFollowsItsToolAndConsecutiveMediaMerges() {
+        val blocks = projectAssistantBlocks(
+            parts = listOf(
+                TextPart("画好了："),
+                tool(id = "t1", name = "generate_image"),
+                ImagePart(uri = "file:///a.png"),
+                ImagePart(uri = "file:///b.png"),
+                TextPart("还要一张吗？"),
+            ),
+            segmentsJson = null,
+            isStreaming = false,
+        )
+        assertEquals(4, blocks.size)
+        assertEquals("画好了：", (blocks[0] as AssistantBlock.Text).text)
         assertEquals(1, (blocks[1] as AssistantBlock.Thinking).steps.size)
+        val media = blocks[2] as AssistantBlock.Media
+        assertEquals(2, media.parts.size)
+        assertEquals("还要一张吗？", (blocks[3] as AssistantBlock.Text).text)
+
+        // 视频：文件 part 同样成块（工具卡之后）。
+        val video = projectAssistantBlocks(
+            parts = listOf(
+                tool(id = "t2", name = "generate_video"),
+                com.psyche.memo.data.model.FilePart(
+                    uri = "/v/out.mp4",
+                    name = "out.mp4",
+                    mime = "video/mp4",
+                ),
+            ),
+            segmentsJson = null,
+            isStreaming = false,
+        )
+        assertEquals(2, video.size)
+        assertEquals(
+            listOf("/v/out.mp4"),
+            (video[1] as AssistantBlock.Media).parts
+                .filterIsInstance<com.psyche.memo.data.model.FilePart>()
+                .map { it.uri },
+        )
     }
 
     @Test

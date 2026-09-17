@@ -68,7 +68,7 @@ class ImageGenerationClientTest {
         assertEquals(1, media.size)
         assertEquals("image/png", media.single().mimeType)
         assertEquals("PNGDATA", media.single().file.readText())
-        assertTrue(media.single().file.parentFile.name == "images")
+        assertEquals("images", media.single().file.parentFile?.name)
 
         val recorded = server.takeRequest()
         assertEquals("/v1/images/generations", recorded.path)
@@ -104,6 +104,25 @@ class ImageGenerationClientTest {
         assertEquals("URLBYTES", media.single().file.readText())
         assertEquals("/v1/images/generations", server.takeRequest().path)
         assertEquals("/files/a.png", server.takeRequest().path)
+    }
+
+    /**
+     * 真实形状（2026-09-17 拿 Agnes 的线上响应实测）：`b64_json` 是**空串**、
+     * 真图在 `url` 里。空串必须当「没有」处理、回落到 url —— 否则会拿空 base64
+     * 去解码（一条服务看起来很对但永远失败的坑）。
+     */
+    @Test
+    fun `an empty b64 field falls back to the url`() = runBlocking {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"created":1,"data":[{"b64_json":"","url":"${server.url("/files/agnes.png")}","revised_prompt":""}]}""",
+            ),
+        )
+        server.enqueue(MockResponse().setBody("AGNESBYTES").setHeader("Content-Type", "image/png"))
+        val media = subject.generate(service(), service().imageRequest("一只猫"))
+        assertEquals("AGNESBYTES", media.single().file.readText())
+        assertEquals("/v1/images/generations", server.takeRequest().path)
+        assertEquals("/files/agnes.png", server.takeRequest().path)
     }
 
     @Test

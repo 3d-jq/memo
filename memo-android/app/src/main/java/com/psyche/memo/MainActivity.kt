@@ -381,6 +381,16 @@ private fun AppThemeAndContent(
                             onOpenWorldBookPage = { navController.navigate("world_book") },
                             onOpenSkills = { navController.navigate("skills") },
                             onOpenWorkspaces = { navController.navigate("workspaces") },
+                            // + 面板生成选择器末尾的「管理生成服务」出口。
+                            onOpenGenerationServices = { kind ->
+                                navController.navigate(
+                                    if (kind == com.psyche.memo.data.model.GenerationKind.VIDEO) {
+                                        "generation_services_video"
+                                    } else {
+                                        "generation_services_image"
+                                    },
+                                )
+                            },
                             onOpenTranslate = { navController.navigate("translate") },
                             onEditAssistant = { id -> navController.navigate("assistant_settings_edit/$id") },
                             onManageTags = { id -> navController.navigate("tags_manager/$id") },

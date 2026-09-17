@@ -48,6 +48,7 @@ import com.composables.icons.lucide.Trash2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.GenerationKind
 import com.psyche.memo.data.model.GenerationService
+import com.psyche.memo.data.model.GenerationTestState
 import com.psyche.memo.provider.generation.GenerationServiceTester
 import com.psyche.memo.ui.snackbar.AppNotification
 import com.psyche.memo.ui.snackbar.NotificationType
@@ -89,7 +90,8 @@ fun GenerationServiceEditorScreen(
     var showKey by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
     var testMessage by remember { mutableStateOf<String?>(null) }
-    var testOk by remember { mutableStateOf<Boolean?>(null) }
+    // 测试结果三态（[GenerationTestState]）：可达 ≠ 失败（见 tester 注释）。
+    var testState by remember { mutableStateOf(initial.lastTestState) }
     var confirmDelete by remember { mutableStateOf(false) }
 
     val requiredMsg = stringResource(R.string.generation_service_editor_required)
@@ -108,6 +110,8 @@ fun GenerationServiceEditorScreen(
         size = size,
         count = count,
         durationSeconds = seconds,
+        // 带上去：新增时也能把刚测出来的结果一起存进来（否则列表一直显示「未测试」）。
+        lastTestState = testState,
     )
 
     fun save() {
@@ -135,17 +139,18 @@ fun GenerationServiceEditorScreen(
         }
         testing = true
         testMessage = null
-        testOk = null
+        testState = null
         scope.launch {
             val result = GenerationServiceTester.test(service, container.httpClient)
             testing = false
-            testOk = result is GenerationServiceTester.Result.Ok
+            // 三态落库：可达（该中转没有 /models）不再被写成「连接失败」。
+            testState = result.state
             testMessage = when (result) {
                 is GenerationServiceTester.Result.Ok -> testOkFmt.format(result.modelCount)
                 is GenerationServiceTester.Result.ReachableWithoutModels -> testNoModelsMsg
                 is GenerationServiceTester.Result.Failed -> testFailedFmt.format(result.message)
             }
-            if (!isAdding) repo.setTestResult(service.id, testOk == true)
+            if (!isAdding) repo.setTestState(service.id, testState!!)
         }
     }
 
@@ -272,10 +277,12 @@ fun GenerationServiceEditorScreen(
                             text = testMessage ?: stringResource(R.string.generation_services_status_untested),
                             style = TextStyle(
                                 fontSize = 13.sp,
-                                color = when (testOk) {
-                                    true -> cs.primary
-                                    false -> cs.error
-                                    null -> cs.onSurface.copy(alpha = 0.66f)
+                                color = when (testState) {
+                                    GenerationTestState.OK -> cs.primary
+                                    // 可达 = 中性（接口通，只是没 /models）；只有真失败才红。
+                                    GenerationTestState.REACHABLE -> cs.onSurface.copy(alpha = 0.66f)
+                                    GenerationTestState.FAILED -> cs.error
+                                    else -> cs.onSurface.copy(alpha = 0.66f)
                                 },
                             ),
                         )

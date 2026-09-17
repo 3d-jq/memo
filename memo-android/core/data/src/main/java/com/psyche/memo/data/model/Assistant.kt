@@ -22,6 +22,23 @@ data class AssistantGenerationBinding(
     val durationSeconds: Int? = null,
 ) {
     val isUsable: Boolean get() = enabled && !serviceId.isNullOrBlank()
+
+    companion object {
+        /**
+         * 选中 / 取消一个服务（+ 面板的生成选择器与助手编辑页共用同一条规则）：
+         * [serviceId] 为 null 表示关掉（工具不再下发给模型）——此时 `enabled=false`
+         * **且 serviceId 一并清空**（与助手编辑页的 `selectedId` 判据一致，否则
+         * 页面会出现「勾着服务但其实没开」的矛盾态）；覆盖参数（model/size/count…）
+         * 原样保留，下次选中同一个服务不用重填。
+         */
+        fun select(
+            current: AssistantGenerationBinding?,
+            serviceId: String?,
+        ): AssistantGenerationBinding = (current ?: AssistantGenerationBinding()).copy(
+            enabled = serviceId != null,
+            serviceId = serviceId,
+        )
+    }
 }
 
 /**
@@ -75,6 +92,18 @@ data class Assistant(
     val presetMessages: List<JsonElement> = emptyList(),
     val regexRules: List<JsonElement> = emptyList(),
 ) {
+    /** 该类型的生成绑定（kind = [GenerationKind.IMAGE] / [GenerationKind.VIDEO]）。 */
+    fun generationBinding(kind: String): AssistantGenerationBinding? =
+        if (kind == GenerationKind.VIDEO) videoGeneration else imageGeneration
+
+    /** 写回该类型的生成绑定（+ 面板的生成选择器与助手编辑页共用）。 */
+    fun withGenerationBinding(kind: String, binding: AssistantGenerationBinding?): Assistant =
+        if (kind == GenerationKind.VIDEO) {
+            copy(videoGeneration = binding)
+        } else {
+            copy(imageGeneration = binding)
+        }
+
     companion object {
         /** assistant.dart L20-22. */
         const val DefaultTemperature: Double = 1.0

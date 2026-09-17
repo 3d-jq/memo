@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.psyche.memo.data.db.loadSchemaStatements
 import com.psyche.memo.data.model.GenerationKind
 import com.psyche.memo.data.model.GenerationService
+import com.psyche.memo.data.model.GenerationTestState
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -114,12 +115,22 @@ class GenerationServiceStoreTest {
     @Test
     fun `test result is stored on the record`() {
         val created = store.create(image())
-        assertNull(created.lastTestOk)
-        val ok = store.setTestResult(created.id, ok = true, at = 42)
-        assertEquals(true, ok?.lastTestOk)
+        assertNull(created.lastTestState)
+        val ok = store.setTestState(created.id, GenerationTestState.OK, at = 42)
+        assertEquals(GenerationTestState.OK, ok?.lastTestState)
         assertEquals(42L, ok?.lastTestAt)
-        assertEquals(true, store.get(created.id)?.lastTestOk)
-        assertEquals(false, store.setTestResult(created.id, ok = false)?.lastTestOk)
-        assertNull(store.setTestResult("missing", ok = true))
+        assertEquals(GenerationTestState.OK, store.get(created.id)?.lastTestState)
+        // 「可达」是独立的一态：不能塌成失败（生成类中转没有 /models 的常态）。
+        assertEquals(
+            GenerationTestState.REACHABLE,
+            store.setTestState(created.id, GenerationTestState.REACHABLE)?.lastTestState,
+        )
+        assertEquals(
+            GenerationTestState.FAILED,
+            store.setTestState(created.id, GenerationTestState.FAILED)?.lastTestState,
+        )
+        // 认不出的值当「没测过」，脏数据不至于在列表里变成怪状态。
+        assertNull(store.setTestState(created.id, "whatever")?.lastTestState)
+        assertNull(store.setTestState("missing", GenerationTestState.OK))
     }
 }

@@ -72,6 +72,8 @@ class AskUserPanelTest {
     }
 
     @Test
+    // `CompletableDeferred.getCompleted()` 仍是实验 API（编译零警告是门禁要求）。
+    @kotlin.OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     fun submitNeedsEveryQuestionAnsweredAndThenCompletesTheRequest() {
         val service = AskUserInteractionService()
         val deferred = request(service)

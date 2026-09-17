@@ -473,10 +473,12 @@ private fun ConfigTab(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        // 顶部管理分组标题（provider_detail_page L1082-1093）。
+        // 顶部管理分组标题（provider_detail_page L1082-1093）。颜色跟主题走 ——
+        // 判据同设置页各分组标题（`settingsSectionHeaderColor`，用户 2026-09-17
+        // 「供应商那个 card 怎么没有跟着主题颜色走」）；字号/间距不动。
         Text(
             text = stringResource(com.psyche.memo.ui.R.string.provider_detail_page_manage_section_title),
-            style = TextStyle(fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.8f)),
+            style = TextStyle(fontSize = 13.sp, color = settingsSectionHeaderColor(cs)),
             modifier = Modifier.padding(start = 12.dp),
         )
         Spacer(Modifier.height(6.dp))

@@ -52,7 +52,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -463,13 +462,30 @@ private fun LogFilesList(
 // —— Plain log viewer (app tab) ————————————————————————————————————————
 
 /** _PlainLogContentPage L437-535 — full-screen overlay with export. */
+/**
+ * 复制到剪贴板。Compose 1.8 起 `LocalClipboardManager` 已废弃，统一走
+ * `LocalClipboard` + `ClipEntry`（`setClipEntry` 是 suspend，所以借组合作用域 launch）。
+ */
+private fun copyToClipboard(
+    scope: kotlinx.coroutines.CoroutineScope,
+    clipboard: androidx.compose.ui.platform.Clipboard,
+    text: String,
+) {
+    scope.launch {
+        clipboard.setClipEntry(
+            androidx.compose.ui.platform.ClipEntry(android.content.ClipData.newPlainText("", text)),
+        )
+    }
+}
+
 @Composable
 private fun PlainLogContentOverlay(file: LogFileEntry, title: String, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
     var content by remember(file.path) { mutableStateOf("") }
     var loading by remember(file.path) { mutableStateOf(true) }
-    val clipboard = LocalClipboardManager.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
+    val clipboardScope = androidx.compose.runtime.rememberCoroutineScope()
 
     LaunchedEffect(file.path) {
         content = withContext(Dispatchers.IO) {
@@ -502,7 +518,7 @@ private fun PlainLogContentOverlay(file: LogFileEntry, title: String, onClose: (
                 icon = Lucide.Copy,
                 label = stringResource(UiR.string.log_viewer_copy),
                 onClick = {
-                    clipboard.setText(AnnotatedString(content))
+                    copyToClipboard(clipboardScope, clipboard, content)
                     SnackbarManager.show(AppNotification(
                         message = context.getString(UiR.string.chat_message_widget_copied_to_clipboard),
                         type = NotificationType.SUCCESS,
@@ -923,11 +939,12 @@ private fun prettyJsonObj(obj: kotlinx.serialization.json.JsonElement?): String 
 @Composable
 private fun RequestLogDetailOverlay(entry: RequestLogEntry, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val clipboard = LocalClipboardManager.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
+    val clipboardScope = androidx.compose.runtime.rememberCoroutineScope()
     val context = LocalContext.current
 
     fun copy(text: String) {
-        clipboard.setText(AnnotatedString(text))
+        copyToClipboard(clipboardScope, clipboard, text)
         SnackbarManager.show(AppNotification(
             message = context.getString(UiR.string.chat_message_widget_copied_to_clipboard),
             type = NotificationType.SUCCESS,
@@ -1137,11 +1154,16 @@ private fun DetailSectionCard(
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.78f), modifier = Modifier.size(18.dp))
+            // 分区标题（附件/参数/请求体…）的颜色跟主题走 —— 判据与设置页各分组标题
+            // 同一个 `settingsSectionHeaderColor`（用户 2026-09-17「日志界面那个分类
+            // 怎么没有跟着主题颜色走」）。图标与标题同色（RikkaHub CardGroup 的
+            // LocalContentColor provides primary 也是整行同色）。
+            val headerColor = settingsSectionHeaderColor(cs)
+            Icon(icon, contentDescription = null, tint = headerColor, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(10.dp))
             Text(
                 text = title,
-                style = TextStyle(fontWeight = FontWeight.Bold, color = cs.onSurface.copy(alpha = 0.90f), letterSpacing = (-0.2).sp),
+                style = TextStyle(fontWeight = FontWeight.Bold, color = headerColor, letterSpacing = (-0.2).sp),
                 modifier = Modifier.weight(1f),
             )
             trailing?.invoke()
@@ -1614,7 +1636,8 @@ private fun CompositionBar(entries: List<Pair<ContextSource, Int>>, isEmptyBg: C
 @Composable
 private fun ContextSnapshotDetailOverlay(snapshot: ContextLogSnapshot, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val clipboard = LocalClipboardManager.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
+    val clipboardScope = androidx.compose.runtime.rememberCoroutineScope()
     val context = LocalContext.current
     val model = snapshot.model.trim()
     val assistant = snapshot.assistantName.trim()
@@ -1630,7 +1653,7 @@ private fun ContextSnapshotDetailOverlay(snapshot: ContextLogSnapshot, onClose: 
             }
             sb.appendLine()
         }
-        clipboard.setText(AnnotatedString(sb.toString()))
+        copyToClipboard(clipboardScope, clipboard, sb.toString())
         SnackbarManager.show(AppNotification(
             message = context.getString(UiR.string.chat_message_widget_copied_to_clipboard),
             type = NotificationType.SUCCESS,
@@ -1747,7 +1770,8 @@ private fun ContextMessageGroup(message: ContextLogMessage) {
 private fun ContextSegmentBlock(segment: ContextSegment) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
-    val clipboard = LocalClipboardManager.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboard.current
+    val clipboardScope = androidx.compose.runtime.rememberCoroutineScope()
     val context = LocalContext.current
     val lum = 0.2126f * cs.surface.red + 0.7152f * cs.surface.green + 0.0722f * cs.surface.blue
     val isDark = lum < 0.5f
@@ -1766,7 +1790,7 @@ private fun ContextSegmentBlock(segment: ContextSegment) {
             .combinedClickable(
                 onClick = { if (hasText) expanded = !expanded },
                 onLongClick = {
-                    clipboard.setText(AnnotatedString(displayText))
+                    copyToClipboard(clipboardScope, clipboard, displayText)
                     SnackbarManager.show(AppNotification(
                         message = context.getString(UiR.string.chat_message_widget_copied_to_clipboard),
                         type = NotificationType.SUCCESS,

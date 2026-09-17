@@ -2237,6 +2237,9 @@ class ChatViewModel(
             }
             // Execute each announced tool and fold its result into the
             // part (stream_chunk_handler.dart ToolCallResult path).
+            // 生成类工具的产物（图片 / 视频）先攒着，等工具卡 fold 完再紧跟其后并进
+            // **同一条**助手消息（用户 2026-09-17「生成结果再开一个输出…好割裂呀」）。
+            val generatedParts = mutableListOf<com.psyche.memo.data.model.MessagePart>()
             val results = calls.map { call ->
                 val images = mutableListOf<com.psyche.memo.data.model.ToolImage>()
                 val result = toolHandler.handle(
@@ -2244,15 +2247,15 @@ class ChatViewModel(
                     parseToolArguments(call.arguments),
                     call.id,
                 ) { images += it }
-                // 生成类工具：产物（图片 / 视频）作为一条助手消息进对话 —— 与输入栏
-                // ➕ 面板的「生成」走同一条路径，所以图片有气泡 + 查看器、视频有文件卡。
                 if (call.name in com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES) {
-                    appendGeneratedMediaFromToolResult(call.arguments, result)
+                    generatedParts += com.psyche.memo.provider.generation.generatedMediaParts(result)
                 }
                 roundHandler.foldToolResult(call.id, JsonPrimitive(result), images)
                 result to images
             }
             allParts += roundHandler.parts
+            // 产物紧跟工具卡（本轮 fold 出来的 part 之后），不再单开一条消息。
+            allParts += generatedParts
             allSegments += roundHandler.reasoningSegments
             updateStreaming(allParts, encodeSegments(allSegments)) // folded results now visible
             // Append the assistant tool_calls + tool result transcript
@@ -3055,73 +3058,7 @@ class ChatViewModel(
         }
     }
 
-    /**
-     * 把「生成图片 / 生成视频」的结果作为一条**助手消息**插进当前对话（自研功能）。
-     *
-     * 形态：`[TextPart(提示词)] + [ImagePart…]`（图片）或 `[TextPart(提示词)] +
-     * [FilePart(mp4)]`（视频）。选助手角色而不是用户，是因为素材是「按你的要求产出的」；
-     * 图片会走现有的助手图片气泡 + 查看器，视频走文件卡（点开交给系统播放器）。
-     *
-     * 提示词只作为正文记一笔；**空的提示词**就不带文本 part（生成页允许只发参数）。
-     * 临时会话不落库（与 `persistAssistant` 的语义一致），内存里仍然显示。
-     */
-    fun appendGeneratedMedia(prompt: String, imagePaths: List<String>, videoPath: String? = null) {
-        val parts = buildList {
-            val trimmed = prompt.trim()
-            if (trimmed.isNotEmpty()) add(com.psyche.memo.data.model.TextPart(trimmed))
-            imagePaths.forEach { path ->
-                add(com.psyche.memo.data.model.ImagePart(uri = path, mime = mimeForPath(path)))
-            }
-            videoPath?.let { path ->
-                add(
-                    com.psyche.memo.data.model.FilePart(
-                        uri = path,
-                        name = java.io.File(path).name,
-                        mime = "video/mp4",
-                    ),
-                )
-            }
-        }
-        if (parts.isEmpty()) return
-        val id = "gen_${java.util.UUID.randomUUID()}"
-        append(
-            UiMessage(
-                id = id,
-                role = "assistant",
-                parts = parts,
-                isStreaming = false,
-                model = selectedModelId.value,
-                providerId = selectedProviderId.value,
-            ),
-        )
-        persistAssistant(id, parts)
-    }
 
-    private fun mimeForPath(path: String): String = when (path.substringAfterLast('.', "").lowercase()) {
-        "jpg", "jpeg" -> "image/jpeg"
-        "webp" -> "image/webp"
-        else -> "image/png"
-    }
-
-    /**
-     * 生成类工具的结果 JSON → 往对话里插一条媒体消息。
-     *
-     * 结果形如 `{"type":"image_generation_result","paths":[…]}` 或
-     * `{"type":"video_generation_result","path":"…"}`；解析失败/没有产物时静默跳过
-     * （工具 JSON 本身已经把错误讲清楚了，模型据此回话）。
-     */
-    private fun appendGeneratedMediaFromToolResult(argumentsJson: String, resultJson: String) {
-        val result = runCatching { Json.parseToJsonElement(resultJson).jsonObject }.getOrNull() ?: return
-        val prompt = runCatching {
-            (Json.parseToJsonElement(argumentsJson).jsonObject["prompt"] as? JsonPrimitive)?.contentOrNull
-        }.getOrNull().orEmpty()
-        val imagePaths = (result["paths"] as? JsonArray)
-            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-            .orEmpty()
-        val videoPath = (result["path"] as? JsonPrimitive)?.contentOrNull
-        if (imagePaths.isEmpty() && videoPath == null) return
-        appendGeneratedMedia(prompt = prompt, imagePaths = imagePaths, videoPath = videoPath)
-    }
 
     private fun ChatMessage.toUi(): UiMessage = UiMessage(
         id = id,

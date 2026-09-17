@@ -197,6 +197,8 @@ fun HomeScreen(
      * 后调用方漏传会直接编译不过。
      */
     onOpenWorkspaces: () -> Unit,
+    /** + 面板生成选择器末尾的「管理生成服务」出口（kind = image/video）。 */
+    onOpenGenerationServices: (String) -> Unit,
     onEditAssistant: (String) -> Unit = {},
     onManageTags: (String) -> Unit = {},
     pendingOpenConversation: androidx.compose.runtime.MutableState<String?>? = null,
@@ -496,7 +498,8 @@ fun HomeScreen(
                 onOpenSearchServices = onOpenSearchServices,
                 onOpenWorldBookPage = onOpenWorldBookPage,
                 onOpenSkills = onOpenSkills,
-        onOpenWorkspaces = onOpenWorkspaces,
+                onOpenWorkspaces = onOpenWorkspaces,
+                onOpenGenerationServices = onOpenGenerationServices,
                 titleRefreshTick = titleRefreshTick,
                 injectPresets = pendingPresetInject,
                 timelineAlpha = { convoFade.value },

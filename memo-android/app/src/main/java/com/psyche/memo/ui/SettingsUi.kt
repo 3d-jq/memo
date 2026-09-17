@@ -580,24 +580,20 @@ fun SettingsSwitchRow(
 /**
  * 源码 section_card.dart L30-66 —— SectionCard standard：r12、hairline 边框
  * （outlineVariant @ dark 0.08 / light 0.06）、背景 surfaceCard、纵向内边距 4。
+ *
+ * **底色走主题语义卡色**（与 [SectionCard] 同源）：这里原本是
+ * `lerp(surface, 纯白, 96%)` 的兼容近似 —— 浅色主题下等于死白、不跟主题，
+ * 于是「工具描述」「供应商详情」这些用本容器的页面卡片永远是白的
+ *（用户 2026-09-17「工具描述那个卡片…全是固定白色呀 没有跟着主题」）。
  */
 @Composable
 fun SettingsSectionCard(content: @Composable () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val lum = 0.2126f * cs.surface.red + 0.7152f * cs.surface.green + 0.0722f * cs.surface.blue
-    val dark = lum < 0.5f
+    val semantic = LocalSemanticColors.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                androidx.compose.ui.graphics.lerp(cs.surface, Color.White, if (dark) 0.10f else 0.96f),
-                RoundedCornerShape(12.dp),
-            )
-            .border(
-                1.dp,
-                cs.outlineVariant.copy(alpha = if (dark) 0.08f else 0.06f),
-                RoundedCornerShape(12.dp),
-            )
+            .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
+            .border(1.dp, semantic.hairline, RoundedCornerShape(12.dp))
             .padding(vertical = 4.dp),
     ) { content() }
 }
@@ -659,16 +655,16 @@ internal fun SettingsTextField(
     }
 }
 
-/** AppSemanticColors.surfaceCard（AppSemanticColors.kt L29）。 */
-internal fun androidx.compose.material3.ColorScheme.surfaceCardColorCompat(): androidx.compose.ui.graphics.Color {
-    val lum = 0.2126f * surface.red + 0.7152f * surface.green + 0.0722f * surface.blue
-    val dark = lum < 0.5f
-    return androidx.compose.ui.graphics.lerp(
-        surface,
-        androidx.compose.ui.graphics.Color.White,
-        if (dark) 0.10f else 0.96f,
-    )
-}
+/**
+ * 卡片底色 —— 直接取主题的 [LocalSemanticColors.surfaceCard]（与 [SectionCard] 同源）。
+ *
+ * 原来是 `lerp(surface, 纯白, 96%)` 的兼容近似：浅色主题下等于死白、不跟主题
+ *（用户 2026-09-17「没有跟着主题…全是固定白色」）。用法遍布输入框底、日志页 tab 条
+ * 容器、工具参数胶囊等，改成主题色后这些位置都会跟着换主题。
+ */
+@Composable
+internal fun androidx.compose.material3.ColorScheme.surfaceCardColorCompat(): androidx.compose.ui.graphics.Color =
+    LocalSemanticColors.current.surfaceCard
 
 // ---------------------------------------------------------------------------
 // Thin shell helpers shared by the backup/sponsor placeholder pages (they were

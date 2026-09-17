@@ -243,14 +243,23 @@ sealed class AssistantBlock {
 
     /** 一张 `_ChainOfThoughtCard` 的全部时间线步骤。 */
     data class Thinking(val steps: List<TimelineStep>) : AssistantBlock()
+
+    /**
+     * 媒体块（图片 / 文档附件）—— **按 part 顺序**出现在正文之间。
+     *
+     * 原设计把整条消息的图片当缩略图组挂在气泡**上方**（另一侧渲染），于是生成类
+     * 工具的产物跑到工具卡上面去了（用户 2026-09-17「在一轮了 但是位置不对呀
+     * 怎么在上面了」）。变成块之后：产物紧跟工具卡、与正文同一条消息内同序排列。
+     */
+    data class Media(val parts: List<MessagePart>) : AssistantBlock()
 }
 
 /**
  * 把消息 parts 折叠成有序块：连续的 reasoning / tool parts 归入当前思考块，
  * 非空 text / 可见 image part 打断它（timeline_projection.dart 566-651）。
  *
- * 图片块不在这里输出——HomeScreen 已用 [MessageImageAttachments] 把整条消息的
- * 图片 part 作为缩略图组渲染在气泡顶部；图片 part 仍然打断思考块。
+ * 图片/附件 part 现在会**成块输出**（[AssistantBlock.Media]，连续的媒体合并成一块），
+ * 由 MessageRow 按块顺序渲染 —— 这样工具产出的图就紧跟工具卡（见 Media 的注释）。
  */
 fun projectAssistantBlocks(
     parts: List<MessagePart>,
@@ -267,13 +276,30 @@ fun projectAssistantBlocks(
         pending = null
     }
 
+    /** 连续媒体并入上一块，避免同一次工具产出的多张图散成多个气泡。 */
+    fun appendMedia(part: MessagePart) {
+        val last = blocks.lastOrNull()
+        if (last is AssistantBlock.Media) {
+            blocks[blocks.lastIndex] = last.copy(parts = last.parts + part)
+        } else {
+            blocks.add(AssistantBlock.Media(listOf(part)))
+        }
+    }
+
     for (part in parts) {
         when (part) {
             is TextPart -> if (part.text.isNotBlank()) {
                 flush()
                 blocks.add(AssistantBlock.Text(part.text))
             }
-            is ImagePart -> if (part.unavailable != true && part.uri.isNotBlank()) flush()
+            is ImagePart -> if (part.unavailable != true && part.uri.isNotBlank()) {
+                flush()
+                appendMedia(part)
+            }
+            is com.psyche.memo.data.model.FilePart -> {
+                flush()
+                appendMedia(part)
+            }
             is ReasoningPart -> {
                 if (part.text.isEmpty()) continue
                 val segment = segments.getOrNull(reasoningIndex)

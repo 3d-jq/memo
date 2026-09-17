@@ -4,6 +4,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.psyche.memo.data.db.ExtensionEntityDao
 import com.psyche.memo.data.model.GenerationKind
 import com.psyche.memo.data.model.GenerationService
+import com.psyche.memo.data.model.GenerationTestState
 import java.util.UUID
 
 /**
@@ -55,10 +56,13 @@ class GenerationServiceStore(db: SQLiteDatabase) {
         return true
     }
 
-    /** 「测试连接」结果落库（服务编辑页的三个状态灯）。 */
-    fun setTestResult(id: String, ok: Boolean, at: Long = System.currentTimeMillis()): GenerationService? {
+    /** 「测试连接」结果落库（[state] = [GenerationTestState] 之一；null 清成「没测过」）。 */
+    fun setTestState(id: String, state: String?, at: Long = System.currentTimeMillis()): GenerationService? {
         val existing = get(id) ?: return null
-        val next = existing.copy(lastTestOk = ok, lastTestAt = at)
+        val next = existing.copy(
+            lastTestState = GenerationTestState.normalize(state),
+            lastTestAt = at,
+        )
         val row = dao.get(id)
         dao.upsert(id, GenerationService.encode(next), row?.sortOrder ?: 0, row?.ownerId)
         return next

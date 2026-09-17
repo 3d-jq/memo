@@ -25,6 +25,48 @@ class AssistantGenerationBindingTest {
         assertTrue(AssistantGenerationBinding(enabled = true, serviceId = "s1").isUsable)
     }
 
+    /**
+     * 选择规则（+ 面板的生成选择器与助手编辑页共用）：选中 = enabled + 服务 id；
+     * 关掉 = enabled false **且 id 清空**（否则页面会出现「勾着服务但其实没开」
+     * 的矛盾态）；覆盖参数两向都保留。
+     */
+    @Test
+    fun `selecting turns the binding on and clearing drops the service id`() {
+        val chosen = AssistantGenerationBinding.select(null, "s1")
+        assertTrue(chosen.isUsable)
+        assertEquals("s1", chosen.serviceId)
+
+        val withOverrides = chosen.copy(model = "gpt-image-1", size = "1024x1024", count = 2)
+        val cleared = AssistantGenerationBinding.select(withOverrides, null)
+        assertFalse(cleared.isUsable)
+        assertNull(cleared.serviceId)
+        // 覆盖参数留着：下次选中同一个服务不用重填。
+        assertEquals("gpt-image-1", cleared.model)
+        assertEquals("1024x1024", cleared.size)
+        assertEquals(2, cleared.count)
+    }
+
+    @Test
+    fun `the per kind helpers read and write the right binding`() {
+        val assistant = Assistant(
+            id = "a1",
+            imageGeneration = AssistantGenerationBinding(enabled = true, serviceId = "img-1"),
+        )
+        assertEquals("img-1", assistant.generationBinding(GenerationKind.IMAGE)?.serviceId)
+        assertNull(assistant.generationBinding(GenerationKind.VIDEO))
+
+        val patched = assistant.withGenerationBinding(
+            GenerationKind.VIDEO,
+            AssistantGenerationBinding.select(null, "vid-1"),
+        )
+        assertEquals("vid-1", patched.videoGeneration?.serviceId)
+        // 另一类不受影响。
+        assertEquals("img-1", patched.imageGeneration?.serviceId)
+
+        // 未知 kind 一律当图片（GenerationKind.normalize 的口径）。
+        assertEquals("img-1", patched.generationBinding("nonsense")?.serviceId)
+    }
+
     @Test
     fun `an assistant without the keys reads as unconfigured`() {
         val decoded = json.decodeFromString(Assistant.serializer(), """{"id":"a1","name":"管家"}""")

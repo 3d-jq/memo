@@ -862,6 +862,140 @@ url 回退、封面落盘、中转字段名容错）、`AssistantGenerationBindi
 ③ 参考图 / 图生图（`/images/edits`、`input_reference`）与服务商扩展（阿里百炼、火山方舟、
 MiniMax 等）都没做 —— 用户明确先只做 OpenAI 兼容两条。
 
+## 5.20 生成功能的「测试连接」三态 + ➕ 入口改成选模型（2026-09-17）
+
+用户 2026-09-17（一次报两件事）：「我给这个加了图片生成和视频生成的功能，但是这个里面的
+测试好像有问题，还有这个输入框加号里面的图片生成和视频生成点击是选择对应的模型 不是点击
+使用呀 这个生成图片和视频是大模型调用工具来」；追问后确认测试那条的现象是
+**「视频，图片 显示连接失败」**，手动生成面板 → **删掉**。
+
+### ① 测试连接：可达 ≠ 连接失败（根因）
+
+老实现把结果压成两态（`lastTestOk: Boolean?`），而探针是 `GET {base}/models`——
+**生成类中转大多没有这个列表接口**（回 404/405）。于是「服务明明是好的」却被写成
+`false`，列表页显示红色「连接失败」、编辑页文案也走 `cs.error`。修法：
+
+- `GenerationTestState`（ok / reachable / failed）替代布尔；`GenerationService.lastTestState`
+  换掉 `lastTestOk`（`normalize()` 认不出的值一律当「没测过」）；store/repo 的方法更名
+  `setTestState`。
+- 404/405 → `ReachableWithoutModels` → 落成 **reachable**，列表页胶囊显示「可达」（primary
+  色）、编辑页文案走中性灰；401/403 单独提示「key 无效或没有权限」；其余非 2xx 照旧带状态码
+  + 响应体截断。**失败文案一律附上探测的 URL**（用户才知道自家地址被拼成了什么）。
+- 顺带修一处：新增服务时测出的结果现在会**跟着保存**（`current()` 带上 `lastTestState`），
+  之前只有「编辑已有服务」才落库，新增完列表永远显示「未测试」。
+
+### ② ➕ 面板的生成入口 = 选模型，不是「使用」
+
+`GenerationSelectorSheet`（照 `WorkspaceSelectorSheet` 的形态：拖柄 + `MemoSheetOptionRow`
+单选「不使用」/各服务 + 末尾「管理生成服务」出口）**只做选择**，点一下绑到当前助手并收起；
+真正出图/出片由模型调 `generate_image` / `generate_video` 完成（助手绑了服务才会拿到这两个
+工具）。**手动生成面板 `GenerationSheet` 已删**（`vm.appendGeneratedMedia` 保留——工具结果
+仍走它插消息），连它的 6 条专属文案一并清掉；想找回看提交 `c4dfa94`。
+
+选择规则抽成纯函数（+ 面板与助手编辑页共用一份，避免两处漂移）：
+`AssistantGenerationBinding.select(current, serviceId)`（选中 = enabled + id；
+「不使用」 = enabled false **且 id 清空**，与编辑页 `selectedId` 判据一致）、
+`Assistant.generationBinding(kind)` / `withGenerationBinding(kind, binding)`。
+`onOpenGenerationServices` 是**无默认值**的导航回调（漏传直接编译不过，见 §5.11 的教训）。
+
+### ③ 顺手清掉的两处测试噪音
+
+- **`./gradlew test` 一片红的假警报**：`:app:testReleaseUnitTest` 有 65 例必红 ——
+  `createAndroidComposeRule` 要启动 `androidx.activity.ComponentActivity`，而声明它的
+  `androidx.compose.ui:ui-test-manifest` 只能挂 debug（release 清单不能带测试脚手架）。
+  已在 `app/build.gradle.kts` 用 `androidComponents { beforeVariants(selector().withBuildType("release")) { it.enableUnitTest = false } }`
+  关掉 release 单测（本工程没有 BuildConfig/debug 分支，两个变体跑同一份代码；
+  真正有意义的门禁是 `:app:testDebugUnitTest`）。
+- **编译零警告**：生成测试里 `File.parentFile` 可空未处理（2 处）、
+  `DatabaseSnapshotMergerTest` 混型 `arrayOf` 的 reified 推断（3 处）、
+  `AskUserPanelTest` 用 `CompletableDeferred.getCompleted()` 缺 opt-in —— 全清。
+
+**测试**：`GenerationServiceTesterTest`（新增「三态各映射各的落库值」与「失败文案带 URL」）、
+`GenerationServiceStoreTest`（三态 + 脏值归零）、`AssistantGenerationBindingTest`（选择规则 +
+per-kind 读写）、`GenerationServiceRepositoryTest` 更名跟进。
+
+## 5.21 生成结果并进同一轮 + 两处主题色漏改（2026-09-17 晚）
+
+用户 2026-09-17（同一条消息里两件事）：「为什么生成图片这个 再开一个输出结果 没有再在一个
+对话轮里呀 好割裂呀 视频生成也会这样吗？」+「这个供应商模型设置那个 card 怎么没有跟着主题
+颜色走呀 还有日志界面那个分类那个」。
+
+### ① 生成产物不再另开一条消息（用户选「并进同一轮」）
+
+旧实现把产物当**独立一条助手消息**插进对话（`appendGeneratedMedia` → 新 `UiMessage` +
+`persistAssistant`），所以工具卡和图片分属两条气泡。改法：
+
+- `runGenerationLoop` 里把产物 part 攒进 `generatedParts`，等**工具卡 fold 完之后**
+  `allParts += generatedParts` —— 产物紧跟工具卡，属于**同一条**助手消息；
+  之后 `updateStreaming(...)` 照旧，落库走原有的轮次收尾（`onPersist`/取消/失败三条路径
+  都带 `allParts`）。
+- 删掉 `appendGeneratedMedia` / `appendGeneratedMediaFromToolResult`（含「另开消息」的
+  落库分支，已无调用者）；提示词**不**重复成文本 part（工具卡里就有参数）。
+- 逻辑抽成纯函数 `provider/generation/GeneratedMediaParts.kt`：
+  `generatedMediaParts(resultJson)`（图片 → `ImagePart`、视频 → `FilePart(video/mp4)`，
+  顺序图片在前）+ `mimeForGeneratedPath`。配 `GeneratedMediaPartsTest` 五例。
+- **视频与图片是同一条代码路径**（`GenerationTools.ALL_TOOL_NAMES` 同一分支），所以行为
+  完全一致 —— 用户问「视频也会这样吗」，答案曾经是「会」，现在是「一样并进同一轮」。
+
+### ② 两处分组标题没跟主题色（同一类漏改）
+
+判据一律 `SettingsUi.kt` 的 `settingsSectionHeaderColor(scheme)`（= `primary`），只改颜色，
+字号/字重/间距不动：
+
+| 位置 | 原来 | 现在 |
+|---|---|---|
+| 日志页 `LogViewerScreen.DetailSectionCard`（附件/参数/请求体… 的**分区标题**） | `onSurface@90%`，图标 `@78%` | 标题与图标同用主题色（RikkaHub `CardGroup` 的 `LocalContentColor provides primary` 也是整行同色） |
+| 供应商详情页「配置」tab 的**「管理」分组标题** | `onSurface@80%` | 主题色 |
+
+同文件里另有两处 `onSurface@80%`（服务账号 JSON 字段标签、`LabeledInput` 的标签）是**表单
+字段标签**、不是分组标题，**保持不动**（别顺手一起改）。
+
+### ③ 顺带：`LocalClipboardManager` 迁移 + 13 条既有警告
+
+`LogViewerScreen` 的 4 处复制改用 `LocalClipboard` + `ClipEntry`（`setClipEntry` 是 suspend，
+统一走文件内的 `copyToClipboard(scope, clipboard, text)`；范式同 `ChatContent.kt:395`）。
+全量重编（`--rerun-tasks`）另外暴露 13 条**既有**编译警告（增量编译一直藏着），
+清单见当日工作日志，属待清批次。
+
+## 5.22 「固定白色」根因 + 助手媒体成块（2026-09-17 深夜）
+
+用户 2026-09-17：「在一轮了 但是位置不对呀 怎么在上面了」+「日志那个分类 tab 没有跟着主题色」
++「工具描述那个卡片也没有跟着主题走 全是固定白色呀 你看看其他界面没有这个问题」。
+
+### ① 「固定白色」的根因：两个白色 lerp 兼容助手
+
+`SettingsUi.kt` 里有一对遗留近似实现，都把卡片底色算成
+`lerp(colorScheme.surface, Color.White, 0.96f)`（浅色）/ `0.10f`（深色）——
+**浅色主题下等于死白、完全不跟主题**：
+
+| 位置 | 影响面 |
+|---|---|
+| `SettingsSectionCard` | 所有用它的页面卡片：**工具描述**、**供应商详情「管理」下面那张卡**、备份/赞助占位页… |
+| `surfaceCardColorCompat()` | 输入框底色 ×11、**日志页 tab 条容器**、消息样式页、工具参数胶囊… |
+
+两处都改成主题语义卡色 `LocalSemanticColors.surfaceCard`（+ `semantic.hairline` 边框，与
+`SectionCard` 同源 —— 它们本来就都标着「section_card.dart L30-66」，是实现漂移了）。
+`surfaceCardColorCompat()` 现在是 `@Composable`（读 composition local），调用点不用改。
+
+⚠️ `ProviderSheets.kt` 里那两处 `Color.White` 是**二维码白底**（扫码需要，上游也写死），
+**别顺手改**。
+
+### ② 助手媒体改成「块」，不再挂在气泡上方
+
+原来整条助手消息的图片/文档被当成一个缩略图组渲染在气泡**上方**，于是生成类工具的
+产物跑到工具卡上面去了。改法：
+
+- `projectAssistantBlocks` 里图片/附件不再只「打断思考块」，而是产出
+  `AssistantBlock.Media(parts)`（**连续媒体合并成一块**）；`FilePart` 同样成块。
+- `MessageRow` 的助手分支删掉「气泡上方」那组渲染（连 8pt 间隔），改为在块循环里按
+  顺序渲染：有图走 `ChatBubbleSurface` + `MessageImageAttachments`，有文件走
+  `MessageAttachmentPreview`。**用户侧**附件仍按原版挂在气泡上方（没动）。
+- 效果：`[正文][工具卡][图片/视频][正文]` —— 产物紧跟工具卡；模型直出图片的消息
+  （只有图片）视觉与原来一致（它本来就是唯一内容）。
+- 测试：`ChatTimelineTest` 的 `imagePartBreaksAThinkingBlock` 改名并更新断言
+  （图片现在自成一格），新增 `mediaFollowsItsToolAndConsecutiveMediaMerges`
+  （工具卡 → 媒体块、连续合并、视频 FilePart 同路）。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)
