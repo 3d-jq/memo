@@ -54,6 +54,13 @@
 - 媒体 part 现在是投影里的 **`AssistantBlock.Media` 块**（连续媒体合并成一块），按 part 顺序渲染 → `[正文][工具卡][图/视频][正文]`；**不再**整条消息的图组挂在气泡上方（那是旧行为，用户「怎么在上面了」）。用户侧附件仍挂气泡上方。
 - 生成类工具（`generate_image`/`generate_video`）的产物并进**同一条**助手消息（`generatedMediaParts()` 纯函数 + `allParts += generatedParts`），**不**另开消息；视频与图片同一条路径。
 
+## 可视化工具：一个 `render_visual`，SVG 路线保留（2026-09-18 用户拍板）
+- **一个工具、一个 `kind` 枚举**：`bar`/`hbar`/`line`/`area`/`pie`/`donut`/`scatter`/`funnel`/`gauge`/`heatmap` + **`svg`（手写兜底）**。别再拆成两个工具（用户 2026-09-18「为什么不能一个工具渲染各种呀」），也**别再自己动手重构**——「结构化图改原生 Compose Canvas + `ChartPart`」的方案已论证，但用户当日说「现在可以了 那就先用这个吧 不改了」，**搁置**。
+- 产物＝`<filesDir>/images/gen_*.svg`（`image/svg+xml`）→ 走已有图片通道：聊天里按 **SVG 自身比例**等比显示（`SvgAspect`）、点开全屏、导出、备份白拿。**不新增 part 类型**是要点。
+- 两个必须记住的坑（详见 PORTING §5.24）：① 消毒重建文档时**自闭合标签别写重复**（XmlPullParser 会给空元素补 END_TAG）；② **AndroidSVG 1.4 不认 `orient="auto-start-reverse"`** → 解析抛异常 → 空白卡片。落盘前已用 AndroidSVG 真解析校验（失败回 tool_error 让模型改）。
+- **通用教训**：「产物文件看起来没问题」≠「能渲染」——校验要走**渲染器自己的解析器**。排查顺序：先看 `files/images/` 有没有落盘（有 ⇒ 工具跑通、问题在渲染层），再拉文件验标记。
+- 开关是**按助手**的（`assistant.localToolIds`，默认空表）；工具改名后旧勾不会迁移，要在助手编辑页重新打开。
+
 ## 生成服务（图片/视频，自研功能）的关键口径（2026-09-17 用户实测后定）
 - **「测试连接」三态：可达 ≠ 连接失败**。探针只有 `GET {base}/models`，而生成类中转大多没这个接口（404/405）——那种情况必须落 `GenerationTestState.REACHABLE`（列表显示「可达」），**不许**再像老的两态实现那样写成 `lastTestOk=false` 标红「连接失败」（用户 2026-09-17「视频，图片 显示连接失败」的根因）。失败文案必须带**探测的 URL + 状态码 + 响应体截断**；新增服务时测出的结果要跟着保存。
 - **➕ 面板的生成入口只做「选模型」**（绑当前助手），真正生成由模型调 `generate_image`/`generate_video` 工具完成。手动生成面板 `GenerationSheet` 已删（用户 2026-09-17 拍板），**勿加回**；选择规则走纯函数 `AssistantGenerationBinding.select` / `Assistant.generationBinding|withGenerationBinding`（+ 面板与助手编辑页共用，别在两处各写一遍）。
