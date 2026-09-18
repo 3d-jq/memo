@@ -268,11 +268,14 @@ internal fun MessageRow(
         timelineSettings.autoCollapseCodeBlock,
         timelineSettings.autoCollapseCodeBlockLines,
         timelineSettings.mobileCodeBlockWrap,
+        msg.isStreaming,
     ) {
         com.psyche.memo.ui.markdown.CodeBlockConfig(
             autoCollapse = timelineSettings.autoCollapseCodeBlock,
             autoCollapseLines = timelineSettings.autoCollapseCodeBlockLines,
             wrap = timelineSettings.mobileCodeBlockWrap,
+            // 流式中不折叠：否则长代码块停在开头，用户以为没在输出。
+            isStreaming = msg.isStreaming,
         )
     }
     val codeBlockActions = remember(onOpenHtmlPreview) {

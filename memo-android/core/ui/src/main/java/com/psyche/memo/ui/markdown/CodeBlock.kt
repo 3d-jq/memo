@@ -56,7 +56,27 @@ data class CodeBlockConfig(
     val autoCollapse: Boolean = false,
     val autoCollapseLines: Int = 2,
     val wrap: Boolean = false,
+    /**
+     * 这条消息是否还在流式输出。
+     *
+     * 作用：**折叠状态下让预览跟着输出走**（显示末尾几行，而不是死死停在开头）
+     * —— 用户 2026-09-18「大模型输出的时候是固定状态，不能滑动，大模型输出也没有滚动，
+     * 只能看到开始部分，导致用户以为没有输出」；随后用户纠正：「可以折叠，实在折叠也可以
+     * 流式」⇒ 所以折叠照旧，只是折叠的窗口跟着写指针走。
+     */
+    val isStreaming: Boolean = false,
 )
+
+/**
+ * 代码块的展开态判定（原版 `_isEffectivelyExpanded`）：手动记忆优先；否则
+ * 「开了自动折叠 ∧ 超出行数阈值」就收起 —— **流式与否不影响折叠**（流式时靠
+ * [collapsedCodePreview] 的 `fromTail` 让窗口跟着写指针走）。
+ */
+internal fun codeBlockExpanded(
+    manual: Boolean?,
+    autoCollapse: Boolean,
+    exceeds: Boolean,
+): Boolean = manual ?: !(autoCollapse && exceeds)
 
 /**
  * 代码块头部右侧的动作（原版 `_CodeBlockIconAction` 三枚：另存为 / 复制 / 预览）。
@@ -106,11 +126,22 @@ internal fun codeExceedsLineThreshold(code: String, threshold: Int): Boolean {
     return false
 }
 
-/** 折叠时只显示前 [visibleLines] 行（原版 `_collapsedHighlightedCode`）。 */
-internal fun collapsedCodePreview(code: String, visibleLines: Int): String {
+/**
+ * 折叠时显示的预览（原版 `_collapsedHighlightedCode`）。
+ *
+ * [fromTail] = true 时取**末尾** [visibleLines] 行：流式输出中折叠着也要能看到内容在推进
+ *（用户 2026-09-18「可以折叠，实在折叠也可以流式」）；已结束时取开头几行（读代码习惯）。
+ */
+internal fun collapsedCodePreview(
+    code: String,
+    visibleLines: Int,
+    fromTail: Boolean = false,
+): String {
     val trimmed = trimTrailingNewlines(code)
     if (trimmed.isEmpty()) return trimmed
-    return trimmed.split('\n').take(visibleLines.coerceAtLeast(1)).joinToString("\n")
+    val lines = trimmed.split('\n')
+    val keep = visibleLines.coerceAtLeast(1)
+    return (if (fromTail) lines.takeLast(keep) else lines.take(keep)).joinToString("\n")
 }
 
 /** 语言标签：fence 的 info 原样显示，空则「代码」/「Code」。 */
@@ -139,7 +170,11 @@ internal fun CodeBlockView(
     val exceeds = remember(full, config.autoCollapseLines) {
         codeExceedsLineThreshold(full, config.autoCollapseLines)
     }
-    val expanded = manual ?: !(config.autoCollapse && exceeds)
+    val expanded = codeBlockExpanded(
+        manual = manual,
+        autoCollapse = config.autoCollapse,
+        exceeds = exceeds,
+    )
     val hiddenTail = !expanded && exceeds
 
     val copiedMessage = stringResource(R.string.chat_message_widget_copied_to_clipboard)
@@ -241,7 +276,16 @@ internal fun CodeBlockView(
             }
             Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Column {
-                    val visible = if (expanded) full else collapsedCodePreview(full, config.autoCollapseLines)
+                    // 折叠 + 流式中 → 预览跟写指针走（末尾几行）。
+                    val visible = if (expanded) {
+                        full
+                    } else {
+                        collapsedCodePreview(
+                            code = full,
+                            visibleLines = config.autoCollapseLines,
+                            fromTail = config.isStreaming,
+                        )
+                    }
                     val textModifier = if (config.wrap) {
                         Modifier.fillMaxWidth()
                     } else {

@@ -165,6 +165,47 @@ class VisualToolsTest {
         )
     }
 
+    /**
+     * 结果必须**明说成功**：原来只回 paths，模型找不到成功标识就跟用户说「绘制失败」，
+     * 而图其实已经渲染出来了（用户 2026-09-18 报的就是这个）。
+     */
+    @Test
+    fun `results state success explicitly`() {
+        val chart = call(bar)
+        assertEquals("ok", chart["status"]?.jsonPrimitive?.content)
+        assertEquals(true, chart["rendered"]?.jsonPrimitive?.content?.toBoolean())
+        assertTrue(
+            chart["note"]!!.jsonPrimitive.content,
+            chart["note"]!!.jsonPrimitive.content.contains("added to the conversation"),
+        )
+
+        val svg = svgCall(flowchart)
+        assertEquals("ok", svg["status"]?.jsonPrimitive?.content)
+        assertTrue(
+            svg["note"]!!.jsonPrimitive.content,
+            svg["note"]!!.jsonPrimitive.content.contains("do not tell the user it failed"),
+        )
+    }
+
+    /** 图表配色走 App 主题的完整解析（含「原样表面」预设通道），不再只读预设 id + 明暗。 */
+    @Test
+    fun `the chart palette goes through the app theme pipeline`() {
+        val scheme = VisualTools.chartSchemeFor(
+            context = context,
+            palette = com.psyche.memo.ui.ThemeState.resolvePalette(),
+            dark = true,
+            pureBackground = false,
+            layeredSurfaces = false,
+            dynamicColor = false,
+        )
+        val chart = chartPaletteOf(scheme, dark = true)
+        assertEquals(
+            scheme.surfaceBright.toArgb().toLong() and 0xFFFFFFFFL,
+            chart.background,
+        )
+        assertEquals(ChartPalette.DARK_CATEGORICAL, chart.series)
+    }
+
     @Test
     fun `palette follows the theme surfaces and keeps categorical series colours`() {
         val lightScheme = androidx.compose.material3.lightColorScheme()

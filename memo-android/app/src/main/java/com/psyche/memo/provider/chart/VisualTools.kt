@@ -208,6 +208,9 @@ object VisualTools {
         )
         return buildJsonObject {
             put("type", JsonPrimitive("chart_result"))
+            put("status", JsonPrimitive("ok"))
+            put("rendered", JsonPrimitive(true))
+            put("note", JsonPrimitive(RESULT_NOTE))
             put("kind", JsonPrimitive(spec.kind.wireName))
             put("points", JsonPrimitive(spec.categories.size))
             put("series", JsonPrimitive(spec.activeSeries.size))
@@ -245,12 +248,27 @@ object VisualTools {
                 )
                 buildJsonObject {
                     put("type", JsonPrimitive("svg_result"))
+                    put("status", JsonPrimitive("ok"))
+                    put("rendered", JsonPrimitive(true))
+                    put("note", JsonPrimitive(RESULT_NOTE))
                     put("aspect", JsonPrimitive(sanitized.aspectRatio))
                     put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
                 }.toString()
             }
         }
     }
+
+    /**
+     * 结果里给模型的一句话。
+     *
+     * 为什么要有：原来只回 `{"type":"…","paths":[…]}`，**没有明确的成功标识** ——
+     * 模型看半天没找到 status/success，就直接跟用户说「绘制失败」，可图其实已经渲染出来了
+     *（用户 2026-09-18「他明明绘制出来怎么说没有绘制成功呀」；设备上同一秒落了两个文件，
+     * 证明工具两次都成功了）。
+     */
+    private const val RESULT_NOTE =
+        "Drawn successfully. The image has already been added to the conversation right below " +
+            "this tool call — describe what it shows, and do not tell the user it failed."
 
     /** 白底：任何主题下都保证对比度（模型不知道当前主题，别让它赌配色）。 */
     private const val BACKGROUND = """<rect x="0" y="0" width="100%" height="100%" fill="#FFFFFF"/>"""
@@ -267,19 +285,54 @@ object VisualTools {
 
     // ------------------------------------------------------------------ 主题配色
 
-    /** 按当前主题解析图表配色（外壳跟主题、系列色固定，见 [ChartPalette]）。 */
+    /**
+     * 按当前主题解析图表配色 —— **与 App 主题同一套解析**（照 MainActivity 那段）：
+     * 自定义主题、Material You 动态取色、纯色背景、分层表面全都认。
+     *
+     * 之前只读「预设 id + 明暗」，于是自定义主题 / 动态取色下图表会退回默认配色
+     *（用户 2026-09-18「还有没有办法跟主题吗」）。
+     */
     fun paletteFor(container: AppContainerImpl): ChartPalette {
-        val prefs = container.preferenceRepository
+        val context = container.appContext
         val systemDark = (
-            container.appContext.resources.configuration.uiMode and
-                Configuration.UI_MODE_NIGHT_MASK
+            context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
             ) == Configuration.UI_MODE_NIGHT_YES
-        val (palette, dark) = MemoTheme.resolve(
-            paletteId = prefs.readJson(MemoTheme.PALETTE_KEY),
-            mode = prefs.readJson(MemoTheme.MODE_KEY),
-            systemDark = systemDark,
+        val dark = MemoTheme.resolve("default", com.psyche.memo.ui.ThemeState.mode, systemDark).second
+        val scheme = chartSchemeFor(
+            context = context,
+            palette = com.psyche.memo.ui.ThemeState.resolvePalette(),
+            dark = dark,
+            pureBackground = com.psyche.memo.ui.ThemeState.usePureBackground,
+            layeredSurfaces = com.psyche.memo.ui.ThemeState.useLayeredSurfaces,
+            dynamicColor = com.psyche.memo.ui.ThemeState.useDynamicColor,
         )
-        return chartPaletteOf(MemoTheme.colorScheme(palette, dark), dark)
+        return chartPaletteOf(scheme, dark)
+    }
+
+    /** App 主题的三条通道（与 MainActivity 的 `colorScheme` 分支一致）。 */
+    internal fun chartSchemeFor(
+        context: Context,
+        palette: com.psyche.memo.ui.theme.Palette,
+        dark: Boolean,
+        pureBackground: Boolean,
+        layeredSurfaces: Boolean,
+        dynamicColor: Boolean,
+    ): androidx.compose.material3.ColorScheme = when {
+        dynamicColor && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S -> {
+            val dynamic = if (dark) {
+                androidx.compose.material3.dynamicDarkColorScheme(context)
+            } else {
+                androidx.compose.material3.dynamicLightColorScheme(context)
+            }
+            MemoTheme.withDerivedSurfaceContainers(
+                MemoTheme.applyPageSurface(dynamic, dark, pureBackground, layeredSurfaces),
+                dark,
+                layeredSurfaces,
+            )
+        }
+        palette.id in com.psyche.memo.ui.theme.authoredSurfacePaletteIds ->
+            MemoTheme.authoredColorScheme(palette, dark, pureBackground)
+        else -> MemoTheme.colorScheme(palette, dark, pureBackground, layeredSurfaces)
     }
 
     private fun kindList(): String = ChartSpec.Kind.entries.joinToString(", ") { it.wireName } +
