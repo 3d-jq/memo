@@ -351,9 +351,20 @@ object VisualTools {
         put("message", JsonPrimitive(message))
     }.toString()
 
+    /**
+     * `kind` **字段**的说明 —— 模型同样会读它。
+     *
+     * 2026-09-18：这行原先写的是保守版（「use svg only for things a data chart cannot
+     * express」「anything the other kinds cannot express」），与顶层 [DESCRIPTION] 的
+     * 「Your drawing canvas…draw it, do not just describe it」自相矛盾 —— 模型读到字段
+     * 说明里的「只能」就被劝退了，画板定位落不了地。现在改成与顶层一致的积极版：
+     * svg 是**自由画板**，凡图表表达不了/不好表达的都可以画；结构图仍让位给
+     * `render_mermaid`（差异化保留）。
+     */
     private const val KIND_DESCRIPTION =
-        "What to draw. Prefer a data-chart kind whenever the content is actually data; " +
-            "use svg only for things a data chart cannot express. " +
+        "What to draw. Pick the mode that fits: a data-chart kind when the content is " +
+            "actually data (we lay it out and colour it to match the app theme), or svg " +
+            "when you want to draw the picture yourself. " +
             "bar = grouped/stacked columns; hbar = horizontal bars (better with long category " +
             "names); line = trend; area = trend with filled area; pie = parts of a whole; " +
             "donut = pie with the total in the middle; scatter = correlation; " +
@@ -361,18 +372,22 @@ object VisualTools {
             "gauge = one value against a maximum (first number is the value, optional second " +
             "number is the maximum, default 100); heatmap = one row per series, one column per " +
             "category, colour = magnitude; " +
-            "svg = you draw it yourself: dashboards, annotated figures, UI sketches, " +
-            "anything the other kinds cannot express. For structural diagrams (flowcharts, " +
-            "sequence/state/ER/class diagrams, gantt, mind maps, timelines) use the " +
+            "svg = your free drawing canvas: you write the SVG yourself, so anything a chart " +
+            "cannot express is fair game — annotated figures, dashboards, UI sketches, " +
+            "comparisons, explainers, whatever makes the point clearer than prose. " +
+            "For structural diagrams (flowcharts, " +
+            "sequence/state/ER/class diagrams, gantt, mind maps, timelines) prefer the " +
             "render_mermaid tool instead."
 
     const val DESCRIPTION =
         "Your drawing canvas for this conversation. Whenever a picture would help the user " +
-            "understand better than prose — structure, flow, comparison, trend, distribution, " +
-            "part-of-whole, a summary at a glance — draw it, do not just describe it. " +
+            "understand better than prose — a comparison, a trend, a distribution, parts of a " +
+            "whole, a summary at a glance, an explainer — draw it, do not just describe it. " +
             "Two modes: (1) a data chart (bar, hbar, line, area, pie, donut, scatter, funnel, " +
             "gauge, heatmap) from numbers you pass; (2) kind=\"svg\" where you write the SVG " +
             "yourself for anything a chart cannot express. " +
+            "For structure and flow — flowcharts, sequence/state/ER/class diagrams, gantt, " +
+            "mind maps, timelines — use the render_mermaid tool instead. " +
             "Everything is rendered locally into the chat as an image (no network, no cost); " +
             "data charts follow the app theme automatically, so do not hand-draw a data chart " +
             "with svg. " +

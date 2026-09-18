@@ -1153,6 +1153,13 @@ SVG 既是图也是文档 —— 能塞脚本、外部引用、`<foreignObject>`
 
 **只动文案**：代码逻辑、schema、接线均未变；两处测试断言的关键字（`render_visual` / `flowchart` / `do not hand-draw a data chart`）全部保留。验证：`provider.chart.*` 全绿（`MermaidToolsTest` 5、`VisualToolsTest` 12，chart 另 3 个 suite 30）。
 
+**同轮后续修正**（用户追问「对应改了没有呀／还剩交叉打架吗」，查出两处自相矛盾，一并修掉）：
+
+1. **`kind` 字段说明没跟着改**：`VisualTools.KIND_DESCRIPTION`（模型同样会读的字段 description）还是保守版 —— 「use svg **only** for things a data chart cannot express」「anything the other kinds cannot express」。顶层说「这是你的画板，画就完了」，字段却说「svg 只能画数据图表达不了的东西」；模型读到这个「只能」就缩回去了，画板定位落不了地。改成与顶层一致的积极版：svg = **your free drawing canvas**，图表表达不了的都算 fair game。
+2. **两个工具顶层抢同一个词**：`render_visual` 的「该画」清单写着 `structure, flow`，`render_mermaid` 写着 `structure, sequence` —— 同一个词、同一个祈使句；而且画板这边**顶层没有让路句**（让给 Mermaid 只写在 `kind` 字段里，位置弱得多）。改：画板清单里摘掉 structure / flow，顶层补「For structure and flow — flowcharts, sequence/state/ER/class diagrams, gantt, mind maps, timelines — use the render_mermaid tool instead.」。至此让路**双向对称**（Mermaid 原本就有让路句）。
+
+改完复验：`BUILD SUCCESSFUL` + `provider.chart.*` 45 例全绿 + 装机。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)
