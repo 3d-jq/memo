@@ -316,9 +316,7 @@ fun ImageViewerOverlay(
             scope.launch {
                 val message = withContext(Dispatchers.IO) { saveImageToGallery(context, url) }
                 saving = false
-                // 查看器是**全屏 Dialog**，App 的 snackbar 宿主在它后面（看不见）——
-                // 保存/分享的反馈必须用系统 Toast（用户 2026-09-18「下载成功怎么没有 toast 提示」）。
-                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                showSnack(message)
             }
         }
 
@@ -334,11 +332,7 @@ fun ImageViewerOverlay(
                 }
                 sharing = false
                 if (result == null) {
-                    android.widget.Toast.makeText(
-                        context,
-                        context.getString(UiR.string.image_viewer_page_image_load_failed),
-                        android.widget.Toast.LENGTH_SHORT,
-                    ).show()
+                    showSnack(context.getString(UiR.string.image_viewer_page_image_load_failed))
                     return@launch
                 }
                 val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -348,13 +342,7 @@ fun ImageViewerOverlay(
                 }
                 runCatching {
                     context.startActivity(android.content.Intent.createChooser(send, null))
-                }.onFailure {
-                    android.widget.Toast.makeText(
-                        context,
-                        it.message ?: "share failed",
-                        android.widget.Toast.LENGTH_SHORT,
-                    ).show()
-                }
+                }.onFailure { showSnack(it.message ?: "share failed") }
             }
         }
 
@@ -499,6 +487,11 @@ fun ImageViewerOverlay(
                     },
                 )
             }
+            // 项目自己的顶部 toast（`AppSnackBarOverlay` + `ToastItem`）只在 MainActivity
+            // 根部挂了一份，而本查看器是**独立 Dialog 窗口** —— 它会被盖住看不见，
+            // 所以这里在 Dialog 内再挂一份：状态还是同一个 `SnackbarManager`，
+            // 「已保存到相册」的观感与全站一致（用户 2026-09-18「改成我们项目里面那个 toast」）。
+            com.psyche.memo.ui.snackbar.AppSnackBarOverlay { }
         }
     }
 }
