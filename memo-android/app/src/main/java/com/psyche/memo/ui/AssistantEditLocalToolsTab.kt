@@ -37,6 +37,7 @@ import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircleQuestion
 import com.composables.icons.lucide.Smartphone
+import com.composables.icons.lucide.Shapes
 import com.composables.icons.lucide.Volume2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.Assistant
@@ -66,6 +67,7 @@ fun AssistantEditLocalToolsTab(
     val screenTime = names.SCREEN_TIME
     val calendarQuery = names.CALENDAR_QUERY
     val calendarCreate = names.CALENDAR_CREATE
+    val renderVisual = names.RENDER_VISUAL
 
     val screenTimePermissionMessage =
         stringResource(R.string.chat_message_widget_screen_time_permission_required)
@@ -191,6 +193,16 @@ fun AssistantEditLocalToolsTab(
                 subtitleRes = R.string.assistant_edit_local_tool_calendar_create_subtitle,
                 enabled = calendarCreate in assistant.localToolIds,
                 onChanged = { toggleTool(calendarCreate, it) },
+            )
+            // 可视化绘图（自研，上游没有这一行）：一个工具、一个 kind 枚举 —— 数据图由
+            // 我们画（跟主题），kind="svg" 时模型直接写 SVG（流程图/时间轴/仪表盘等）。
+            SettingsIosDivider()
+            LocalToolRow(
+                icon = Lucide.Shapes,
+                titleRes = R.string.assistant_edit_local_tool_render_visual_title,
+                subtitleRes = R.string.assistant_edit_local_tool_render_visual_subtitle,
+                enabled = renderVisual in assistant.localToolIds,
+                onChanged = { toggleTool(renderVisual, it) },
             )
         }
     }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -97,7 +98,11 @@ fun MessageImageAttachments(
     val viewable = viewableImageUris(parts)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (part in entries) {
-            ImageAttachmentTile(part = part, viewable = viewable, onOpenViewer = onOpenViewer)
+            if (isChartAttachment(part)) {
+                ChartAttachmentCard(part = part, viewable = viewable, onOpenViewer = onOpenViewer)
+            } else {
+                ImageAttachmentTile(part = part, viewable = viewable, onOpenViewer = onOpenViewer)
+            }
         }
     }
 }
@@ -132,11 +137,11 @@ fun MessageAttachmentPreview(
     ) {
         for (part in entries) {
             when (part) {
-                is ImagePart -> ImageAttachmentTile(
-                    part = part,
-                    viewable = viewable,
-                    onOpenViewer = onOpenViewer,
-                )
+                is ImagePart -> if (isChartAttachment(part)) {
+                    ChartAttachmentCard(part = part, viewable = viewable, onOpenViewer = onOpenViewer)
+                } else {
+                    ImageAttachmentTile(part = part, viewable = viewable, onOpenViewer = onOpenViewer)
+                }
                 is FilePart -> MessageDocCard(part)
                 else -> Unit
             }
@@ -179,6 +184,65 @@ internal fun ImageAttachmentTile(
                 model = uri,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+/**
+ * 图表产物（`render_chart` 的 SVG）—— 聊天里用**等比满宽卡片**显示。
+ *
+ * 为什么不复用 [ImageAttachmentTile]：那个是 112dp + `ContentScale.Crop` 的缩略块
+ *（原版 `_buildAttachmentPreview` 口径，给照片用的），图表被裁掉坐标轴/图例就没法看了。
+ */
+internal fun isChartAttachment(part: MessagePart): Boolean =
+    part is ImagePart &&
+        part.mime?.trim()?.lowercase() == com.psyche.memo.provider.chart.ChartSvgRenderer.MIME
+
+@Composable
+internal fun ChartAttachmentCard(
+    part: ImagePart,
+    viewable: List<String>,
+    onOpenViewer: (uris: List<String>, initialIndex: Int) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val uri = part.uri.trim()
+    val viewIndex = viewable.indexOf(uri)
+    val unavailable = part.unavailable == true || uri.isEmpty()
+    // 比例取自 SVG 自己（结构化图表恒为 900×560；自由绘制的流程图可能又高又窄，
+    // 用固定比例会被压扁）。
+    val aspect = remember(uri) {
+        com.psyche.memo.provider.chart.SvgAspect.ofFile(uri)
+            ?: com.psyche.memo.provider.chart.ChartSvgRenderer.ASPECT_RATIO
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(aspect)
+            .clip(RoundedCornerShape(12.dp))
+            .background(cs.onSurface.copy(alpha = 0.04f))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+            .clickable(enabled = !unavailable && viewIndex >= 0) {
+                onOpenViewer(viewable, viewIndex)
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (unavailable) {
+            Icon(
+                Lucide.ImageOff,
+                contentDescription = androidx.compose.ui.res.stringResource(
+                    UiR.string.chat_message_widget_attachment_unavailable,
+                ),
+                tint = cs.onSurface.copy(alpha = 0.45f),
+                modifier = Modifier.size(20.dp),
+            )
+        } else {
+            // SVG 自带 900×560 画布，等比铺满 → 坐标轴与图例都看得清。
+            AsyncImage(
+                model = uri,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
         }

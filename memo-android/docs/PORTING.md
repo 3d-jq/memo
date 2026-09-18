@@ -1002,6 +1002,148 @@ per-kind 读写）、`GenerationServiceRepositoryTest` 更名跟进。
   （图片现在自成一格），新增 `mediaFollowsItsToolAndConsecutiveMediaMerges`
   （工具卡 → 媒体块、连续合并、视频 FilePart 同路）。
 
+## 5.23 `render_chart` 本地可视化工具（自研，上游没有，2026-09-17）
+
+用户 2026-09-17：「加个本地工具 就是可以可视化的工具，大模型可以以这个为可视化，帮助用户」，
+追问后定：**渲染路线照自研可视化那套（纯 SVG、扁平、跟随主题）**、**第一版核心 5 类图**
+（柱/折线/面积/饼/散点）、**静态就够**（不做 tooltip/缩放）。
+
+### 为什么是 SVG 而不是 Compose Canvas
+
+1. **复用现有图片通道**：产物落 `<filesDir>/images/gen_*.svg` → `ImagePart` → 已有的
+   图片气泡 + 查看器 + 导出 + 备份 + 存储页归类，**一个新 part 类型都不用加**；
+   GPU 上跑 SVG 渲染的是 coil 的 `SvgDecoder`（`MemoApplication.newImageLoader()` 里已注册）。
+2. **纯函数可单测**：`ChartSvgRenderer.render(spec, palette)` 是字符串拼装，测试直接
+   **按坐标断言**（`bar heights are proportional to the values` 就钉住了 y=plotTop、
+   height=绘图区高），不需要 Robolectric 布局测量。
+3. 代价：**静态**（换主题不会重画）、交互要自己写。用户明确选了静态。
+
+### 落地清单
+
+| 件 | 位置 |
+|---|---|
+| 规格 + 校验/截断 | `provider/chart/ChartSpec.kt`（上限：24 分类 / 6 系列 / 200 点，超出截断不失败；失败抛 `ChartSpecException`，文案**点名哪个字段不对**，模型据此改正重试） |
+| SVG 渲染（纯函数） | `provider/chart/ChartSvgRenderer.kt`（900×560、网格线 1.5px、nice 刻度、图例、XML 转义；全零数据不产生 NaN） |
+| 工具（描述/schema/执行/取色） | `provider/chart/ChartTools.kt`（`TOOL_NAME = "render_chart"`；`DEFINITION` 由工具自维护，因为数组套对象的参数用 `param()` helper 表达不了） |
+| 接线 | `LocalToolNames.RENDER_CHART` + `all`（目录 LOCAL 组、保留名、平台可用性）、`offeredTools()` 的 `offered` 集合、`LocalToolExecutors.EXECUTABLE` + 分发、`MEDIA_TOOL_NAMES`（ChatViewModel 用它决定挂媒体 part）、`AssistantEditLocalToolsTab` 开关行、`toolSchemaIconFor` 图标 |
+| 配色 | 外壳跟主题（卡片底 = `surfaceBright`、文字/轴线同主题）、**系列色固定**（默认主题是黑白灰，套主题色会画成一片灰）；深色主题用提亮版分类色 |
+
+**开关**：和别的本地工具一样是**按助手**的（`assistant.localToolIds`，默认空表 ⇒ 新助手不
+自带任何本地工具）——要在「助手编辑页 → 本地工具 → 绘制图表」打开。
+
+**产物 JSON**：成功 `{"type":"chart_result","kind":…,"points":n,"series":n,"paths":[…]}`；
+失败 `{"type":"tool_error","error":"chart_invalid_spec","message":"…"}`（**不抛异常**，让模型自己改）。
+
+**测试**：`ChartSpecTest`（解析/上限/错误文案/堆叠范围）、`ChartSvgRendererTest`（画布/柱高
+比例/折线面积散点几何/饼图百分比/转义/深色/nice 刻度）、`ChartToolsTest`（落盘真 SVG +
+错误 JSON + 主题取色 + 是否真接进本地工具那四道门 + schema 与 enum 一致）。
+
+**留账**：① 交互（tooltip/缩放）没做；② 换主题不重画（静态图，与用户约定一致）；
+③ 流程图/时序图这类要走 mermaid 的图形没做（当时建议留给 HTML 通道）；④ 自定义主题
+（`custom_themes_v1`）下取色用的是 `MemoTheme.resolve` 的默认分支，没读用户自定义配色。
+
+## 5.24 可视化工具（自研，2026-09-18 分三步长成）
+
+用户 2026-09-18 三连反馈：「有局限呀 只能生成这几个图呀」→「为什么不能一个工具渲染各种呀」
+→「我刚刚让大模型调用这个自由渲染 怎么渲染不出来呀」。最终形态：**一个工具
+`render_visual`**，一个 `kind` 枚举（10 种结构化图 + `svg` 手写兜底），一条产物通道。
+
+### 演变
+
+| 阶段 | 形态 | 为什么变 |
+|---|---|---|
+| ① | `render_chart`（5 类结构化图） | 数据图质量稳定、自动跟主题 |
+| ② | + `render_svg`（手写 SVG） | 图形清单写死 → 流程图/时间轴/仪表盘出不来 |
+| ③ | **合并成 `render_visual`** | 两个工具 = 两个开关 + 两份描述 + 靠文案互相约束「谁该用谁」；合成一个后模型只选 `kind`，「数据图别手写」写进 `kind` 字段说明即可 |
+| ③ 附带 | 结构化补到 **10 种**（+ `hbar` `donut` `funnel` `gauge` `heatmap`） | 用户「尽量全满」 |
+
+### ⚠️ 手写 SVG「渲染不出来」的根因（务必记住这个坑）
+
+`SvgSanitizer` 用 XmlPullParser **重建**文档时，**自闭合标签会写重复**：
+XmlPullParser 对 `<rect/>` 会先给 `isEmptyElementTag=true` 的 START_TAG、**再补一个
+END_TAG**，两边都写就输出 `<rect/></rect>` → 非法 XML → AndroidSVG 解析失败 → 图一张都
+渲染不出来（文件还好好躺在磁盘上，所以只看产物目录会以为没问题）。
+修法：用 `swallowedEndTags` 计数器吞掉补来的 END_TAG；测试里加了「产物必须能被再解析
+一次」的**回环校验**（`SvgSanitizerTest.self closing tags do not get a stray end tag`）。
+
+### ⚠️⚠️ 第二个（真正的）根因：AndroidSVG 不认 `orient="auto-start-reverse"`
+
+修完自闭合标签后用户仍报「还是渲染不了」。这次文件**是合法 XML**（`ET.fromstring` 通过），
+但卡片还是空白。真凶：**AndroidSVG 1.4 的 `orient` 只接受 `auto` 或数字**（把它的 jar 解开
+按字面量搜，`auto-start-reverse` **0 命中**），而模型照着 SVG2 文档爱写
+`<marker orient="auto-start-reverse">` → 解析抛异常 → coil 解码失败 → **空白卡片**。
+
+两道防线（都已落地）：
+
+1. **消毒时归一化**（`SvgSanitizer.normalizeValue`）：`orient` 认不出就降级成 `auto`；
+2. **落盘前用 AndroidSVG 真解析一次**（`VisualTools.executeRawSvg`）：解不开就回
+   `tool_error`，让模型改成「基础形状」重试 —— **不再静默产出空白卡片**。
+   （`com.caverock:androidsvg-aar:1.4` 本来是 coil-svg 的传递依赖，已在 APK 里；
+   显式声明进 `libs.versions.toml` 才在编译期可用。）
+
+教训：**「产物文件看起来没问题」≠「能渲染」** —— 校验必须走渲染器自己的解析器，
+而不是 XML 良构性。这也是用户要求「切原生」的直接理由（见下）。
+
+**排查范式**（11 分钟定位）：先 `adb shell run-as <pkg> ls -lt files/images/` 看**有没有落盘**
+—— 有文件 ⇒ 工具跑通了、问题在渲染/显示；没文件 ⇒ 工具或消毒器拒了。再拉文件看标记。
+
+### 落地（合并后）
+
+| 件 | 位置 |
+|---|---|
+| 工具（kind 分发 / 描述 / schema / 取色） | `provider/chart/VisualTools.kt`（`TOOL_NAME = "render_visual"`，`KIND_SVG = "svg"`） |
+| 结构化渲染（10 种图） | `provider/chart/ChartSvgRenderer.kt` |
+| 规格与校验 | `provider/chart/ChartSpec.kt`（`SINGLE_SERIES_KINDS`：pie/donut/funnel/gauge 只取第一组） |
+| 手写 SVG 消毒 | `provider/chart/SvgSanitizer.kt` + `SvgAspect`（读 SVG 自己的比例） |
+| 接线 | `LocalToolNames.RENDER_VISUAL` / `localDefinition` / `offeredTools().offered` / `LocalToolExecutors.EXECUTABLE` / `MEDIA_TOOL_NAMES` / 助手开关行（一行）/ `toolSchemaIconFor`（`Lucide.Shapes`）/ 文案 ×3 |
+
+**开关是旧的迁移不了**：`assistant.localToolIds` 存的是工具名，改名后（`render_chart`/
+`render_svg` → `render_visual`）要在「助手编辑页 → 本地工具」重新打开一次。
+
+**测试**：`ChartSpecTest` / `ChartSvgRendererTest`（含 5 种新图几何）/ `SvgSanitizerTest` /
+`VisualToolsTest`（合并后统一入口 + 四条接线门 + kind 枚举 == 实现）。
+
+### 分工
+
+| 工具 | 输入 | 谁画 | 适用 |
+|---|---|---|---|
+| `render_chart` | 结构化 spec（kind/categories/series） | 我们（`ChartSvgRenderer`，跟主题） | 数据图：柱/折线/面积/饼/散点 |
+| **`render_svg`** | **模型手写 SVG 标记** | 模型 | 流程图 / 时序图 / 组织图 / 时间轴 / 仪表盘 / 拼版 / UI 草图……**没有图形清单** |
+
+### 安全边界（这条最重要）
+
+SVG 既是图也是文档 —— 能塞脚本、外部引用、`<foreignObject>`（内嵌任意 HTML）。做法：
+
+1. `SvgSanitizer`（`provider/chart/SvgSanitizer.kt`）用 **XmlPullParser 重建文档**
+   （白名单式拷贝，**不是正则替换** —— 正则改标记很容易漏：属性大小写、引号、注释伪装）：
+   - 删 `<script>` / `<foreignObject>` **整棵子树**、`on*` 事件属性、`javascript:` /
+     `data:text/html` 值、http(s) / `//` 开头的外部 `href`、`style` 里的外部 `url()`
+   - 根必须是 `<svg>`，且**必须能算出布局盒**：`viewBox` 或绝对 `width`+`height`
+     （`100%` 这种相对尺寸视作没给）；长宽比限制 0.15–8
+   - 体积 ≤ 256KB；不是良构 XML 直接拒；失败信息写成**给模型看的一句话**
+2. **注入不透明白底**（`SvgTools.withBackground`）：模型不知道当前主题，白底 + 深色墨迹
+   在任何主题下都清楚（与二维码白底同一条理由）。工具描述里明确要求「按浅色背景设计」。
+3. 渲染仍是**静态**的：coil → AndroidSVG，不执行脚本、不联网。
+
+### 显示
+
+自由绘制的产物与图表同 MIME（`image/svg+xml`）→ 聊天里同样走等比卡片；**比例取自 SVG
+自己**（`SvgAspect.ofFile`，只读开头 400 字节、`remember` 缓存）—— 结构化图表恒为 900×560，
+而流程图可能又高又窄，用固定比例会被压扁。
+
+**接线**（与 `render_chart` 完全对称）：`LocalToolNames.RENDER_SVG` + `all` /
+`localDefinition` / `offeredTools().offered` / `LocalToolExecutors.EXECUTABLE` + 分发 /
+`MEDIA_TOOL_NAMES` / 助手编辑页开关行 / `toolSchemaIconFor`（`Lucide.PenTool`）/ 文案 ×3。
+
+**测试**：`SvgSanitizerTest`（脚本、事件属性、foreignObject、外部引用、根/布局盒/体积/
+畸形 XML/极端比例、`SvgAspect` 读文件）、`SvgToolsTest`（落盘真 SVG + 白底在最底、
+注入的脚本到不了文件、坏图回 tool_error、接线齐全）。
+
+**留账**：① AndroidSVG 对模型的「合法但用了它不支持的写法」会静默降级（画面缺块），
+目前靠工具描述里的「用基础形状」约束；② 流程图/类图/活动图现在**靠模型手摆坐标**（节点一
+多就会歪）—— 提议过 `render_diagram`（mermaid 子集 DSL + 我们自动布局），用户当时跳过没定，
+需要时再捡起来；③ 老消息里那些坏掉的 SVG 文件仍在磁盘上（重新生成即可）。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)

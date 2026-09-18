@@ -2254,7 +2254,7 @@ class ChatViewModel(
                     parseToolArguments(call.arguments),
                     call.id,
                 ) { images += it }
-                if (call.name in com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES) {
+                if (call.name in com.psyche.memo.provider.generation.MEDIA_TOOL_NAMES) {
                     generatedParts += com.psyche.memo.provider.generation.generatedMediaParts(result)
                 }
                 roundHandler.foldToolResult(call.id, JsonPrimitive(result), images)
@@ -2489,6 +2489,8 @@ class ChatViewModel(
             names.TEXT_TO_SPEECH,
             names.CALCULATE,
             names.SCREEN_TIME,
+            // 可视化绘图（自研）：同样是「本地工具」，按助手的 localToolIds 开关。
+            names.RENDER_VISUAL,
         )
         val out = mutableListOf<LlmToolSpec>()
         // Web search tool (tool_handler_service.dart L241-245): offered

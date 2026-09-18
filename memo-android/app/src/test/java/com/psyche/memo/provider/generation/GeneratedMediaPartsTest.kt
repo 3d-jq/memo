@@ -65,4 +65,14 @@ class GeneratedMediaPartsTest {
         val parts = generatedMediaParts("""{"paths":["/a/noext","/a/x.bin"]}""")
         assertEquals(listOf("image/png", "image/png"), parts.filterIsInstance<ImagePart>().map { it.mime })
     }
+
+    /**
+     * 图表工具（render_chart）的产物是 SVG —— MIME 要认出来，聊天侧才会用等比卡片
+     * 而不是 112dp 缩略块（否则坐标轴被裁掉）。
+     */
+    @Test
+    fun `svg products carry the svg mime`() {
+        val parts = generatedMediaParts("""{"type":"chart_result","paths":["/a/gen_1.svg"]}""")
+        assertEquals("image/svg+xml", (parts.single() as ImagePart).mime)
+    }
 }

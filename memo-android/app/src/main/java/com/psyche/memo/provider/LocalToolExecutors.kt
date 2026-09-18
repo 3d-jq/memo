@@ -42,18 +42,36 @@ object LocalToolExecutors {
     const val CALENDAR_QUERY = "calendar_query"
     const val CALENDAR_CREATE = "calendar_create"
 
+    /** 可视化绘图（自研，一个工具 10 种图 + 手写 SVG）：名字以工具本体为准。 */
+    const val RENDER_VISUAL = com.psyche.memo.provider.chart.VisualTools.TOOL_NAME
+
     /** Names this object can execute; the rest fall through. */
     val EXECUTABLE = setOf(
         CLIPBOARD, TEXT_TO_SPEECH, CALCULATE, SCREEN_TIME, CALENDAR_QUERY, CALENDAR_CREATE,
+        RENDER_VISUAL,
     )
 
-    fun execute(context: Context, name: String, args: JsonObject): String? = when (name) {
+    /**
+     * @param chartPalette 图表工具的配色（外壳跟主题）；调用方拿不到当前主题时给 null，
+     *   工具会退回浅色主题的配色。
+     */
+    fun execute(
+        context: Context,
+        name: String,
+        args: JsonObject,
+        chartPalette: com.psyche.memo.provider.chart.ChartPalette? = null,
+    ): String? = when (name) {
         CLIPBOARD -> clipboard(context, args)
         TEXT_TO_SPEECH -> textToSpeech(context, args)
         CALCULATE -> calculate(args)
         SCREEN_TIME -> screenTime(context, args)
         CALENDAR_QUERY -> queryCalendar(context, args)
         CALENDAR_CREATE -> createCalendarEvent(context, args)
+        RENDER_VISUAL -> com.psyche.memo.provider.chart.VisualTools.execute(
+            context = context,
+            args = args,
+            palette = chartPalette ?: com.psyche.memo.provider.chart.ChartPalette.LIGHT,
+        )
         else -> null
     }
 

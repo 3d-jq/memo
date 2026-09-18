@@ -38,10 +38,20 @@ internal fun generatedMediaParts(resultJson: String): List<MessagePart> {
     }
 }
 
-/** 产物路径 → MIME（生成结果只可能是这三种；认不出按 png）。 */
+/** 产物路径 → MIME（生成结果只可能是这几种；认不出按 png）。 */
 internal fun mimeForGeneratedPath(path: String): String =
     when (path.substringAfterLast('.', "").lowercase()) {
+        // 图表工具（render_chart）产出的是 SVG：coil 的 SvgDecoder 直接能渲染。
+        "svg" -> "image/svg+xml"
         "jpg", "jpeg" -> "image/jpeg"
         "webp" -> "image/webp"
         else -> "image/png"
     }
+
+/**
+ * 会把产物挂进消息的工具（生成图片 / 生成视频 / 绘制图表 / 自由绘制）—— `ChatViewModel`
+ * 用它决定「这个工具的结果要不要转成消息里的媒体 part」。
+ */
+internal val MEDIA_TOOL_NAMES: Set<String> =
+    com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES +
+        com.psyche.memo.provider.chart.VisualTools.ALL_TOOL_NAMES

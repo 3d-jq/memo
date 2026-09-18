@@ -112,6 +112,8 @@ dependencies {
     implementation(libs.zxing.core)
     implementation(libs.quickie.bundled)
     implementation(libs.coilSvg)
+    // 手写 SVG 落盘前用它解析校验（本来是 coil-svg 的传递依赖，显式声明见 toml 注释）
+    implementation(libs.androidsvg)
     implementation(libs.accompanistDrawablePainter)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.okhttp)

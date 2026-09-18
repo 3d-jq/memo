@@ -169,6 +169,8 @@
     <string name="assistant_edit_local_tool_calculate_subtitle">Evaluate mathematical expressions, supports + - * / power sqrt sin cos etc.</string>
     <string name="assistant_edit_local_tool_calculate_title">Calculator</string>
     <string name="assistant_edit_local_tool_calendar_create_subtitle">Create calendar events on this device with your confirmation, requires the calendar permission.</string>
+    <string name="assistant_edit_local_tool_render_visual_title">Draw a visual</string>
+    <string name="assistant_edit_local_tool_render_visual_subtitle">Chart the data (bar, line, pie, funnel, gauge…) or draw it yourself (flowcharts, timelines, dashboards).</string>
     <string name="assistant_edit_local_tool_calendar_create_title">Create Event</string>
     <string name="assistant_edit_local_tool_calendar_query_subtitle">Read calendar events on this device, requires the calendar permission.</string>
     <string name="assistant_edit_local_tool_calendar_query_title">Query Calendar</string>

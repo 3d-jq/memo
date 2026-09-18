@@ -270,7 +270,13 @@ class ToolHandler(
                 container != null
             ) {
                 com.psyche.memo.provider.LocalToolExecutors
-                    .execute(container.appContext, name, args)
+                    .execute(
+                        context = container.appContext,
+                        name = name,
+                        args = args,
+                        // 图表工具要跟主题取色（外壳跟主题、系列色固定）。
+                        chartPalette = com.psyche.memo.provider.chart.VisualTools.paletteFor(container),
+                    )
                     ?.let { return it }
             }
 

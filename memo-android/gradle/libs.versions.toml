@@ -39,6 +39,8 @@ androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", ve
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 coil = { group = "io.coil-kt", name = "coil-compose", version = "2.6.0" }
 coilSvg = { group = "io.coil-kt", name = "coil-svg", version = "2.6.0" }
+# coil-svg 的传递依赖，显式声明以便直接用它的解析器做校验（版本与其保持一致）
+androidsvg = { group = "com.caverock", name = "androidsvg-aar", version = "1.4" }
 accompanistDrawablePainter = { group = "com.google.accompanist", name = "accompanist-drawablepainter", version = "0.34.0" }
 androidx-test-core = { group = "androidx.test", name = "core", version = "1.6.1" }
 robolectric = { group = "org.robolectric", name = "robolectric", version = "4.13" }

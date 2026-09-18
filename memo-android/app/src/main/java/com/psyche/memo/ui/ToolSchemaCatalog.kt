@@ -463,10 +463,22 @@ object BuiltInToolCatalog {
         const val REMINDERS_QUERY = "reminders_query"
         const val REMINDERS_CREATE = "reminders_create"
         const val REMINDERS_COMPLETE = "reminders_complete"
+
+        /**
+         * 绘制图表（`render_chart`，自研功能）：模型把数据画成图，本地渲染成 SVG。
+         * 名字以 [com.psyche.memo.provider.chart.VisualTools] 为准，这里只是把它接进
+         * 「本地工具」这一组（设置 → 工具描述 / 助手编辑页的本地工具 tab 都认这份名单）。
+         */
+        /**
+         * 可视化绘图（`render_visual`，自研）：一个工具、一个 kind 枚举 —— 结构化数据图
+         * 由我们画，`kind = "svg"` 时模型直接写 SVG（流程图/时间轴/仪表盘等）。
+         */
+        const val RENDER_VISUAL = com.psyche.memo.provider.chart.VisualTools.TOOL_NAME
+
         val all = listOf(
             TIME_INFO, CLIPBOARD, TEXT_TO_SPEECH, ASK_USER, CALCULATE, SCREEN_TIME,
             CALENDAR_QUERY, CALENDAR_CREATE, CURRENT_LOCATION, WEATHER, HEALTH_SUMMARY,
-            REMINDERS_QUERY, REMINDERS_CREATE, REMINDERS_COMPLETE,
+            REMINDERS_QUERY, REMINDERS_CREATE, REMINDERS_COMPLETE, RENDER_VISUAL,
         )
 
         /** local_tools_service.dart L48-52 — creating calendar events or changing
@@ -478,6 +490,9 @@ object BuiltInToolCatalog {
 
     /** local_tools_service.dart definitionFor — schema builders for the Android-visible set. */
     fun localDefinition(name: String): JsonObject = when (name) {
+        // 自研的可视化工具（render_chart）：schema 由工具自己维护（数组套对象的参数
+        // 用 param() 那几个 helper 表达不了）。
+        LocalToolNames.RENDER_VISUAL -> com.psyche.memo.provider.chart.VisualTools.DEFINITION
         LocalToolNames.TIME_INFO -> definition(
             name = LocalToolNames.TIME_INFO,
             description = "Get the current local date and time info from the device. Returns year, month, day, weekday, ISO date and time strings, timezone, UTC offset, and timestamp.",

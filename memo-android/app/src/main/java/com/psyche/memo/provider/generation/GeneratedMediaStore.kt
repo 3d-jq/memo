@@ -61,6 +61,8 @@ class GeneratedMediaStore(context: Context) {
     companion object {
         /** 上游图片接口的 output_format → 文件扩展名（默认 png）。 */
         fun extensionFor(mimeType: String): String = when (mimeType.lowercase()) {
+            // 图表（render_chart）也是走这条通道的 SVG 产物。
+            "image/svg+xml", "svg" -> "svg"
             "image/jpeg", "image/jpg", "jpeg", "jpg" -> "jpg"
             "image/webp", "webp" -> "webp"
             else -> "png"
