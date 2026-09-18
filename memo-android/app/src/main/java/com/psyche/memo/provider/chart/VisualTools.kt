@@ -367,9 +367,12 @@ object VisualTools {
             "render_mermaid tool instead."
 
     const val DESCRIPTION =
-        "Draw a picture in the conversation: either a data chart (bar, hbar, line, area, pie, " +
-            "donut, scatter, funnel, gauge, heatmap) from numbers you pass, or a free-form " +
-            "drawing (kind=\"svg\") for diagrams and sketches. " +
+        "Your drawing canvas for this conversation. Whenever a picture would help the user " +
+            "understand better than prose — structure, flow, comparison, trend, distribution, " +
+            "part-of-whole, a summary at a glance — draw it, do not just describe it. " +
+            "Two modes: (1) a data chart (bar, hbar, line, area, pie, donut, scatter, funnel, " +
+            "gauge, heatmap) from numbers you pass; (2) kind=\"svg\" where you write the SVG " +
+            "yourself for anything a chart cannot express. " +
             "Everything is rendered locally into the chat as an image (no network, no cost); " +
             "data charts follow the app theme automatically, so do not hand-draw a data chart " +
             "with svg. " +

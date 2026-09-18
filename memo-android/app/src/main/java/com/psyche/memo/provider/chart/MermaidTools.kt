@@ -28,8 +28,10 @@ object MermaidTools {
     val ALL_TOOL_NAMES = setOf(TOOL_NAME)
 
     const val DESCRIPTION =
-        "Draw a Mermaid diagram as an image in the conversation. Use this for structural and " +
-            "professional diagrams: flowcharts (flowchart TD/LR), sequence diagrams " +
+        "Draw a Mermaid diagram in the conversation — the most reliable way to give the user a " +
+            "professional diagram. Whenever structure, sequence, states, relationships, " +
+            "schedules or hierarchy would help them understand, draw it instead of describing " +
+            "it in prose. Supported types: flowcharts (flowchart TD/LR), sequence diagrams " +
             "(sequenceDiagram), state machines (stateDiagram-v2), class diagrams (classDiagram), " +
             "ER models (erDiagram), Gantt charts (gantt), mind maps (mindmap), timelines " +
             "(timeline), user journeys (journey), pie charts (pie), quadrant charts " +

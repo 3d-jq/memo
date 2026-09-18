@@ -1144,6 +1144,15 @@ SVG 既是图也是文档 —— 能塞脚本、外部引用、`<foreignObject>`
 多就会歪）—— 提议过 `render_diagram`（mermaid 子集 DSL + 我们自动布局），用户当时跳过没定，
 需要时再捡起来；③ 老消息里那些坏掉的 SVG 文件仍在磁盘上（重新生成即可）。
 
+### 描述文案主动化（2026-09-18，用户手改）
+
+两个绘图工具的描述从「介绍能画什么」改成**主动引导模型多画**（起因：模型太保守，能用图表达的也用文字答）。
+
+- `render_mermaid`（`MermaidTools.DESCRIPTION`）：加「the most reliable way to give the user a professional diagram」「draw it instead of describing it in prose」。
+- `render_visual`（`VisualTools.DESCRIPTION`）：改成「Your drawing canvas for this conversation…draw it, do not just describe it」，并把两种模式（数据图 / `kind="svg"`）讲清楚。
+
+**只动文案**：代码逻辑、schema、接线均未变；两处测试断言的关键字（`render_visual` / `flowchart` / `do not hand-draw a data chart`）全部保留。验证：`provider.chart.*` 全绿（`MermaidToolsTest` 5、`VisualToolsTest` 12，chart 另 3 个 suite 30）。
+
 ## 6. 规格速查（Flutter 源码 → 要点，避免重复侦察）
 
 - 编辑页骨架：`assistant_settings_edit_page.dart` L80-152(tab specs) L316-410(scaffold) L1262+(_iosNavRow：36 图标槽/15sp 单行 label/13sp detail/chevron) L632+(_SegTabBar：44/4/18/6/88、选中 primary 14%、文字 primary vs onSurface 82%)
