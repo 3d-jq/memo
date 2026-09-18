@@ -80,6 +80,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * 存储页「图片」档的判定。
+ *
+ * 含 `.svg` —— 自研可视化工具（`render_visual`）的图表/自由绘制产物就是 SVG，
+ * 漏了它存储页里就看不到这些文件（用户 2026-09-18「存储数据的图片里面怎么也没有记录」）。
+ */
+internal fun isImageFileName(name: String): Boolean {
+    val lower = name.lowercase()
+    return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+        lower.endsWith(".gif") || lower.endsWith(".webp") || lower.endsWith(".heic") ||
+        lower.endsWith(".heif") || lower.endsWith(".bmp") || lower.endsWith(".ico") ||
+        lower.endsWith(".svg")
+}
+
 // ---------------------------------------------------------------------------
 // StorageUsageService port (lib/core/services/storage/storage_usage_service.dart).
 // Path mapping: appData = filesDir, chat database family = databases/memo.db*,
@@ -137,12 +151,7 @@ object StorageUsage {
         StorageCategoryKey.OTHER,
     )
 
-    private fun isImage(name: String): Boolean {
-        val lower = name.lowercase()
-        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
-            lower.endsWith(".gif") || lower.endsWith(".webp") || lower.endsWith(".heic") ||
-            lower.endsWith(".heif") || lower.endsWith(".bmp") || lower.endsWith(".ico")
-    }
+    private fun isImage(name: String): Boolean = isImageFileName(name)
 
     private class MutableStats {
         var count = 0

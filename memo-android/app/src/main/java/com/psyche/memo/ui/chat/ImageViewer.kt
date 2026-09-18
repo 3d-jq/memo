@@ -496,8 +496,74 @@ fun ImageViewerOverlay(
  * used as-is, remote/data images are materialized into the cache dir.
  * Returns null when the input is unusable.
  */
+/** 这个地址/路径是不是 SVG（自研可视化工具 `render_visual` 的产物）。 */
+internal fun isSvgUrl(url: String): Boolean {
+    val clean = url.substringBefore('?').substringBefore('#').lowercase()
+    return clean.endsWith(".svg") || clean.startsWith("data:image/svg")
+}
+
+/**
+ * SVG 字节 → PNG 字节。
+ *
+ * 为什么必须转：「保存到相册」和「分享」走的都是**位图**通道 —— MediaStore 按
+ * `image/png` 写、微信等应用也只认常见位图。直接把 SVG 的文本字节当 PNG 存进去，
+ * 相册里就是一张坏图（用户 2026-09-18「生成的这个 svg 点击下载不了」）。
+ * 用 AndroidSVG 渲染成位图再编码，原有保存/分享路径一行都不用改。
+ */
+/**
+ * 栅格化的目标像素尺寸：最长边放大到 [maxDimension]（清晰又不过大），缩放夹在 1~3 倍。
+ */
+internal fun svgPngSize(
+    width: Float,
+    height: Float,
+    maxDimension: Int = 2048,
+): Pair<Int, Int> {
+    val w = width.takeIf { it > 0f } ?: 900f
+    val h = height.takeIf { it > 0f } ?: 560f
+    val scale = (maxDimension.toFloat() / maxOf(w, h)).coerceIn(1f, 3f)
+    return (w * scale).toInt().coerceAtLeast(1) to (h * scale).toInt().coerceAtLeast(1)
+}
+
+internal fun svgToPng(svgBytes: ByteArray, maxDimension: Int = 2048): ByteArray? = runCatching {
+    val svg = com.caverock.androidsvg.SVG.getFromString(String(svgBytes, Charsets.UTF_8))
+    val (pixelWidth, pixelHeight) = svgPngSize(
+        width = svg.documentWidth,
+        height = svg.documentHeight,
+        maxDimension = maxDimension,
+    )
+    val picture = svg.renderToPicture(pixelWidth, pixelHeight)
+    val bitmap = android.graphics.Bitmap.createBitmap(
+        pixelWidth,
+        pixelHeight,
+        android.graphics.Bitmap.Config.ARGB_8888,
+    )
+    android.graphics.drawable.PictureDrawable(picture)
+        .apply { setBounds(0, 0, pixelWidth, pixelHeight) }
+        .draw(android.graphics.Canvas(bitmap))
+    java.io.ByteArrayOutputStream().use { out ->
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+        out.toByteArray()
+    }
+}.getOrNull()
+
 internal fun materializeShareablePath(context: android.content.Context, url: String): String? {
     if (url.isEmpty()) return null
+    // SVG（图表 / 自由绘制）先栅格化成 PNG —— 多数应用不认 SVG。
+    val localFile = when {
+        url.startsWith("file://") -> java.io.File(url.removePrefix("file://"))
+        url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:") -> null
+        else -> java.io.File(url)
+    }
+    if (isSvgUrl(url) || localFile?.name?.lowercase()?.endsWith(".svg") == true) {
+        val raw = localFile?.takeIf { it.exists() }?.readBytes()
+            ?: readImageBytes(url)
+            ?: return null
+        val png = svgToPng(raw) ?: return null
+        val out = java.io.File(context.cacheDir, "share/memo-${System.currentTimeMillis()}.png")
+        out.parentFile?.mkdirs()
+        out.writeBytes(png)
+        return out.absolutePath
+    }
     return when {
         url.startsWith("file://") -> {
             java.io.File(url.removePrefix("file://")).takeIf { it.exists() }?.absolutePath
@@ -609,8 +675,14 @@ internal fun saveImageToGallery(context: android.content.Context, url: String): 
         return context.getString(UiR.string.image_viewer_page_image_load_failed)
     }
     return try {
-        val bytes = readImageBytes(url)
+        val raw = readImageBytes(url)
             ?: return context.getString(UiR.string.image_viewer_page_image_load_failed)
+        // SVG 先栅格化成 PNG，否则写进相册的是一段文本字节（坏图）。
+        val bytes = if (isSvgUrl(url)) {
+            svgToPng(raw) ?: return context.getString(UiR.string.image_viewer_page_image_load_failed)
+        } else {
+            raw
+        }
         val name = "memo-${SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())}.png"
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
