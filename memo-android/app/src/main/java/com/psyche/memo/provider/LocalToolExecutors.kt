@@ -45,17 +45,20 @@ object LocalToolExecutors {
     /** 可视化绘图（自研，一个工具 10 种图 + 手写 SVG）：名字以工具本体为准。 */
     const val RENDER_VISUAL = com.psyche.memo.provider.chart.VisualTools.TOOL_NAME
 
+    /** Mermaid 图（自研）。 */
+    const val RENDER_MERMAID = com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME
+
     /** Names this object can execute; the rest fall through. */
     val EXECUTABLE = setOf(
         CLIPBOARD, TEXT_TO_SPEECH, CALCULATE, SCREEN_TIME, CALENDAR_QUERY, CALENDAR_CREATE,
-        RENDER_VISUAL,
+        RENDER_VISUAL, RENDER_MERMAID,
     )
 
     /**
      * @param chartPalette 图表工具的配色（外壳跟主题）；调用方拿不到当前主题时给 null，
      *   工具会退回浅色主题的配色。
      */
-    fun execute(
+    suspend fun execute(
         context: Context,
         name: String,
         args: JsonObject,
@@ -68,6 +71,11 @@ object LocalToolExecutors {
         CALENDAR_QUERY -> queryCalendar(context, args)
         CALENDAR_CREATE -> createCalendarEvent(context, args)
         RENDER_VISUAL -> com.psyche.memo.provider.chart.VisualTools.execute(
+            context = context,
+            args = args,
+            palette = chartPalette ?: com.psyche.memo.provider.chart.ChartPalette.LIGHT,
+        )
+        RENDER_MERMAID -> com.psyche.memo.provider.chart.MermaidTools.execute(
             context = context,
             args = args,
             palette = chartPalette ?: com.psyche.memo.provider.chart.ChartPalette.LIGHT,

@@ -171,6 +171,8 @@
     <string name="assistant_edit_local_tool_calendar_create_subtitle">在你确认后于本设备创建日历日程，需要授予日历权限。</string>
     <string name="assistant_edit_local_tool_render_visual_title">可视化绘图</string>
     <string name="assistant_edit_local_tool_render_visual_subtitle">把数据画成图（柱状/折线/饼/漏斗/仪表盘…），或让模型直接画（流程图/时间轴/仪表盘）。</string>
+    <string name="assistant_edit_local_tool_render_mermaid_title">Mermaid 图</string>
+    <string name="assistant_edit_local_tool_render_mermaid_subtitle">专业结构图：流程图 / 时序图 / 状态图 / ER / 类图 / 甘特 / 思维导图 / 时间线。</string>
     <string name="assistant_edit_local_tool_calendar_create_title">创建日程</string>
     <string name="assistant_edit_local_tool_calendar_query_subtitle">读取本设备上的日历日程，需要授予日历权限。</string>
     <string name="assistant_edit_local_tool_calendar_query_title">查询日历</string>

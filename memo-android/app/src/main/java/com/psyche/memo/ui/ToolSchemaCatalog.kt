@@ -475,10 +475,13 @@ object BuiltInToolCatalog {
          */
         const val RENDER_VISUAL = com.psyche.memo.provider.chart.VisualTools.TOOL_NAME
 
+        /** Mermaid 图（`render_mermaid`，自研）：流程图/时序图/状态图/ER/类图/甘特/思维导图等。 */
+        const val RENDER_MERMAID = com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME
+
         val all = listOf(
             TIME_INFO, CLIPBOARD, TEXT_TO_SPEECH, ASK_USER, CALCULATE, SCREEN_TIME,
             CALENDAR_QUERY, CALENDAR_CREATE, CURRENT_LOCATION, WEATHER, HEALTH_SUMMARY,
-            REMINDERS_QUERY, REMINDERS_CREATE, REMINDERS_COMPLETE, RENDER_VISUAL,
+            REMINDERS_QUERY, REMINDERS_CREATE, REMINDERS_COMPLETE, RENDER_VISUAL, RENDER_MERMAID,
         )
 
         /** local_tools_service.dart L48-52 — creating calendar events or changing
@@ -493,6 +496,7 @@ object BuiltInToolCatalog {
         // 自研的可视化工具（render_chart）：schema 由工具自己维护（数组套对象的参数
         // 用 param() 那几个 helper 表达不了）。
         LocalToolNames.RENDER_VISUAL -> com.psyche.memo.provider.chart.VisualTools.DEFINITION
+        LocalToolNames.RENDER_MERMAID -> com.psyche.memo.provider.chart.MermaidTools.DEFINITION
         LocalToolNames.TIME_INFO -> definition(
             name = LocalToolNames.TIME_INFO,
             description = "Get the current local date and time info from the device. Returns year, month, day, weekday, ISO date and time strings, timezone, UTC offset, and timestamp.",

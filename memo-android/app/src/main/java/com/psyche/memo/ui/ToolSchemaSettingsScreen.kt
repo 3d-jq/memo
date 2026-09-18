@@ -45,6 +45,7 @@ import com.composables.icons.lucide.Calendar
 import com.composables.icons.lucide.CalendarPlus
 import com.composables.icons.lucide.CircleCheck
 import com.composables.icons.lucide.Shapes
+import com.composables.icons.lucide.Workflow
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Clipboard
 import com.composables.icons.lucide.Clock
@@ -98,6 +99,8 @@ fun toolSchemaIconFor(name: String): androidx.compose.ui.graphics.vector.ImageVe
     "reminders_complete" -> Lucide.CircleCheck
     // 自研：可视化绘图（render_visual，10 种图 + 手写 SVG 一个入口）。
     com.psyche.memo.provider.chart.VisualTools.TOOL_NAME -> Lucide.Shapes
+    // 自研：Mermaid 图。
+    com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME -> Lucide.Workflow
     else -> Lucide.Wrench
 }
 /** toolSchemaFirstLine L65-69. */

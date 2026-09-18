@@ -37,6 +37,7 @@ object VisualTools {
     /** `svg` 是一个「kind」，不是另一个工具 —— 手写模式只有这一个入口。 */
     const val KIND_SVG = "svg"
 
+
     val DEFINITION: JsonObject = buildJsonObject {
         put("type", JsonPrimitive("function"))
         put(
@@ -159,6 +160,7 @@ object VisualTools {
                                         )
                                     },
                                 )
+
                             },
                         )
                         put(
@@ -178,12 +180,13 @@ object VisualTools {
     fun execute(context: Context, args: JsonObject, palette: ChartPalette): String {
         val kind = (args["kind"] as? JsonPrimitive)?.contentOrNull?.trim()?.lowercase()
             ?: return errorJson("visual_invalid", "kind is required (one of: ${kindList()})")
-        if (kind == KIND_SVG) return executeRawSvg(context, args)
+        if (kind == KIND_SVG) return executeRawSvg(context, args, palette)
         return executeChart(context, args, palette, kind)
     }
 
     // ------------------------------------------------------------------ 结构化图
 
+    /** 结构化 kind：规格校验 → 渲染 SVG → 落盘（走已有图片通道）。 */
     private fun executeChart(
         context: Context,
         args: JsonObject,
@@ -220,7 +223,7 @@ object VisualTools {
 
     // ------------------------------------------------------------------ 手写 SVG
 
-    private fun executeRawSvg(context: Context, args: JsonObject): String {
+    private fun executeRawSvg(context: Context, args: JsonObject, palette: ChartPalette): String {
         val raw = (args["svg"] as? JsonPrimitive)?.contentOrNull
             ?: return errorJson(
                 "svg_invalid",
@@ -243,7 +246,9 @@ object VisualTools {
                     )
                 }
                 val media = GeneratedMediaStore(context).saveImage(
-                    bytes = withBackground(sanitized.svg).toByteArray(Charsets.UTF_8),
+                    // 底色跟当前主题（暗色模式下就是深色卡片，而不是白纸）。
+                    bytes = withBackground(sanitized.svg, palette.background)
+                        .toByteArray(Charsets.UTF_8),
                     mimeType = ChartSvgRenderer.MIME,
                 )
                 buildJsonObject {
@@ -270,17 +275,19 @@ object VisualTools {
         "Drawn successfully. The image has already been added to the conversation right below " +
             "this tool call — describe what it shows, and do not tell the user it failed."
 
-    /** 白底：任何主题下都保证对比度（模型不知道当前主题，别让它赌配色）。 */
-    private const val BACKGROUND = """<rect x="0" y="0" width="100%" height="100%" fill="#FFFFFF"/>"""
-
-    /** 把白底插成根节点的第一个子元素（保证在所有内容之下）。 */
-    internal fun withBackground(svg: String): String {
+    /**
+     * 给手写 SVG 铺一层底色 —— **用当前主题的卡色**，不是死白
+     *（用户 2026-09-18「暗色模式这个 svg 怎么不跟着暗色呀」）。
+     */
+    internal fun withBackground(svg: String, background: Long): String {
         val rootStart = svg.indexOf("<svg", ignoreCase = true)
         if (rootStart < 0) return svg
         val tagEnd = svg.indexOf('>', rootStart)
         if (tagEnd < 0) return svg
+        val fill = "#%06X".format(background and 0xFFFFFF)
+        val rect = """<rect x="0" y="0" width="100%" height="100%" fill="$fill"/>"""
         val insertAt = tagEnd + 1
-        return svg.substring(0, insertAt) + BACKGROUND + svg.substring(insertAt)
+        return svg.substring(0, insertAt) + rect + svg.substring(insertAt)
     }
 
     // ------------------------------------------------------------------ 主题配色
@@ -354,8 +361,10 @@ object VisualTools {
             "gauge = one value against a maximum (first number is the value, optional second " +
             "number is the maximum, default 100); heatmap = one row per series, one column per " +
             "category, colour = magnitude; " +
-            "svg = you draw it yourself: flowcharts, sequence/org diagrams, timelines, " +
-            "dashboards, annotated figures, UI sketches."
+            "svg = you draw it yourself: dashboards, annotated figures, UI sketches, " +
+            "anything the other kinds cannot express. For structural diagrams (flowcharts, " +
+            "sequence/state/ER/class diagrams, gantt, mind maps, timelines) use the " +
+            "render_mermaid tool instead."
 
     const val DESCRIPTION =
         "Draw a picture in the conversation: either a data chart (bar, hbar, line, area, pie, " +

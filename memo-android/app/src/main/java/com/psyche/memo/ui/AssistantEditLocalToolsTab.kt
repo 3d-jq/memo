@@ -38,6 +38,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircleQuestion
 import com.composables.icons.lucide.Smartphone
 import com.composables.icons.lucide.Shapes
+import com.composables.icons.lucide.Workflow
 import com.composables.icons.lucide.Volume2
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.Assistant
@@ -68,6 +69,7 @@ fun AssistantEditLocalToolsTab(
     val calendarQuery = names.CALENDAR_QUERY
     val calendarCreate = names.CALENDAR_CREATE
     val renderVisual = names.RENDER_VISUAL
+    val renderMermaid = names.RENDER_MERMAID
 
     val screenTimePermissionMessage =
         stringResource(R.string.chat_message_widget_screen_time_permission_required)
@@ -203,6 +205,15 @@ fun AssistantEditLocalToolsTab(
                 subtitleRes = R.string.assistant_edit_local_tool_render_visual_subtitle,
                 enabled = renderVisual in assistant.localToolIds,
                 onChanged = { toggleTool(renderVisual, it) },
+            )
+            // Mermaid 图（自研）：流程图/时序图/状态图/ER/类图/甘特/思维导图等。
+            SettingsIosDivider()
+            LocalToolRow(
+                icon = Lucide.Workflow,
+                titleRes = R.string.assistant_edit_local_tool_render_mermaid_title,
+                subtitleRes = R.string.assistant_edit_local_tool_render_mermaid_subtitle,
+                enabled = renderMermaid in assistant.localToolIds,
+                onChanged = { toggleTool(renderMermaid, it) },
             )
         }
     }

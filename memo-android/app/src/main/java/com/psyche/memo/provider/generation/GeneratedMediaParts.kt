@@ -54,4 +54,5 @@ internal fun mimeForGeneratedPath(path: String): String =
  */
 internal val MEDIA_TOOL_NAMES: Set<String> =
     com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES +
-        com.psyche.memo.provider.chart.VisualTools.ALL_TOOL_NAMES
+        com.psyche.memo.provider.chart.VisualTools.ALL_TOOL_NAMES +
+        com.psyche.memo.provider.chart.MermaidTools.ALL_TOOL_NAMES

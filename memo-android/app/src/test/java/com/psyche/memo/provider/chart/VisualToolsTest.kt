@@ -123,10 +123,22 @@ class VisualToolsTest {
     }
 
     @Test
-    fun `background is injected right after the root tag`() {
-        val out = VisualTools.withBackground("""<svg viewBox="0 0 10 10"><rect/></svg>""")
-        assertTrue(out.startsWith("""<svg viewBox="0 0 10 10"><rect x="0" y="0""""))
-        assertTrue(out.endsWith("<rect/></svg>"))
+    fun `background is injected right after the root tag and follows the theme`() {
+        val light = VisualTools.withBackground(
+            """<svg viewBox="0 0 10 10"><rect/></svg>""",
+            ChartPalette.LIGHT.background,
+        )
+        assertTrue(light.startsWith("""<svg viewBox="0 0 10 10"><rect x="0" y="0""""))
+        assertTrue(light.contains("""fill="#FFFFFF""""))
+        assertTrue(light.endsWith("<rect/></svg>"))
+
+        // 暗色主题 → 深色底（不再是死白，用户 2026-09-18「暗色模式这个 svg 怎么不跟着暗色呀」）
+        val dark = VisualTools.withBackground(
+            """<svg viewBox="0 0 10 10"><rect/></svg>""",
+            ChartPalette.DARK.background,
+        )
+        assertFalse(dark.contains("""fill="#FFFFFF""""))
+        assertTrue(dark.contains("""fill="#1C1C1B""""))
     }
 
     // ------------------------------------------------------------------ 接线与配色

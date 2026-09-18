@@ -171,6 +171,8 @@
     <string name="assistant_edit_local_tool_calendar_create_subtitle">在你確認後於本裝置建立日曆行程，需要授予日曆權限。</string>
     <string name="assistant_edit_local_tool_render_visual_title">視覺化繪圖</string>
     <string name="assistant_edit_local_tool_render_visual_subtitle">把資料畫成圖（柱狀/折線/圓餅/漏斗/儀表盤…），或讓模型直接畫（流程圖/時間軸/儀表盤）。</string>
+    <string name="assistant_edit_local_tool_render_mermaid_title">Mermaid 圖</string>
+    <string name="assistant_edit_local_tool_render_mermaid_subtitle">專業結構圖：流程圖 / 時序圖 / 狀態圖 / ER / 類別圖 / 甘特 / 心智圖 / 時間軸。</string>
     <string name="assistant_edit_local_tool_calendar_create_title">建立行程</string>
     <string name="assistant_edit_local_tool_calendar_query_subtitle">讀取本裝置上的日曆行程，需要授予日曆權限。</string>
     <string name="assistant_edit_local_tool_calendar_query_title">查詢日曆</string>

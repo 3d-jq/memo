@@ -316,7 +316,9 @@ fun ImageViewerOverlay(
             scope.launch {
                 val message = withContext(Dispatchers.IO) { saveImageToGallery(context, url) }
                 saving = false
-                showSnack(message)
+                // 查看器是**全屏 Dialog**，App 的 snackbar 宿主在它后面（看不见）——
+                // 保存/分享的反馈必须用系统 Toast（用户 2026-09-18「下载成功怎么没有 toast 提示」）。
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -332,7 +334,11 @@ fun ImageViewerOverlay(
                 }
                 sharing = false
                 if (result == null) {
-                    showSnack(context.getString(UiR.string.image_viewer_page_image_load_failed))
+                    android.widget.Toast.makeText(
+                        context,
+                        context.getString(UiR.string.image_viewer_page_image_load_failed),
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
                     return@launch
                 }
                 val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -342,7 +348,13 @@ fun ImageViewerOverlay(
                 }
                 runCatching {
                     context.startActivity(android.content.Intent.createChooser(send, null))
-                }.onFailure { showSnack(it.message ?: "share failed") }
+                }.onFailure {
+                    android.widget.Toast.makeText(
+                        context,
+                        it.message ?: "share failed",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
             }
         }
 
