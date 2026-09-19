@@ -134,6 +134,8 @@ fun BackupScreen(
     // (plain lambdas) can still produce localized messages.
     val exportTitle = backupTaskLabels(UiR.string.backup_page_export_to_file)
     val importTitle = backupTaskLabels(UiR.string.backup_page_import_backup_file)
+    val cherryImportTitle = backupTaskLabels(UiR.string.backup_page_import_from_cherry_studio)
+    val chatboxImportTitle = backupTaskLabels(UiR.string.backup_page_import_from_chatbox)
     val exportFailedPrefix = stringResource(UiR.string.backup_page_export_failed_message, "%s")
     val restoreFailedPrefix = stringResource(UiR.string.backup_page_restore_failed_message, "%s")
     val exportedAsTemplate = stringResource(UiR.string.message_export_sheet_exported_as, "%s")
@@ -309,6 +311,116 @@ fun BackupScreen(
             }
         }
     }
+    // ── Cherry / Chatbox 导入（backup 子块 8）────────────────────────────
+    // Cherry: 实验性确认 sheet → 选文件 → 模式 → 导入（backup_page.dart L71-99 /
+    // L1289-1345）。Chatbox: 选文件 → 模式 → 导入（L1356-1398）。
+    var thirdPartySource by remember { mutableStateOf<String?>(null) } // "cherry" | "chatbox"
+    var pendingThirdPartyFile by remember { mutableStateOf<File?>(null) }
+    var showThirdPartyModeDialog by remember { mutableStateOf(false) }
+    var showCherryConfirm by remember { mutableStateOf(false) }
+    val cherryConfirmBody = stringResource(UiR.string.backup_page_cherry_studio_confirm_body)
+    val cherryUnsupportedTemplate =
+        stringResource(UiR.string.backup_page_cherry_studio_unsupported_backup_version)
+    val importThirdPartyLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val staged = withContext(Dispatchers.IO) {
+                runCatching {
+                    val target = File(context.cacheDir, "third_party_import_${System.currentTimeMillis()}")
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        target.outputStream().use { out -> input.copyTo(out) }
+                    } ?: error("无法读取所选文件")
+                    target.takeIf { it.length() > 0 }
+                }.getOrNull()
+            }
+            if (staged == null) {
+                toast(restoreFailedPrefix.format("所选文件为空或无法读取"), NotificationType.ERROR)
+                return@launch
+            }
+            pendingThirdPartyFile = staged
+            showThirdPartyModeDialog = true
+        }
+    }
+
+    fun runThirdPartyImport(source: String, file: File, mode: RestoreMode) {
+        scope.launch {
+            var details: String? = null
+            val title = if (source == "cherry") cherryImportTitle else chatboxImportTitle
+            val ok = runner.run(
+                labels = title,
+                errorMessage = { failure ->
+                    if (failure is com.psyche.memo.data.backup.cherry.CherryUnsupportedBackupVersionException) {
+                        cherryUnsupportedTemplate.format(failure.version.toString())
+                    } else {
+                        restoreFailedPrefix.format(failure.message ?: failure.toString())
+                    }
+                },
+            ) { progress, isCancelled ->
+                var providers = 0
+                var assistants = 0
+                var conversations = 0
+                var messages = 0
+                var files = 0
+                withContext(Dispatchers.IO) {
+                    if (source == "cherry") {
+                        val result = com.psyche.memo.data.backup.cherry.CherryImporter
+                            .importFromCherryStudio(
+                                file = file,
+                                mode = mode,
+                                database = container.database,
+                                preferenceRepository = container.preferenceRepository,
+                                uploadDir = File(context.filesDir, "upload"),
+                                onProgress = { progress(it) },
+                                isCancelled = isCancelled,
+                            )
+                        providers = result.providers
+                        assistants = result.assistants
+                        conversations = result.conversations
+                        messages = result.messages
+                        files = result.files
+                    } else {
+                        val result = com.psyche.memo.data.backup.chatbox.ChatboxImportRunner
+                            .importFromChatbox(
+                                file = file,
+                                mode = mode,
+                                database = container.database,
+                                preferenceRepository = container.preferenceRepository,
+                                uploadDir = File(context.filesDir, "upload"),
+                                onProgress = { progress(it) },
+                                isCancelled = isCancelled,
+                            )
+                        providers = result.providers
+                        assistants = result.assistants
+                        conversations = result.conversations
+                        messages = result.messages
+                    }
+                }
+                // Upstream renders these count lines in English in every locale
+                // (backup_page.dart L1336-1345), so the labels stay literal.
+                details = buildString {
+                    append(if (source == "cherry") cherryImportTitle else chatboxImportTitle)
+                    append(":\n")
+                    append(" • Providers: ").append(providers).append('\n')
+                    append(" • Assistants: ").append(assistants).append('\n')
+                    append(" • Conversations: ").append(conversations).append('\n')
+                    append(" • Messages: ").append(messages)
+                    if (source == "cherry") {
+                        append('\n').append(" • Files: ").append(files)
+                    }
+                }
+            }
+            file.delete()
+            if (ok && details != null) {
+                restartReport = RestoreReportUi(
+                    skippedConversations = 0,
+                    details = details,
+                )
+            }
+        }
+    }
+
 // ── 5. WebDAV 备份 (WebDAV Backup) — 4 nav rows, sub-block 5 ──
 // 服务器设置 / 测试连接 / 恢复（远端列表 sheet → 模式 → 恢复）/
 // 立即备份（导出 → ensureCollection → PUT），对齐 backup_page L347-800。
@@ -677,12 +789,14 @@ fun deleteS3Item(item: com.psyche.memo.data.backup.S3FileItem) {
                     Lucide.BoxIcon,
                     stringResource(UiR.string.backup_page_import_from_cherry_studio),
                     "",
+                    onTap = { importThirdPartyLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
                 )
                 BackupDivider()
                 BackupPlaceholderRow(
                     Lucide.BoxIcon,
                     stringResource(UiR.string.backup_page_import_from_chatbox),
                     "",
+                    onTap = { importThirdPartyLauncher.launch(arrayOf("application/json", "application/zip", "application/octet-stream", "*/*")) },
                 )
             }
 

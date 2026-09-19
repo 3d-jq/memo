@@ -169,10 +169,6 @@
     <string name="assistant_edit_local_tool_calculate_subtitle">計算數學表達式，支援加減乘除冪運算 sqrt sin cos 等。</string>
     <string name="assistant_edit_local_tool_calculate_title">計算機</string>
     <string name="assistant_edit_local_tool_calendar_create_subtitle">在你確認後於本裝置建立日曆行程，需要授予日曆權限。</string>
-    <string name="assistant_edit_local_tool_render_visual_title">視覺化繪圖</string>
-    <string name="assistant_edit_local_tool_render_visual_subtitle">把資料畫成圖（柱狀/折線/圓餅/漏斗/儀表盤…），或讓模型直接畫（流程圖/時間軸/儀表盤）。</string>
-    <string name="assistant_edit_local_tool_render_mermaid_title">Mermaid 圖</string>
-    <string name="assistant_edit_local_tool_render_mermaid_subtitle">專業結構圖：流程圖 / 時序圖 / 狀態圖 / ER / 類別圖 / 甘特 / 心智圖 / 時間軸。</string>
     <string name="assistant_edit_local_tool_calendar_create_title">建立行程</string>
     <string name="assistant_edit_local_tool_calendar_query_subtitle">讀取本裝置上的日曆行程，需要授予日曆權限。</string>
     <string name="assistant_edit_local_tool_calendar_query_title">查詢日曆</string>
@@ -189,6 +185,10 @@
     <string name="assistant_edit_local_tool_reminders_create_title">建立提醒</string>
     <string name="assistant_edit_local_tool_reminders_query_subtitle">讀取本裝置上的提醒事項，需要授予提醒事項完整存取權限。</string>
     <string name="assistant_edit_local_tool_reminders_query_title">查詢提醒</string>
+    <string name="assistant_edit_local_tool_render_mermaid_subtitle">專業結構圖：流程圖 / 時序圖 / 狀態圖 / ER / 類別圖 / 甘特 / 心智圖 / 時間軸。</string>
+    <string name="assistant_edit_local_tool_render_mermaid_title">Mermaid 圖</string>
+    <string name="assistant_edit_local_tool_render_visual_subtitle">把資料畫成圖（柱狀/折線/圓餅/漏斗/儀表盤…），或讓模型直接畫（流程圖/時間軸/儀表盤）。</string>
+    <string name="assistant_edit_local_tool_render_visual_title">視覺化繪圖</string>
     <string name="assistant_edit_local_tool_screen_time_subtitle">查詢本裝置的應用使用時長，需要授予使用情況存取權限。</string>
     <string name="assistant_edit_local_tool_screen_time_title">螢幕使用時間</string>
     <string name="assistant_edit_local_tool_text_to_speech_subtitle">允許助手使用已設定的語音播放朗讀文字。</string>
@@ -421,6 +421,11 @@
     <string name="backup_page_backup_uploaded">已上傳備份</string>
     <string name="backup_page_cancel">取消</string>
     <string name="backup_page_chats_label">聊天記錄</string>
+    <string name="backup_page_cherry_studio_confirm_body">此功能目前仍處於實驗階段。
+目前僅能導入助手，對話內容，供應商和文件，
+一些供應商需要在baseurl後面添加/v1 or /v1beta。 
+為確保數據安全，建議在導入前先執行備份。
+是否已知曉並繼續選擇文件？</string>
     <string name="backup_page_cherry_studio_unsupported_backup_version">此備份使用 Cherry Studio 格式版本 %1$s，Memo 目前尚無法匯入。請改用 Cherry Studio v1 匯出備份，或等待後續版本支援 Cherry Studio v2。</string>
     <string name="backup_page_delete_confirm_content">確定要刪除遠端備份「%1$s」嗎？此操作不可撤銷。</string>
     <string name="backup_page_delete_confirm_title">確認刪除</string>
@@ -975,6 +980,8 @@
     <string name="flutter_log_setting_title">Flutter日誌列印</string>
     <string name="font_picker_choose_local_file">選擇本機檔案</string>
     <string name="generation_interrupted">生成已中斷</string>
+    <string name="generation_selector_hint">選好服務後，直接讓模型生成即可（模型會呼叫生成工具）</string>
+    <string name="generation_selector_manage">管理生成服務</string>
     <string name="generation_service_editor_add_title">新增服務</string>
     <string name="generation_service_editor_api_key_label">API Key</string>
     <string name="generation_service_editor_base_url_label">介面位址</string>
@@ -1008,11 +1015,15 @@
     <string name="generation_services_page_testing">測試中…</string>
     <string name="generation_services_page_video_title">生成影片</string>
     <string name="generation_services_status_failed">連線失敗</string>
-    <string name="generation_services_status_reachable">可達</string>
-    <string name="generation_selector_hint">選好服務後，直接讓模型生成即可（模型會呼叫生成工具）</string>
-    <string name="generation_selector_manage">管理生成服務</string>
     <string name="generation_services_status_ok">可用</string>
+    <string name="generation_services_status_reachable">可達</string>
     <string name="generation_services_status_untested">未測試</string>
+    <string name="generation_sheet_failed">生成失敗：%1$s</string>
+    <string name="generation_sheet_generate">生成</string>
+    <string name="generation_sheet_generating">生成中…</string>
+    <string name="generation_sheet_inserted">已加入對話</string>
+    <string name="generation_sheet_prompt_hint">描述你想要的畫面</string>
+    <string name="generation_sheet_prompt_hint_video">描述你想要的影片</string>
     <string name="haptics_section_generation">生成觸感</string>
     <string name="haptics_section_interaction">互動觸感</string>
     <string name="haptics_section_master">總開關</string>

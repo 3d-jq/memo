@@ -169,10 +169,6 @@
     <string name="assistant_edit_local_tool_calculate_subtitle">Evaluate mathematical expressions, supports + - * / power sqrt sin cos etc.</string>
     <string name="assistant_edit_local_tool_calculate_title">Calculator</string>
     <string name="assistant_edit_local_tool_calendar_create_subtitle">Create calendar events on this device with your confirmation, requires the calendar permission.</string>
-    <string name="assistant_edit_local_tool_render_visual_title">Draw a visual</string>
-    <string name="assistant_edit_local_tool_render_visual_subtitle">Chart the data (bar, line, pie, funnel, gauge…) or draw it yourself (flowcharts, timelines, dashboards).</string>
-    <string name="assistant_edit_local_tool_render_mermaid_title">Mermaid diagram</string>
-    <string name="assistant_edit_local_tool_render_mermaid_subtitle">Professional diagrams: flowcharts, sequence, state, ER, class, gantt, mind maps, timelines.</string>
     <string name="assistant_edit_local_tool_calendar_create_title">Create Event</string>
     <string name="assistant_edit_local_tool_calendar_query_subtitle">Read calendar events on this device, requires the calendar permission.</string>
     <string name="assistant_edit_local_tool_calendar_query_title">Query Calendar</string>
@@ -189,6 +185,10 @@
     <string name="assistant_edit_local_tool_reminders_create_title">Create Reminder</string>
     <string name="assistant_edit_local_tool_reminders_query_subtitle">Read reminders on this device, requires full reminders access.</string>
     <string name="assistant_edit_local_tool_reminders_query_title">Query Reminders</string>
+    <string name="assistant_edit_local_tool_render_mermaid_subtitle">Professional diagrams: flowcharts, sequence, state, ER, class, gantt, mind maps, timelines.</string>
+    <string name="assistant_edit_local_tool_render_mermaid_title">Mermaid diagram</string>
+    <string name="assistant_edit_local_tool_render_visual_subtitle">Chart the data (bar, line, pie, funnel, gauge…) or draw it yourself (flowcharts, timelines, dashboards).</string>
+    <string name="assistant_edit_local_tool_render_visual_title">Draw a visual</string>
     <string name="assistant_edit_local_tool_screen_time_subtitle">Query app screen usage on this device, requires the Usage access permission.</string>
     <string name="assistant_edit_local_tool_screen_time_title">Screen Time</string>
     <string name="assistant_edit_local_tool_text_to_speech_subtitle">Let the assistant read text aloud with the configured TTS playback.</string>
@@ -421,6 +421,9 @@ The timestamp is that message’s own send time, so it stays stable when you ret
     <string name="backup_page_backup_uploaded">Backup uploaded</string>
     <string name="backup_page_cancel">Cancel</string>
     <string name="backup_page_chats_label">Chats</string>
+    <string name="backup_page_cherry_studio_confirm_body">This feature is experimental.
+To keep your data safe, it is recommended to back up before importing.
+Proceed to choose a file?</string>
     <string name="backup_page_cherry_studio_unsupported_backup_version">This backup uses Cherry Studio format version %1$s, which Memo cannot import yet. Export from Cherry Studio v1 instead, or wait for a Memo update that supports Cherry Studio v2 backups.</string>
     <string name="backup_page_delete_confirm_content">Are you sure you want to delete remote backup \"%1$s\"? This action cannot be undone.</string>
     <string name="backup_page_delete_confirm_title">Confirm Deletion</string>
@@ -975,6 +978,8 @@ Updating Memo first is the safer choice.</string>
     <string name="flutter_log_setting_title">Flutter Logging</string>
     <string name="font_picker_choose_local_file">Choose Local File</string>
     <string name="generation_interrupted">Generation interrupted</string>
+    <string name="generation_selector_hint">Pick a service, then just ask the model to generate — it calls the generation tool.</string>
+    <string name="generation_selector_manage">Manage generation services</string>
     <string name="generation_service_editor_add_title">New service</string>
     <string name="generation_service_editor_api_key_label">API key</string>
     <string name="generation_service_editor_base_url_label">Base URL</string>
@@ -1008,11 +1013,15 @@ Updating Memo first is the safer choice.</string>
     <string name="generation_services_page_testing">Testing…</string>
     <string name="generation_services_page_video_title">Video generation</string>
     <string name="generation_services_status_failed">Failed</string>
-    <string name="generation_services_status_reachable">Reachable</string>
-    <string name="generation_selector_hint">Pick a service, then just ask the model to generate — it calls the generation tool.</string>
-    <string name="generation_selector_manage">Manage generation services</string>
     <string name="generation_services_status_ok">Available</string>
+    <string name="generation_services_status_reachable">Reachable</string>
     <string name="generation_services_status_untested">Not tested</string>
+    <string name="generation_sheet_failed">Generation failed: %1$s</string>
+    <string name="generation_sheet_generate">Generate</string>
+    <string name="generation_sheet_generating">Generating…</string>
+    <string name="generation_sheet_inserted">Added to the conversation</string>
+    <string name="generation_sheet_prompt_hint">Describe the image you want</string>
+    <string name="generation_sheet_prompt_hint_video">Describe the video you want</string>
     <string name="haptics_section_generation">Generation</string>
     <string name="haptics_section_interaction">Interaction</string>
     <string name="haptics_section_master">Master</string>

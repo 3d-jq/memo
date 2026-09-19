@@ -849,8 +849,12 @@
   "backupPageForwardCompatBody": "This backup was created by a newer version of Kelivo (data format {backupVersion}; this version supports {currentVersion}), and it does not say whether older versions can read it.\n\nYou can continue: anything this version does not recognise will be skipped, and the backup file itself is not modified. But if the newer version changed how existing data is stored, some content may be imported incorrectly.\n\nUpdating Kelivo first is the safer choice.",
   "@backupPageForwardCompatBody": {
     "placeholders": {
-      "backupVersion": { "type": "int" },
-      "currentVersion": { "type": "int" }
+      "backupVersion": {
+        "type": "int"
+      },
+      "currentVersion": {
+        "type": "int"
+      }
     }
   },
   "backupPageForwardCompatContinue": "Import anyway",
@@ -1578,8 +1582,12 @@
   "backgroundTaskFailed": "{task} failed: {error}",
   "@backgroundTaskFailed": {
     "placeholders": {
-      "task": {"type": "String"},
-      "error": {"type": "String"}
+      "task": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
     }
   },
   "defaultModelPageOcrModelSubtitle": "Used for extracting text and descriptions from images",
@@ -1969,23 +1977,27 @@
   "searchServiceEditorMultiKeyTitle": "Multi-key rotation",
   "searchServiceEditorMultiKeyNone": "Not configured",
   "searchApiKeysPageDescription": "Keys rotate in the order listed; the first is the primary key. Usage is not queried to avoid provider rate limiting.",
-
   "searchApiKeysPagePrimaryBadge": "Primary",
   "searchApiKeysPageBatchHint": "Paste one or more keys — one per line or comma-separated",
   "searchApiKeysPageBatchResult": "Added {added}, skipped {skipped} duplicate(s)",
   "@searchApiKeysPageBatchResult": {
     "placeholders": {
-      "added": { "type": "String" },
-      "skipped": { "type": "String" }
+      "added": {
+        "type": "String"
+      },
+      "skipped": {
+        "type": "String"
+      }
     }
   },
   "searchApiKeysPageAdd": "Add",
   "searchApiKeysPageEmpty": "No keys configured yet.",
   "searchServiceEditorMultiKeyCount": "{count} keys",
-
   "@searchServiceEditorMultiKeyCount": {
     "placeholders": {
-      "count": { "type": "String" }
+      "count": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorUsageTitle": "Account usage",
@@ -1995,26 +2007,36 @@
   "searchServiceEditorUsageRemaining": "{remaining} credits remaining",
   "@searchServiceEditorUsageRemaining": {
     "placeholders": {
-      "remaining": { "type": "String" }
+      "remaining": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorUsageBalance": "Balance: {balance}",
   "@searchServiceEditorUsageBalance": {
     "placeholders": {
-      "balance": { "type": "String" }
+      "balance": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorUsageUsed": "{used} of {limit} credits used",
   "@searchServiceEditorUsageUsed": {
     "placeholders": {
-      "used": { "type": "String" },
-      "limit": { "type": "String" }
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorUsageFailed": "Could not query usage: {message}",
   "@searchServiceEditorUsageFailed": {
     "placeholders": {
-      "message": { "type": "String" }
+      "message": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorTestTitle": "Test search",
@@ -2025,7 +2047,9 @@
   "searchServiceEditorTestFailed": "Search failed: {message}",
   "@searchServiceEditorTestFailed": {
     "placeholders": {
-      "message": { "type": "String" }
+      "message": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorResultOpenTooltip": "Open result",
@@ -2034,7 +2058,9 @@
   "searchServiceEditorDeleteMessage": "Delete {provider}? This cannot be undone.",
   "@searchServiceEditorDeleteMessage": {
     "placeholders": {
-      "provider": { "type": "String" }
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorDeleteConfirm": "Delete",
@@ -2295,14 +2321,26 @@
   "asrServicesModelDownloadingLabel": "Downloading…",
   "asrServicesModelNotDownloadedLabel": "Not downloaded",
   "asrServicesDownloadFailed": "Model download failed: {error}",
-  "@asrServicesDownloadFailed": {"placeholders": {"error": {"type": "String"}}},
+  "@asrServicesDownloadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "asrServicesSystemChecking": "Checking…",
   "asrServicesSystemAvailable": "Available",
   "asrServicesSystemCheckFailed": "System speech recognition is unavailable on this device.",
   "asrServicesMicrophonePermissionDenied": "Microphone permission was not granted.",
   "asrServicesNoSpeechDetected": "No speech was detected.",
   "asrServicesRecognitionFailed": "Speech recognition failed: {error}",
-  "@asrServicesRecognitionFailed": {"placeholders": {"error": {"type": "String"}}},
+  "@asrServicesRecognitionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "ttsServicesPageAddNotImplemented": "Add TTS service not implemented",
   "ttsServicesPageSystemTtsTitle": "System TTS",
   "ttsServicesPageSystemTtsAvailableSubtitle": "Use system built-in TTS",
@@ -2373,8 +2411,12 @@
   "ttsServicesValidationSampleRate": "{format} requires {rates} Hz.",
   "@ttsServicesValidationSampleRate": {
     "placeholders": {
-      "format": {"type": "String"},
-      "rates": {"type": "String"}
+      "format": {
+        "type": "String"
+      },
+      "rates": {
+        "type": "String"
+      }
     }
   },
   "ttsServicesViewDetailsButton": "View details",
@@ -2614,14 +2656,14 @@
   "assistantEditLocalToolAskUserSubtitle": "Let the assistant ask short questions and continue after you answer.",
   "assistantEditLocalToolCalculateTitle": "Calculator",
   "assistantEditLocalToolCalculateSubtitle": "Evaluate mathematical expressions, supports + - * / power sqrt sin cos etc.",
-   "assistantEditLocalToolScreenTimeTitle": "Screen Time",
-   "assistantEditLocalToolScreenTimeSubtitle": "Query app screen usage on this device, requires the Usage access permission.",
-   "chatMessageWidgetScreenTimeTotal": "Total screen time",
-   "chatMessageWidgetScreenTimePermissionRequired": "Usage access permission is not granted. Please enable it in system settings and try again.",
-   "assistantEditLocalToolCalendarQueryTitle": "Query Calendar",
-   "assistantEditLocalToolCalendarQuerySubtitle": "Read calendar events on this device, requires the calendar permission.",
-   "assistantEditLocalToolCalendarCreateTitle": "Create Event",
-   "assistantEditLocalToolCalendarCreateSubtitle": "Create calendar events on this device with your confirmation, requires the calendar permission.",
+  "assistantEditLocalToolScreenTimeTitle": "Screen Time",
+  "assistantEditLocalToolScreenTimeSubtitle": "Query app screen usage on this device, requires the Usage access permission.",
+  "chatMessageWidgetScreenTimeTotal": "Total screen time",
+  "chatMessageWidgetScreenTimePermissionRequired": "Usage access permission is not granted. Please enable it in system settings and try again.",
+  "assistantEditLocalToolCalendarQueryTitle": "Query Calendar",
+  "assistantEditLocalToolCalendarQuerySubtitle": "Read calendar events on this device, requires the calendar permission.",
+  "assistantEditLocalToolCalendarCreateTitle": "Create Event",
+  "assistantEditLocalToolCalendarCreateSubtitle": "Create calendar events on this device with your confirmation, requires the calendar permission.",
   "assistantEditLocalToolLocationTitle": "Current Location",
   "assistantEditLocalToolLocationSubtitle": "Read a one-shot location from this device, requires the location permission.",
   "assistantEditLocalToolWeatherTitle": "Weather",
@@ -2631,8 +2673,12 @@
   "assistantEditLocalToolHealthSelectedCount": "{selected}/{total} selected",
   "@assistantEditLocalToolHealthSelectedCount": {
     "placeholders": {
-      "selected": { "type": "int" },
-      "total": { "type": "int" }
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "healthDataSettingsTitle": "Health Data",
@@ -2640,8 +2686,12 @@
   "healthDataSettingsBadge": "{selected}/{total} on",
   "@healthDataSettingsBadge": {
     "placeholders": {
-      "selected": { "type": "int" },
-      "total": { "type": "int" }
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "healthDataSettingsIosReadTitle": "iOS Health Read",
@@ -3017,7 +3067,9 @@
   "memorySettingsInjectionMaxItemsOption": "{n}",
   "@memorySettingsInjectionMaxItemsOption": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "memorySettingsInjectionMaxItemsCustomButton": "Custom",
@@ -3068,7 +3120,9 @@
   "memoryEntryScopeAssistantNamed": "{name}",
   "@memoryEntryScopeAssistantNamed": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "memoryEntrySourceManual": "Manual",
@@ -3080,7 +3134,9 @@
   "memoryEntryUpdatedAt": "Updated {date}",
   "@memoryEntryUpdatedAt": {
     "placeholders": {
-      "date": {"type": "String"}
+      "date": {
+        "type": "String"
+      }
     }
   },
   "memoryEntryActionEdit": "Edit",
@@ -3095,7 +3151,9 @@
   "memoryEntryBatchDeleteConfirmTitle": "Delete {count} memories?",
   "@memoryEntryBatchDeleteConfirmTitle": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "memoryEntryBatchDeleteConfirmContent": "Selected memories will be permanently deleted.",
@@ -3122,7 +3180,9 @@
   "memoryOrphanBanner": "{count} orphaned assistant memories (assistant deleted)",
   "@memoryOrphanBanner": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "memoryOrphanCleanupButton": "Clean up",
@@ -3130,7 +3190,9 @@
   "memoryOrphanConfirmContent": "Permanently delete {count} memories whose assistant no longer exists.",
   "@memoryOrphanConfirmContent": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "memoryOrganizeButton": "Organize",
@@ -3140,26 +3202,34 @@
   "memoryOrganizeStatusLast": "Last organized: {when}",
   "@memoryOrganizeStatusLast": {
     "placeholders": {
-      "when": {"type": "String"}
+      "when": {
+        "type": "String"
+      }
     }
   },
   "memoryOrganizeStatusExtracted": "extracted {count}",
   "@memoryOrganizeStatusExtracted": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "memoryOrganizeStatusSkipped": "nothing to remember",
   "memoryOrganizeStatusFailed": "Failed: {reason}",
   "@memoryOrganizeStatusFailed": {
     "placeholders": {
-      "reason": {"type": "String"}
+      "reason": {
+        "type": "String"
+      }
     }
   },
   "memoryOrganizeStatusSkippedReason": "skipped: {reason}",
   "@memoryOrganizeStatusSkippedReason": {
     "placeholders": {
-      "reason": {"type": "String"}
+      "reason": {
+        "type": "String"
+      }
     }
   },
   "memoryOutcomeTemporaryConversation": "Temporary chats are not saved to memory",
@@ -3191,19 +3261,25 @@
   "memoryOrganizeMinutesAgo": "{n} min ago",
   "@memoryOrganizeMinutesAgo": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "memoryOrganizeHoursAgo": "{n} h ago",
   "@memoryOrganizeHoursAgo": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "memoryOrganizeDaysAgo": "{n} d ago",
   "@memoryOrganizeDaysAgo": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "memoryModelMissingNotice": "Select a memory processing model in Settings → Memory first.",
@@ -3236,7 +3312,9 @@
   "legacyMemoryAssistantHeader": "Assistant: {name}",
   "@legacyMemoryAssistantHeader": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "legacyMemorySearchHint": "Search legacy memories",
@@ -3245,7 +3323,9 @@
   "legacyMemoryMigrationSubtitle": "Use a model to classify and clean up {count} legacy memories. The originals stay unchanged.",
   "@legacyMemoryMigrationSubtitle": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "legacyMemoryMigrationModel": "Migration model",
@@ -3263,16 +3343,24 @@
   "legacyMemoryMigrationProgress": "{current} of {total}",
   "@legacyMemoryMigrationProgress": {
     "placeholders": {
-      "current": {"type": "int"},
-      "total": {"type": "int"}
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "legacyMemoryMigrationComplete": "Migration complete",
   "legacyMemoryMigrationResult": "{created} migrated · {skipped} already existed",
   "@legacyMemoryMigrationResult": {
     "placeholders": {
-      "created": {"type": "int"},
-      "skipped": {"type": "int"}
+      "created": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
     }
   },
   "legacyMemoryMigrationFailed": "Migration stopped. You can retry; memories already saved will be skipped.",
@@ -3287,9 +3375,15 @@
   "legacyMemoryMigrationPartial": "{created} migrated · {skipped} skipped · {failed} failed",
   "@legacyMemoryMigrationPartial": {
     "placeholders": {
-      "created": {"type": "int"},
-      "skipped": {"type": "int"},
-      "failed": {"type": "int"}
+      "created": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
     }
   },
   "legacyMemoryMigrationContinue": "Continue migration",
@@ -3299,7 +3393,9 @@
   "legacyMemoryMigrationErrorOther": "Migration failed: {message}",
   "@legacyMemoryMigrationErrorOther": {
     "placeholders": {
-      "message": {"type": "String"}
+      "message": {
+        "type": "String"
+      }
     }
   },
   "legacyMemoryModeTitle": "Use legacy memory",
@@ -3351,7 +3447,9 @@
   "assistantEditOrganizeFrequencyOption": "Every {n}",
   "@assistantEditOrganizeFrequencyOption": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "assistantEditOrganizeFrequencyCustomButton": "Custom",
@@ -3641,7 +3739,13 @@
   "migrationChatsExportDegradedNote": "The chats.json export was skipped because of an error. The backup ZIP still contains the raw Hive files with your complete chat history.",
   "timelineJumpToLatest": "Jump to latest",
   "largeContentShowMore": "Show {count} more",
-  "@largeContentShowMore": {"placeholders": {"count": {"type": "int"}}},
+  "@largeContentShowMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "largeContentCollapse": "Collapse",
   "imageSettingsPageTitle": "Image Processing",
   "imageSettingsPageEditSectionTitle": "Editing",
@@ -4217,7 +4321,9 @@
   "generationServicesDeleteMessage": "Delete \"{name}\"? This cannot be undone.",
   "@generationServicesDeleteMessage": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "generationServiceEditorAddTitle": "New service",
@@ -4238,7 +4344,9 @@
   "generationServiceEditorSecondsValue": "{count}s",
   "@generationServiceEditorSecondsValue": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "generationServiceEditorTestSection": "Connection",
@@ -4246,14 +4354,18 @@
   "generationServiceEditorTestOk": "Endpoint reachable ({count} models)",
   "@generationServiceEditorTestOk": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "generationServiceEditorTestNoModels": "Endpoint reachable, but it does not expose /models",
   "generationServiceEditorTestFailed": "Connection failed: {message}",
   "@generationServiceEditorTestFailed": {
     "placeholders": {
-      "message": { "type": "String" }
+      "message": {
+        "type": "String"
+      }
     }
   },
   "generationServiceEditorRequired": "Required",
@@ -4276,20 +4388,34 @@
   "generationSheetFailed": "Generation failed: {message}",
   "@generationSheetFailed": {
     "placeholders": {
-      "message": { "type": "String" }
+      "message": {
+        "type": "String"
+      }
     }
   },
   "generationSheetInserted": "Added to the conversation",
   "chatMessageWidgetGenerateImage": "Generate image: {prompt}",
   "@chatMessageWidgetGenerateImage": {
     "placeholders": {
-      "prompt": { "type": "String" }
+      "prompt": {
+        "type": "String"
+      }
     }
   },
   "chatMessageWidgetGenerateVideo": "Generate video: {prompt}",
   "@chatMessageWidgetGenerateVideo": {
     "placeholders": {
-      "prompt": { "type": "String" }
+      "prompt": {
+        "type": "String"
+      }
     }
-  }
+  },
+  "backupPageCherryStudioConfirmBody": "This feature is experimental.\nTo keep your data safe, it is recommended to back up before importing.\nProceed to choose a file?",
+  "assistantEditLocalToolRenderVisualTitle": "Draw a visual",
+  "assistantEditLocalToolRenderVisualSubtitle": "Chart the data (bar, line, pie, funnel, gauge…) or draw it yourself (flowcharts, timelines, dashboards).",
+  "assistantEditLocalToolRenderMermaidTitle": "Mermaid diagram",
+  "assistantEditLocalToolRenderMermaidSubtitle": "Professional diagrams: flowcharts, sequence, state, ER, class, gantt, mind maps, timelines.",
+  "generationServicesStatusReachable": "Reachable",
+  "generationSelectorHint": "Pick a service, then just ask the model to generate — it calls the generation tool.",
+  "generationSelectorManage": "Manage generation services"
 }

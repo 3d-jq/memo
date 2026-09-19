@@ -658,8 +658,12 @@
   "backupPageForwardCompatBody": "这份备份由更新版本的 Kelivo 创建（数据格式 {backupVersion}，当前版本支持 {currentVersion}），且未声明旧版本能否读取。\n\n你可以继续导入：当前版本不认识的内容会被跳过，备份文件本身不会被修改。但如果新版本改变了已有数据的存储方式，部分内容可能会被错误导入。\n\n更稳妥的做法是先升级 Kelivo。",
   "@backupPageForwardCompatBody": {
     "placeholders": {
-      "backupVersion": { "type": "int" },
-      "currentVersion": { "type": "int" }
+      "backupVersion": {
+        "type": "int"
+      },
+      "currentVersion": {
+        "type": "int"
+      }
     }
   },
   "backupPageForwardCompatContinue": "仍然导入",
@@ -737,9 +741,9 @@
   "backupPageUserAgentHint": "可选",
   "backupPageSave": "保存",
   "backupPageBackupNow": "立即备份",
-  "backupPageWifiOnly": "\u4ec5 Wi-Fi",
-  "backupPageWhileCharging": "\u4ec5\u5728\u5145\u7535\u65f6",
-  "localSnapshotOnDeviceCopies": "\u672c\u673a\u526f\u672c",
+  "backupPageWifiOnly": "仅 Wi-Fi",
+  "backupPageWhileCharging": "仅在充电时",
+  "localSnapshotOnDeviceCopies": "本机副本",
   "backupPageLocalBackup": "本地备份",
   "backupPageImportFromCherryStudio": "从 Cherry Studio 导入",
   "backupPageCherryStudioUnsupportedBackupVersion": "此备份使用 Cherry Studio 格式版本 {version}，Kelivo 目前尚无法导入。请改用 Cherry Studio v1 导出备份，或等待后续版本支持 Cherry Studio v2。",
@@ -1234,8 +1238,12 @@
   "backgroundTaskFailed": "{task}失败：{error}",
   "@backgroundTaskFailed": {
     "placeholders": {
-      "task": {"type": "String"},
-      "error": {"type": "String"}
+      "task": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
     }
   },
   "defaultModelPageOcrModelSubtitle": "用于对图片执行文字识别的模型",
@@ -1545,14 +1553,12 @@
   "searchServiceEditorMultiKeyTitle": "多 Key 轮询",
   "searchServiceEditorMultiKeyNone": "未配置",
   "searchApiKeysPageDescription": "列表中的 Key 按顺序轮询使用，第一个为主 Key；不查额度，以防触发服务商风控。",
-
   "searchApiKeysPagePrimaryBadge": "主",
   "searchApiKeysPageBatchHint": "可一次粘贴多个 Key：每行一个，或用逗号分隔",
   "searchApiKeysPageBatchResult": "已添加 {added} 个，跳过 {skipped} 个重复",
   "searchApiKeysPageAdd": "添加",
   "searchApiKeysPageEmpty": "尚未配置任何 Key。",
   "searchServiceEditorMultiKeyCount": "共 {count} 个 Key",
-
   "searchServiceEditorUsageTitle": "账户用量",
   "searchServiceEditorUsageNotQueried": "尚未查询用量。",
   "searchServiceEditorUsageQuery": "查询用量",
@@ -1560,26 +1566,36 @@
   "searchServiceEditorUsageRemaining": "剩余 {remaining} 额度",
   "@searchServiceEditorUsageRemaining": {
     "placeholders": {
-      "remaining": { "type": "String" }
+      "remaining": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorUsageBalance": "余额 {balance}",
   "@searchServiceEditorUsageBalance": {
     "placeholders": {
-      "balance": { "type": "String" }
+      "balance": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorUsageUsed": "已使用 {used} / {limit} 额度",
   "@searchServiceEditorUsageUsed": {
     "placeholders": {
-      "used": { "type": "String" },
-      "limit": { "type": "String" }
+      "used": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorUsageFailed": "用量查询失败：{message}",
   "@searchServiceEditorUsageFailed": {
     "placeholders": {
-      "message": { "type": "String" }
+      "message": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorTestTitle": "测试搜索",
@@ -1590,7 +1606,9 @@
   "searchServiceEditorTestFailed": "搜索失败：{message}",
   "@searchServiceEditorTestFailed": {
     "placeholders": {
-      "message": { "type": "String" }
+      "message": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorResultOpenTooltip": "打开结果",
@@ -1599,7 +1617,9 @@
   "searchServiceEditorDeleteMessage": "确定删除 {provider} 吗？此操作无法撤销。",
   "@searchServiceEditorDeleteMessage": {
     "placeholders": {
-      "provider": { "type": "String" }
+      "provider": {
+        "type": "String"
+      }
     }
   },
   "searchServiceEditorDeleteConfirm": "删除",
@@ -2161,14 +2181,14 @@
   "assistantEditLocalToolAskUserSubtitle": "允许助手提出简短问题，并在你回答后继续生成。",
   "assistantEditLocalToolCalculateTitle": "计算器",
   "assistantEditLocalToolCalculateSubtitle": "计算数学表达式，支持加减乘除幂运算 sqrt sin cos 等。",
-   "assistantEditLocalToolScreenTimeTitle": "屏幕使用时间",
-   "assistantEditLocalToolScreenTimeSubtitle": "查询本设备的应用使用时长，需要授予使用情况访问权限。",
-   "chatMessageWidgetScreenTimeTotal": "总屏幕时间",
-   "chatMessageWidgetScreenTimePermissionRequired": "未授予使用情况访问权限，请在系统设置中开启后重试。",
-   "assistantEditLocalToolCalendarQueryTitle": "查询日历",
-   "assistantEditLocalToolCalendarQuerySubtitle": "读取本设备上的日历日程，需要授予日历权限。",
-   "assistantEditLocalToolCalendarCreateTitle": "创建日程",
-   "assistantEditLocalToolCalendarCreateSubtitle": "在你确认后于本设备创建日历日程，需要授予日历权限。",
+  "assistantEditLocalToolScreenTimeTitle": "屏幕使用时间",
+  "assistantEditLocalToolScreenTimeSubtitle": "查询本设备的应用使用时长，需要授予使用情况访问权限。",
+  "chatMessageWidgetScreenTimeTotal": "总屏幕时间",
+  "chatMessageWidgetScreenTimePermissionRequired": "未授予使用情况访问权限，请在系统设置中开启后重试。",
+  "assistantEditLocalToolCalendarQueryTitle": "查询日历",
+  "assistantEditLocalToolCalendarQuerySubtitle": "读取本设备上的日历日程，需要授予日历权限。",
+  "assistantEditLocalToolCalendarCreateTitle": "创建日程",
+  "assistantEditLocalToolCalendarCreateSubtitle": "在你确认后于本设备创建日历日程，需要授予日历权限。",
   "assistantEditLocalToolLocationTitle": "当前位置",
   "assistantEditLocalToolLocationSubtitle": "读取本设备的一次性位置，需要授予定位权限。",
   "assistantEditLocalToolWeatherTitle": "天气",
@@ -2528,7 +2548,9 @@
   "memorySettingsInjectionMaxItemsOption": "{n}",
   "@memorySettingsInjectionMaxItemsOption": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "memorySettingsInjectionMaxItemsCustomButton": "自定义",
@@ -2579,7 +2601,9 @@
   "memoryEntryScopeAssistantNamed": "{name}",
   "@memoryEntryScopeAssistantNamed": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "memoryEntrySourceManual": "手动",
@@ -2591,7 +2615,9 @@
   "memoryEntryUpdatedAt": "更新于 {date}",
   "@memoryEntryUpdatedAt": {
     "placeholders": {
-      "date": {"type": "String"}
+      "date": {
+        "type": "String"
+      }
     }
   },
   "memoryEntryActionEdit": "编辑",
@@ -2606,7 +2632,9 @@
   "memoryEntryBatchDeleteConfirmTitle": "删除 {count} 条记忆？",
   "@memoryEntryBatchDeleteConfirmTitle": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "memoryEntryBatchDeleteConfirmContent": "所选记忆将被永久删除。",
@@ -2633,7 +2661,9 @@
   "memoryOrphanBanner": "有 {count} 条孤儿助手记忆（助手已删除）",
   "@memoryOrphanBanner": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "memoryOrphanCleanupButton": "清理",
@@ -2641,7 +2671,9 @@
   "memoryOrphanConfirmContent": "将永久删除 {count} 条所属助手已不存在的记忆。",
   "@memoryOrphanConfirmContent": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "memoryOrganizeButton": "整理记忆",
@@ -2651,26 +2683,34 @@
   "memoryOrganizeStatusLast": "上次整理：{when}",
   "@memoryOrganizeStatusLast": {
     "placeholders": {
-      "when": {"type": "String"}
+      "when": {
+        "type": "String"
+      }
     }
   },
   "memoryOrganizeStatusExtracted": "提取 {count} 条",
   "@memoryOrganizeStatusExtracted": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "memoryOrganizeStatusSkipped": "无需记忆",
   "memoryOrganizeStatusFailed": "失败：{reason}",
   "@memoryOrganizeStatusFailed": {
     "placeholders": {
-      "reason": {"type": "String"}
+      "reason": {
+        "type": "String"
+      }
     }
   },
   "memoryOrganizeStatusSkippedReason": "已跳过：{reason}",
   "@memoryOrganizeStatusSkippedReason": {
     "placeholders": {
-      "reason": {"type": "String"}
+      "reason": {
+        "type": "String"
+      }
     }
   },
   "memoryOutcomeTemporaryConversation": "临时对话不会写入记忆",
@@ -2702,19 +2742,25 @@
   "memoryOrganizeMinutesAgo": "{n} 分钟前",
   "@memoryOrganizeMinutesAgo": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "memoryOrganizeHoursAgo": "{n} 小时前",
   "@memoryOrganizeHoursAgo": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "memoryOrganizeDaysAgo": "{n} 天前",
   "@memoryOrganizeDaysAgo": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "memoryModelMissingNotice": "需要先在 设置 → 记忆 中选择记忆处理模型。",
@@ -2747,7 +2793,9 @@
   "legacyMemoryAssistantHeader": "助手：{name}",
   "@legacyMemoryAssistantHeader": {
     "placeholders": {
-      "name": {"type": "String"}
+      "name": {
+        "type": "String"
+      }
     }
   },
   "legacyMemorySearchHint": "搜索旧版记忆",
@@ -2756,7 +2804,9 @@
   "legacyMemoryMigrationSubtitle": "使用模型整理并分类 {count} 条旧版记忆，原数据不会改变。",
   "@legacyMemoryMigrationSubtitle": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "legacyMemoryMigrationModel": "迁移模型",
@@ -2774,16 +2824,24 @@
   "legacyMemoryMigrationProgress": "{current} / {total}",
   "@legacyMemoryMigrationProgress": {
     "placeholders": {
-      "current": {"type": "int"},
-      "total": {"type": "int"}
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "legacyMemoryMigrationComplete": "迁移完成",
   "legacyMemoryMigrationResult": "已迁移 {created} 条 · 跳过已有 {skipped} 条",
   "@legacyMemoryMigrationResult": {
     "placeholders": {
-      "created": {"type": "int"},
-      "skipped": {"type": "int"}
+      "created": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
     }
   },
   "legacyMemoryMigrationFailed": "迁移已停止。可以重试，已保存的记忆会自动跳过。",
@@ -2798,9 +2856,15 @@
   "legacyMemoryMigrationPartial": "已迁移 {created} · 跳过 {skipped} · 失败 {failed}",
   "@legacyMemoryMigrationPartial": {
     "placeholders": {
-      "created": {"type": "int"},
-      "skipped": {"type": "int"},
-      "failed": {"type": "int"}
+      "created": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
     }
   },
   "legacyMemoryMigrationContinue": "继续迁移",
@@ -2810,7 +2874,9 @@
   "legacyMemoryMigrationErrorOther": "迁移失败：{message}",
   "@legacyMemoryMigrationErrorOther": {
     "placeholders": {
-      "message": {"type": "String"}
+      "message": {
+        "type": "String"
+      }
     }
   },
   "legacyMemoryModeTitle": "使用旧版记忆",
@@ -2855,7 +2921,9 @@
   "assistantEditOrganizeFrequencyOption": "每 {n} 轮",
   "@assistantEditOrganizeFrequencyOption": {
     "placeholders": {
-      "n": {"type": "int"}
+      "n": {
+        "type": "int"
+      }
     }
   },
   "assistantEditOrganizeFrequencyCustomButton": "自定义",
@@ -3093,7 +3161,13 @@
   "migrationChatsExportDegradedNote": "chats.json 导出因出错而被跳过。备份 ZIP 仍包含原始 Hive 文件，完整聊天记录未丢失。",
   "timelineJumpToLatest": "跳到最新",
   "largeContentShowMore": "再显示 {count} 项",
-  "@largeContentShowMore": {"placeholders": {"count": {"type": "int"}}},
+  "@largeContentShowMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "largeContentCollapse": "收起",
   "imageSettingsPageTitle": "图片处理",
   "imageSettingsPageEditSectionTitle": "编辑",
@@ -3182,13 +3256,43 @@
   "memoryTraceAfter": "改动后",
   "memoryTraceEmptyValue": "（空）",
   "memoryTraceStepsCount": "{count} 个步骤",
-  "@memoryTraceStepsCount": {"placeholders": {"count": {"type": "int"}}},
+  "@memoryTraceStepsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "memoryTraceMutationsCount": "{count} 项改动",
-  "@memoryTraceMutationsCount": {"placeholders": {"count": {"type": "int"}}},
+  "@memoryTraceMutationsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "memoryTraceRepeatCount": "重复 {count} 次",
-  "@memoryTraceRepeatCount": {"placeholders": {"count": {"type": "int"}}},
+  "@memoryTraceRepeatCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "memoryTraceWindowValue": "{size} 条消息 · #{start}–#{end}",
-  "@memoryTraceWindowValue": {"placeholders": {"size": {"type": "int"}, "start": {"type": "int"}, "end": {"type": "int"}}},
+  "@memoryTraceWindowValue": {
+    "placeholders": {
+      "size": {
+        "type": "int"
+      },
+      "start": {
+        "type": "int"
+      },
+      "end": {
+        "type": "int"
+      }
+    }
+  },
   "memoryTraceShowMore": "展开全文",
   "memoryTraceShowLess": "收起",
   "messageStyleSettingsPageTitle": "消息样式",
@@ -3527,5 +3631,13 @@
   "generationSheetFailed": "生成失败：{message}",
   "generationSheetInserted": "已加入对话",
   "chatMessageWidgetGenerateImage": "生成图片：{prompt}",
-  "chatMessageWidgetGenerateVideo": "生成视频：{prompt}"
+  "chatMessageWidgetGenerateVideo": "生成视频：{prompt}",
+  "backupPageCherryStudioConfirmBody": "此功能目前仍处于实验阶段。\n目前仅能导入助手，对话内容，供应商和文件，\n一些供应商需要在baseurl后面添加/v1 or /v1beta。 \n为确保数据安全，建议在导入前先执行备份。\n是否已知晓并继续选择文件？",
+  "assistantEditLocalToolRenderVisualTitle": "可视化绘图",
+  "assistantEditLocalToolRenderVisualSubtitle": "把数据画成图（柱状/折线/饼/漏斗/仪表盘…），或让模型直接画（流程图/时间轴/仪表盘）。",
+  "assistantEditLocalToolRenderMermaidTitle": "Mermaid 图",
+  "assistantEditLocalToolRenderMermaidSubtitle": "专业结构图：流程图 / 时序图 / 状态图 / ER / 类图 / 甘特 / 思维导图 / 时间线。",
+  "generationServicesStatusReachable": "可达",
+  "generationSelectorHint": "选好服务后，直接让模型生成即可（模型会调用生成工具）",
+  "generationSelectorManage": "管理生成服务"
 }
