@@ -411,7 +411,7 @@ fun MemorySettingsScreen(
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { injectionCustomInput = false }) {
-                    Text(stringResource(UiR.string.home_page_cancel))
+                    Text(stringResource(UiR.string.home_page_cancel), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
                 }
             },
         )

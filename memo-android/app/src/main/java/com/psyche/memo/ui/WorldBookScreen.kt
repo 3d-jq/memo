@@ -315,7 +315,7 @@ fun WorldBookScreen(
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { deletingBook = null }) {
-                    Text(stringResource(R.string.world_book_cancel))
+                    Text(stringResource(R.string.world_book_cancel), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
                 }
             },
         )

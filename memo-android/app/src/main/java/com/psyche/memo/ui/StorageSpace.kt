@@ -1145,7 +1145,7 @@ fun StorageCategoryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirm = null }) {
-                    Text(stringResource(UiR.string.home_page_cancel))
+                    Text(stringResource(UiR.string.home_page_cancel), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
                 }
             },
         )

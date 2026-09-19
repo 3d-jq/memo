@@ -685,7 +685,7 @@ fun SearchServiceEditorScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text(stringResource(R.string.search_services_add_dialog_cancel))
+                    Text(stringResource(R.string.search_services_add_dialog_cancel), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
                 }
             },
         )

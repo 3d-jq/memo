@@ -191,7 +191,7 @@ fun InstructionInjectionScreen(
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { deleting = null }) {
-                    Text(stringResource(R.string.quick_phrase_cancel_button))
+                    Text(stringResource(R.string.quick_phrase_cancel_button), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
                 }
             },
         )

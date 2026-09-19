@@ -441,7 +441,7 @@ fun MessageStyleSettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) {
-                    Text(stringResource(UiR.string.message_style_settings_page_cancel))
+                    Text(stringResource(UiR.string.message_style_settings_page_cancel), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
                 }
             },
         )
@@ -494,7 +494,7 @@ fun MessageStyleSettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { colorPicker = null }) {
-                    Text(stringResource(UiR.string.message_style_settings_page_cancel))
+                    Text(stringResource(UiR.string.message_style_settings_page_cancel), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
                 }
             },
         )

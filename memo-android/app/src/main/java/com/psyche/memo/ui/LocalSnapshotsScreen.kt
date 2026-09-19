@@ -659,7 +659,7 @@ private fun SnapshotConfirmDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(stringResource(UiR.string.home_page_cancel))
+                Text(stringResource(UiR.string.home_page_cancel), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
             }
         },
     )

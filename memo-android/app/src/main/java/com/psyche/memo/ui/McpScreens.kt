@@ -198,7 +198,7 @@ fun McpServersScreen(
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
-                    Text(stringResource(R.string.mcp_page_cancel))
+                    Text(stringResource(R.string.mcp_page_cancel), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.74f))
                 }
             },
         )
