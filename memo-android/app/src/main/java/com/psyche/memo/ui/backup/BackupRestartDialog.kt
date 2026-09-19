@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.backup
 
+import com.psyche.memo.ui.overlaySurfaceColor
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
@@ -59,7 +60,7 @@ fun BackupRestartRequiredDialog(
         // dismissible: false — the user must acknowledge the restart prompt.
         onDismissRequest = {},
         shape = RoundedCornerShape(16.dp),
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = {
             Text(
                 text = stringResource(UiR.string.backup_page_restart_required),

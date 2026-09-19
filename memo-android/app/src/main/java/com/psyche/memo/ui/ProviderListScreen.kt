@@ -433,7 +433,9 @@ fun ProvidersScreen(
     // ---- Delete-selected confirmation ----
     if (showDeleteConfirm) {
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { showDeleteConfirm = false },
             title = {
                 Text(
                     stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_title) +

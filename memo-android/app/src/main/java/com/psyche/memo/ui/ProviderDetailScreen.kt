@@ -407,7 +407,9 @@ fun ProviderDetailScreen(
     // ---- Delete confirmation: clear model refs, remove row, pop ----
     if (showDelete) {
         AlertDialog(
-            onDismissRequest = { showDelete = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { showDelete = false },
             title = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_title)) },
             text = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_content)) },
             confirmButton = {
@@ -1243,7 +1245,9 @@ private fun ModelsTab(
             )
         }
         AlertDialog(
-            onDismissRequest = { pendingDelete = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { pendingDelete = null },
             title = { Text(confirmTitle) },
             text = { Text(content) },
             confirmButton = {
@@ -1266,7 +1270,9 @@ private fun ModelsTab(
 
     if (deleteAllConfirm) {
         AlertDialog(
-            onDismissRequest = { deleteAllConfirm = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteAllConfirm = false },
             // 原版 `_deleteAllModels`（L3276-3326）：标题是通用「确认删除」，
             // 正文才是「此操作不可撤回」。
             title = { Text(confirmTitle) },

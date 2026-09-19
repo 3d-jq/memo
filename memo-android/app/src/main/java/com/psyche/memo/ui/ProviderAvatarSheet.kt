@@ -126,7 +126,7 @@ internal fun ProviderIconPickerDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(UiR.string.provider_avatar_icon_dialog_title)) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -135,7 +135,7 @@ internal fun ProviderIconPickerDialog(
                     onValueChange = { query = it },
                     singleLine = true,
                     placeholder = { Text(stringResource(UiR.string.provider_avatar_icon_search_hint)) },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(10.dp))
@@ -195,7 +195,7 @@ internal fun ProviderAvatarTextDialog(
     val ok = valid(value)
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(title) },
         text = {
             OutlinedTextField(
@@ -203,7 +203,7 @@ internal fun ProviderAvatarTextDialog(
                 onValueChange = { value = it },
                 singleLine = true,
                 placeholder = { Text(hint) },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
         },

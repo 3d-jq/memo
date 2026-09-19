@@ -404,7 +404,7 @@ internal fun ContextMessageInputDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(title) },
         text = {
             Column {
@@ -419,7 +419,6 @@ internal fun ContextMessageInputDialog(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     keyboardActions = KeyboardActions(onDone = { submit() }),
-                    shape = RoundedCornerShape(12.dp),
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = semantic.surfaceFill,
                         unfocusedContainerColor = semantic.surfaceFill,

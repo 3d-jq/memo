@@ -551,6 +551,7 @@ fun BackupReminderCustomDaysDialog(
     val days = text.toIntOrNull()
     val valid = days != null && days in 1..365
     AlertDialog(
+        shape = RoundedCornerShape(16.dp),
         onDismissRequest = onDismiss,
         title = { Text(androidx.compose.ui.res.stringResource(UiR.string.backup_reminder_custom_dialog_title)) },
         text = {
@@ -590,6 +591,6 @@ fun BackupReminderCustomDaysDialog(
                 )
             }
         },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
     )
 }

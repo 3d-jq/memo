@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.backup
 
+import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -166,7 +167,7 @@ fun ForwardCompatDialogHost(dialogs: ForwardCompatDialogs) {
         AlertDialog(
             onDismissRequest = { dialogs.settle(false) },
             shape = RoundedCornerShape(16.dp),
-            containerColor = semantic.overlaySurface(cs),
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             title = {
                 Text(
                     text = stringResource(UiR.string.backup_page_forward_compat_title),
@@ -207,7 +208,7 @@ fun ForwardCompatDialogHost(dialogs: ForwardCompatDialogs) {
         AlertDialog(
             onDismissRequest = { dialogs.settle(false) },
             shape = RoundedCornerShape(16.dp),
-            containerColor = semantic.overlaySurface(cs),
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             title = {
                 Text(
                     text = stringResource(UiR.string.backup_page_forward_compat_title),

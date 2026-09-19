@@ -235,6 +235,8 @@ private fun MemoryConfirmDialog(
 ) {
     val cs = MaterialTheme.colorScheme
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = { onResult(false) },
         title = { Text(title) },
         text = { Text(content) },

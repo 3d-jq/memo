@@ -205,6 +205,8 @@ internal fun NicknameDialog(
     val canSave = trimmed.isNotEmpty() && trimmed != initial
 
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.side_drawer_set_nickname_title)) },
         text = {

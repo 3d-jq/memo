@@ -393,7 +393,9 @@ fun WorkspaceDetailScreen(
 
     installError?.let { message ->
         AlertDialog(
-            onDismissRequest = { installError = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { installError = null },
             title = { Text(stringResource(R.string.workspace_rootfs_install_failed)) },
             text = { Text(message) },
             confirmButton = {
@@ -439,7 +441,9 @@ fun WorkspaceDetailScreen(
 
     deleteTarget?.let { entry ->
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteTarget = null },
             title = {
                 Text(
                     stringResource(
@@ -871,7 +875,9 @@ private fun WorkspaceEnvironmentsCard(
 
     failure?.let { (label, message) ->
         AlertDialog(
-            onDismissRequest = { failure = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { failure = null },
             title = { Text(stringResource(R.string.workspace_env_install_failed)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1010,6 +1016,8 @@ private fun InstallRootfsDialog(
     val cs = MaterialTheme.colorScheme
     var url by remember(workspaceName) { mutableStateOf(defaultRootfsUrl()) }
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.workspace_install_rootfs)) },
         text = {

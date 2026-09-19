@@ -121,7 +121,9 @@ fun WorkspaceTerminalScreen(
     val pendingCloseTab = state.tabs.firstOrNull { it.id == pendingCloseTabId }
     if (pendingCloseTab != null) {
         AlertDialog(
-            onDismissRequest = { pendingCloseTabId = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { pendingCloseTabId = null },
             title = {
                 Text(stringResource(R.string.workspace_terminal_close_confirm_title, pendingCloseTab.number.toString()))
             },

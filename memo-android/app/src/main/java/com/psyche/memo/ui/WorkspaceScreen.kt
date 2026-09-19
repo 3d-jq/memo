@@ -163,7 +163,9 @@ fun WorkspaceScreen(
     if (creating) {
         var name by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { creating = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { creating = false },
             title = { Text(stringResource(R.string.workspace_new)) },
             text = {
                 OutlinedTextField(
@@ -226,7 +228,9 @@ fun WorkspaceScreen(
 
     deleteTarget?.let { workspace ->
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.workspace_delete_title)) },
             text = { Text(stringResource(R.string.workspace_delete_message, workspace.name)) },
             confirmButton = {
@@ -326,6 +330,8 @@ private fun InstallProgressDialog(
     val fraction = if (total > 0) (progress?.bytesRead ?: 0L).toFloat() / total.toFloat() else null
     AlertDialog(
         // 安装中不给关：关掉不会取消协程，只会让用户以为停了。
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = {},
         title = { Text(stringResource(R.string.workspace_install_rootfs)) },
         text = {

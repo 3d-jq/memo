@@ -1028,7 +1028,9 @@ fun SideDrawerContent(
         // stringResource，先在组合作用域内求值）。
         val deleteDoneText = stringResource(UiR.string.side_drawer_delete_snackbar, target.title)
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_title)) },
             text = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_content, "1")) },
             confirmButton = {
@@ -1060,7 +1062,9 @@ fun SideDrawerContent(
     renameTarget?.let { target ->
         var name by remember(target.id) { mutableStateOf(target.title) }
         AlertDialog(
-            onDismissRequest = { renameTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { renameTarget = null },
             title = { Text(stringResource(UiR.string.side_drawer_menu_rename)) },
             text = {
                 OutlinedTextField(
@@ -1164,7 +1168,9 @@ fun SideDrawerContent(
     // Multi-delete confirmation (memo _deleteSelected).
     if (multiDeleteConfirm) {
         AlertDialog(
-            onDismissRequest = { multiDeleteConfirm = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { multiDeleteConfirm = false },
             title = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_title)) },
             text = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_content, selectedIds.size.toString())) },
             confirmButton = {
@@ -1265,7 +1271,9 @@ fun SideDrawerContent(
 
     assistantDeleteTarget?.let { target ->
         AlertDialog(
-            onDismissRequest = { assistantDeleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { assistantDeleteTarget = null },
             title = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_title)) },
             text = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_content)) },
             confirmButton = {

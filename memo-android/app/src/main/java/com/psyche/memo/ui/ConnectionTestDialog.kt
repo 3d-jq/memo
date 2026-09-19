@@ -86,7 +86,7 @@ internal fun ConnectionTestDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         shape = RoundedCornerShape(16.dp),
         title = {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

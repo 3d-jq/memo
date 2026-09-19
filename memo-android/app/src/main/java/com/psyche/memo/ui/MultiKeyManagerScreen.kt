@@ -452,7 +452,9 @@ fun MultiKeyManagerScreen(
     // ---- Delete-all-errors confirm dialog ----
     if (showDeleteErrors) {
         AlertDialog(
-            onDismissRequest = { showDeleteErrors = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { showDeleteErrors = false },
             title = { Text(stringResource(R.string.multi_key_page_delete_errors_confirm_title)) },
             text = { Text(stringResource(R.string.multi_key_page_delete_errors_confirm_content)) },
             confirmButton = {

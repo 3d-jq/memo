@@ -252,8 +252,9 @@ fun AssistantSettingsScreen(
     deleteTarget?.let { target ->
         // _confirmDelete L532-559.
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_title)) },
             text = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_content)) },
             confirmButton = {

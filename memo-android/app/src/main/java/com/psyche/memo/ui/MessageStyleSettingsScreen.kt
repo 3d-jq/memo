@@ -429,7 +429,9 @@ fun MessageStyleSettingsScreen(
     if (showResetConfirm) {
         // L503-582 — reset confirmation.
         AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { showResetConfirm = false },
             text = { Text(stringResource(UiR.string.message_style_settings_page_reset_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
@@ -464,7 +466,9 @@ fun MessageStyleSettingsScreen(
             mutableStateOf(String.format(java.util.Locale.US, "%06X", initial.toArgb() and 0xFFFFFF))
         }
         AlertDialog(
-            onDismissRequest = { colorPicker = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { colorPicker = null },
             title = { Text(title) },
             text = {
                 OutlinedTextField(

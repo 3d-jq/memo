@@ -180,7 +180,9 @@ fun McpServersScreen(
 
     deleteTarget?.let { server ->
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.mcp_page_confirm_delete_title)) },
             text = { Text(stringResource(R.string.mcp_page_confirm_delete_content)) },
             confirmButton = {

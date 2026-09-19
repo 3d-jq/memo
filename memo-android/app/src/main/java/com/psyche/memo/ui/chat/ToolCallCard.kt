@@ -912,6 +912,8 @@ private fun ApprovalDenyDialog(
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
     val cs = MaterialTheme.colorScheme
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.tool_approval_deny_title)) },
         text = {

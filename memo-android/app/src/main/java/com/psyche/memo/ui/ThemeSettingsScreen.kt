@@ -304,7 +304,9 @@ fun ThemeSettingsScreen(
     // Delete confirmation dialog.
     deleteTarget?.let { target ->
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(UiR.string.custom_theme_delete)) },
             text = { Text(stringResource(UiR.string.custom_theme_delete_confirm)) },
             confirmButton = {

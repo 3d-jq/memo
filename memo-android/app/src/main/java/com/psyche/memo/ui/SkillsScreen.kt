@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -252,7 +253,9 @@ fun SkillsScreen(
 
     deleteTarget?.let { target ->
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.skills_page_delete_title)) },
             text = { Text(stringResource(R.string.skills_page_delete_message, target.name)) },
             confirmButton = {
@@ -406,6 +409,8 @@ private fun ImportGitHubDialog(
     var loading by remember { mutableStateOf(false) }
 
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = { if (!loading) onDismiss() },
         title = { Text(stringResource(R.string.skills_page_import_github)) },
         text = {
@@ -477,6 +482,8 @@ private fun AddSkillDialog(
     val nameError = content.isNotBlank() && name.isBlank()
 
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.skills_page_add_title)) },
         text = {

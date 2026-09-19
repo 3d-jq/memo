@@ -76,7 +76,7 @@ fun MemoAlertDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = title?.let { t ->
             {
                 Text(

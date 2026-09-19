@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -141,7 +142,9 @@ fun SkillDetailScreen(
         var content by remember { mutableStateOf("") }
         val invalid = fileName.isNotBlank() && fileName.contains('\\')
         AlertDialog(
-            onDismissRequest = { creating = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { creating = false },
             title = { Text(stringResource(R.string.skill_detail_page_new_file)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -192,7 +195,9 @@ fun SkillDetailScreen(
 
     deleteTarget?.let { entry ->
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.skill_detail_page_delete_file)) },
             text = { Text(stringResource(R.string.skill_detail_page_delete_confirm, entry.relativePath)) },
             confirmButton = {
@@ -296,6 +301,8 @@ private fun SkillFileEditor(
 ) {
     var content by remember(title) { mutableStateOf(initialContent) }
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = onDismiss,
         title = { Text(title, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold) },
         text = {

@@ -438,7 +438,9 @@ fun ReasoningBudgetSheet(
         val parsed = text.trim().toIntOrNull()
         val valid = parsed != null && (parsed == -1 || parsed >= 0)
         AlertDialog(
-            onDismissRequest = { customOpen = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { customOpen = false },
             title = { Text(stringResource(UiR.string.reasoning_budget_sheet_custom_label)) },
             text = {
                 OutlinedTextField(

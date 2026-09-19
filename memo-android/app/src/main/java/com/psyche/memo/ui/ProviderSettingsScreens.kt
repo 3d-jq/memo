@@ -243,7 +243,9 @@ fun ProviderEditScreen(
 
     if (showDelete) {
         AlertDialog(
-            onDismissRequest = { showDelete = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { showDelete = false },
             title = { Text(stringResource(UiR.string.provider_detail_page_delete_provider_title)) },
             text = { Text(stringResource(UiR.string.providers_page_delete_selected_confirm_content)) },
             confirmButton = {

@@ -197,7 +197,7 @@ internal fun EmojiPickerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.emojiTitle)) },
         text = {
             Column {
@@ -285,7 +285,7 @@ internal fun AvatarUrlDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.urlTitle)) },
         text = {
             AvatarDialogField(
@@ -337,7 +337,7 @@ internal fun QQAvatarDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
-        containerColor = semantic.overlaySurface(cs),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.qqTitle)) },
         text = {
             AvatarDialogField(

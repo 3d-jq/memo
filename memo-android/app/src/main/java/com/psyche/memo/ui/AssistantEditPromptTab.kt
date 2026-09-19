@@ -1121,8 +1121,9 @@ private fun TimeVarEnableDialog(
 ) {
     val cs = MaterialTheme.colorScheme
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
         title = { Text(stringResource(UiR.string.assistant_edit_prompt_time_var_dialog_title)) },
         text = {
             Text(
@@ -1149,8 +1150,9 @@ private fun TimeVarEnableDialog(
 @Composable
 private fun AppendTimeInfoDialog(onDismiss: () -> Unit) {
     AlertDialog(
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
         title = { Text(stringResource(UiR.string.assistant_edit_prompt_append_time_info_title)) },
         text = {
             Text(

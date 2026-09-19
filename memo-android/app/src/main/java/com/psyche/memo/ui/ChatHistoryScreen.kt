@@ -267,7 +267,9 @@ fun ChatHistoryScreen(
     // conversations with a null assistantId that are not pinned are removed.
     if (showDeleteAll) {
         AlertDialog(
-            onDismissRequest = { showDeleteAll = false },
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(16.dp),
+        onDismissRequest = { showDeleteAll = false },
             title = { Text(stringResource(UiR.string.chat_history_page_delete_all_dialog_title)) },
             text = { Text(stringResource(UiR.string.chat_history_page_delete_all_dialog_content)) },
             confirmButton = {
