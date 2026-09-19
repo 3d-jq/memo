@@ -61,9 +61,8 @@ data class NetworkTtsResult(
  * —— 12 家网络 TTS 的请求组装与响应解析。
  *
  * 已接：openai / gemini / azure / minimax / qwen / groq / xai / elevenlabs /
- * mimo / step / fishAudio（11 家 HTTP）。
- * 未接：qwenAudio（DashScope WebSocket 双向流，需要 OkHttp WebSocket 会话，
- * 与 ASR 的 WebSocket 四家一起做）——调用会抛 [TtsException]，UI 会显示失败。
+ * mimo / step / fishAudio（11 家 HTTP）+ qwenAudio（DashScope WebSocket 双向流，
+ * 2026-09-19 补齐，12/12 全通）。
  *
  * 与原版的差异：**不做客户端参数范围校验**（MiniMax 的 emotion/speed/volume/
  * pitch/format/sampleRate/bitrate 白名单、Fish 的 referenceId），只保留「必填项
@@ -116,9 +115,7 @@ object NetworkTts {
             is MimoTtsOptions -> mimo(client, options, text, isCancelled)
             is StepTtsOptions -> step(client, options, text, isCancelled)
             is FishAudioTtsOptions -> fishAudio(client, options, text)
-            is QwenAudioTtsOptions -> throw TtsException(
-                "Qwen Audio TTS (WebSocket) is not ported yet",
-            )
+            is QwenAudioTtsOptions -> qwenAudio(client, options, text, isCancelled)
         }
     }
 
@@ -731,6 +728,219 @@ object NetworkTts {
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     private val SSML_MEDIA = "application/ssml+xml".toMediaType()
 
-    /** 供调用方按 kind 判断是否已实现（qwenAudio 还没接）。 */
-    fun isSupported(kind: NetworkTtsKind): Boolean = kind != NetworkTtsKind.qwenAudio
+    // -------------------------------------------------- qwenAudio（DashScope WebSocket）
+
+    /** QwenAudioTtsOptions.websocketUrl（network_tts.dart L616-623）。 */
+    private fun qwenAudioWebsocketUrl(opt: QwenAudioTtsOptions): String {
+        val ws = opt.workspaceId.trim()
+        val reg = opt.region.trim().ifEmpty { "cn-beijing" }
+        return if (ws.isEmpty()) {
+            "wss://dashscope.aliyuncs.com/api-ws/v1/inference"
+        } else {
+            "wss://$ws.$reg.maas.aliyuncs.com/api-ws/v1/inference"
+        }
+    }
+
+    private const val QWEN_STARTED_TIMEOUT_MS = 30_000L
+    private const val QWEN_FINISHED_TIMEOUT_MS = 120_000L
+
+    /** Latch 等待 + 取消轮询（`_waitWithCancellation` 的阻塞版）。 */
+    private fun awaitLatch(
+        latch: java.util.concurrent.CountDownLatch,
+        timeoutMs: Long,
+        isCancelled: () -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (latch.await(100, java.util.concurrent.TimeUnit.MILLISECONDS)) return true
+            if (isCancelled()) throw TtsException("TTS cancelled")
+        }
+        return latch.await(0, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * `_qwenAudioSpeech`（network_tts.dart L1618-1786）：run-task → 等
+     * task-started（30s）→ continue-task（文本）+ finish-task → 等
+     * task-finished（120s）；音频以二进制帧回流，PCM 格式转 WAV 后返回。
+     */
+    private fun qwenAudio(
+        client: OkHttpClient,
+        opt: QwenAudioTtsOptions,
+        text: String,
+        isCancelled: () -> Boolean,
+    ): NetworkTtsResult {
+        val session = QwenAudioTtsSession(client, opt, isCancelled)
+        try {
+            session.awaitStarted()
+            checkCancelled(isCancelled)
+            session.sendContinueAndFinish(text)
+            session.awaitFinished()
+            checkCancelled(isCancelled)
+            session.terminal?.let { throw it }
+            val bytes = session.audioBytes()
+            if (bytes.isEmpty()) throw TtsException("Qwen Audio TTS returned no audio")
+            val fmt = opt.format.lowercase()
+            return if (fmt == "pcm") {
+                NetworkTtsResult(
+                    bytes = pcmToWav(bytes, opt.sampleRate),
+                    mime = "audio/wav",
+                    sampleRate = opt.sampleRate,
+                )
+            } else {
+                NetworkTtsResult(
+                    bytes = bytes,
+                    mime = audioMimeForFormat(fmt),
+                    sampleRate = opt.sampleRate,
+                )
+            }
+        } finally {
+            session.close()
+        }
+    }
+
+    private class QwenAudioTtsSession(
+        client: OkHttpClient,
+        private val opt: QwenAudioTtsOptions,
+        private val isCancelled: () -> Boolean,
+    ) : okhttp3.WebSocketListener() {
+
+        private val taskId = java.util.UUID.randomUUID().toString()
+        private val started = java.util.concurrent.CountDownLatch(1)
+        private val finished = java.util.concurrent.CountDownLatch(1)
+        private val audioBuffer = java.io.ByteArrayOutputStream()
+        @Volatile var terminal: TtsException? = null
+            private set
+        private var socket: okhttp3.WebSocket? = null
+
+        init {
+            val builder = okhttp3.Request.Builder()
+                .url(qwenAudioWebsocketUrl(opt))
+                .header("Authorization", "Bearer ${opt.apiKey}")
+            if (opt.workspaceId.trim().isNotEmpty()) {
+                builder.header("X-DashScope-WorkSpace", opt.workspaceId.trim())
+            }
+            socket = client.newWebSocket(builder.build(), this)
+        }
+
+        fun awaitStarted() {
+            if (!awaitLatch(started, QWEN_STARTED_TIMEOUT_MS, isCancelled)) {
+                throw terminal ?: TtsException("Qwen Audio TTS timed out waiting for task-started")
+            }
+            terminal?.let { throw it }
+        }
+
+        fun sendContinueAndFinish(text: String) {
+            send(
+                buildJsonObject {
+                    put("header", buildJsonObject {
+                        put("action", "continue-task")
+                        put("task_id", taskId)
+                        put("streaming", "duplex")
+                    })
+                    put("payload", buildJsonObject {
+                        put("input", buildJsonObject { put("text", text) })
+                    })
+                },
+            )
+            send(
+                buildJsonObject {
+                    put("header", buildJsonObject {
+                        put("action", "finish-task")
+                        put("task_id", taskId)
+                        put("streaming", "duplex")
+                    })
+                    put("payload", buildJsonObject { put("input", buildJsonObject { }) })
+                },
+            )
+        }
+
+        fun awaitFinished() {
+            if (!awaitLatch(finished, QWEN_FINISHED_TIMEOUT_MS, isCancelled)) {
+                throw terminal ?: TtsException("Qwen Audio TTS timed out waiting for task-finished")
+            }
+            terminal?.let { throw it }
+        }
+
+        fun audioBytes(): ByteArray = synchronized(audioBuffer) { audioBuffer.toByteArray() }
+
+        fun close() {
+            runCatching { socket?.close(1000, null) }
+        }
+
+        private fun fail(message: String) {
+            terminal = terminal ?: TtsException(message)
+            started.countDown()
+            finished.countDown()
+        }
+
+        private fun send(json: JsonObject) {
+            val sent = runCatching { socket?.send(json.toString()) ?: false }.getOrDefault(false)
+            if (!sent) fail("Qwen Audio TTS WebSocket send failed")
+        }
+
+        override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+            send(
+                buildJsonObject {
+                    put("header", buildJsonObject {
+                        put("action", "run-task")
+                        put("task_id", taskId)
+                        put("streaming", "duplex")
+                    })
+                    put("payload", buildJsonObject {
+                        put("task_group", "audio")
+                        put("task", "tts")
+                        put("function", "SpeechSynthesizer")
+                        put("model", opt.model)
+                        put("parameters", buildJsonObject {
+                            put("text_type", "PlainText")
+                            put("voice", opt.voice)
+                            put("format", opt.format)
+                            put("sample_rate", opt.sampleRate)
+                        })
+                        put("input", buildJsonObject { })
+                    })
+                },
+            )
+        }
+
+        override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+            val json = runCatching { Json.parseToJsonElement(text).jsonObject }.getOrNull() ?: run {
+                fail("Qwen Audio TTS returned malformed lifecycle JSON.")
+                return
+            }
+            val header = json["header"] as? JsonObject
+            val name = header?.get("event")?.jsonPrimitive?.contentOrNull.orEmpty()
+            when (name) {
+                "task-started" -> started.countDown()
+                // result-generated 只带句子/时间戳元数据；音频走二进制帧。
+                "task-finished" -> finished.countDown()
+                "task-failed", "error" -> {
+                    val payload = json["payload"] as? JsonObject
+                    val msg = (header?.get("error_message")?.jsonPrimitive?.contentOrNull
+                        ?: header?.get("error_code")?.jsonPrimitive?.contentOrNull
+                        ?: payload?.get("message")?.jsonPrimitive?.contentOrNull
+                        ?: name)
+                    fail("Qwen Audio TTS failed: $msg")
+                }
+            }
+        }
+
+        override fun onMessage(webSocket: okhttp3.WebSocket, bytes: okio.ByteString) {
+            synchronized(audioBuffer) { audioBuffer.write(bytes.toByteArray()) }
+        }
+
+        override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+            fail("Qwen Audio TTS connection failed: ${t.message ?: t}")
+        }
+
+        override fun onClosed(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
+            // 服务端先关流还没发 task-finished：按异常收尾。
+            if (started.count > 0 || finished.count > 0) {
+                fail("Qwen Audio TTS socket closed before task-finished")
+            }
+        }
+    }
+
+    /** 供调用方按 kind 判断是否已实现（12/12 全部接线）。 */
+    fun isSupported(kind: NetworkTtsKind): Boolean = true
 }

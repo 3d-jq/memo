@@ -269,12 +269,13 @@ class NetworkTtsTest {
     // ------------------------------------------------------------------ 未接的 provider
 
     @Test
-    fun `qwen audio websocket is explicitly unsupported`() {
+    fun `qwen audio websocket reports a connection failure instead of not-ported`() {
         val options = QwenAudioTtsOptions("q", true, "QwenAudio", "k", "", "cn-beijing", "m", "v", "pcm", 24000)
-        assertFalse(NetworkTts.isSupported(NetworkTtsKind.qwenAudio))
+        assertTrue(NetworkTts.isSupported(NetworkTtsKind.qwenAudio))
         val error = runCatching { NetworkTts.synthesize(client, options, "hi") }.exceptionOrNull()
+        // 测试环境连不上 DashScope：失败必须是 TtsException（不再是"未移植"）。
         assertTrue(error is TtsException)
-        assertTrue(error!!.message!!.contains("not ported"))
+        assertTrue(error!!.message!!.contains("not ported").not())
     }
 
     // ------------------------------------------------------------------ 纯函数
