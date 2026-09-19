@@ -54,6 +54,9 @@ object TtsPlayer {
 
     @Volatile private var switchableRef: SwitchableTtsEngine? = null
 
+    /** 系统语音四个偏好键的读写口（[SystemTtsConfig]）；启动早期可能还没接上。 */
+    @Volatile private var servicesStoreRef: com.psyche.memo.ui.TtsServicesStore? = null
+
     /** Called from `MemoApplication.onCreate`. */
     fun init(
         context: Context,
@@ -63,15 +66,46 @@ object TtsPlayer {
         if (controllerRef != null) return
         synchronized(this) {
             if (controllerRef == null) {
+                if (store != null) servicesStoreRef = store
+                // 现读：偏好改过之后引擎重建/重下发都拿到最新值。
+                val config = { servicesStoreRef?.systemTtsConfig() ?: SystemTtsConfig() }
                 val engine = if (client != null && store != null) {
-                    SwitchableTtsEngine(context.applicationContext, client, store)
+                    SwitchableTtsEngine(context.applicationContext, client, store, config)
                         .also { switchableRef = it }
                 } else {
-                    SystemTtsEngine(context.applicationContext)
+                    SystemTtsEngine(context.applicationContext, config)
                 }
-                controllerRef = TtsPlaybackController(engine)
+                controllerRef = TtsPlaybackController(engine).also {
+                    // 原版 `_init` 的 `_kickEngine` + `_ensureBound`：启动就把引擎构造出来，
+                    // 「语音服务」页开的时候才枚举得到引擎与语言。
+                    it.prepareEngine()
+                }
             }
         }
+    }
+
+    /** 偏好写完后重新下发（语速/音调/引擎/语言）。 */
+    fun reloadSystemConfig() {
+        controller(null)?.reloadSystemConfig()
+    }
+
+    /** 原版 `listEngines()`。引擎还没就绪时为空表。 */
+    fun listEngines(): List<String> = controller(null)?.systemEngines() ?: emptyList()
+
+    /** 原版 `listLanguages()`。 */
+    fun listLanguages(): List<String> = controller(null)?.systemLanguages() ?: emptyList()
+
+    /** 让引擎先起来（枚举要用它），配合 [listEngines] 的有界轮询用。 */
+    fun prepareSystemEngine() {
+        controller(null)?.prepareEngine()
+    }
+
+    /** 「使用缓存复播」（tts_settings_page.dart 的那颗开关）。 */
+    val cacheNetworkAudioForReplay: Boolean
+        get() = servicesStoreRef?.cacheNetworkAudioForReplay ?: false
+
+    fun setCacheNetworkAudioForReplay(value: Boolean) {
+        servicesStoreRef?.cacheNetworkAudioForReplay = value
     }
 
     /** 当前是否在用网络语音（悬浮播放器的保存钮据此显示）。 */
@@ -173,7 +207,8 @@ object TtsPlayer {
     }
 
     fun replay() {
-        controller(null)?.replay()
+        // 「使用缓存复播」决定重播要不要再花一次合成（原版 replay 的 reuseResolvedNetworkAudio）。
+        controller(null)?.replay(allowCachedAudio = cacheNetworkAudioForReplay)
     }
 
     fun seekBackward() {

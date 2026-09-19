@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +31,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import com.psyche.memo.ui.slider.MemoSlider
@@ -40,6 +44,9 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -607,26 +614,34 @@ internal fun streamOf(initial: TtsServiceOptions?): Boolean =
 private fun SystemTtsConfigSheet(container: AppContainerImpl, onDismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
-    val prefs = remember { container.preferenceRepository }
-    // TtsProvider keys (L44-48) — same key names via PreferenceRepository JSON.
-    fun readNum(key: String, def: Float): Float =
-        prefs.readJson(key)?.toFloatOrNull() ?: def
-    fun writeNum(key: String, v: Float) =
-        prefs.writeJson(key, kotlinx.serialization.json.JsonPrimitive(v).toString())
+    val store = remember { container.ttsServicesStore }
 
-    var rate by remember { mutableStateOf(readNum("tts_speech_rate_v1", 0.5f)) }
-    var pitch by remember { mutableStateOf(readNum("tts_pitch_v1", 1.0f)) }
+    // TtsProvider 的四个键（tts_provider.dart L44-47），读写都过 store。
+    var config by remember { mutableStateOf(store.systemTtsConfig()) }
+    var rate by remember { mutableStateOf(config.speechRate.toFloat()) }
+    var pitch by remember { mutableStateOf(config.pitch.toFloat()) }
     var engines by remember { mutableStateOf(listOf<String>()) }
-    var engineId by remember { mutableStateOf(prefs.readJson("tts_engine_v1")?.removeSurrounding("\"") ?: "") }
-    var languageTag by remember { mutableStateOf(prefs.readJson("tts_language_v1")?.removeSurrounding("\"") ?: "") }
+    var languages by remember { mutableStateOf(listOf<String>()) }
 
+    // 原版 listEngines()/listLanguages() 问的是**正在播放的那个**引擎实例，所以走
+    // TtsPlayer；引擎还没绑好时照 `_ensureBound` 每 120ms 再问一次（有界）。
     androidx.compose.runtime.LaunchedEffect(Unit) {
-        // listEngines (tts_provider) via TextToSpeech engine enumeration.
-        engines = systemTtsRef?.let { tts ->
-            runCatching {
-                tts.engines.map { it.name }
-            }.getOrDefault(emptyList())
-        } ?: emptyList()
+        com.psyche.memo.ui.chat.TtsPlayer.prepareSystemEngine()
+        var attempt = 0
+        while (attempt < ENGINE_POLL_ATTEMPTS) {
+            engines = withContext(Dispatchers.IO) { com.psyche.memo.ui.chat.TtsPlayer.listEngines() }
+            languages = withContext(Dispatchers.IO) { com.psyche.memo.ui.chat.TtsPlayer.listLanguages() }
+            if (engines.isNotEmpty() && languages.isNotEmpty()) break
+            delay(120)
+            attempt++
+        }
+    }
+
+    /** 存偏好 + 立刻下发（原版 setSpeechRate/setPitch/setEngineId/setLanguageTag）。 */
+    fun commit(next: com.psyche.memo.ui.chat.SystemTtsConfig) {
+        store.setSystemTtsConfig(next)
+        config = next
+        com.psyche.memo.ui.chat.TtsPlayer.reloadSystemConfig()
     }
 
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
@@ -641,26 +656,31 @@ sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle 
             )
             Spacer(Modifier.height(10.dp))
 
-            // Engine selector row (_sheetSelectRow L2012-2088).
-            val curEngine = engineId.ifEmpty { engines.firstOrNull() ?: "" }
-            TactileRow(onTap = if (engines.isEmpty()) null else ({ engineId = engines.firstOrNull() ?: engineId })) { pressed ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(if (pressed) withAlpha(cs.onSurface, 0.05) else Color.Transparent)
-                        .padding(horizontal = 12.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(stringResource(UiR.string.tts_services_page_engine_label), style = TextStyle(fontSize = 15.sp, color = withAlpha(cs.onSurface, 0.9)), modifier = Modifier.weight(1f))
-                    Text(
-                        curEngine.ifEmpty { stringResource(UiR.string.tts_services_page_auto_label) },
-                        style = TextStyle(fontSize = 13.sp, color = withAlpha(cs.onSurface, 0.6)),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Lucide.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = withAlpha(cs.onSurface, 0.9))
-                }
-            }
+            // Engine selector row (_sheetSelectRow L2012-2088)。没点名时显示的是
+            // `_selectEngine` 实际选中的那一个（优先 google），不是列表第一项。
+            val autoLabel = stringResource(UiR.string.tts_services_page_auto_label)
+            SheetSelectRow(
+                label = stringResource(UiR.string.tts_services_page_engine_label),
+                value = com.psyche.memo.ui.chat.preferredSystemEngine(engines, config.engineId)
+                    ?.takeIf { it.isNotEmpty() } ?: autoLabel,
+                options = engines,
+                onPicked = { commit(config.copy(engineId = it)) },
+            )
             Spacer(Modifier.height(4.dp))
+
+            // Language selector row（L1922-1945）：cur 回落链 zh-CN → en-US → 第一个。
+            val curLanguage = config.languageTag ?: when {
+                languages.contains("zh-CN") -> "zh-CN"
+                languages.contains("en-US") -> "en-US"
+                else -> languages.firstOrNull() ?: ""
+            }
+            SheetSelectRow(
+                label = stringResource(UiR.string.tts_services_page_language_label),
+                value = curLanguage.ifEmpty { autoLabel },
+                options = languages,
+                onPicked = { commit(config.copy(languageTag = it)) },
+            )
+            Spacer(Modifier.height(8.dp))
 
             Text(
                 stringResource(UiR.string.tts_services_page_speech_rate_label),
@@ -673,7 +693,7 @@ sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle 
                 valueRange = 0.1f..1.0f,
                 valueLabel = { String.format(java.util.Locale.US, "%.2f", it) },
                 onValueChangeFinished = {
-                    prefs.writeJson("tts_speech_rate_v1", rate.toString())
+                    commit(config.copy(speechRate = rate.toDouble().coerceIn(0.1, 1.0)))
                 },
             )
             Text(
@@ -687,7 +707,7 @@ sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle 
                 valueRange = 0.5f..2.0f,
                 valueLabel = { String.format(java.util.Locale.US, "%.2f", it) },
                 onValueChangeFinished = {
-                    prefs.writeJson("tts_pitch_v1", pitch.toString())
+                    commit(config.copy(pitch = pitch.toDouble().coerceIn(0.5, 2.0)))
                 },
             )
 
@@ -710,3 +730,90 @@ sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle 
         }
     }
 }
+
+/**
+ * `_sheetSelectRow` L2012-2088：行右侧显示当前值，点开是一列选项。
+ *
+ * 选项面板用锚定下拉而不是**第二层** bottom sheet —— Compose 里 sheet 套 sheet 的
+ * 手势/层级不可靠，而同一个工程里 `ApiPathField`（供应商端点三选一）已经用这个
+ * 组件跑通了「列表选一个」的交互。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SheetSelectRow(
+    label: String,
+    value: String,
+    options: List<String>,
+    onPicked: (String) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TactileRow(onTap = if (options.isEmpty()) null else ({ expanded = true })) { pressed ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(if (pressed) withAlpha(cs.onSurface, 0.05) else Color.Transparent)
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    label,
+                    style = TextStyle(fontSize = 15.sp, color = withAlpha(cs.onSurface, 0.9)),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    value,
+                    style = TextStyle(fontSize = 13.sp, color = withAlpha(cs.onSurface, 0.6)),
+                    modifier = Modifier.padding(end = 6.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Icon(Lucide.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp), tint = withAlpha(cs.onSurface, 0.9))
+            }
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
+            containerColor = LocalSemanticColors.current.surfaceCard,
+            tonalElevation = 0.dp,
+            shadowElevation = 6.dp,
+        ) {
+            Column(
+                Modifier
+                    .widthIn(max = 320.dp)
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                options.forEach { option ->
+                    val selected = option == value
+                    DropdownMenuItem(
+                        modifier = Modifier.background(
+                            if (selected) cs.primary.copy(alpha = 0.08f) else Color.Transparent,
+                        ),
+                        text = {
+                            Text(
+                                option,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(
+                                    fontSize = 14.sp,
+                                    color = if (selected) cs.primary else cs.onSurface,
+                                ),
+                            )
+                        },
+                        onClick = {
+                            expanded = false
+                            onPicked(option)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** `_ensureBound` 的轮询上限（120ms × 20 ≈ 2.4s）。 */
+private const val ENGINE_POLL_ATTEMPTS = 20

@@ -39,17 +39,129 @@ interface TtsEngine {
     fun prepare(onReady: (Boolean) -> Unit)
 
     /** Speaks [text] at [rate] (the engine's own 0.1–1.0 axis), replacing anything queued. */
-    fun speak(text: String, utteranceId: String, rate: Float)
+    fun speak(
+        text: String,
+        utteranceId: String,
+        rate: Float,
+        allowCachedAudio: Boolean = true,
+    )
 
     fun stop()
 
     fun shutdown()
+
+    /**
+     * 把偏好里改过的语速/音调/引擎/语言重新下发（原版 `_applyConfig`）。
+     * 返回 **true** 表示实例已被换掉（换语音引擎只能重建），调用方要重新 [prepare]。
+     */
+    fun syncConfig(): Boolean = false
+
+    /** 当前系统语音配置（网络引擎没有 → null）。 */
+    fun systemConfig(): SystemTtsConfig? = null
+
+    /** 原版 `listEngines()`：可枚举的语音引擎包名。 */
+    fun listEngines(): List<String> = emptyList()
+
+    /** 原版 `listLanguages()`：当前引擎支持的语音语言标签。 */
+    fun listLanguages(): List<String> = emptyList()
 }
 
+/**
+ * 系统语音的运行时配置 —— 上游 `TtsProvider` 的 `_speechRate` / `_pitch` /
+ * `_engineId` / `_languageTag` 四个字段。
+ *
+ * [speechRate] 是上游那根 flutter_tts 轴（**0.5 才是正常语速**），显示倍速要 ×2。
+ */
+data class SystemTtsConfig(
+    val speechRate: Double = DEFAULT_SPEECH_RATE,
+    val pitch: Double = DEFAULT_PITCH,
+    val engineId: String? = null,
+    val languageTag: String? = null,
+) {
+    /** 悬浮播放器显示的倍速（原版 `_init` L132-134、`setSpeechRate` L339-343）。 */
+    val displayedSpeed: Double get() = TtsPlaybackSpeed.normalize(speechRate * 2)
+
+    companion object {
+        const val RATE_KEY = "tts_speech_rate_v1"
+        const val PITCH_KEY = "tts_pitch_v1"
+        const val ENGINE_KEY = "tts_engine_v1"
+        const val LANGUAGE_KEY = "tts_language_v1"
+        const val CACHE_REPLAY_KEY = "tts_cache_network_audio_for_replay_v1"
+
+        /** `tts_provider.dart:79` 「flutter_tts platform value, 0.5 is normal」。 */
+        const val DEFAULT_SPEECH_RATE = 0.5
+        const val DEFAULT_PITCH = 1.0
+    }
+}
+
+/** 偏好 JSON → 配置：区间与默认值逐字照 `tts_provider.dart` `_init` L122-131。 */
+fun parseSystemTtsConfig(
+    rateJson: String?,
+    pitchJson: String?,
+    engineJson: String?,
+    languageJson: String?,
+): SystemTtsConfig = SystemTtsConfig(
+    speechRate = (rateJson?.let { unquoteJson(it)?.toDoubleOrNull() } ?: SystemTtsConfig.DEFAULT_SPEECH_RATE)
+        .coerceIn(0.1, 1.0),
+    pitch = (pitchJson?.let { unquoteJson(it)?.toDoubleOrNull() } ?: SystemTtsConfig.DEFAULT_PITCH)
+        .coerceIn(0.5, 2.0),
+    engineId = engineJson?.let { unquoteJson(it) },
+    languageTag = languageJson?.let { unquoteJson(it) },
+)
+
+/** JSON 载荷去引号（备份恢复可能写成 `"zh-CN"`，数字则是裸 `0.5`）；空串算没设。 */
+private fun unquoteJson(raw: String): String? =
+    raw.trim().removeSurrounding("\"").takeIf { it.isNotEmpty() }
+
+/** `_localeToTag` L976-981：`语言-国家`，没有国家就单语言码。 */
+fun localeToTag(language: String, country: String?): String =
+    if (country.isNullOrEmpty()) language else "$language-$country"
+
+/**
+ * 这次该说哪种语言（`_applyConfig` L251-264）：偏好里的标签优先，其次设备语言；
+ * 两者引擎都不支持时回落 `zh-CN`/`en-US`，还不支持就返回 null（上游此时什么都不设）。
+ */
+fun resolveSystemLanguage(
+    config: SystemTtsConfig,
+    deviceTag: String,
+    deviceLanguage: String,
+    available: (String) -> Boolean,
+): String? {
+    val tag = config.languageTag ?: deviceTag
+    if (available(tag)) return tag
+    val fallback = if (deviceLanguage.lowercase().startsWith("zh")) "zh-CN" else "en-US"
+    return fallback.takeIf { available(it) }
+}
+
+/**
+ * 用哪个语音引擎（`_applyConfig` L246-250 + `_selectEngine` L315-333）：用户点名的优先；
+ * 没点名时**优先名字含 google 的引擎，否则第一个** —— 不是「留着系统默认」。
+ */
+fun preferredSystemEngine(engines: List<String>, selected: String?): String? =
+    selected?.takeIf { it.isNotEmpty() }
+        ?: engines.firstOrNull { it.contains("google", ignoreCase = true) }
+        ?: engines.firstOrNull()
+
 /** The real engine, backed by the platform's text-to-speech service. */
-class SystemTtsEngine(private val context: Context) : TtsEngine {
+class SystemTtsEngine(
+    private val context: Context,
+    private val configProvider: () -> SystemTtsConfig = { SystemTtsConfig() },
+) : TtsEngine {
 
     private var engine: TextToSpeech? = null
+
+    /**
+     * 构造 TextToSpeech 是异步的（就绪只从构造函数的回调来），而 [prepare] 可能被
+     * 好几路同时要到（启动预热、第一次朗读、换引擎后的重建），所以这里把等待者排队，
+     * 就绪那一次一起结算 —— 否则后来的人会看到「已就绪」而对着一个还没绑定的实例说话。
+     */
+    private val lock = Any()
+    private val waiting = mutableListOf<(Boolean) -> Unit>()
+    @Volatile private var ready = false
+    @Volatile private var binding = false
+
+    /** 这个实例是**带着哪个引擎名**构造出来的（null = 让系统挑）。 */
+    @Volatile private var boundEngine: String? = null
 
     override var listener: TtsEngine.Listener? = null
         set(value) {
@@ -58,26 +170,122 @@ class SystemTtsEngine(private val context: Context) : TtsEngine {
         }
 
     override fun prepare(onReady: (Boolean) -> Unit) {
-        if (engine != null) {
-            onReady(true)
-            return
+        synchronized(lock) {
+            if (ready) {
+                onReady(true)
+                return
+            }
+            waiting.add(onReady)
+            if (binding) return
+            binding = true
         }
-        // android.jar's TextToSpeech has no setOnInitListener — the callback only
-        // comes through the constructor.
-        engine = TextToSpeech(context.applicationContext) { status ->
-            listener?.let { engine?.setOnUtteranceProgressListener(adapt(it)) }
-            onReady(status == TextToSpeech.SUCCESS)
-        }
+        bind(configProvider().engineId)
     }
 
-    override fun speak(text: String, utteranceId: String, rate: Float) {
+    /**
+     * android.jar 的 TextToSpeech 没有「换引擎」的方法 —— 只能带引擎名重新构造
+     * （flutter_tts 的 `setEngine` 在原生侧就是这么做的）。没点名时也要**钉到**
+     * `_selectEngine` 算出的那一个（优先 google 否则第一个），而不是留着系统默认，
+     * 所以流程是「先建默认实例 → 枚举引擎 → 带着选中的名字重建」。
+     */
+    private fun bind(engineName: String?) {
+        val wanted = engineName?.ifEmpty { null }
+        val app = context.applicationContext
+        val initListener = TextToSpeech.OnInitListener { status -> onBound(status, wanted) }
+        boundEngine = wanted
+        engine = if (wanted == null) TextToSpeech(app, initListener)
+        else TextToSpeech(app, initListener, wanted)
+    }
+
+    private fun onBound(status: Int, wanted: String?) {
+        val tts = engine
+        if (tts == null || status != TextToSpeech.SUCCESS) {
+            synchronized(lock) { ready = false }
+            settle(false)
+            return
+        }
+        listener?.let { tts.setOnUtteranceProgressListener(adapt(it)) }
+        if (wanted == null) {
+            val preferred = preferredSystemEngine(engineNamesOf(tts), null)
+            if (preferred != null && preferred != boundEngine) {
+                runCatching { tts.shutdown() }
+                engine = null
+                bind(preferred)
+                return
+            }
+        }
+        applyVoice(tts, configProvider())
+        synchronized(lock) { ready = true }
+        settle(true)
+    }
+
+    private fun settle(value: Boolean) {
+        val callbacks: List<(Boolean) -> Unit>
+        synchronized(lock) {
+            binding = false
+            callbacks = waiting.toList()
+            waiting.clear()
+        }
+        callbacks.forEach { it(value) }
+    }
+
+    override fun speak(
+        text: String,
+        utteranceId: String,
+        rate: Float,
+        allowCachedAudio: Boolean,
+    ) {
         val tts = engine ?: return
-        tts.language = Locale.getDefault()
         // rate 是内部轴（显示倍速 / 2）—— Android 的 1.0 才是正常语速，必须还原，
         // 否则一律半速播放（见 TtsPlaybackSpeed.toAndroidSpeechRate）。
+        // 语言/音调是引擎级设置，在 bind/applyVoice 时下发，不能在这里按设备语言覆盖
+        // （原版 `_applyConfig` 只在配置变化时设语言，`_trySpeak` 每块只重设语速）。
         tts.setSpeechRate(TtsPlaybackSpeed.toAndroidSpeechRate(rate.toDouble()))
         tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
     }
+
+    /** 原版 `_applyConfig` L237-265：音调 + 语言（带 zh-CN/en-US 回落）下发到引擎实例。 */
+    override fun syncConfig(): Boolean {
+        val tts = engine ?: return false
+        val config = configProvider()
+        val preferred = preferredSystemEngine(engineNamesOf(tts), config.engineId)
+        if (preferred != null && preferred != boundEngine) {
+            runCatching { tts.shutdown() }
+            engine = null
+            boundEngine = null
+            synchronized(lock) { ready = false; binding = false }
+            return true
+        }
+        applyVoice(tts, config)
+        return false
+    }
+
+    override fun systemConfig(): SystemTtsConfig = configProvider()
+
+    override fun listEngines(): List<String> = engine?.let { engineNamesOf(it) } ?: emptyList()
+
+    override fun listLanguages(): List<String> =
+        engine?.let { tts ->
+            runCatching { tts.availableLanguages?.map { it.toLanguageTag() } ?: emptyList() }
+                .getOrDefault(emptyList())
+        } ?: emptyList()
+
+    private fun applyVoice(tts: TextToSpeech, config: SystemTtsConfig) {
+        runCatching { tts.setPitch(config.pitch.toFloat()) }
+        val locale = Locale.getDefault()
+        val tag = resolveSystemLanguage(
+            config = config,
+            deviceTag = localeToTag(locale.language, locale.country),
+            deviceLanguage = locale.language,
+        ) { candidate ->
+            runCatching { tts.isLanguageAvailable(Locale.forLanguageTag(candidate)) >= 0 }
+                .getOrDefault(false)
+        }
+        if (tag != null) runCatching { tts.language = Locale.forLanguageTag(tag) }
+    }
+
+    private fun engineNamesOf(tts: TextToSpeech): List<String> =
+        runCatching { tts.engines?.map { it.name } ?: emptyList() }.getOrDefault(emptyList())
 
     override fun stop() {
         engine?.stop()
@@ -87,6 +295,9 @@ class SystemTtsEngine(private val context: Context) : TtsEngine {
         engine?.stop()
         engine?.shutdown()
         engine = null
+        boundEngine = null
+        synchronized(lock) { ready = false }
+        settle(false)
     }
 
     /** `UtteranceProgressListener` is an abstract class, so bridge it here. */
@@ -131,7 +342,13 @@ class TtsPlaybackController(
     private val chunkMaxLength: Int = SYSTEM_CHUNK_MAX_LENGTH,
 ) : TtsEngine.Listener {
 
-    private val _state = MutableStateFlow(TtsPlaybackState())
+    /**
+     * 显示倍速的起点：偏好里的 `tts_speech_rate_v1`（×2 后夹进档位区间），原版
+     * `_init` L132-134。没有系统配置可读（网络引擎、单测）时按 1.0×。
+     */
+    private val seededSpeed = engine.systemConfig()?.displayedSpeed ?: 1.0
+
+    private val _state = MutableStateFlow(TtsPlaybackState(speed = seededSpeed))
     val state: StateFlow<TtsPlaybackState> = _state
 
     /** The chat action row's Speak/Stop icon follows this (`isActive`). */
@@ -145,8 +362,9 @@ class TtsPlaybackController(
     private var session = 0
     private var paused = false
     private var prepared = false
-    private var pendingText: String? = null
+    private var pendingSession = -1
     private var lastOwnerId: String? = null
+    private var allowCachedAudio = true
 
     init {
         engine.listener = this
@@ -165,23 +383,9 @@ class TtsPlaybackController(
         chunkOffsetMs = 0L
         paused = false
         lastOwnerId = ownerId
+        allowCachedAudio = true
         publish(status = TtsPlaybackStatus.BUFFERING, positionMs = 0L, chunkIndex = 0)
-
-        if (prepared) {
-            playCurrent()
-            return
-        }
-        pendingText = trimmed
-        engine.prepare { ready ->
-            prepared = ready
-            val queued = pendingText
-            pendingText = null
-            if (ready && queued != null) {
-                playCurrent()
-            } else if (!ready) {
-                finish(TtsPlaybackStatus.ERROR, "tts_unavailable")
-            }
-        }
+        playCurrent()
     }
 
     /**
@@ -213,7 +417,7 @@ class TtsPlaybackController(
     fun stop() {
         session++
         runCatching { engine.stop() }
-        pendingText = null
+        pendingSession = -1
         chunks = emptyList()
         timeline = null
         currentChunk = 0
@@ -223,12 +427,17 @@ class TtsPlaybackController(
         setState(TtsPlaybackState(speed = _state.value.speed))
     }
 
-    /** Restarts the session from its first chunk. */
-    fun replay() {
+    /**
+     * Restarts the session from its first chunk. [allowCachedAudio] is the
+     * 「使用缓存复播」开关（原版 `replay` 的 `reuseResolvedNetworkAudio`）：
+     * 关掉时整段重新请求语音服务，而不是复用已合成的音频。
+     */
+    fun replay(allowCachedAudio: Boolean = true) {
         if (chunks.isEmpty()) return
         currentChunk = 0
         chunkOffsetMs = 0L
         paused = false
+        this.allowCachedAudio = allowCachedAudio
         publish(status = TtsPlaybackStatus.PLAYING, positionMs = 0L, chunkIndex = 0)
         playCurrent()
     }
@@ -259,16 +468,46 @@ class TtsPlaybackController(
         if (_state.value.isActive && !paused) playCurrent()
     }
 
+    /**
+     * 偏好里的语速/音调/引擎/语言变了，重新下发给引擎（原版 `_applyConfig`）。
+     *
+     * 换引擎在 Android 上只能重建实例，所以 [prepared] 要清掉等下一次 prepare；
+     * 正在播的会话立刻重说当前块，否则会停在一个被 shutdown 杀掉的语音上不出声。
+     * 显示倍速只在**没在播**时跟着语速偏好走（原版 `setSpeechRate` L339 的判定）。
+     */
+    fun reloadSystemConfig() {
+        val config = engine.systemConfig()
+        val rebuilt = engine.syncConfig()
+        if (rebuilt) {
+            prepared = false
+            if (_state.value.isActive && !paused) playCurrent()
+        }
+        if (config != null && !_state.value.isActive) {
+            _state.value = _state.value.copy(speed = config.displayedSpeed)
+        }
+    }
+
+    /** 原版 `listEngines()`：可枚举的语音引擎。 */
+    fun systemEngines(): List<String> = engine.listEngines()
+
+    /** 原版 `listLanguages()`：当前引擎支持的语言标签。 */
+    fun systemLanguages(): List<String> = engine.listLanguages()
+
+    /** 原版 `_kickEngine`：先把引擎构造出来（设置页枚举引擎/语言要用）。 */
+    fun prepareEngine() {
+        engine.prepare { prepared = it }
+    }
+
     /** Releases the engine. */
     fun shutdown() {
         runCatching { engine.shutdown() }
         prepared = false
-        pendingText = null
+        pendingSession = -1
         chunks = emptyList()
         timeline = null
         lastOwnerId = null
         session++
-        setState(TtsPlaybackState())
+        setState(TtsPlaybackState(speed = seededSpeed))
     }
 
     // ── engine callbacks ──────────────────────────────────────────────────────
@@ -311,6 +550,19 @@ class TtsPlaybackController(
     // ── internals ─────────────────────────────────────────────────────────────
 
     private fun playCurrent() {
+        if (!prepared) {
+            // 引擎还没就绪（首次朗读、或换语音引擎后重建）：就绪那一次再说**当时**的
+            // 那一块（其间可能已经 seek/stop，会话号不一致就整个丢掉）。
+            val target = session
+            pendingSession = target
+            engine.prepare { ready ->
+                prepared = ready
+                if (pendingSession != target) return@prepare
+                pendingSession = -1
+                if (ready) playCurrent() else finish(TtsPlaybackStatus.ERROR, "tts_unavailable")
+            }
+            return
+        }
         val chunk = chunks.getOrNull(currentChunk) ?: run {
             finish(TtsPlaybackStatus.ENDED, null)
             return
@@ -318,7 +570,12 @@ class TtsPlaybackController(
         runCatching {
             // A seek into the middle of a chunk restarts that chunk: speaking from
             // its beginning is the granularity the engine offers.
-            engine.speak(chunk.text, ttsUtteranceId(session, currentChunk), TtsPlaybackSpeed.toSystemRate(_state.value.speed).toFloat())
+            engine.speak(
+                chunk.text,
+                ttsUtteranceId(session, currentChunk),
+                TtsPlaybackSpeed.toSystemRate(_state.value.speed).toFloat(),
+                allowCachedAudio,
+            )
         }.onFailure {
             finish(TtsPlaybackStatus.ERROR, it.message)
             return

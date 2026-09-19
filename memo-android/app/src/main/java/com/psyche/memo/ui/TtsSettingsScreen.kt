@@ -76,7 +76,9 @@ fun TtsSettingsScreen(
     }
 
     var autoPlay by remember { mutableStateOf(readBool("tts_auto_play_assistant_replies_v1", false)) }
-    var cacheReplay by remember { mutableStateOf(readBool("tts_cache_network_audio_for_replay_v1", false)) }
+    // 「使用缓存复播」是 TtsProvider 自己的键（`tts_provider.dart` L48-49），播放器的
+    // replay 读它决定要不要重新请求语音服务 —— 写也走同一处，别留下第二套解析。
+    var cacheReplay by remember { mutableStateOf(container.ttsServicesStore.cacheNetworkAudioForReplay) }
     var selectionMode by remember {
         mutableStateOf(
             container.preferenceRepository.readJson("tts_text_selection_mode_v1")
@@ -120,7 +122,7 @@ fun TtsSettingsScreen(
                         trailing = {
                             IosSwitch(value = cacheReplay, onValueChanged = {
                                 cacheReplay = it
-                                writeBool("tts_cache_network_audio_for_replay_v1", it)
+                                container.ttsServicesStore.cacheNetworkAudioForReplay = it
                             })
                         },
                     )

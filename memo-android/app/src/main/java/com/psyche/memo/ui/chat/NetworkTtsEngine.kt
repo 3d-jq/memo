@@ -22,11 +22,12 @@ class TtsAudioCache(private val context: Context, private val maxFiles: Int = MA
     fun fileFor(
         options: TtsServiceOptions,
         text: String,
+        readCache: Boolean = true,
         synth: () -> NetworkTtsResult,
     ): File {
         val dir = File(context.filesDir, DIR).apply { mkdirs() }
         val key = keyFor(options, text)
-        val hit = dir.listFiles()?.firstOrNull { it.name.startsWith("$key.") }
+        val hit = if (readCache) dir.listFiles()?.firstOrNull { it.name.startsWith("$key.") } else null
         if (hit != null && hit.length() > 0) {
             hit.setLastModified(System.currentTimeMillis())
             return hit
@@ -95,7 +96,12 @@ class NetworkTtsEngine(
         onReady(optionsProvider() != null)
     }
 
-    override fun speak(text: String, utteranceId: String, rate: Float) {
+    override fun speak(
+        text: String,
+        utteranceId: String,
+        rate: Float,
+        allowCachedAudio: Boolean,
+    ) {
         stopInternal()
         stopped = false
         currentText = text
@@ -108,7 +114,10 @@ class NetworkTtsEngine(
             // 显示倍速 → 引擎 rate 是 speed/2，这里还原（见 TtsPlaybackSpeed.toSystemRate）。
             val speed = mediaPlayerSpeed(rate)
             val file = runCatching {
-                cache.fileFor(options, text) { NetworkTts.synthesize(client, options, text) }
+                // 「使用缓存复播」关掉时重播要真的重新请求服务（原版 replay 清 `_resolvedNetworkChunks`）。
+                cache.fileFor(options, text, readCache = allowCachedAudio) {
+                    NetworkTts.synthesize(client, options, text)
+                }
             }.getOrElse {
                 post { fail(utteranceId, 2) }
                 return@Thread
@@ -286,10 +295,10 @@ class SwitchableTtsEngine(
     context: Context,
     client: OkHttpClient,
     private val store: TtsServicesStore,
+    configProvider: () -> SystemTtsConfig = { SystemTtsConfig() },
 ) : TtsEngine {
 
-
-    private val system = SystemTtsEngine(context.applicationContext)
+    private val system = SystemTtsEngine(context.applicationContext, configProvider)
     private val network = NetworkTtsEngine(
         context,
         client,
@@ -331,17 +340,30 @@ class SwitchableTtsEngine(
         system.prepare(onReady)
     }
 
-    override fun speak(text: String, utteranceId: String, rate: Float) {
+    override fun speak(
+        text: String,
+        utteranceId: String,
+        rate: Float,
+        allowCachedAudio: Boolean,
+    ) {
         val options = selectedNetworkOptions()
         if (shouldUseNetworkEngine(options)) {
             active = network
-            network.speak(text, utteranceId, rate)
+            network.speak(text, utteranceId, rate, allowCachedAudio)
         } else {
             // 未接的 provider（qwenAudio）退回系统引擎，而不是静默不出声。
             active = system
-            system.speak(text, utteranceId, rate)
+            system.speak(text, utteranceId, rate, allowCachedAudio)
         }
     }
+
+    override fun syncConfig(): Boolean = system.syncConfig()
+
+    override fun systemConfig(): SystemTtsConfig? = system.systemConfig()
+
+    override fun listEngines(): List<String> = system.listEngines()
+
+    override fun listLanguages(): List<String> = system.listLanguages()
 
     override fun stop() {
         system.stop()

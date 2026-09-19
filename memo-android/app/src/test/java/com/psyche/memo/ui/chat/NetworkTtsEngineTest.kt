@@ -74,13 +74,31 @@ class NetworkTtsEngineTest {
             return NetworkTtsResult(byteArrayOf(1, 2, 3), "audio/mpeg")
         }
 
-        val first = cache.fileFor(openAi, "你好", ::synth)
-        val second = cache.fileFor(openAi, "你好", ::synth)
+        val first = cache.fileFor(openAi, "你好", synth = ::synth)
+        val second = cache.fileFor(openAi, "你好", synth = ::synth)
 
         assertEquals(first.absolutePath, second.absolutePath)
         assertEquals(1, synthCalls) // 第二次命中缓存，不再合成
         assertTrue(first.exists())
         assertEquals("mp3", first.extension)
+    }
+
+    /** 「使用缓存复播」关掉时重播要真的重新请求服务（readCache = false）。 */
+    @Test
+    fun cacheBypassOnReplayWithoutTheFlagResynthesizes() {
+        val dir = File(context.filesDir, TtsAudioCache.DIR)
+        dir.deleteRecursively()
+        val cache = TtsAudioCache(context)
+        var synthCalls = 0
+        fun synth(): NetworkTtsResult {
+            synthCalls++
+            return NetworkTtsResult(byteArrayOf(1, 2, 3), "audio/mpeg")
+        }
+        cache.fileFor(openAi, "再来一次", synth = ::synth)
+        assertEquals(1, synthCalls)
+
+        cache.fileFor(openAi, "再来一次", readCache = false, synth = ::synth)
+        assertEquals(2, synthCalls)
     }
 
     @Test

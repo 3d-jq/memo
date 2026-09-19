@@ -16,6 +16,8 @@ import kotlinx.serialization.json.JsonObjectBuilder
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.psyche.memo.data.settings.PreferenceRepository
+import com.psyche.memo.ui.chat.SystemTtsConfig
+import com.psyche.memo.ui.chat.parseSystemTtsConfig
 
 /**
  * network_tts.dart 1:1 — TtsServiceOptions hierarchy. JSON field names and
@@ -495,6 +497,36 @@ class TtsServicesStore(
         setServices(store.toList())
         if (selectedServiceId == removed.id) selectedServiceId = null
     }
+
+    /**
+     * 系统语音的四个偏好键（tts_provider.dart `_rateKey`…`_langKey`）——它们是普通
+     * PREFERENCE 键，走 [PreferenceRepository] 没问题（只有服务列表是实体键）。
+     */
+    fun systemTtsConfig(): SystemTtsConfig = parseSystemTtsConfig(
+        rateJson = prefs.readJson(SystemTtsConfig.RATE_KEY),
+        pitchJson = prefs.readJson(SystemTtsConfig.PITCH_KEY),
+        engineJson = prefs.readJson(SystemTtsConfig.ENGINE_KEY),
+        languageJson = prefs.readJson(SystemTtsConfig.LANGUAGE_KEY),
+    )
+
+    /** 整份读-改-写，免得每个调用方各抄一遍键名。 */
+    fun setSystemTtsConfig(config: SystemTtsConfig) {
+        prefs.writeJson(SystemTtsConfig.RATE_KEY, JsonPrimitive(config.speechRate).toString())
+        prefs.writeJson(SystemTtsConfig.PITCH_KEY, JsonPrimitive(config.pitch).toString())
+        writeOptional(SystemTtsConfig.ENGINE_KEY, config.engineId)
+        writeOptional(SystemTtsConfig.LANGUAGE_KEY, config.languageTag)
+    }
+
+    private fun writeOptional(key: String, value: String?) {
+        if (value == null) prefs.remove(key) else prefs.writeJson(key, JsonPrimitive(value).toString())
+    }
+
+    /** 「使用缓存复播」开关（tts_provider.dart `_cacheNetworkAudioForReplayKey`）。 */
+    var cacheNetworkAudioForReplay: Boolean
+        get() = prefs.readJson(SystemTtsConfig.CACHE_REPLAY_KEY)?.trim()?.removeSurrounding("\"")?.toBoolean() ?: false
+        set(value) {
+            prefs.writeJson(SystemTtsConfig.CACHE_REPLAY_KEY, JsonPrimitive(value).toString())
+        }
 
     companion object {
         /** BusinessEntityKind.ttsService.tableName. */

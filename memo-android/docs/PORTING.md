@@ -1263,3 +1263,37 @@ MemoRadius 三档：容器 20 / 嵌套 16 / 胶囊 999。至此全站圆角只�
   走 MCP OAuth **会在回调解析处 `NoSuchMethodError` 崩**，7 处（292/293/300/301/1089/1090/1094）。
   改字符串重载 `decode(s, "UTF-8")`（API 1 就有，行为等价）。`toByteArray(StandardCharsets.UTF_8)`
   这类不受影响，别一起改。**教训：lint 的 NewApi 能抓到单测和编译都抓不到的机型崩溃。**
+
+## 5.28 系统语音设置真正生效（2026-09-19，「做TTS吧」）
+
+§5.12 语音批留的最后一块：`tts_speech_rate_v1` / `tts_pitch_v1` / `tts_engine_v1` /
+`tts_language_v1` / `tts_cache_network_audio_for_replay_v1` 五个键**只写不读**。
+「系统语音设置」sheet 里语速/音调滑杆存了库，播放时一概不看；引擎行点一下只是把
+`engines.first()` 赋给局部变量，**连 `tts_engine_v1` 都没写**；语言行整行没移植。
+
+- **取配置的形状**：`SystemTtsConfig`（语速 0.1–1.0 默认 0.5／音调 0.5–2.0 默认 1.0／
+  引擎名／语言标签）+ 纯函数 `parseSystemTtsConfig`，持久化挂在 `TtsServicesStore`
+  （它已经握着 `PreferenceRepository`）。`SystemTtsEngine(context, configProvider)` 现读，
+  和 `NetworkTtsEngine` 的 `optionsProvider` 同一套缝。
+- **换引擎只能重建**：android.jar 里 `TextToSpeech` 没有 `getEngine()`，公开的方法只有
+  `setEngineByPackageName`（flutter_tts 都不用它），所以照 flutter_tts 的做法带引擎名
+  重新构造，并自己记 `boundEngine`（构造时给的名字）做对比。上游 `_selectEngine` 是
+  **无条件钉到**「名字含 google 否则第一个」，不是留系统默认 → 我们照做（默认实例起来后
+  枚举、再带选中的名字重建一次）。sheet 里显示的也就是这个实际生效的名字。
+- **异步就绪要排队**：`TextToSpeech` 的构造回调是唯一入口，而 `prepare()` 现在可能被三路
+  同时要（启动预热、第一次朗读、换引擎后重建）。旧写法「有实例就算就绪」会让后来的人对着
+  一个还没绑定的实例说话 → `waiting` 队列 + `settle()` 一次结算。控制器侧 `pendingText`
+  换成 `pendingSession`（会话号不一致就整段丢弃），于是「引擎没就绪」不再是特例而是
+  `playCurrent()` 的统一前置。
+- **正在播时换引擎**：旧实例被 `shutdown()` 后 `onDone` 永远不会来 → 胶囊卡在「播放中」不出声。
+  `reloadSystemConfig()` 报重建时把当前块重新走一遍 prepare→speak（上游此处是坏的）。
+- **显示倍速**：`TtsPlaybackState.speed` 现在由 `tts_speech_rate_v1 × 2` 播种（原版 `_init`
+  L132-134），且只在**没在播**时跟着偏好动（原版 `setSpeechRate` L339 的 `isActive` 判定）。
+- **「使用缓存复播」= 重播要不要再花钱**：`replay(allowCachedAudio)` 一路传到
+  `TtsAudioCache.fileFor(readCache = …)`；关掉时合成缓存只写不读（上游是清 `_resolvedNetworkChunks`）。
+  新会话仍按我们的缓存走（那是本工程相对上游的改进，不改）。
+- **语言回落链照 `_applyConfig` L251-264**：偏好标签说不通**直接**跳 zh-CN/en-US，设备语言
+  只在没有偏好时参与（写测试时按直觉猜错过一次）。
+- 枚举引擎/语言改走播放器的引擎（原版 `tts.listEngines()` 问的就是正在播的那个实例），
+  没就绪时按 `_ensureBound` 每 120ms 轮一次、上限 20 次。页内那份 `systemTtsRef` 只留着报
+  「系统语音 已就绪/不可用」那行小字。

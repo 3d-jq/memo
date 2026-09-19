@@ -22,24 +22,58 @@ class TtsPlaybackControllerTest {
     private class FakeEngine : TtsEngine {
         override var listener: TtsEngine.Listener? = null
         val spoken = mutableListOf<Triple<String, String, Float>>()
+        val cachedFlags = mutableListOf<Boolean>()
         var stopped = 0
         var shutdown = 0
         var failNextSpeak = false
         private var ready = true
+        private val waiting = mutableListOf<(Boolean) -> Unit>()
 
-        fun pending(): Boolean = false
+        /** 系统语音配置（只有系统引擎有）；null = 像网络引擎那样没有。 */
+        var config: SystemTtsConfig? = null
+        var syncCalls = 0
+
+        /** syncConfig 要不要报「实例被重建了」。 */
+        var rebuildsOnSync = false
+
+        /** false = prepare 不立刻回调，模拟引擎还在绑定。 */
+        var autoPrepare = true
+
+        fun pending(): Boolean = waiting.isNotEmpty()
 
         override fun prepare(onReady: (Boolean) -> Unit) {
-            if (ready) onReady(true)
+            if (ready && autoPrepare) onReady(true) else waiting.add(onReady)
         }
 
-        override fun speak(text: String, utteranceId: String, rate: Float) {
+        /** 引擎的初始化回调：把排队的等待者一起结算（真引擎就是这么干的）。 */
+        fun finishPrepare(value: Boolean = true) {
+            ready = value
+            val callbacks = waiting.toList()
+            waiting.clear()
+            callbacks.forEach { it(value) }
+        }
+
+        override fun speak(
+            text: String,
+            utteranceId: String,
+            rate: Float,
+            allowCachedAudio: Boolean,
+        ) {
             if (failNextSpeak) {
                 failNextSpeak = false
                 error("engine refused")
             }
             spoken.add(Triple(text, utteranceId, rate))
+            cachedFlags.add(allowCachedAudio)
         }
+
+        override fun syncConfig(): Boolean {
+            syncCalls++
+            if (rebuildsOnSync) ready = false
+            return rebuildsOnSync
+        }
+
+        override fun systemConfig(): SystemTtsConfig? = config
 
         override fun stop() {
             stopped++
@@ -219,6 +253,98 @@ class TtsPlaybackControllerTest {
         assertEquals(TtsPlaybackStatus.ERROR, player.state.value.status)
         assertFalse(player.speaking.value)
         assertEquals("engine refused", player.state.value.errorMessage)
+    }
+
+    // ---- 系统语音偏好（语速／引擎）真正生效 ------------------------------------
+
+    @Test
+    fun `the displayed speed seeds from the speech-rate preference`() {
+        val engine = FakeEngine().apply { config = SystemTtsConfig(speechRate = 0.7) }
+        val player = TtsPlaybackController(engine)
+        // flutter_tts 那根轴的 0.7 = 显示 1.4×（原版 `_init` L132-134）。
+        assertEquals(1.4, player.state.value.speed, 0.001)
+    }
+
+    @Test
+    fun `a rate change moves the displayed speed only while idle`() {
+        val engine = FakeEngine().apply { config = SystemTtsConfig(speechRate = 0.5) }
+        val player = TtsPlaybackController(engine)
+        player.speak("Hello there.")
+        engine.startLast()
+        engine.config = SystemTtsConfig(speechRate = 1.0)
+
+        player.reloadSystemConfig()
+        // 正在播时不动显示倍速（原版 `setSpeechRate` L339 的 isActive 判定）。
+        assertEquals(1.0, player.state.value.speed, 0.001)
+
+        player.stop()
+        player.reloadSystemConfig()
+        assertEquals(2.0, player.state.value.speed, 0.001)
+        assertEquals(2, engine.syncCalls)
+    }
+
+    @Test
+    fun `a chunk waits for the engine instead of being dropped while it binds`() {
+        val engine = FakeEngine().apply { autoPrepare = false }
+        val player = TtsPlaybackController(engine)
+        player.speak("Hello there.")
+        assertTrue("引擎还没就绪就不能开口", engine.spoken.isEmpty())
+        assertEquals(TtsPlaybackStatus.BUFFERING, player.state.value.status)
+
+        engine.finishPrepare()
+        assertEquals(1, engine.spoken.size)
+    }
+
+    @Test
+    fun `an engine that never becomes ready reports it instead of hanging`() {
+        val engine = FakeEngine().apply { autoPrepare = false }
+        val player = TtsPlaybackController(engine)
+        player.speak("Hello there.")
+        engine.finishPrepare(false)
+        assertEquals(TtsPlaybackStatus.ERROR, player.state.value.status)
+        assertEquals("tts_unavailable", player.state.value.errorMessage)
+    }
+
+    @Test
+    fun `stopping while the engine is binding cancels the queued utterance`() {
+        val engine = FakeEngine().apply { autoPrepare = false }
+        val player = TtsPlaybackController(engine)
+        player.speak("Hello there.")
+        player.stop()
+
+        engine.finishPrepare()
+
+        assertTrue(engine.spoken.isEmpty())
+        assertFalse(player.state.value.isActive)
+    }
+
+    @Test
+    fun `switching engine mid-session restarts the current chunk instead of hanging`() {
+        val engine = FakeEngine()
+        val player = TtsPlaybackController(engine)
+        player.speak("Hello there.")
+        assertEquals(1, engine.spoken.size)
+
+        // 换语音引擎 = 旧实例被 shutdown：先重新 prepare，再把当前块重说一遍。
+        engine.rebuildsOnSync = true
+        engine.autoPrepare = false
+        player.reloadSystemConfig()
+        assertEquals("重建期间不能再对着旧实例说话", 1, engine.spoken.size)
+
+        engine.finishPrepare()
+        assertEquals(2, engine.spoken.size)
+        assertTrue("会话不能停在无声的播放态", player.state.value.isActive)
+    }
+
+    @Test
+    fun `replay honours the cache-replay flag`() {
+        val engine = FakeEngine()
+        val player = TtsPlaybackController(engine)
+        player.speak("Hello there.")
+
+        player.replay(allowCachedAudio = false)
+
+        assertEquals(listOf(true, false), engine.cachedFlags)
     }
 
     // ---- who owns the playback ------------------------------------------------
