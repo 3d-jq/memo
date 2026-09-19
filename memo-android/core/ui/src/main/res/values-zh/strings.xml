@@ -1332,6 +1332,7 @@
     <string name="log_viewer_empty">暂无日志</string>
     <string name="log_viewer_error_title">错误</string>
     <string name="log_viewer_export">导出</string>
+    <string name="log_viewer_export_failed">导出失败：%1$s</string>
     <string name="log_viewer_field_duration">耗时</string>
     <string name="log_viewer_field_ended">结束</string>
     <string name="log_viewer_field_id">ID</string>

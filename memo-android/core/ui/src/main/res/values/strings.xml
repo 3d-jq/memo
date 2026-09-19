@@ -1330,6 +1330,7 @@ Updating Memo first is the safer choice.</string>
     <string name="log_viewer_empty">No logs yet</string>
     <string name="log_viewer_error_title">Error</string>
     <string name="log_viewer_export">Export</string>
+    <string name="log_viewer_export_failed">Export failed: %1$s</string>
     <string name="log_viewer_field_duration">Duration</string>
     <string name="log_viewer_field_ended">Ended</string>
     <string name="log_viewer_field_id">ID</string>

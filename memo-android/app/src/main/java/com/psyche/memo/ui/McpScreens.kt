@@ -191,7 +191,7 @@ fun McpServersScreen(
                     container.mcpConnections.disconnect(server.id)
                     container.mcpRepository.delete(server.id)
                     SnackbarManager.show(
-                        AppNotification(message = "MCP server deleted", type = NotificationType.SUCCESS),
+                        AppNotification(message = container.appContext.getString(com.psyche.memo.ui.R.string.mcp_page_server_deleted), type = NotificationType.SUCCESS),
                     )
                     reload++
                 }) { Text(stringResource(R.string.mcp_page_delete), color = cs.error) }

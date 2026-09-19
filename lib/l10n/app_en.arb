@@ -2801,6 +2801,7 @@
   "logViewerEmpty": "No logs yet",
   "logViewerErrorTitle": "Error",
   "logViewerExport": "Export",
+  "logViewerExportFailed": "Export failed: %1$s",
   "logViewerFieldDuration": "Duration",
   "logViewerFieldEnded": "Ended",
   "logViewerFieldId": "ID",

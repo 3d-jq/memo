@@ -481,6 +481,7 @@ private fun copyToClipboard(
 @Composable
 private fun PlainLogContentOverlay(file: LogFileEntry, title: String, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val exportFailedText = stringResource(com.psyche.memo.ui.R.string.log_viewer_export_failed)
     val context = LocalContext.current
     var content by remember(file.path) { mutableStateOf("") }
     var loading by remember(file.path) { mutableStateOf(true) }
@@ -510,7 +511,7 @@ private fun PlainLogContentOverlay(file: LogFileEntry, title: String, onClose: (
                         }
                         UiBridge.startActivity(android.content.Intent.createChooser(intent, file.name))
                     }.onFailure {
-                        SnackbarManager.show(AppNotification(message = "Export failed: $it", type = NotificationType.ERROR))
+                        SnackbarManager.show(AppNotification(message = exportFailedText.format(it.toString()), type = NotificationType.ERROR))
                     }
                 },
             )
@@ -623,6 +624,7 @@ internal fun OverlayScaffold(
 @Composable
 private fun RequestLogFileOverlay(container: AppContainerImpl, file: LogFileEntry, title: String, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val exportFailedText = stringResource(com.psyche.memo.ui.R.string.log_viewer_export_failed)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var loading by remember(file.path) { mutableStateOf(true) }
     var requests by remember(file.path) { mutableStateOf<List<RequestLogEntry>>(emptyList()) }
@@ -657,7 +659,7 @@ private fun RequestLogFileOverlay(container: AppContainerImpl, file: LogFileEntr
             TopBarAction(
                 icon = Lucide.Share2,
                 label = stringResource(UiR.string.log_viewer_export),
-                onClick = { shareLogFile(file) },
+                onClick = { shareLogFile(file, exportFailedText) },
             )
         },
     ) {
@@ -688,7 +690,7 @@ private fun RequestLogFileOverlay(container: AppContainerImpl, file: LogFileEntr
     detail?.let { RequestLogDetailOverlay(it) { detail = null } }
 }
 
-private fun shareLogFile(file: LogFileEntry) {
+private fun shareLogFile(file: LogFileEntry, exportFailedText: String) {
     runCatching {
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = "text/plain"
@@ -698,7 +700,7 @@ private fun shareLogFile(file: LogFileEntry) {
         }
         UiBridge.startActivity(android.content.Intent.createChooser(intent, file.name))
     }.onFailure {
-        SnackbarManager.show(AppNotification(message = "Export failed: $it", type = NotificationType.ERROR))
+        SnackbarManager.show(AppNotification(message = exportFailedText.format(it.toString()), type = NotificationType.ERROR))
     }
 }
 
@@ -1345,6 +1347,7 @@ private fun KvGrid(items: List<Pair<String, String>>) {
 @Composable
 private fun ContextLogFileOverlay(container: AppContainerImpl, file: LogFileEntry, title: String, onClose: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val exportFailedText = stringResource(com.psyche.memo.ui.R.string.log_viewer_export_failed)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var loading by remember(file.path) { mutableStateOf(true) }
     var loadingMore by remember(file.path) { mutableStateOf(false) }
@@ -1389,7 +1392,7 @@ private fun ContextLogFileOverlay(container: AppContainerImpl, file: LogFileEntr
             TopBarAction(
                 icon = Lucide.Share2,
                 label = stringResource(UiR.string.log_viewer_export),
-                onClick = { shareLogFile(file) },
+                onClick = { shareLogFile(file, exportFailedText) },
             )
         },
     ) {

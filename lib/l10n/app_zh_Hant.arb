@@ -2023,6 +2023,7 @@
   "logViewerEmpty": "暫無日誌",
   "logViewerErrorTitle": "錯誤",
   "logViewerExport": "匯出",
+  "logViewerExportFailed": "匯出失敗：%1$s",
   "logViewerFieldDuration": "耗時",
   "logViewerFieldEnded": "結束",
   "logViewerFieldId": "ID",
