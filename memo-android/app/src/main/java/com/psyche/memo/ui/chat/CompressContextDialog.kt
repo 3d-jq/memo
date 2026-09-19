@@ -123,7 +123,7 @@ fun CompressContextDialog(
     androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
         androidx.compose.material3.Surface(
             color = cs.surfaceContainerHigh,
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         ) {
             Column(
                 modifier = Modifier

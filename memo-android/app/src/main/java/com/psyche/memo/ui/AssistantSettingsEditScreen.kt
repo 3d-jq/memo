@@ -437,7 +437,7 @@ internal fun EditSegTabBar(tabs: List<String>, selected: Int, onSelect: (Int) ->
         Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .background(semantic.surfaceCard, RoundedCornerShape(18.dp)),
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.CARD_DP.dp)),
     ) {
         val n = tabs.size
         val innerAvail = maxWidth - 8.dp

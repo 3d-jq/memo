@@ -443,9 +443,9 @@ fun ImageViewerOverlay(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 28.dp)
-                    .clip(RoundedCornerShape(30.dp))
+                    .clip(RoundedCornerShape(MemoRadius.PILL_DP.dp))
                     .background(Color.Black.copy(alpha = 0.26f))
-                    .border(0.7.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(30.dp))
+                    .border(0.7.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
                 GlassViewerButton(

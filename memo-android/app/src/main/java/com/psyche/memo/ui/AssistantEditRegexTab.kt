@@ -246,9 +246,9 @@ private fun RegexRuleCard(
                             modifier = Modifier
                                 .background(
                                     if (isDark) cs.onSurface.copy(alpha = 0.06f) else cs.primary.copy(alpha = 0.10f),
-                                    RoundedCornerShape(24.dp),
+                                    RoundedCornerShape(MemoRadius.PILL_DP.dp),
                                 )
-                                .border(1.dp, cs.primary.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
+                                .border(1.dp, cs.primary.copy(alpha = 0.35f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                         ) {
                             Text(

@@ -312,7 +312,7 @@ private fun LogViewerTabsAndPages(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(44.dp)
-                    .background(cs.surfaceCardColorCompat(), RoundedCornerShape(18.dp))
+                    .background(cs.surfaceCardColorCompat(), RoundedCornerShape(MemoRadius.CARD_DP.dp))
                     .padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1108,9 +1108,9 @@ private fun ErrorHeroCard(errors: List<String>) {
             .fillMaxWidth()
             .background(
                 androidx.compose.ui.graphics.lerp(semantic.surfaceCard, cs.error, if (isDark) 0.14f else 0.08f),
-                RoundedCornerShape(18.dp),
+                RoundedCornerShape(MemoRadius.CARD_DP.dp),
             )
-            .border(1.dp, cs.error.copy(alpha = if (isDark) 0.34f else 0.22f), RoundedCornerShape(18.dp))
+            .border(1.dp, cs.error.copy(alpha = if (isDark) 0.34f else 0.22f), RoundedCornerShape(MemoRadius.CARD_DP.dp))
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

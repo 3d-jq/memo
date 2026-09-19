@@ -429,7 +429,7 @@ private fun SheetActionButton(label: String, filled: Boolean, onTap: () -> Unit,
                 .fillMaxWidth()
                 .background(
                     cs.onSurface.copy(alpha = if (pressed) base + 0.03f else base),
-                    RoundedCornerShape(13.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
                 .padding(vertical = 11.dp),
             contentAlignment = Alignment.Center,

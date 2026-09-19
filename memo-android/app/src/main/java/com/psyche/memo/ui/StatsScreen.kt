@@ -395,7 +395,7 @@ private fun RangeChip(label: String, selected: Boolean, onTap: () -> Unit) {
     Box(
         modifier = Modifier
             .height(32.dp)
-            .background(background, RoundedCornerShape(15.dp))
+            .background(background, RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .clickable(onClick = onTap)
             .padding(horizontal = 13.dp),
         contentAlignment = Alignment.Center,
@@ -995,7 +995,7 @@ private fun RankRow(
                 Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(widthFactor.toFloat())
-                    .background(semantic.surfaceFill, RoundedCornerShape(18.dp)),
+                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp)),
             )
             Row(
                 Modifier
@@ -1203,7 +1203,7 @@ private fun CustomRangeSheet(
                 Box(
                     Modifier
                         .weight(1f)
-                        .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.08f else 0.09f), RoundedCornerShape(13.dp))
+                        .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.08f else 0.09f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                         .clickable(onClick = onDismiss)
                         .padding(vertical = 11.dp),
                     contentAlignment = Alignment.Center,
@@ -1217,7 +1217,7 @@ private fun CustomRangeSheet(
                 Box(
                     Modifier
                         .weight(1f)
-                        .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.16f else 0.14f), RoundedCornerShape(13.dp))
+                        .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.16f else 0.14f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                         .clickable { onApply(start, end) }
                         .padding(vertical = 11.dp),
                     contentAlignment = Alignment.Center,
@@ -1267,7 +1267,7 @@ private fun DateField(label: String, date: LocalDate, onTap: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.07f else 0.06f), RoundedCornerShape(13.dp))
+            .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.07f else 0.06f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .clickable(onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
@@ -1332,7 +1332,7 @@ private fun StatsDatePickerSheet(
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Row(
                         Modifier
-                            .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.08f else 0.06f), RoundedCornerShape(13.dp))
+                            .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.08f else 0.06f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                             .clickable { monthMode = !monthMode }
                             .padding(horizontal = 14.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1446,7 +1446,7 @@ private fun StatsDatePickerSheet(
                                         .background(
                                             if (isSelected) cs.onSurface.copy(alpha = if (semantic.isDark) 0.18f else 0.14f)
                                             else semantic.surfaceFill,
-                                            RoundedCornerShape(13.dp),
+                                            RoundedCornerShape(MemoRadius.PILL_DP.dp),
                                         )
                                         .clickable(enabled = enabled) {
                                             visibleMonth = LocalDate.of(visibleMonth.year, month, 1)

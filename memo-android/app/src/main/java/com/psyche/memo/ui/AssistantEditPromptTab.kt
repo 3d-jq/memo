@@ -822,7 +822,7 @@ private fun PresetMessageCard(
     val semantic = LocalSemanticColors.current
     val isDark = cs.surface.luminance() < 0.5f
     val isAssistant = role == "assistant"
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(MemoRadius.CARD_DP.dp)
     Row(
         modifier
             .fillMaxWidth()

@@ -361,7 +361,7 @@ internal fun SegTabBar(tabs: List<String>, selected: Int, onSelect: (Int) -> Uni
             .height(44.dp)
             .background(
                 if (semantic.isDark) semantic.surfaceFill else semantic.surfaceCard,
-                RoundedCornerShape(18.dp),
+                RoundedCornerShape(MemoRadius.CARD_DP.dp),
             )
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
