@@ -25,6 +25,8 @@ class McpConnectionManager(
     private val http: OkHttpClient,
     /** `mcp_request_timeout_ms_v1`，由容器注入（这里不直接碰偏好存储）。 */
     private val requestTimeoutMsProvider: () -> Long = { McpClient.DEFAULT_RESPONSE_TIMEOUT_MS },
+    /** 工具结果里的 base64 图片落盘（只有 app 侧拿得到 filesDir），返回绝对路径或 null。 */
+    private val imageSaver: (mime: String, base64Data: String) -> String? = { _, _ -> null },
 ) {
 
     enum class Status { idle, connecting, connected, error }
@@ -141,10 +143,10 @@ class McpConnectionManager(
         update(serverId) { ConnectionState() }
     }
 
-    /** tools/call on a connected server; throws when not connected. */
+    /** tools/call：结果按上游 `_flattenToolResult` 展开成一段 markdown（图片就地成行）。 */
     suspend fun callTool(serverId: String, toolName: String, arguments: kotlinx.serialization.json.JsonObject): String {
         val client = clients[serverId] ?: throw McpException("MCP server is not connected")
-        return client.callTool(toolName, arguments)
+        return flattenMcpToolResult(client.callTool(toolName, arguments), imageSaver)
     }
 
     fun shutdown() {

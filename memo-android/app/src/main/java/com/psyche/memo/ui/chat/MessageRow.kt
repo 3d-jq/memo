@@ -263,7 +263,8 @@ internal fun MessageRow(
     // 表格工具栏（_MarkdownTableToolbar）：复制 / 存图 / 导出 CSV 的平台侧实现，
     // 由 app 注入给 core:ui（core:ui 拿不到剪贴板、MediaStore、SAF）。
     val tableActions = com.psyche.memo.ui.chat.rememberMarkdownTableActions()
-    // 代码块：折叠/换行三个设置 + 「预览」动作（另存为暂未接线，按钮自动隐藏）。
+    // 代码块：折叠/换行三个设置 +「另存为」「预览」两个动作（另存为走 SAF，
+    // 与表格导出 CSV 同一套系统创建文档通道）。
     val codeBlockConfig = remember(
         timelineSettings.autoCollapseCodeBlock,
         timelineSettings.autoCollapseCodeBlockLines,
@@ -278,11 +279,7 @@ internal fun MessageRow(
             isStreaming = msg.isStreaming,
         )
     }
-    val codeBlockActions = remember(onOpenHtmlPreview) {
-        com.psyche.memo.ui.markdown.CodeBlockActions(
-            onPreviewHtml = onOpenHtmlPreview,
-        )
-    }
+    val codeBlockActions = rememberCodeBlockActions(onPreviewHtml = onOpenHtmlPreview)
     // 数学公式两开关（渲染页）：总开关 + 是否把 `$…$` 当公式。
     val mathConfig = remember(timelineSettings.mathRendering, timelineSettings.dollarLatex) {
         com.psyche.memo.ui.markdown.MathConfig(
@@ -896,7 +893,7 @@ internal fun MessageRow(
                                             com.psyche.memo.ui.chat.TtsPlayer.togglePause()
 
                                         com.psyche.memo.ui.chat.MessageTtsAction.SPEAK ->
-                                            com.psyche.memo.ui.chat.TtsPlayer.speak(context, msg.content, ownerId = msg.id)
+                                            com.psyche.memo.ui.chat.TtsPlayer.speak(context, assistantReplyForTts(timelineSettings.ttsTextSelectionMode, msg.content), ownerId = msg.id)
                                     }
                                 },
                             )

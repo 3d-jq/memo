@@ -84,8 +84,8 @@ internal fun codeBlockExpanded(
  * SAF 与预览页，由调用方注入）。
  */
 data class CodeBlockActions(
-    /** 「另存为文件」（app 侧走 SAF）。 */
-    val onSaveAs: ((code: String) -> Unit)? = null,
+    /** 「另存为文件」（app 侧走 SAF；语言决定扩展名，照 `_codeFileExtension`）。 */
+    val onSaveAs: ((code: String, language: String?) -> Unit)? = null,
     /** HTML 代码块的「预览」（app 侧走 HtmlPreviewScreen）。 */
     val onPreviewHtml: ((code: String) -> Unit)? = null,
 )
@@ -254,7 +254,7 @@ internal fun CodeBlockView(
                     )
                 }
                 actions.onSaveAs?.let { save ->
-                    CodeBlockIconAction(icon = Lucide.Download, label = saveLabel) { save(full) }
+                    CodeBlockIconAction(icon = Lucide.Download, label = saveLabel) { save(full, language) }
                     Spacer(Modifier.width(16.dp))
                 }
                 CodeBlockIconAction(icon = Lucide.Copy, label = copyLabel) {

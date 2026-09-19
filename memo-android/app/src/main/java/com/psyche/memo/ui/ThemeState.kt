@@ -98,9 +98,23 @@ object ThemeState {
      * 「theme_mode_v1 需要重启」的旧问题同一手法）。
      */
     fun loadFonts(container: AppContainerImpl) {
-        val read: (String) -> String? = { container.preferenceRepository.readJson(it) }
+        val prefs = container.preferenceRepository
+        migrateLegacyGoogleFontFlags(prefs)
+        val read: (String) -> String? = { prefs.readJson(it) }
         appFontFamily = AppFonts.appFontFamily(read)
         codeFontFamily = AppFonts.codeFontFamily(read)
+    }
+
+    /**
+     * 上游早已删掉 Google Fonts 选择器（settings_provider.dart:1931-1943 + 1993-1998）：
+     * 「族名来自 Google Fonts」的老数据一律退回系统默认（族名丢掉），然后把两个旗标删除。
+     * 本工程从来不会写这两个键，所以只有上游备份还原进来的数据会命中。
+     */
+    private fun migrateLegacyGoogleFontFlags(prefs: com.psyche.memo.data.settings.PreferenceRepository) {
+        if (readBool(prefs, AppFonts.APP_IS_GOOGLE_KEY)) prefs.remove(AppFonts.APP_FAMILY_KEY)
+        if (readBool(prefs, AppFonts.CODE_IS_GOOGLE_KEY)) prefs.remove(AppFonts.CODE_FAMILY_KEY)
+        if (prefs.readJson(AppFonts.APP_IS_GOOGLE_KEY) != null) prefs.remove(AppFonts.APP_IS_GOOGLE_KEY)
+        if (prefs.readJson(AppFonts.CODE_IS_GOOGLE_KEY) != null) prefs.remove(AppFonts.CODE_IS_GOOGLE_KEY)
     }
 
     private fun readBool(

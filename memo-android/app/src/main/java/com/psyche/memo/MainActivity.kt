@@ -432,7 +432,7 @@ private fun AppThemeAndContent(
                             onOpenInstructionInjection = { navController.navigate("instruction_injection") },
                             onOpenWorldBook = { navController.navigate("world_book") },
                             onOpenTtsServices = { navController.navigate("tts_services") },
-                            onOpenLogs = { navController.navigate("log_viewer") },
+                            onOpenLogs = { navController.navigate("log_viewer/0") },
                             onOpenBackup = { navController.navigate("backup") },
                             onOpenSponsor = { navController.navigate("sponsor") },
                             onBack = { navController.popBackStack() },
@@ -533,6 +533,8 @@ private fun AppThemeAndContent(
                     composable("about") {
                         AboutScreen(
                             container = container,
+                            onOpenDebug = { navController.navigate("debug") },
+                            onOpenLogs = { tab -> navController.navigate("log_viewer/$tab") },
                             onBack = { navController.popBackStack() },
                         )
                     }
@@ -558,7 +560,7 @@ private fun AppThemeAndContent(
                                 container = container,
                                 categoryKey = category,
                                 onBack = { navController.popBackStack() },
-                                onOpenLogs = { navController.navigate("log_viewer") },
+                                onOpenLogs = { navController.navigate("log_viewer/0") },
                                 onOpenSnapshots = { navController.navigate("local_snapshots") },
                             )
                         }
@@ -803,9 +805,10 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
-                    composable("log_viewer") {
+                    composable("log_viewer/{tab}") { entry ->
                         LogViewerScreen(
                             container = container,
+                            initialTab = entry.arguments?.getString("tab")?.toIntOrNull() ?: 0,
                             onBack = { navController.popBackStack() },
                         )
                     }

@@ -270,7 +270,23 @@ fun SideDrawerContent(
     var globalResults by remember { mutableStateOf<List<com.psyche.memo.data.db.MessageDao.GlobalHit>>(emptyList()) }
     var globalHasRun by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Conversation?>(null) }
-    var moveTarget by remember { mutableStateOf<Conversation?>(null) }
+    /** 移动到助手（单条传 excludeAssistantId、批量不传，照 side_drawer.dart:345 与 :766）。 */
+    var moveRequest by remember { mutableStateOf<MoveRequest?>(null) }
+    /** 批量移动完成后的「已移动 N 个话题」（条数只在事件回调里知道，所以走状态回灌）。 */
+    var moveSnackbarCount by remember { mutableStateOf<Int?>(null) }
+    moveSnackbarCount?.let { moved ->
+        val text = stringResource(UiR.string.side_drawer_move_selected_snackbar, moved.toString())
+        LaunchedEffect(moved) {
+            moveSnackbarCount = null
+            com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                com.psyche.memo.ui.snackbar.AppNotification(
+                    message = text,
+                    type = com.psyche.memo.ui.snackbar.NotificationType.SUCCESS,
+                    durationMs = 3000,
+                ),
+            )
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -779,8 +795,14 @@ fun SideDrawerContent(
                         icon = Lucide.Shuffle,
                         label = stringResource(UiR.string.side_drawer_selection_move),
                         color = cs.primary,
-                        enabled = false,
-                        onClick = {},
+                        enabled = selectedIds.isNotEmpty(),
+                        onClick = {
+                            // side_drawer.dart:767-770 `_moveSelected`：正在生成的会话不参与。
+                            val picked = conversations.filter {
+                                it.id in selectedIds && it.id !in streamingIds
+                            }
+                            if (picked.isNotEmpty()) moveRequest = MoveRequest(picked, null, batch = true)
+                        },
                     )
                     Spacer(Modifier.width(10.dp))
                     SelectionAction(
@@ -1009,7 +1031,7 @@ fun SideDrawerContent(
                     color = cs.onSurface,
                 ) {
                     menuFor = null
-                    moveTarget = target
+                    moveRequest = MoveRequest(listOf(target), target.assistantId, batch = false)
                 }
                 MenuRow(
                     icon = Lucide.Trash2,
@@ -1092,18 +1114,18 @@ fun SideDrawerContent(
         )
     }
 
-    // Move-to-assistant sheet (memo showAssistantMoveSelector): lists every
-    // assistant except the conversation's current one.
-    moveTarget?.let { target ->
+    // Move-to-assistant sheet (showAssistantMoveSelector): 单条排除会话当前所在
+    // 助手，批量列出全部助手（side_drawer.dart:345-348 与 :766-810 的差别）。
+    moveRequest?.let { request ->
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
-            onDismissRequest = { moveTarget = null },
+            onDismissRequest = { moveRequest = null },
             shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
             containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
             // assistant_rows 整表 + 逐条解 JSON 不在组合期做（§5.13）。
-            val assistants = rememberLoaded(emptyList(), target.assistantId) {
+            val assistants = rememberLoaded(emptyList(), request.excludeAssistantId) {
                 com.psyche.memo.data.db.PayloadEntityDao(
                     container.database.readableDatabase,
                     "assistant_rows",
@@ -1115,7 +1137,7 @@ fun SideDrawerContent(
                             row.payload,
                         )
                     }.getOrNull()
-                }.filter { it.id != target.assistantId }
+                }.filter { it.id != request.excludeAssistantId }
             }
             Column(
                 modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp),
@@ -1127,11 +1149,47 @@ fun SideDrawerContent(
                             .height(48.dp)
                             .background(cs.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .clickable {
-                                moveTarget = null
-                                container.conversationDao.update(
-                                    target.copy(assistantId = a.id, updatedAt = System.currentTimeMillis()),
-                                )
+                                moveRequest = null
+                                // 移动前算「下一条」（side_drawer.dart:777 + :824-840）：
+                                // 当前助手作用域内、排除本次被移动的会话，按更新时间取最近一条。
+                                val batchIds = request.conversations.map { it.id }.toSet()
+                                val nextId = if (currentAssistantId == null) {
+                                    null
+                                } else {
+                                    scopedConversations
+                                        .filter { it.id !in batchIds }
+                                        .maxByOrNull { it.updatedAt }?.id
+                                }
+                                // chat_service.dart:4231-4256：去重、跳过已在目标助手的，
+                                // 只有真移动的计数；:4220 移动时清 injectedMemoryHash。
+                                val now = System.currentTimeMillis()
+                                val seen = HashSet<String>()
+                                val movedIds = HashSet<String>()
+                                request.conversations.forEach { conv ->
+                                    if (conv.id.isEmpty() || !seen.add(conv.id)) return@forEach
+                                    if (conv.assistantId == a.id) return@forEach
+                                    container.conversationDao.update(
+                                        conv.copy(
+                                            assistantId = a.id,
+                                            updatedAt = now,
+                                            injectedMemoryHash = null,
+                                        ),
+                                    )
+                                    movedIds.add(conv.id)
+                                }
                                 reload()
+                                if (movedIds.isEmpty() || !request.batch) return@clickable
+                                moveSnackbarCount = movedIds.size
+                                selectedIds.clear()
+                                internalSelectionMode = false
+                                // 当前会话被移走（或本来没有当前会话）→ 选下一条 / 新建
+                                // （side_drawer.dart:799-808，closeDrawer 跟随「点话题保持侧栏」）。
+                                val currentMoved =
+                                    selectedId == null || selectedId in movedIds
+                                if (currentMoved) {
+                                    val closeDrawer = !keepSidebarOnTopicTap
+                                    if (nextId != null) onSelect(nextId, closeDrawer) else onNew(closeDrawer)
+                                }
                             }
                             .padding(horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1684,3 +1742,14 @@ private fun SkeletonBar(widthFactor: Float, height: androidx.compose.ui.unit.Dp,
             .background(color, androidx.compose.foundation.shape.RoundedCornerShape(height / 2)),
     )
 }
+
+/**
+ * 一次「移动到助手」请求：要移动的会话 + 选择器里排除的助手
+ * （[excludeAssistantId] 只有单条路径给）+ 是否批量（批量才有 snackbar、
+ * 才退多选并处理「当前会话被移走」）。
+ */
+private data class MoveRequest(
+    val conversations: List<Conversation>,
+    val excludeAssistantId: String?,
+    val batch: Boolean,
+)

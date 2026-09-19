@@ -117,6 +117,8 @@ private data class LogFileEntry(val path: String, val name: String, val size: Lo
 @Composable
 fun LogViewerScreen(
     container: AppContainerImpl,
+    /** `LogViewerPage.initialTab`（context=0 / request=1 / app=2）。 */
+    initialTab: Int = 0,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -172,6 +174,7 @@ fun LogViewerScreen(
         } else {
             LogViewerTabsAndPages(
                 container = container,
+                initialTab = initialTab,
                 requestFiles = requestFiles,
                 appFiles = appFiles,
                 contextFiles = contextFiles,
@@ -283,13 +286,14 @@ private fun trimSurroundingBlankLines(text: String): String =
 @Composable
 private fun LogViewerTabsAndPages(
     container: AppContainerImpl,
+    initialTab: Int,
     requestFiles: List<LogFileEntry>,
     appFiles: List<LogFileEntry>,
     contextFiles: List<LogFileEntry>,
     onOpenFile: (tab: Int, file: LogFileEntry, title: String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val pagerState = rememberPagerState(initialPage = 0) { 3 }
+    val pagerState = rememberPagerState(initialPage = initialTab.coerceIn(0, 2)) { 3 }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     val zh = java.util.Locale.getDefault().language.lowercase() == "zh"

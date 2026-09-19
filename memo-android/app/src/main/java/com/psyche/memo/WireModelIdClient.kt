@@ -16,12 +16,19 @@ import kotlinx.coroutines.flow.Flow
  */
 internal class WireModelIdClient(
     private val delegate: LlmClient,
+    /** 该 provider 的 Claude 提示词缓存（开关 + 已归一的 '5m'/'1h'）。 */
+    private val promptCaching: () -> Pair<Boolean, String> = { false to "5m" },
     private val wireModelId: (String) -> String,
 ) : LlmClient {
 
     private fun LlmRequest.mapped(): LlmRequest {
+        val caching = promptCaching()
         val wire = wireModelId(modelId)
-        return if (wire == modelId || wire.isEmpty()) this else copy(modelId = wire)
+        val stamped = copy(
+            claudePromptCaching = caching.first,
+            claudePromptCachingTtl = caching.second,
+        )
+        return if (wire == modelId || wire.isEmpty()) stamped else stamped.copy(modelId = wire)
     }
 
     override fun supports(providerId: String): Boolean = delegate.supports(providerId)

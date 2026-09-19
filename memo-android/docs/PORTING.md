@@ -1297,3 +1297,62 @@ MemoRadius 三档：容器 20 / 嵌套 16 / 胶囊 999。至此全站圆角只�
 - 枚举引擎/语言改走播放器的引擎（原版 `tts.listEngines()` 问的就是正在播的那个实例），
   没就绪时按 `_ensureBound` 每 120ms 轮一次、上限 20 次。页内那份 `systemTtsRef` 只留着报
   「系统语音 已就绪/不可用」那行小字。
+
+## 5.29 死 UI 与小开关收口（2026-09-19，用户「先收死 UI 和小开关」）
+
+§5.25 说功能齐了，但有一批**界面画出来了、点了没反应**和**偏好只写不读**的洞。这轮全查了上游原样再补，
+每条都标了上游行号；**做不了的三条写明白原因，不硬做**。
+
+- **关于页长按图标 → 调试页**（`about_page.dart:426-440`）：一次长按即进，`Haptics.medium()`，
+  **无条件编译、无连点计数、无开发者开关**（连点版本号 7 次开的是彩蛋 sheet，两件事别混）。
+  顺带把彩蛋 sheet 里三颗 `Lucide.FolderOpen` 接上（L171-194/242-265/313-336）——
+  `log_viewer` 路由早就注册了，注释说「未移植」是过期的；路由改成 `log_viewer/{tab}`
+  对应 `LogViewerPage.initialTab`（context=0 / request=1 / app=2）。
+  `debug` 路由此前无人调用，`more` 路由**上游同样是死代码**（`MorePage` 全仓无引用），不算缺口。
+- **抽屉批量「移动」**（`side_drawer.dart:766-810`）：过滤正在生成的会话（Memo 侧等价物是
+  `streamingConversationIds`，上游叫 `loadingConversationIds`）→ 选择器**不**排除当前助手
+  （单条才排除）→ 移动 → `n==0` 直接 return → snackbar「已移动 N 个话题」→ 当前会话被移走时
+  按 `_nextRecentConversationExcluding`（L824-840，**当前助手作用域内**排除被移动的后取最近）
+  跳转或新建 → 退多选。**顺带修一个既有 bug**：单条移动过去不清 `injected_memory_hash`
+  （`chat_service.dart:4220` 会清），不清的话记忆注入哈希还挂着旧助手的值。
+- **代码块「另存为」**（`markdown_with_highlight.dart:2594-2600` + `2709-2760`）：这颗钮
+  **无条件渲染**（不看语言、不看行数），文件名 = 词干「代码」+ `_` + ISO8601 本地时间戳
+  （`:` 和 `.` 换成 `-`）+ 扩展名（`_codeFileExtension` 22 组别名表，认不出 `.txt`）。
+  Android 上 `FilePicker.saveFile(bytes:)` 的等价物就是 SAF 创建文档；SAF 没有
+  `allowedExtensions` 那一层，扩展名直接写进建议文件名。取消静默、成功「已导出为 <名>」。
+- **多选导出图片**（`home_page_controller.dart:2141-2168`）：第三颗 `Lucide.Image` 恢复渲染
+  （`cs.secondary`），接到 §5.25 已落地的 `ChatExportImage`。两条上游语义：导出的是**会话
+  时间序**的选中消息（不是点选顺序）、**先收多选再导出**；从导出 sheet 进来时不收
+  （上游 sheet 也不收）。**有意偏差**（UI-7i 已记）：不补 `showImagePreviewSheet`，直接系统分享。
+- **MCP 工具结果非文本块**（`mcp_tool_service.dart:248-324`）：按原顺序累加成一整段 markdown —
+  image 块 base64 落盘（`filesDir/tool_images/mcp_img_<微秒>.<ext>`）后**就地**写一行
+  `![](...)`（目的地含空格/括号/`<>`/非 ASCII 时按 `encodeMarkdownImageDestination` 包 `<>`，
+  与已有的 decode 配成一对），对话里的图片横滚条因此直接可用；resource 有 text 当文本、
+  否则一行 `resource: <uri>`；audio/未知类型退化成**美化 JSON 内联**；坏块 try/catch 静默跳过。
+  ⚠️ 两处**过去是我们自己加的**、与上游相反的行为被撤掉：空结果 dump 整坨 JSON-RPC、
+  `isError` 抛成 `execution_error`（上游把错误文本当普通工具结果发给模型）。
+- **语音「朗读取哪部分文本」**（`tts_text_selection.dart` 全量 + `tts_provider.dart:983`）：
+  五种模式（含「选取为空则回退去过代码的原文」这条关键兜底）**只作用在助手消息朗读**上
+  （上游唯一消费点 `home_page_controller.dart:1818`），所以接在 MessageRow 的朗读钮与自动播放两处，
+  **不能**接进 `TtsPlayer.speak` —— 那会连「听测试」和悬浮条重播一起污染。
+  顺序是**先按模式取文、后剥 markdown**（后者在 `_speakQueued` 里，所有朗读入口共用）。
+  顺带补上 Memo 一直缺的 `_stripMarkdown`：此前朗读会把 `#`、`**`、链接地址、代码块整段念出来。
+- **Claude 提示词缓存**（`claude_official.dart:357-360`）：开关 + TTL 此前零消费，现在经
+  `LlmRequest` 由 `clientFor` 统一盖章（覆盖聊天/标题/摘要/记忆/翻译/OCR/测试连接全部路径）。
+  ⚠️ **上游的形状就是 body 顶层一个 `cache_control`**，不是 Anthropic 文档要求的
+  content-block 内嵌，也没有断点数/最小可缓存 token 的处理——按 1:1 照做，
+  「缓存到底有没有生效」是上游的事，别当成我们的缺口。5m 只发 `{"type":"ephemeral"}`、
+  1h 才带 `"ttl":"1h"`（`resolveClaudePromptCachingTtl` 只认 1h，其它一律 5m）；
+  OpenAI 兼容路径另有三重门（开关 + OpenRouter + 模型 id 含 claude/anthropic/）。
+  响应侧（`cache_read_input_tokens` 合并、用量卡、统计）本来就通了。
+- **两个 `*_font_is_google_v1`**：上游**已删除** Google Fonts（`google_fonts` 不在 pubspec 里，
+  键只剩 `settings_provider.dart:1931-1943/1993-1998` 的「迁移后置 null 再删键」）。
+  所以正确动作不是接旗标而是照抄那段迁移（`ThemeState.loadFonts` 里），两个死常量随之有了用途。
+
+**做不了、也没硬做的三条**：
+- `display_show_app_updates_v1` —— 上游唯一实现是拉 `https://kelivo.psycheas.top/update.json`
+  （`update_provider.dart:92-95`），品牌规则禁止该端点，而造一个假端点没有意义。
+- `image_cropper_enabled_v1` —— 是「选图后逐张弹裁剪器」的完整功能（上游 `image_cropper` 包 +
+  `AndroidUiSettings`，取消即丢图），要引第三方库或自写裁剪界面，不是几行开关。
+- `send_markdown_image_links_as_images_v1` —— 要移植 `parseTextAndImages`（markdown 图链接
+  扫描 + 远程/本地/data 三类闸门）并和「模型支持视觉才发图」的剥离逻辑配合，中批，单独做。

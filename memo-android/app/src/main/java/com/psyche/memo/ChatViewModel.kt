@@ -1802,7 +1802,18 @@ class ChatViewModel(
                 // home_page_controller.dart L1763-1765 —— 「自动播放助手回复」：
                 // 正常跑完一轮就朗读整条回复（取消/报错不播）。
                 if (readBoolPref("tts_auto_play_assistant_replies_v1")) {
+                    // 「朗读取哪部分文本」只作用在助手消息上（home_page_controller.dart:1818）。
+                    // `val text = allParts...` 必须留在一行里 —— ToolTranscriptContentTest
+                    // 按行白名单放行这一处累计全文（工具 transcript 不许取 allParts，TTS 要整条）。
                     val text = allParts.filterIsInstance<TextPart>().joinToString("") { it.text }
+                        .let { round ->
+                            com.psyche.memo.ui.chat.assistantReplyForTts(
+                                modeValue = container.preferenceRepository
+                                    .readJson("tts_text_selection_mode_v1")
+                                    ?.trim()?.trim('"')?.takeIf { mode -> mode.isNotEmpty() },
+                                content = round,
+                            )
+                        }
                     if (text.isNotBlank()) {
                         // 走 `speak(appContext, ...)` 拿 Context，让 TtsPlayer 的
                         // `controller(context)` 懒初始化兜底能命中——之前 `TtsPlayer.init`

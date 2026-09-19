@@ -91,8 +91,15 @@ fun ChatSelectionExportBar(
                 Haptics.light(view)
                 onExportMarkdown()
             }
-            // 图片导出（原版第三颗按钮）依赖 widget 截图导出引擎，未移植前
-            // 不渲染，避免死按钮（截图导出单独批次补）。
+            SelectionActionButton(
+                icon = Lucide.Image,
+                label = stringResource(UiR.string.chat_selection_export_image),
+                color = cs.secondary,
+                modifier = Modifier.weight(1f),
+            ) {
+                Haptics.light(view)
+                onExportImage()
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             SelectionToggleCard(

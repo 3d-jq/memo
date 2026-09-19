@@ -146,6 +146,40 @@ class ClaudeClientIntegrationTest {
         assertTrue("body=$body", body.contains("\"system\":\"Be terse.\""))
     }
 
+    /**
+     * 「Claude 提示词缓存」开关（claude_official.dart:357-360）——形状照上游：
+     * body **顶层** 一个 cache_control，5m 只有 type，1h 才带 ttl，关掉时整个键不出现。
+     */
+    @Test
+    fun cacheControlFollowsTheProviderSwitch() = runBlocking {
+        repeat(3) {
+            server.enqueue(
+                MockResponse()
+                    .setHeader("Content-Type", "text/event-stream")
+                    .setBody("data: {\"type\":\"message_stop\"}\n\n"),
+            )
+        }
+        client().streamChat(request(server.url("/").toString())).toList()
+        client().streamChat(
+            request(server.url("/").toString()).copy(claudePromptCaching = true),
+        ).toList()
+        client().streamChat(
+            request(server.url("/").toString())
+                .copy(claudePromptCaching = true, claudePromptCachingTtl = "1h"),
+        ).toList()
+
+        val off = server.takeRequest().body.readUtf8()
+        assertTrue("关掉时不该有这个键：body=$off", !off.contains("cache_control"))
+        val short = server.takeRequest().body.readUtf8()
+        assertTrue("body=$short", short.contains("\"cache_control\":{\"type\":\"ephemeral\"}"))
+        assertTrue(!short.contains("\"ttl\""))
+        val longTtl = server.takeRequest().body.readUtf8()
+        assertTrue(
+            "body=$longTtl",
+            longTtl.contains("\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}"),
+        )
+    }
+
     @Test
     fun nonStreamingParsesTextBlocks() = runBlocking {
         server.enqueue(

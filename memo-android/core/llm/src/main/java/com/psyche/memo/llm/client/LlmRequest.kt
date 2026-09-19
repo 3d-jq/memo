@@ -82,6 +82,13 @@ data class LlmRequest(
      */
     val useResponseApi: Boolean = false,
     /**
+     * Claude 提示词缓存（provider 级两键 `claudePromptCachingEnabled` /
+     * `_claudePromptCachingTtl`，取值只有 '5m' / '1h'）。上游在请求体**顶层**加一个
+     * `cache_control` 键（claude_official.dart:357-360），这里原样透传形状。
+     */
+    val claudePromptCaching: Boolean = false,
+    val claudePromptCachingTtl: String = "5m",
+    /**
      * 当前模型是否支持图片输入（`ModelOverrideResolver` 的 `visionInput`，即上游的
      * `Modality.IMAGE in supportInputModalities`）。只用来决定**工具结果里的图片**
      * 发不发；不支持时按上游换成 `[Image output omitted: …]` 文本占位。

@@ -57,7 +57,7 @@ internal fun parseToolResultImages(content: String?): Pair<String, List<String>>
 // ---------------------------------------------------------------------------
 
 /** 逻辑行切分：\r、\n、U+2028、U+2029 都算断行，\r\n 按一个断行处理。 */
-private fun toolResultLogicalLines(content: String): List<String> {
+internal fun toolResultLogicalLines(content: String): List<String> {
     val lines = ArrayList<String>()
     var i = 0
     val end = content.length
@@ -75,7 +75,7 @@ private fun toolResultLogicalLines(content: String): List<String> {
     return lines
 }
 
-private fun isLogicalLineBreak(c: Char): Boolean =
+internal fun isLogicalLineBreak(c: Char): Boolean =
     c == '\n' || c == '\r' || c == '\u2028' || c == '\u2029'
 
 private fun isIndentedCodeLine(line: String): Boolean = leadingIndentColumns(line) >= 4
@@ -93,7 +93,7 @@ private fun leadingIndentColumns(line: String): Int {
 }
 
 /** markdown_line_lexer.dart consumeFence —— 只跟踪围栏，不关心 details。 */
-private class FenceLexer {
+internal class FenceLexer {
     private var marker: Char? = null
     private var length = 0
 
@@ -235,6 +235,41 @@ private fun isWindowsImageDestination(dest: String): Boolean {
         dest[1] == ':' &&
         (dest[2] == '\\' || dest[2] == '/') &&
         isDriveLetter(dest[0])
+}
+
+/**
+ * `encodeMarkdownImageDestination`（mcp_structured_image.dart:238-242）—— MCP 工具结果
+ * 里的图片要就地写成一行 `![](...)`，路径含空格/括号/`#`/`%`/`<>`/反斜杠或非 ASCII 时
+ * 必须包进 `<>` 并转义，否则解析方（上面的 decode）会把目的地截断。
+ */
+internal fun encodeMarkdownImageDestination(uri: String): String {
+    if (uri.isEmpty()) return uri
+    if (!destinationNeedsAngleBrackets(uri)) return uri
+    return "<" + escapeAngleBracketDestination(uri) + ">"
+}
+
+private fun destinationNeedsAngleBrackets(uri: String): Boolean {
+    if (isWindowsImageDestination(uri)) return true
+    for (ch in uri) {
+        val code = ch.code
+        if (code <= 0x20) return true
+        if (code == 0x28 || code == 0x29 || code == 0x5C || code == 0x23 ||
+            code == 0x25 || code == 0x3C || code == 0x3E
+        ) {
+            return true
+        }
+        if (code > 0x7E) return true
+    }
+    return false
+}
+
+private fun escapeAngleBracketDestination(uri: String): String {
+    val buf = StringBuilder()
+    for (ch in uri) {
+        if (ch == '\\' || ch == '>') buf.append('\\')
+        buf.append(ch)
+    }
+    return buf.toString()
 }
 
 /** 只反转义 Markdown 标点；Windows 路径反斜杠保留。 */

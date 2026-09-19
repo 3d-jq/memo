@@ -135,13 +135,14 @@ fun rememberMarkdownTableActions(): MarkdownTableActions {
     }
 }
 
-private fun exportedAs(context: Context): String =
+// 代码块「另存为」（CodeBlockSave.kt）复用同一对导出文案与提示通道。
+internal fun exportedAs(context: Context): String =
     context.getString(R.string.message_export_sheet_exported_as)
 
-private fun exportFailed(context: Context): String =
+internal fun exportFailed(context: Context): String =
     context.getString(R.string.message_export_sheet_export_failed)
 
-private fun toast(message: String, type: NotificationType) {
+internal fun toast(message: String, type: NotificationType) {
     SnackbarManager.show(AppNotification(message, type))
 }
 

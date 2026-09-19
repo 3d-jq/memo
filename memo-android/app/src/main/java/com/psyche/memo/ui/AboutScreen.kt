@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -53,11 +54,13 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.FileText
+import com.composables.icons.lucide.FolderOpen
 import com.composables.icons.lucide.Github
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Phone
 import com.composables.icons.lucide.Sparkles
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.R as UiR
 
 /**
@@ -65,17 +68,22 @@ import com.psyche.memo.ui.R as UiR
  * name, GitHub/Discord/QQ/afdian links are dropped (upstream-specific), the
  * app name/description come from the generated strings (about_page_app_name
  * / about_page_app_description), and version info comes from PackageManager
- * (PackageInfo.fromPlatform upstream). Kept: header card (long-press icon →
- * reserved debug entry, not wired yet), version row with the 7-tap easter
- * egg → log settings sheet (L99-385), system row (L496-503).
+ * (PackageInfo.fromPlatform upstream). Kept: header card (L426-440 long-press
+ * the 54dp app icon → debug page, one press, no developer switch, no release
+ * gating), version row with the 7-tap easter egg → log settings sheet
+ * (L99-385) with its three folder-open buttons → log viewer tabs, system row
+ * (L496-503).
  */
 @Composable
 fun AboutScreen(
     container: AppContainerImpl,
+    onOpenDebug: () -> Unit,
+    onOpenLogs: (Int) -> Unit,
     onBack: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
+    val view = LocalView.current
 
     var version by remember { mutableStateOf("") }
     var buildNumber by remember { mutableStateOf("") }
@@ -127,9 +135,18 @@ fun AboutScreen(
                         Image(
                             painter = painterResource(com.psyche.memo.R.drawable.ic_launcher_foreground),
                             contentDescription = null,
+                            // L426-440：长按图标本体一次即进调试页（中触觉，无条件编译、
+                            // 无连点计数、无开发者开关）。
                             modifier = Modifier
                                 .size(54.dp)
-                                .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp)),
+                                .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                                .combinedClickable(
+                                    onClick = {},
+                                    onLongClick = {
+                                        Haptics.medium(view)
+                                        onOpenDebug()
+                                    },
+                                ),
                         )
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -239,11 +256,14 @@ fun AboutScreen(
         }
     }
 
-    // L116-385: easter egg sheet — per-channel log toggles. The folder-open
-    // buttons navigate to LogViewerPage upstream; the log viewer page is not
-    // ported yet, so the toggles only.
+    // L116-385: easter egg sheet — per-channel log toggles, each with the
+    // folder-open button upstream routes to that log viewer tab.
     if (easterEggVisible) {
-        EasterEggSheet(container = container, onDismiss = { easterEggVisible = false })
+        EasterEggSheet(
+            container = container,
+            onOpenLogs = onOpenLogs,
+            onDismiss = { easterEggVisible = false },
+        )
     }
 }
 
@@ -286,7 +306,11 @@ private fun AboutNavRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EasterEggSheet(container: AppContainerImpl, onDismiss: () -> Unit) {
+private fun EasterEggSheet(
+    container: AppContainerImpl,
+    onOpenLogs: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     // Mirrors Flutter's settings_provider.dart enable sequence: read the
     // current value via LogBootstrap (which routes to the correct backing
@@ -315,10 +339,13 @@ sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle 
                 modifier = Modifier.size(28.dp),
             )
             Spacer(Modifier.height(16.dp))
+            // LogViewerPage 的三个 tab 常量（log_viewer_page.dart:32-34）：
+            // context=0 / request=1 / app=2。
             LogToggleRow(
                 title = stringResource(UiR.string.context_log_setting_title),
                 subtitle = stringResource(UiR.string.context_log_setting_subtitle),
                 value = contextLog,
+                onOpenLogs = { onOpenLogs(0) },
                 onChange = { v ->
                     contextLog = v
                     com.psyche.memo.logging.LogBootstrap.setContextLogEnabled(prefs, v)
@@ -329,6 +356,7 @@ sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle 
                 title = stringResource(UiR.string.request_log_setting_title),
                 subtitle = stringResource(UiR.string.request_log_setting_subtitle),
                 value = requestLog,
+                onOpenLogs = { onOpenLogs(1) },
                 onChange = { v ->
                     requestLog = v
                     com.psyche.memo.logging.LogBootstrap.setRequestLogEnabled(prefs, v)
@@ -339,6 +367,7 @@ sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle 
                 title = stringResource(UiR.string.flutter_log_setting_title),
                 subtitle = stringResource(UiR.string.flutter_log_setting_subtitle),
                 value = flutterLog,
+                onOpenLogs = { onOpenLogs(2) },
                 onChange = { v ->
                     flutterLog = v
                     com.psyche.memo.logging.LogBootstrap.setFlutterLogEnabled(prefs, v)
@@ -357,6 +386,7 @@ private fun LogToggleRow(
     title: String,
     subtitle: String,
     value: Boolean,
+    onOpenLogs: () -> Unit,
     onChange: (Boolean) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -370,6 +400,21 @@ private fun LogToggleRow(
                 style = TextStyle(fontSize = 15.sp, color = cs.onSurface.copy(alpha = 0.9f)),
                 modifier = Modifier.weight(1f),
             )
+            // L171-194：文件夹钮在标签与开关**之间**（圆角 6、图标 20 走 primary）。
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+                    .clickable(onClick = onOpenLogs)
+                    .padding(6.dp),
+            ) {
+                Icon(
+                    Lucide.FolderOpen,
+                    contentDescription = null,
+                    tint = cs.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
             IosSwitch(value = value, onValueChanged = onChange)
         }
         Text(

@@ -96,17 +96,22 @@ class McpClientTest {
         )
         val client = McpClient(config(), http)
         client.initialize()
-        assertEquals("hello\nworld", client.callTool("echo", buildJsonObject { put("q", "x") }))
+        // callTool 只回 result；content 的展开在 flattenMcpToolResult（图片要落盘才需要 filesDir）。
+        assertEquals(
+            "hello\nworld",
+            flattenMcpToolResult(client.callTool("echo", buildJsonObject { put("q", "x") })) { _, _ -> null },
+        )
         server.takeRequest(); server.takeRequest()
         val call = server.takeRequest()
         assertTrue(call.body.readUtf8().contains("\"method\":\"tools/call\""))
 
+        // isError 不是异常：上游把错误文本当普通工具结果发给模型（mcp_tool_service.dart:248）。
         server.enqueue(
             jsonRpcResponse(3, """{"content":[{"type":"text","text":"boom"}],"isError":true}"""),
         )
-        val error = runCatching { client.callTool("echo", buildJsonObject {}) }.exceptionOrNull()
-        assertTrue(error is McpException)
-        assertTrue(error!!.message!!.contains("boom"))
+        val outcome = runCatching { client.callTool("echo", buildJsonObject {}) }
+        assertTrue("工具结果不该抛", outcome.isSuccess)
+        assertEquals("boom", flattenMcpToolResult(outcome.getOrThrow()) { _, _ -> null })
     }
 
     @Test

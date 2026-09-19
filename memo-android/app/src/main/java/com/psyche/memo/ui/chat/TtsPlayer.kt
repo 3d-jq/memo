@@ -188,14 +188,21 @@ object TtsPlayer {
     }
 
     private fun speakNow(context: Context, text: String, ownerId: String?) {
-        lastText = text
-        controller(context)?.speak(text, ownerId)
+        // 原版 `_speakQueued` 第一件事就是 `_stripMarkdown(text).trim()`，空则什么都不做
+        // （tts_provider.dart:430-432）。所有朗读入口共用这条路，所以选取（只给助手消息）
+        // 在调用方做，剥 markdown 在这里做。
+        val content = stripMarkdownForTts(text).trim()
+        if (content.isEmpty()) return
+        lastText = content
+        controller(context)?.speak(content, ownerId)
     }
 
     /** 已初始化后的免 Context 重载（ViewModel 等无 UI 的调用方，如自动播放）。 */
     fun speak(text: String, ownerId: String? = null) {
-        lastText = text
-        controllerRef?.speak(text, ownerId)
+        val content = stripMarkdownForTts(text).trim()
+        if (content.isEmpty()) return
+        lastText = content
+        controllerRef?.speak(content, ownerId)
     }
 
     fun togglePause() {

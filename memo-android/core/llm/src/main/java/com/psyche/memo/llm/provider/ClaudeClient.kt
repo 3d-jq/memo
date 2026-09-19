@@ -373,6 +373,15 @@ class ClaudeClient(
                 put("top_p", request.topP)
             }
             if (system.isNotEmpty()) put("system", system)
+            // claude_official.dart L357-360 —— 「提示词缓存」开时给 body 加一个顶层
+            // cache_control：5m 只有 type，1h 才带 ttl。上游就是这么发的（**不是**
+            // Anthropic 文档里的 content-block 内嵌形式），照它 1:1。
+            if (request.claudePromptCaching) {
+                put("cache_control", buildJsonObject {
+                    put("type", "ephemeral")
+                    if (request.claudePromptCachingTtl == "1h") put("ttl", "1h")
+                })
+            }
             if (request.tools.isNotEmpty()) {
                 put("tools", buildJsonArray {
                     for (tool in request.tools) {

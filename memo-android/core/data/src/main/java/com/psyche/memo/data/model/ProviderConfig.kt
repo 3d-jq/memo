@@ -62,6 +62,13 @@ data class ProviderConfig(
     companion object {
         fun fromJsonString(json: kotlinx.serialization.json.Json, text: String): ProviderConfig =
             json.decodeFromString(serializer(), text)
+
+        /**
+         * `resolveClaudePromptCachingTtl` L6128-6136：去空白转小写后**只认 '1h'**，
+         * 其它（含没设过）一律回落 '5m'。
+         */
+        fun resolveClaudePromptCachingTtl(raw: String?): String =
+            if (raw?.trim()?.lowercase() == "1h") "1h" else "5m"
     }
 }
 

@@ -224,13 +224,42 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     }
     val mcpConnections: com.psyche.memo.provider.mcp.McpConnectionManager by lazy {
         // 「请求超时」是设置页可改的（TIMEOUT_KEY 存裸毫秒数），每次连接现读。
-        com.psyche.memo.provider.mcp.McpConnectionManager(mcpRepository, httpClient) {
-            preferenceRepository.readJson(
-                com.psyche.memo.ui.TIMEOUT_KEY,
-            )?.trim()?.removeSurrounding("\"")?.toLongOrNull()
-                ?: com.psyche.memo.provider.mcp.McpClient.DEFAULT_RESPONSE_TIMEOUT_MS
-        }
+        com.psyche.memo.provider.mcp.McpConnectionManager(
+            mcpRepository,
+            httpClient,
+            requestTimeoutMsProvider = {
+                preferenceRepository.readJson(
+                    com.psyche.memo.ui.TIMEOUT_KEY,
+                )?.trim()?.removeSurrounding("\"")?.toLongOrNull()
+                    ?: com.psyche.memo.provider.mcp.McpClient.DEFAULT_RESPONSE_TIMEOUT_MS
+            },
+            imageSaver = ::saveMcpToolImage,
+        )
     }
+
+    /**
+     * MCP 工具结果里的 base64 图片落盘（上游 `AppDirectories.saveBase64Image`，
+     * prefix `mcp_img`；standard 与 URL-safe 两种 base64 都吃）。目录沿用工具图片的
+     * `filesDir/tool_images` —— 图片要随工具结果持久化，重开对话还在。
+     */
+    private fun saveMcpToolImage(mime: String, base64Data: String): String? = runCatching {
+        val cleaned = base64Data.replace(Regex("\\s"), "")
+        val flags = android.util.Base64.NO_WRAP or
+            if (cleaned.contains('-') || cleaned.contains('_')) android.util.Base64.URL_SAFE else 0
+        val bytes = android.util.Base64.decode(cleaned, flags)
+        val ext = when (mime.lowercase()) {
+            "image/jpeg", "image/jpg" -> "jpg"
+            "image/gif" -> "gif"
+            "image/webp" -> "webp"
+            else -> "png"
+        }
+        val dir = java.io.File(appContext.filesDir, "tool_images").apply { mkdirs() }
+        // 一次结果里可能有多张图，毫秒会撞名，补上亚毫秒位。
+        val micros = System.currentTimeMillis() * 1000L + (System.nanoTime() % 1000L)
+        val file = java.io.File(dir, "mcp_img_$micros.$ext")
+        file.writeBytes(bytes)
+        file.absolutePath
+    }.getOrNull()
 
     /** HTTP search dispatch (ported provider subset). */
     val searchEngine: com.psyche.memo.provider.search.SearchEngine by lazy {
@@ -594,7 +623,18 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         // apiModelId 才是**出网**的模型 id，而且厂商启发式（Claude thinking、
         // Gemini 判定、GLM OCR…）也用它。包一层客户端在这里统一改写，覆盖聊天 /
         // 标题 / 摘要 / 记忆 / 翻译 / OCR / 测试连接全部请求路径。
-        return WireModelIdClient(base) { modelId -> wireModelId(providerId, modelId) }
+        return WireModelIdClient(
+            delegate = base,
+            promptCaching = {
+                val config = providerConfig(providerId)
+                val caching = config?.claudePromptCachingEnabled == true
+                val ttl = com.psyche.memo.data.model.ProviderConfig.resolveClaudePromptCachingTtl(
+                    config?.claudePromptCachingTtl,
+                )
+                caching to ttl
+            },
+            wireModelId = { modelId -> wireModelId(providerId, modelId) },
+        )
     }
 
     /**

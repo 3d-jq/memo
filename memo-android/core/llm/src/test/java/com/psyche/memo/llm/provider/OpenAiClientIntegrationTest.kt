@@ -363,4 +363,27 @@ class OpenAiClientIntegrationTest {
 
         assertEquals("/openai", server.takeRequest().path)
     }
+
+    /**
+     * `applyOpenRouterClaudePromptCaching`（openai_vendor_compat.dart:358-376）三重门：
+     * 开关开 + OpenRouter + 模型是 Claude，三个都满足才加 cache_control。
+     */
+    @Test
+    fun cacheControlOnlyOnOpenRouterClaudeModels() = runBlocking {
+        repeat(3) {
+            server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: [DONE]\n\n"))
+        }
+        val caching = request(server.url("/api/v1").toString())
+            .copy(providerId = "openrouter", claudePromptCaching = true)
+        client().streamChat(caching.copy(modelId = "anthropic/claude-sonnet-4")).toList()
+        client().streamChat(caching.copy(modelId = "gpt-4o-mini")).toList()
+        client().streamChat(caching.copy(providerId = "deepseek")).toList()
+
+        val onRouter = server.takeRequest().body.readUtf8()
+        assertTrue("body=$onRouter", onRouter.contains("\"cache_control\":{\"type\":\"ephemeral\"}"))
+        val notClaude = server.takeRequest().body.readUtf8()
+        assertTrue("非 Claude 模型不加：body=$notClaude", !notClaude.contains("cache_control"))
+        val notRouter = server.takeRequest().body.readUtf8()
+        assertTrue("不是 OpenRouter 不加：body=$notRouter", !notRouter.contains("cache_control"))
+    }
 }

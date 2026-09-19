@@ -304,6 +304,7 @@ class OpenAiChatCompletionsClient(
             // reasoning:{enabled}，Laguna 用 chat_template_kwargs；只有通用
             // OpenAI 兼容端点才下发 reasoning_effort（智谱收到它会 400）。
             applyReasoningKnobs(request)
+            applyOpenRouterClaudePromptCaching(request)
             if (request.tools.isNotEmpty()) {
                 put("tools", buildJsonArray {
                     for (tool in request.tools) {
@@ -327,6 +328,26 @@ class OpenAiChatCompletionsClient(
             }
         }
         return obj.toString()
+    }
+
+    /**
+     * `applyOpenRouterClaudePromptCaching`（openai_vendor_compat.dart L358-376）——
+     * OpenAI 兼容路径上的三重门：开关开 + 是 OpenRouter + 模型是 Claude，三个都满足
+     * 才加 body 顶层的 `cache_control`（形状与 ClaudeClient 一致：5m 无 ttl，1h 带 ttl）。
+     */
+    private fun kotlinx.serialization.json.JsonObjectBuilder.applyOpenRouterClaudePromptCaching(
+        request: LlmRequest,
+    ) {
+        if (!request.claudePromptCaching) return
+        val provider = request.providerId.lowercase()
+        val host = runCatching { java.net.URI(request.baseUrl).host ?: "" }.getOrDefault("")
+        if (!provider.contains("openrouter") && !host.contains("openrouter.ai")) return
+        val model = request.modelId.lowercase()
+        if (!model.contains("claude") && !model.contains("anthropic/")) return
+        put("cache_control", buildJsonObject {
+            put("type", "ephemeral")
+            if (request.claudePromptCachingTtl == "1h") put("ttl", "1h")
+        })
     }
 
     /** applyVendorReasoningKnobs（openai_vendor_compat.dart L503-570）。 */

@@ -82,25 +82,20 @@ class McpClient(
         }
     }
 
-    /** tools/call → joined text content (non-text blocks are ignored). */
-    suspend fun callTool(name: String, arguments: JsonObject): String = withContext(Dispatchers.IO) {
-        val result = rpc(
+    /**
+     * tools/call → 服务端返回的 result 对象原样交给调用方。
+     *
+     * content 数组的展开（文本 / 图片 / 资源 / 音频）在 `flattenMcpToolResult`，
+     * 那里才需要落盘图片的目录；`isError` 也在那里按上游语义**不**当异常抛。
+     */
+    suspend fun callTool(name: String, arguments: JsonObject): JsonObject = withContext(Dispatchers.IO) {
+        rpc(
             "tools/call",
             buildJsonObject {
                 put("name", name)
                 put("arguments", arguments)
             },
         )
-        val content = result["content"] as? JsonArray
-        val texts = content?.mapNotNull { element ->
-            val obj = element as? JsonObject ?: return@mapNotNull null
-            if (obj.string("type") != "text") null else obj.string("text")
-        } ?: emptyList()
-        val text = texts.joinToString("\n").ifEmpty { result.toString() }
-        if ((result["isError"] as? JsonPrimitive)?.content?.toBooleanStrictOrNull() == true) {
-            throw McpException(text)
-        }
-        text
     }
 
     override fun close() {
