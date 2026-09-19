@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -251,7 +252,7 @@ fun ToolSchemaEditorScreen(
                                 for (tag in tags) {
                                     Box(
                                         modifier = Modifier
-                                            .background(cs.surfaceCardColorCompat(), RoundedCornerShape(999.dp))
+                                            .background(cs.surfaceCardColorCompat(), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                                             .padding(horizontal = 8.dp, vertical = 2.dp),
                                     ) {
                                         Text(

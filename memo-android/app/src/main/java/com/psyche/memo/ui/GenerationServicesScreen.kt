@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -201,7 +202,7 @@ fun GenerationServicesScreen(
     deleteTarget?.let { service ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.generation_services_delete_title)) },
             text = { Text(deleteMessageFmt.format(service.displayName)) },
@@ -302,7 +303,7 @@ private fun GenerationServiceRow(
             style = TextStyle(fontSize = 11.sp, color = statusFg),
             maxLines = 1,
             modifier = Modifier
-                .background(statusBg, RoundedCornerShape(999.dp))
+                .background(statusBg, RoundedCornerShape(MemoRadius.PILL_DP.dp))
                 .padding(horizontal = 8.dp, vertical = 3.dp),
         )
     }

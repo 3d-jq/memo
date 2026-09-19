@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.chat
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.app.Dialog
 import android.graphics.Bitmap
 import android.graphics.Canvas

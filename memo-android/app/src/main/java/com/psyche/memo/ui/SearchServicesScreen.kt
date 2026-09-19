@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -336,7 +337,7 @@ private fun ServiceRow(
                 style = TextStyle(fontSize = 11.sp, color = statusFg),
                 maxLines = 1,
                 modifier = Modifier
-                    .background(statusBg, RoundedCornerShape(999.dp))
+                    .background(statusBg, RoundedCornerShape(MemoRadius.PILL_DP.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp),
             )
         }
@@ -399,7 +400,7 @@ private fun ModalActionSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp)) {
@@ -408,7 +409,7 @@ private fun ModalActionSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(12.dp))

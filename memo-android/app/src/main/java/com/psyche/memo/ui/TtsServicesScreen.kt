@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import android.content.Context
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
@@ -182,7 +183,7 @@ fun TtsServicesScreen(
                             .size(28.dp)
                             .background(
                                 withAlpha(cs.onSurface, if (addPressed) 0.10 else 0.0),
-                                RoundedCornerShape(8.dp),
+                                RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                             )
                             .clickable(interactionSource = addInteraction, indication = null) {
                                 Haptics.light(view)
@@ -314,7 +315,7 @@ fun TtsServicesScreen(
     // _showMobileErrorDetails L681-741.
     errorDetails?.let { message ->
         ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = { errorDetails = null }, dragHandle = null) {
             Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp)) {
                 MemoSheetHandle()
@@ -485,8 +486,8 @@ private fun NetworkTtsRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp)
-                    .background(withAlpha(cs.error, 0.08), RoundedCornerShape(10.dp))
-                    .border(0.6.dp, withAlpha(cs.error, 0.3), RoundedCornerShape(10.dp))
+                    .background(withAlpha(cs.error, 0.08), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+                    .border(0.6.dp, withAlpha(cs.error, 0.3), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -629,7 +630,7 @@ private fun SystemTtsConfigSheet(container: AppContainerImpl, onDismiss: () -> U
     }
 
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp)) {
             MemoSheetHandle()

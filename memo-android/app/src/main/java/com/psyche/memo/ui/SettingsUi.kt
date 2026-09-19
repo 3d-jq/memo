@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.graphics.Color
@@ -233,7 +233,7 @@ internal fun ActionSheet(
     actions: List<SheetAction>,
 ) {
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
@@ -267,7 +267,7 @@ internal fun languageLabelRes(locale: AppLocale): Int = when (locale) {
  * 自绘 sheet 拖柄（用户 2026-09-12：全站统一手绘，Material 原生胶囊把手一律不用）。
  * 40×4、onSurface@20%、全圆，含上方 8dp 与下方 [trailingGap] 间距 —— 直接放在
  * `ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 dragHandle = null)` 内容的第一个子项即可。
  * 列表用 `verticalArrangement = spacedBy(...)` 的 sheet 传 `trailingGap = 0.dp`，
  * 免得间距叠成双份。
@@ -283,7 +283,7 @@ internal fun MemoSheetHandle(trailingGap: androidx.compose.ui.unit.Dp = 10.dp) {
             modifier = Modifier
                 .width(40.dp)
                 .height(4.dp)
-                .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
         )
     }
     Spacer(Modifier.height(trailingGap))
@@ -418,7 +418,7 @@ internal fun LanguageSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier

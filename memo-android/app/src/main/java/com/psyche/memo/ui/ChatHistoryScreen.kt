@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -269,7 +269,7 @@ fun ChatHistoryScreen(
     if (showDeleteAll) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { showDeleteAll = false },
             title = { Text(stringResource(UiR.string.chat_history_page_delete_all_dialog_title)) },
             text = { Text(stringResource(UiR.string.chat_history_page_delete_all_dialog_content)) },
@@ -427,12 +427,12 @@ private fun HistoryConversationCard(
                     .clickable { onPinToggle() }
                     .background(
                         if (conversation.isPinned) cs.primary.copy(alpha = 0.12f) else cs.surface,
-                        RoundedCornerShape(999.dp),
+                        RoundedCornerShape(MemoRadius.PILL_DP.dp),
                     )
                     .border(
                         1.dp,
                         cs.outlineVariant.copy(alpha = 0.18f),
-                        RoundedCornerShape(999.dp),
+                        RoundedCornerShape(MemoRadius.PILL_DP.dp),
                     )
                     .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,

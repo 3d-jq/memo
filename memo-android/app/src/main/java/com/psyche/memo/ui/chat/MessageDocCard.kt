@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.theme.MemoRadius
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -54,9 +55,9 @@ fun MessageDocCard(
             .widthIn(max = 220.dp)
             .background(
                 color = if (isDark) cs.onSurface.copy(alpha = 0.08f) else cs.surface.copy(alpha = 0.92f),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
             )
-            .border(1.dp, cs.outlineVariant.copy(alpha = 0.18f), RoundedCornerShape(10.dp))
+            .border(1.dp, cs.outlineVariant.copy(alpha = 0.18f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .clickable(enabled = !missing) { openDoc(context, path, part.mime) }
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

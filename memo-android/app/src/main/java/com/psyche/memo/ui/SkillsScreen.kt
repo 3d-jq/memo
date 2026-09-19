@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.content.Context
 import android.net.Uri
@@ -254,7 +255,7 @@ fun SkillsScreen(
     deleteTarget?.let { target ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.skills_page_delete_title)) },
             text = { Text(stringResource(R.string.skills_page_delete_message, target.name)) },
@@ -410,7 +411,7 @@ private fun ImportGitHubDialog(
 
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { if (!loading) onDismiss() },
         title = { Text(stringResource(R.string.skills_page_import_github)) },
         text = {
@@ -483,7 +484,7 @@ private fun AddSkillDialog(
 
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.skills_page_add_title)) },
         text = {

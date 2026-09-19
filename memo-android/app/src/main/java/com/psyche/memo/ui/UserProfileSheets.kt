@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -207,7 +207,7 @@ internal fun NicknameDialog(
 
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.side_drawer_set_nickname_title)) },
         text = {

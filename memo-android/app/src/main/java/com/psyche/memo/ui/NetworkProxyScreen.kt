@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -302,7 +302,7 @@ fun NetworkProxyScreen(
     // L377-418 — proxy type bottom sheet: http / https / socks5.
     if (typeSheetVisible) {
         ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = { typeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier
@@ -379,7 +379,7 @@ private fun ProxyTextField(
         minLines = minLines,
         maxLines = maxLines,
         textStyle = TextStyle(fontSize = 14.sp, color = cs.onSurface),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = cs.surfaceCardColorCompat(),
             unfocusedContainerColor = cs.surfaceCardColorCompat(),
@@ -411,8 +411,8 @@ private fun ProxyTypeSheetField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(cs.surface.copy(alpha = 0.04f), RoundedCornerShape(10.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .background(cs.surface.copy(alpha = 0.04f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.12f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .clickable(onClick = onOpen)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

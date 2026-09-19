@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.ui.draw.alpha
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
@@ -129,7 +130,7 @@ internal fun TimelineSkeleton(modifier: Modifier = Modifier) {
                         .height(44.dp)
                         .background(
                             bubbleColor,
-                            androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            androidx.compose.foundation.shape.RoundedCornerShape(MemoRadius.INNER_DP.dp),
                         ),
                 )
             }

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.backup
 
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -166,7 +167,7 @@ fun ForwardCompatDialogHost(dialogs: ForwardCompatDialogs) {
     dialogs.consent?.let { args ->
         AlertDialog(
             onDismissRequest = { dialogs.settle(false) },
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             title = {
                 Text(
@@ -207,7 +208,7 @@ fun ForwardCompatDialogHost(dialogs: ForwardCompatDialogs) {
     if (dialogs.showUnreadable) {
         AlertDialog(
             onDismissRequest = { dialogs.settle(false) },
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             title = {
                 Text(

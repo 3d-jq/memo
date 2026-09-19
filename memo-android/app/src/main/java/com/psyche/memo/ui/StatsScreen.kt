@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -624,7 +624,7 @@ private fun StatsMetricGridPanel(summary: com.psyche.memo.data.stats.StatsSummar
                                 .background(
                                     if (semantic.isDark) cs.onSurface.copy(alpha = 0.06f)
                                     else cs.surfaceContainerHighest.copy(alpha = 0.38f),
-                                    RoundedCornerShape(10.dp),
+                                    RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                                 )
                                 .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1161,7 +1161,7 @@ private fun CustomRangeSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘容器，禁用 Material 默认 handle
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = cs.overlaySurfaceColor(),
     ) {
         Column(
@@ -1313,7 +1313,7 @@ private fun StatsDatePickerSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = cs.overlaySurfaceColor(),
     ) {
         Column(Modifier.fillMaxWidth().padding(start = 14.dp, top = 12.dp, end = 14.dp, bottom = 14.dp)) {

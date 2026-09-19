@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -319,7 +319,7 @@ fun ImportProviderSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(

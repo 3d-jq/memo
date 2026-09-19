@@ -1,4 +1,4 @@
-package com.psyche.memo.ui
+package com.psyche.memo.ui.theme
 
 /**
  * 全站圆角 token —— 采自 Apple HIG 风格参考（Pinguo/Pinguo Design System，
@@ -17,6 +17,10 @@ object MemoRadius {
 
     /** 容器内嵌套块圆角（全局圆角 − 4）。 */
     const val INNER_DP = 16
+
+    /** 小控件圆角（Apple 参考系的 tighter end：小标签、内嵌 chip、紧凑输入）。
+     *  三档收档时漏了它，导致全站 r6/r8/r9/r10/r11 无处归。 */
+    const val SMALL_DP = 10
 
     /** 胶囊（按钮 / 标签 / chips）。 */
     const val PILL_DP = 999

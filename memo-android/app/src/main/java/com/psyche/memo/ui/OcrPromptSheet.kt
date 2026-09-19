@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -67,7 +67,7 @@ fun OcrPromptSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -81,7 +81,7 @@ fun OcrPromptSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(14.dp))

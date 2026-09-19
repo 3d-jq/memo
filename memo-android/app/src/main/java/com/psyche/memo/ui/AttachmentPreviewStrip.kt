@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,14 +63,14 @@ fun AttachmentPreviewStrip(
                         Box(
                             modifier = Modifier
                                 .size(64.dp)
-                                .border(1.dp, previewBorder, RoundedCornerShape(10.dp))
+                                .border(1.dp, previewBorder, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                                 .padding(1.dp),
                         ) {
                             coil.compose.AsyncImage(
                                 model = File(indexed.value.uri),
                                 contentDescription = indexed.value.name,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(62.dp).background(previewFill, RoundedCornerShape(9.dp)),
+                                modifier = Modifier.size(62.dp).background(previewFill, RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
                             )
                         }
                         Box(
@@ -102,8 +103,8 @@ fun AttachmentPreviewStrip(
                     Row(
                         modifier = Modifier
                             .height(48.dp)
-                            .background(previewFill, RoundedCornerShape(10.dp))
-                            .border(1.dp, previewBorder, RoundedCornerShape(10.dp))
+                            .background(previewFill, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+                            .border(1.dp, previewBorder, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                             .padding(start = 10.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

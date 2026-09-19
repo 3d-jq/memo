@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -340,7 +340,7 @@ fun SettingsScreen(
     // L52-96,159-165 — color mode sheet: system / light / dark.
     if (colorModeSheetVisible) {
         ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = { colorModeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier

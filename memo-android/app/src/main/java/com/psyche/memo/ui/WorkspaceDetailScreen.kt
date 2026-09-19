@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -395,7 +395,7 @@ fun WorkspaceDetailScreen(
     installError?.let { message ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { installError = null },
             title = { Text(stringResource(R.string.workspace_rootfs_install_failed)) },
             text = { Text(message) },
@@ -443,7 +443,7 @@ fun WorkspaceDetailScreen(
     deleteTarget?.let { entry ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleteTarget = null },
             title = {
                 Text(
@@ -758,7 +758,7 @@ private fun WorkspaceEnvironmentsCard(
                     modifier = Modifier
                         .background(
                             if (selected) cs.primary else semantic.surfaceFill,
-                            RoundedCornerShape(999.dp),
+                            RoundedCornerShape(MemoRadius.PILL_DP.dp),
                         )
                         .clickable(enabled = enabled) {
                             mirror = candidate
@@ -877,7 +877,7 @@ private fun WorkspaceEnvironmentsCard(
     failure?.let { (label, message) ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { failure = null },
             title = { Text(stringResource(R.string.workspace_env_install_failed)) },
             text = {
@@ -1018,7 +1018,7 @@ private fun InstallRootfsDialog(
     var url by remember(workspaceName) { mutableStateOf(defaultRootfsUrl()) }
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.workspace_install_rootfs)) },
         text = {
@@ -1142,7 +1142,7 @@ private fun AreaSelector(area: WorkspaceStorageArea, onSelect: (WorkspaceStorage
                     .weight(1f)
                     .background(
                         if (selected) cs.primary.copy(alpha = 0.10f) else Color.Transparent,
-                        RoundedCornerShape(10.dp),
+                        RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                     )
                     .clickable { onSelect(value) }
                     .padding(vertical = 8.dp),
@@ -1313,8 +1313,8 @@ private fun WorkspaceBottomTabs(tab: Int, onSelect: (Int) -> Unit) {
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)
-            .background(semantic.surfaceCard, RoundedCornerShape(16.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(4.dp),
     ) {
         listOf(
@@ -1369,7 +1369,7 @@ internal fun FileEditorSheet(
     var text by remember(title, initial) { mutableStateOf(initial) }
     ModalBottomSheet(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,

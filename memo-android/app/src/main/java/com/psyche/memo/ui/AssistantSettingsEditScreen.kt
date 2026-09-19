@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -317,9 +317,9 @@ private fun AssistantDetailOutline(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .background(semantic.surfaceCard)
-                    .border(0.7.dp, semantic.hairline, RoundedCornerShape(16.dp))
+                    .border(0.7.dp, semantic.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -873,7 +873,7 @@ private fun BasicSettingsTab(
                                 contentScale = androidx.compose.ui.layout.ContentScale.FillWidth,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp)),
+                                    .clip(RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
                             )
                         }
                     }
@@ -1063,11 +1063,11 @@ private fun Surface16Card(content: @Composable () -> Unit) {
     val semantic = LocalSemanticColors.current
     androidx.compose.material3.Surface(
         color = semantic.surfaceCard,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         border = androidx.compose.foundation.BorderStroke(0.6.dp, semantic.hairline),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp)),
     ) {
         Box(Modifier.padding(14.dp)) { content() }
     }

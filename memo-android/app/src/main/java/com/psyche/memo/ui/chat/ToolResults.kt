@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -312,7 +313,7 @@ fun ScreenTimeToolDetailBody(result: ScreenTimeResult) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(6.dp)
-                        .clip(RoundedCornerShape(999.dp)),
+                        .clip(RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                     color = cs.primary,
                     trackColor = cs.onSurface.copy(alpha = 0.08f),
                 )

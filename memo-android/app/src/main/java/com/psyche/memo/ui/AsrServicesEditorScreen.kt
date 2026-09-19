@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.speech.SpeechRecognizer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -491,7 +491,7 @@ internal fun AsrEditorField(
                 .fillMaxWidth()
                 .background(
                     if (errorText != null) withAlpha(cs.error, if (app.isDark) 0.12 else 0.08) else app.surfaceFill,
-                    RoundedCornerShape(10.dp),
+                    RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                 )
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {

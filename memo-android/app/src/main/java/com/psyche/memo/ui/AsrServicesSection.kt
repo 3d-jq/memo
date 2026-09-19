@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -94,7 +95,7 @@ fun AsrServicesSection(
                     .size(28.dp)
                     .background(
                         withAlpha(cs.onSurface, if (addPressed) 0.10 else 0.0),
-                        RoundedCornerShape(8.dp),
+                        RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                     )
                     .clickable(interactionSource = addInteraction, indication = null) {
                         Haptics.light(view)

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -702,7 +703,7 @@ fun ToolCallCard(
                             ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
                         },
                     ),
-                    RoundedCornerShape(16.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
                 .padding(start = 16.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
             horizontalAlignment = Alignment.Start,
@@ -800,7 +801,7 @@ fun ToolCallCard(
                         .fillMaxWidth()
                         .background(
                             cs.onSurface.copy(alpha = if (isDark) 0.06f else 0.04f),
-                            RoundedCornerShape(8.dp),
+                            RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                         )
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
@@ -877,12 +878,12 @@ private fun ApprovalButton(
                 .height(36.dp)
                 .background(
                     if (filled) color.copy(alpha = if (isDark) 0.25f else 0.15f) else Color.Transparent,
-                    RoundedCornerShape(10.dp),
+                    RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                 )
                 .border(
                     width = 1.dp,
                     color = color.copy(alpha = if (filled) 0.5f else 0.35f),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -913,7 +914,7 @@ private fun ApprovalDenyDialog(
     val cs = MaterialTheme.colorScheme
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.tool_approval_deny_title)) },
         text = {
@@ -1044,7 +1045,7 @@ fun ToolDetailSheet(part: ToolUiPart, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         // 拖拽调高：CustomBottomSheet 的手势在 Compose 里用 nestedScroll 等价
@@ -1312,7 +1313,7 @@ internal fun ToolApprovalPanel(
                         ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
                     },
                 ),
-                RoundedCornerShape(20.dp),
+                RoundedCornerShape(MemoRadius.CARD_DP.dp),
             )
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
@@ -1348,7 +1349,7 @@ internal fun ToolApprovalPanel(
                     .fillMaxWidth()
                     .background(
                         cs.onSurface.copy(alpha = if (isDark) 0.06f else 0.04f),
-                        RoundedCornerShape(8.dp),
+                        RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                     )
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {

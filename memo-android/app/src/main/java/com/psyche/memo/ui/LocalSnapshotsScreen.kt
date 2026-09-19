@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -648,7 +649,7 @@ private fun SnapshotConfirmDialog(
     val cs = MaterialTheme.colorScheme
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(message) },

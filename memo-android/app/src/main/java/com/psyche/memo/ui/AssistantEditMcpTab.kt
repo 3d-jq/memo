@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -163,7 +164,7 @@ private fun McpServerRow(
             text = toolsTag,
             style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
             modifier = Modifier
-                .background(cs.primary.copy(alpha = 0.10f), RoundedCornerShape(999.dp))
+                .background(cs.primary.copy(alpha = 0.10f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                 .padding(horizontal = 8.dp, vertical = 2.dp),
         )
         Spacer(Modifier.width(8.dp))

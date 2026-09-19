@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -182,7 +182,7 @@ fun McpServersScreen(
     deleteTarget?.let { server ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.mcp_page_confirm_delete_title)) },
             text = { Text(stringResource(R.string.mcp_page_confirm_delete_content)) },
@@ -244,7 +244,7 @@ private fun McpServerCard(
             Box(
                 modifier = Modifier
                     .size(42.dp)
-                    .background(semantic.surfaceFill, RoundedCornerShape(10.dp)),
+                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Lucide.Terminal, contentDescription = null, tint = cs.primary, modifier = Modifier.size(20.dp))
@@ -277,7 +277,7 @@ private fun McpServerCard(
                     text = stringResource(R.string.mcp_page_tools_count, toolCount.toString(), totalTools.toString()),
                     style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
                     modifier = Modifier
-                        .background(cs.primary.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                        .background(cs.primary.copy(alpha = 0.12f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                 )
             }
@@ -366,7 +366,7 @@ private fun McpServerEditSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -380,7 +380,7 @@ private fun McpServerEditSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -660,8 +660,8 @@ private fun McpServerEditSheet(
                                                         color = color,
                                                     ),
                                                     modifier = Modifier
-                                                        .background(bg, RoundedCornerShape(999.dp))
-                                                        .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(999.dp))
+                                                        .background(bg, RoundedCornerShape(MemoRadius.PILL_DP.dp))
+                                                        .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                                                         .padding(horizontal = 8.dp, vertical = 2.dp),
                                                 )
                                             }
@@ -792,7 +792,7 @@ private fun McpJsonEditSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -806,7 +806,7 @@ private fun McpJsonEditSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -919,7 +919,7 @@ private fun McpTimeoutSheet(container: AppContainerImpl, onDismiss: () -> Unit) 
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -933,7 +933,7 @@ private fun McpTimeoutSheet(container: AppContainerImpl, onDismiss: () -> Unit) 
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(12.dp))

@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -73,7 +73,7 @@ internal fun ProviderAvatarSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -136,7 +136,7 @@ internal fun ProviderIconPickerDialog(
                     onValueChange = { query = it },
                     singleLine = true,
                     placeholder = { Text(stringResource(UiR.string.provider_avatar_icon_search_hint)) },
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(10.dp))
@@ -204,7 +204,7 @@ internal fun ProviderAvatarTextDialog(
                 onValueChange = { value = it },
                 singleLine = true,
                 placeholder = { Text(hint) },
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
         },

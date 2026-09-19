@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -192,12 +193,12 @@ fun TtsServicesEditorScreen(
                                         modifier = Modifier
                                             .background(
                                                 if (selected) withAlpha(cs.primary, if (app.isDark) 0.22 else 0.12) else app.surfaceFill,
-                                                RoundedCornerShape(999.dp),
+                                                RoundedCornerShape(MemoRadius.PILL_DP.dp),
                                             )
                                             .border(
                                                 1.dp,
                                                 if (selected) withAlpha(cs.primary, 0.38) else withAlpha(cs.outlineVariant, 0.14),
-                                                RoundedCornerShape(999.dp),
+                                                RoundedCornerShape(MemoRadius.PILL_DP.dp),
                                             )
                                             .padding(horizontal = 12.dp, vertical = 8.dp),
                                     )
@@ -313,7 +314,7 @@ internal fun TtsEditorTextField(
         Box(
             Modifier
                 .fillMaxWidth()
-                .background(app.surfaceFill, RoundedCornerShape(10.dp))
+                .background(app.surfaceFill, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             if (value.isEmpty()) {

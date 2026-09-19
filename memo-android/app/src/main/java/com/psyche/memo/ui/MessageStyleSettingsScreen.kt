@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -431,7 +431,7 @@ fun MessageStyleSettingsScreen(
         // L503-582 — reset confirmation.
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { showResetConfirm = false },
             text = { Text(stringResource(UiR.string.message_style_settings_page_reset_confirm)) },
             confirmButton = {
@@ -468,7 +468,7 @@ fun MessageStyleSettingsScreen(
         }
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { colorPicker = null },
             title = { Text(title) },
             text = {
@@ -533,8 +533,8 @@ private fun StyleSwatch(styleId: String) {
     Box(
         modifier = Modifier
             .size(28.dp)
-            .background(fill, RoundedCornerShape(8.dp))
-            .border(0.8.dp, border, RoundedCornerShape(8.dp)),
+            .background(fill, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+            .border(0.8.dp, border, RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
     )
 }
 
@@ -604,8 +604,8 @@ private fun SegmentedToggle(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(cs.surfaceCardColorCompat(), RoundedCornerShape(10.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.18f), RoundedCornerShape(10.dp)),
+            .background(cs.surfaceCardColorCompat(), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.18f), RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
     ) {
         SegmentedHalf(leftLabel, leftIcon, !rightSelected) { onChanged(false) }
         SegmentedHalf(rightLabel, rightIcon, rightSelected) { onChanged(true) }
@@ -745,8 +745,8 @@ private fun ColorRow(label: String, color: Color, onTap: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(22.dp)
-                .background(color, RoundedCornerShape(6.dp))
-                .border(0.8.dp, cs.outlineVariant.copy(alpha = 0.42f), RoundedCornerShape(6.dp)),
+                .background(color, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+                .border(0.8.dp, cs.outlineVariant.copy(alpha = 0.42f), RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
         )
     }
 }

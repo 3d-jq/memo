@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -328,7 +329,7 @@ fun RenderingSettingsScreen(
     if (sizeSheetVisible) {
         ModalBottomSheet(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(),
             onDismissRequest = { sizeSheetVisible = false },
             dragHandle = null,
@@ -379,7 +380,7 @@ sheetState = rememberMemoSheetState(),
     if (colorSheetVisible) {
         ModalBottomSheet(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(),
             onDismissRequest = { colorSheetVisible = false },
             dragHandle = null,
@@ -428,11 +429,11 @@ sheetState = rememberMemoSheetState(),
                             Box(
                                 modifier = Modifier
                                     .size(20.dp)
-                                    .background(Color(argb), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+                                    .background(Color(argb), androidx.compose.foundation.shape.RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                                     .border(
                                         0.8.dp,
                                         cs.outlineVariant.copy(alpha = 0.42f),
-                                        androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                                        androidx.compose.foundation.shape.RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                                     ),
                             )
                         }
@@ -487,7 +488,7 @@ sheetState = rememberMemoSheetState(),
     if (phrasesSheetVisible) {
         ModalBottomSheet(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(),
             onDismissRequest = { phrasesSheetVisible = false },
             dragHandle = null,

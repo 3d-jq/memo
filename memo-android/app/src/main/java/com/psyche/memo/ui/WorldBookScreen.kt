@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -561,8 +561,8 @@ private fun TagPill(text: String, color: Color) {
     val cs = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
-            .background(withAlpha(color, 0.14), RoundedCornerShape(999.dp))
-            .border(1.dp, withAlpha(color, 0.35), RoundedCornerShape(999.dp))
+            .background(withAlpha(color, 0.14), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .border(1.dp, withAlpha(color, 0.35), RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
         Text(
@@ -585,7 +585,7 @@ private fun EntryActionSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 12.dp)) {
@@ -612,7 +612,7 @@ private fun SheetHandleBar() {
             modifier = Modifier
                 .width(40.dp)
                 .height(4.dp)
-                .background(withAlpha(cs.onSurface, 0.2), RoundedCornerShape(999.dp)),
+                .background(withAlpha(cs.onSurface, 0.2), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
         )
     }
 }
@@ -666,7 +666,7 @@ internal fun WorldBookEditSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -780,7 +780,7 @@ internal fun WorldBookEntryEditSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -970,7 +970,7 @@ private fun <T> InjectionPickerSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 12.dp)) {
@@ -1088,8 +1088,8 @@ private fun KeywordChip(keyword: String, isDark: Boolean, onRemove: () -> Unit) 
     val cs = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
-            .background(withAlpha(cs.primary, if (isDark) 0.22 else 0.12), RoundedCornerShape(999.dp))
-            .border(0.6.dp, withAlpha(cs.primary, if (isDark) 0.36 else 0.26), RoundedCornerShape(999.dp)),
+            .background(withAlpha(cs.primary, if (isDark) 0.22 else 0.12), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .border(0.6.dp, withAlpha(cs.primary, if (isDark) 0.36 else 0.26), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

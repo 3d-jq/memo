@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -124,7 +125,7 @@ private const val SOFT_CAP_RATIO = 0.45f
 private const val MIN_INPUT_HEIGHT_DP = 80f
 
 /** 源码 chat_input_bar.dart:2618-2619 / 2626 —— ClipRRect + BoxDecoration borderRadius: 20 */
-private val InputContainerShape = RoundedCornerShape(20.dp)
+private val InputContainerShape = RoundedCornerShape(MemoRadius.CARD_DP.dp)
 
 /**
  * 源码 chat_input_bar.dart:2620-2621

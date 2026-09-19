@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -331,7 +331,7 @@ internal fun QuickPhraseEditSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -345,7 +345,7 @@ internal fun QuickPhraseEditSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -441,12 +441,12 @@ fun QuickPhraseMenu(
                 .heightIn(max = maxHeight)
                 .background(
                     semantic.surfaceCardFill.copy(alpha = 0.92f),
-                    RoundedCornerShape(16.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
                 .border(
                     1.dp,
                     if (semantic.isDark) cs.onSurface.copy(alpha = 0.08f) else cs.outlineVariant.copy(alpha = 0.2f),
-                    RoundedCornerShape(16.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 ),
         ) {
             LazyColumn(modifier = Modifier.fillMaxWidth()) {

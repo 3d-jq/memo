@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -267,7 +267,7 @@ internal fun InstructionEditSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -281,7 +281,7 @@ internal fun InstructionEditSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -391,7 +391,7 @@ fun InstructionInjectionSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(modifier = Modifier.fillMaxWidth().imePadding()) {
@@ -400,7 +400,7 @@ fun InstructionInjectionSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {

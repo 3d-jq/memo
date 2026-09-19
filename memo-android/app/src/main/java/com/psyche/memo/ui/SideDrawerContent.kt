@@ -2,7 +2,7 @@
 
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -387,7 +387,7 @@ fun SideDrawerContent(
                     placeholder = {},
                     textStyle = TextStyle(fontSize = 14.sp, color = cs.onSurface),
                     singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     leadingIcon = {
                         // Tapping the prefix toggles global search mode
                         // (side_drawer.dart L2270-2327: prefix is the toggle).
@@ -477,7 +477,7 @@ fun SideDrawerContent(
         //    on primary-15% circle with a 0.5dp onSurface-12% border; name
         //    15sp medium; ChevronDown 18dp at 70%.
         Surface(
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
             color = cs.surface,
             modifier = Modifier
                 .fillMaxWidth()
@@ -674,7 +674,7 @@ fun SideDrawerContent(
                                 isCurrent -> cs.primary.copy(alpha = 0.12f)
                                 else -> Color.Transparent
                             },
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = if (isLastInSection) 0.dp else 4.dp),
@@ -749,7 +749,7 @@ fun SideDrawerContent(
                 conversations.filter { it.id in selectedIds }.all { it.isPinned }
             Surface(
                 color = cs.surface.copy(alpha = 0.78f),
-                shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+                shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
                 shadowElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -891,7 +891,7 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { menuFor = null },
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
             containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
@@ -905,7 +905,7 @@ fun SideDrawerContent(
                     Box(
                         modifier = Modifier
                             .size(width = 40.dp, height = 4.dp)
-                            .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                            .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                     )
                 }
                 Spacer(Modifier.height(10.dp))
@@ -1030,7 +1030,7 @@ fun SideDrawerContent(
         val deleteDoneText = stringResource(UiR.string.side_drawer_delete_snackbar, target.title)
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_title)) },
             text = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_content, "1")) },
@@ -1064,7 +1064,7 @@ fun SideDrawerContent(
         var name by remember(target.id) { mutableStateOf(target.title) }
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { renameTarget = null },
             title = { Text(stringResource(UiR.string.side_drawer_menu_rename)) },
             text = {
@@ -1098,7 +1098,7 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { moveTarget = null },
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
             containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
@@ -1170,7 +1170,7 @@ fun SideDrawerContent(
     if (multiDeleteConfirm) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { multiDeleteConfirm = false },
             title = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_title)) },
             text = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_content, selectedIds.size.toString())) },
@@ -1203,7 +1203,7 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { assistantMenuFor = null },
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
             containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
@@ -1217,7 +1217,7 @@ fun SideDrawerContent(
                     Box(
                         modifier = Modifier
                             .size(width = 40.dp, height = 4.dp)
-                            .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                            .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                     )
                 }
                 Spacer(Modifier.height(10.dp))
@@ -1273,7 +1273,7 @@ fun SideDrawerContent(
     assistantDeleteTarget?.let { target ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { assistantDeleteTarget = null },
             title = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_title)) },
             text = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_content)) },

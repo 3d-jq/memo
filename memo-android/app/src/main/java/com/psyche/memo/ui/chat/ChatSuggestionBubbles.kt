@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +53,7 @@ fun ChatSuggestionBubbles(
         visible.forEach { suggestion ->
             Box(
                 modifier = Modifier
-                    .background(baseColor, RoundedCornerShape(16.dp))
+                    .background(baseColor, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable(role = Role.Button) { onTap(suggestion) }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {

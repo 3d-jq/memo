@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -673,7 +673,7 @@ fun SearchServiceEditorScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { showDeleteConfirm = false },
             title = { Text(stringResource(R.string.search_service_editor_delete_title)) },
             text = { Text(stringResource(R.string.search_service_editor_delete_message, displayName)) },
@@ -710,12 +710,12 @@ private fun TypeChips(selected: String, onSelect: (String) -> Unit) {
                     modifier = Modifier
                         .background(
                             if (isSelected) cs.primary.copy(alpha = 0.14f) else semantic.surfaceFill,
-                            RoundedCornerShape(999.dp),
+                            RoundedCornerShape(MemoRadius.PILL_DP.dp),
                         )
                         .border(
                             1.dp,
                             if (isSelected) cs.primary.copy(alpha = 0.4f) else cs.outlineVariant.copy(alpha = 0.3f),
-                            RoundedCornerShape(999.dp),
+                            RoundedCornerShape(MemoRadius.PILL_DP.dp),
                         )
                         .clickable { onSelect(type) }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -952,7 +952,7 @@ private fun FieldBlock(
                         modifier = Modifier
                             .background(
                                 if (selected) cs.primary.copy(alpha = 0.12f) else semantic.surfaceFill,
-                                RoundedCornerShape(10.dp),
+                                RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                             )
                             .clickable { onValue(spec.key, value) }
                             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1186,7 +1186,7 @@ fun SearchApiKeysScreen(
                                             text = stringResource(R.string.search_api_keys_page_primary_badge),
                                             style = TextStyle(fontSize = 11.sp, color = cs.primary),
                                             modifier = Modifier
-                                                .background(cs.primary.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                                                .background(cs.primary.copy(alpha = 0.12f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                                                 .padding(horizontal = 8.dp, vertical = 2.dp),
                                         )
                                         Spacer(Modifier.width(8.dp))

@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.chat
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
@@ -82,7 +82,7 @@ fun McpAssistantSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -98,7 +98,7 @@ fun McpAssistantSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(10.dp))
@@ -212,8 +212,8 @@ private fun ToolsTag(text: String) {
     val cs = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
-            .background(cs.primary.copy(alpha = 0.10f), RoundedCornerShape(999.dp))
-            .border(1.dp, cs.primary.copy(alpha = 0.35f), RoundedCornerShape(999.dp))
+            .background(cs.primary.copy(alpha = 0.10f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .border(1.dp, cs.primary.copy(alpha = 0.35f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Text(

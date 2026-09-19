@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -237,7 +237,7 @@ private fun MemoryConfirmDialog(
     val cs = MaterialTheme.colorScheme
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { onResult(false) },
         title = { Text(title) },
         text = { Text(content) },
@@ -362,8 +362,8 @@ internal fun MemorySelectChip(
     TactileRow(onTap = onTap, haptics = false) { pressed ->
         Row(
             modifier = Modifier
-                .background(if (pressed) withAlpha(background, 0.8) else background, RoundedCornerShape(999.dp))
-                .border(1.dp, borderColor, RoundedCornerShape(999.dp))
+                .background(if (pressed) withAlpha(background, 0.8) else background, RoundedCornerShape(MemoRadius.PILL_DP.dp))
+                .border(1.dp, borderColor, RoundedCornerShape(MemoRadius.PILL_DP.dp))
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -472,7 +472,7 @@ internal fun <T> MemoryOptionPickerSheet(
     onSelected: (T) -> Unit,
 ) {
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
@@ -532,7 +532,7 @@ internal fun MemorySheetActions(
 /** memory_ui.dart L1435-1475. */
 @Composable
 internal fun MemoryBadge(label: String, color: Color, onTap: (() -> Unit)? = null) {
-    val shape = RoundedCornerShape(999.dp)
+    val shape = RoundedCornerShape(MemoRadius.PILL_DP.dp)
     val inner: @Composable () -> Unit = {
         Box(
             modifier = Modifier

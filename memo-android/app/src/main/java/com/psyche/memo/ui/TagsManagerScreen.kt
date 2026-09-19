@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -175,7 +175,7 @@ fun TagsManagerScreen(
     deleting?.let { tag ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleting = null },
             title = { Text(stringResource(UiR.string.assistant_tags_delete_confirm_title)) },
             text = { Text(stringResource(UiR.string.assistant_tags_delete_confirm_content)) },
@@ -231,7 +231,7 @@ private fun TagNameDialog(
     var name by remember(initial) { mutableStateOf(initial) }
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.backup
 
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -59,7 +60,7 @@ fun BackupRestartRequiredDialog(
     AlertDialog(
         // dismissible: false — the user must acknowledge the restart prompt.
         onDismissRequest = {},
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = {
             Text(

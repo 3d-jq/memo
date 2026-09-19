@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.chat
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.content.ContentValues
 import android.provider.MediaStore
 import androidx.compose.foundation.background
@@ -164,7 +164,7 @@ internal fun ImageAttachmentTile(
     Box(
         modifier = Modifier
             .size(112.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .background(cs.onSurface.copy(alpha = 0.07f))
             .clickable(enabled = !unavailable && viewIndex >= 0) {
                 onOpenViewer(viewable, viewIndex)

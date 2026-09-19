@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -303,8 +304,8 @@ private fun PlayerSurface(
             // Upstream: shadow alpha 0.14, blur 16, offset (0, 7). Compose's
             // basic shadow overload has no colour knobs, so the drop shadow uses
             // the platform default tone at the same elevation.
-            .shadow(elevation = 7.dp, shape = RoundedCornerShape(999.dp))
-            .clip(RoundedCornerShape(999.dp))
+            .shadow(elevation = 7.dp, shape = RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .clip(RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .background(cs.surface.copy(alpha = 0.96f))
             .padding(horizontal = SURFACE_PADDING, vertical = 4.dp)
             .semantics {
@@ -439,7 +440,7 @@ private fun SpeedButton(speed: Double, onClick: () -> Unit) {
     val tooltip = stringResource(UiR.string.tts_floating_speed_tooltip)
     Pressable(
         background = cs.primaryContainer.copy(alpha = 0.44f),
-        shape = RoundedCornerShape(999.dp),
+        shape = RoundedCornerShape(MemoRadius.PILL_DP.dp),
         tooltip = tooltip,
         onTap = onClick,
         modifier = Modifier.width(44.dp).height(32.dp),
@@ -476,7 +477,7 @@ private fun PressableCircle(
 ) {
     Pressable(
         background = background,
-        shape = RoundedCornerShape(999.dp),
+        shape = RoundedCornerShape(MemoRadius.PILL_DP.dp),
         tooltip = tooltip,
         onTap = onTap,
         modifier = Modifier.size(size),

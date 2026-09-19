@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -258,7 +259,7 @@ private fun BalanceField(label: String, value: String, onValueChange: (String) -
             onValueChange = onValueChange,
             singleLine = true,
             textStyle = TextStyle(fontSize = 14.sp),
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceFill,
                 unfocusedContainerColor = semantic.surfaceFill,
@@ -303,7 +304,7 @@ private fun BalanceQueryButton(label: String, enabled: Boolean, onTap: () -> Uni
     Row(
         modifier = Modifier
             .clickable(enabled = enabled) { onTap() }
-            .background(bg, RoundedCornerShape(10.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .padding(horizontal = 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

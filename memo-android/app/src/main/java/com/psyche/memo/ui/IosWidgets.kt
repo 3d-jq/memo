@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.EaseOutBack
 import androidx.compose.animation.core.EaseOutCubic
@@ -809,7 +810,7 @@ fun IosIconButton(
     Box(
         modifier = modifier
             .then(if (minSize != null) Modifier.defaultMinSize(minWidth = minSize, minHeight = minSize) else Modifier)
-            .background(backdrop, RoundedCornerShape(8.dp))
+            .background(backdrop, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -865,7 +866,7 @@ fun IosIconContentButton(
     )
     Box(
         modifier = modifier
-            .background(backdrop, RoundedCornerShape(8.dp))
+            .background(backdrop, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -977,7 +978,7 @@ internal fun IosFormField(
             Box(
                 modifier = (if (fieldWidth == null) Modifier.weight(8f) else Modifier.width(fieldWidth))
                     .heightIn(min = 40.dp)
-                    .background(semantic.surfaceCardFill, RoundedCornerShape(10.dp))
+                    .background(semantic.surfaceCardFill, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                     .padding(
                         horizontal = if (fieldWidth != null && fieldWidth <= 60.dp) 10.dp else 12.dp,
                         vertical = 9.dp,

@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.backup
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -65,7 +65,7 @@ fun BackupImportModeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = {
             Text(
@@ -140,7 +140,7 @@ private fun ImportModeCard(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(withAlpha(cs.primary, 0.10), RoundedCornerShape(10.dp)),
+                .background(withAlpha(cs.primary, 0.10), RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, tint = cs.primary, modifier = Modifier.size(20.dp))

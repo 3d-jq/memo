@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import android.graphics.Typeface
 import android.view.MotionEvent
 import androidx.compose.foundation.background
@@ -122,7 +123,7 @@ fun WorkspaceTerminalScreen(
     if (pendingCloseTab != null) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { pendingCloseTabId = null },
             title = {
                 Text(stringResource(R.string.workspace_terminal_close_confirm_title, pendingCloseTab.number.toString()))
@@ -212,7 +213,7 @@ private fun TerminalTabStrip(
                 modifier = Modifier
                     .background(
                         if (selected) cs.primary.copy(alpha = 0.12f) else semantic.surfaceFill,
-                        RoundedCornerShape(8.dp),
+                        RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                     )
                     .clickable { onSelectTab(tab.id) }
                     .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
@@ -373,7 +374,7 @@ private fun TerminalExtraKey(
         modifier = Modifier
             .background(
                 color = if (selected) cs.primary else withAlpha(cs.onSurface, 0.12),
-                shape = RoundedCornerShape(6.dp),
+                shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),

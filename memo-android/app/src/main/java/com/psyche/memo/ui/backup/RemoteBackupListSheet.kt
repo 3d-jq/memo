@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.backup
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -69,7 +69,7 @@ fun <T> RemoteBackupListSheet(
         sheetState = sheetState,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
     ) {
         Column(
             Modifier

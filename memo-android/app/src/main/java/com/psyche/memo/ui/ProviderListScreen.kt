@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -435,7 +435,7 @@ fun ProvidersScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { showDeleteConfirm = false },
             title = {
                 Text(
@@ -616,7 +616,7 @@ private fun ProviderCard(
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     // Status pill: success ON / warning OFF.
-                    Surface(color = statusBg, shape = RoundedCornerShape(999.dp)) {
+                    Surface(color = statusBg, shape = RoundedCornerShape(MemoRadius.PILL_DP.dp)) {
                         Text(
                             text = stringResource(
                                 if (enabled) com.psyche.memo.ui.R.string.providers_page_enabled_status
@@ -628,7 +628,7 @@ private fun ProviderCard(
                     }
                     // Model-count pill.
                     if (item.modelCount > 0) {
-                        Surface(color = cs.primary.copy(alpha = 0.08f), shape = RoundedCornerShape(999.dp)) {
+                        Surface(color = cs.primary.copy(alpha = 0.08f), shape = RoundedCornerShape(MemoRadius.PILL_DP.dp)) {
                             Text(
                                 text = item.modelCount.toString() + stringResource(
                                     if (item.modelCount == 1) com.psyche.memo.ui.R.string.providers_page_models_count_single_suffix

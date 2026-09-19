@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -669,7 +669,7 @@ fun ModelDetailSheet(
         onDismissRequest = { onDismiss(false) },
         sheetState = sheetState,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         // DraggableScrollableSheet port: the content list drives the sheet
@@ -726,7 +726,7 @@ fun ModelDetailSheet(
                     .align(Alignment.CenterHorizontally)
                     .width(40.dp)
                     .height(4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
             )
             Spacer(Modifier.height(8.dp))
             // Header 44dp: X close + centered title (build L306-342).
@@ -1016,8 +1016,8 @@ private fun SegmentedMulti(options: List<String>, isSelected: List<Boolean>, onC
                 val segShape = when {
                     allSelected -> shape
                     selectedCount == 1 && sel -> shape
-                    i == 0 -> RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp)
-                    i == options.size - 1 -> RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp)
+                    i == 0 -> RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, bottomStart = MemoRadius.CARD_DP.dp)
+                    i == options.size - 1 -> RoundedCornerShape(topEnd = MemoRadius.CARD_DP.dp, bottomEnd = MemoRadius.CARD_DP.dp)
                     else -> RoundedCornerShape(0.dp)
                 }
                 Row(

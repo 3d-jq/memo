@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -779,7 +779,7 @@ private fun PresetPillButton(
     )
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .background(background)
             .clickable(
                 interactionSource = interaction,
@@ -894,7 +894,7 @@ private fun PresetEditSheet(
         onDismissRequest = onDismiss,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
     ) {
         Column(
             Modifier
@@ -917,7 +917,7 @@ private fun PresetEditSheet(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            val shape = RoundedCornerShape(10.dp)
+            val shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp)
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -1122,7 +1122,7 @@ private fun TimeVarEnableDialog(
     val cs = MaterialTheme.colorScheme
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.assistant_edit_prompt_time_var_dialog_title)) },
         text = {
@@ -1151,7 +1151,7 @@ private fun TimeVarEnableDialog(
 private fun AppendTimeInfoDialog(onDismiss: () -> Unit) {
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.assistant_edit_prompt_append_time_info_title)) },
         text = {
@@ -1187,7 +1187,7 @@ private fun SystemPromptEditorSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
@@ -1269,7 +1269,7 @@ private fun SheetTextButton(
     )
     Box(
         Modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .background(background)
             .clickable(
                 interactionSource = interaction,

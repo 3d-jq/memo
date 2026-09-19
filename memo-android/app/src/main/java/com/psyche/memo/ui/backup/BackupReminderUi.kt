@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.backup
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
@@ -261,7 +261,7 @@ fun BackupReminderTimeSheet(
         sheetState = sheetState,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
     ) {
         Column(
             Modifier
@@ -471,7 +471,7 @@ fun BackupReminderFrequencySheet(
         sheetState = sheetState,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
     ) {
         Column(
             Modifier
@@ -552,7 +552,7 @@ fun BackupReminderCustomDaysDialog(
     val days = text.toIntOrNull()
     val valid = days != null && days in 1..365
     AlertDialog(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = { Text(androidx.compose.ui.res.stringResource(UiR.string.backup_reminder_custom_dialog_title)) },
         text = {

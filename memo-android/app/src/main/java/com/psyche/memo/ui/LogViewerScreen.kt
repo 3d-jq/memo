@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import com.psyche.memo.common.logging.ContextLogMessage
 import com.psyche.memo.common.logging.ContextLogSnapshot
@@ -407,11 +407,11 @@ private fun LogFilesList(
                 modifier = Modifier
                     .padding(bottom = 10.dp)
                     .fillMaxWidth()
-                    .background(semantic.surfaceCard, RoundedCornerShape(16.dp))
+                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .border(
                         1.dp,
                         cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f),
-                        RoundedCornerShape(16.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
                     .clickable { onOpen(file, title) }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -730,8 +730,8 @@ private fun RequestSummaryBar(total: Int, errors: Int, warnings: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(16.dp))
-            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f), RoundedCornerShape(16.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -764,7 +764,7 @@ private fun RequestSummaryBar(total: Int, errors: Int, warnings: Int) {
 private fun CountPill(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, bg: Color, fg: Color) {
     Row(
         modifier = Modifier
-            .background(bg, RoundedCornerShape(999.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -798,8 +798,8 @@ private fun RequestLogCard(entry: RequestLogEntry, onTap: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(16.dp))
-            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f), RoundedCornerShape(16.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onTap)
             .padding(14.dp),
     ) {
@@ -845,7 +845,7 @@ private fun MethodPill(method: String) {
     }
     Box(
         modifier = Modifier
-            .background(bg, RoundedCornerShape(999.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
         Text(method, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.2.sp, color = fg))
@@ -875,7 +875,7 @@ private fun StatusPill(status: Int?, isError: Boolean) {
     }
     Row(
         modifier = Modifier
-            .background(bg, RoundedCornerShape(999.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1298,8 +1298,8 @@ private fun AttachmentChips(attachments: List<LogPayloadRef>) {
         for (a in attachments) {
             Row(
                 modifier = Modifier
-                    .background(semantic.surfaceFill, RoundedCornerShape(10.dp))
-                    .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.22f else 0.34f), RoundedCornerShape(10.dp))
+                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+                    .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.22f else 0.34f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1613,14 +1613,14 @@ private fun ContextSnapshotCard(snapshot: ContextLogSnapshot, onTap: () -> Unit)
 @Composable
 private fun CompositionBar(entries: List<Pair<ContextSource, Int>>, isEmptyBg: Color) {
     if (entries.isEmpty()) {
-        Box(Modifier.fillMaxWidth().height(6.dp).background(isEmptyBg, RoundedCornerShape(999.dp)))
+        Box(Modifier.fillMaxWidth().height(6.dp).background(isEmptyBg, RoundedCornerShape(MemoRadius.PILL_DP.dp)))
         return
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(6.dp)
-            .background(Color.Transparent, RoundedCornerShape(999.dp))
+            .background(Color.Transparent, RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .clipToBounds(),
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -1897,7 +1897,7 @@ private fun LogSettingsSheet(container: AppContainerImpl, onDismiss: () -> Unit,
     val maxSizeOptions = listOf(0, 50, 100, 200, 500)
 
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
@@ -2040,7 +2040,7 @@ private fun SettingTile(
             Spacer(Modifier.width(12.dp))
             Box(
                 modifier = Modifier
-                    .background(cs.primary.copy(alpha = if (isDark) 0.18f else 0.10f), RoundedCornerShape(8.dp))
+                    .background(cs.primary.copy(alpha = if (isDark) 0.18f else 0.10f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                     .padding(horizontal = 10.dp, vertical = 5.dp),
             ) {
                 Text(value, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = cs.primary))
@@ -2066,12 +2066,12 @@ private fun SettingTile(
                             .background(
                                 if (selected) cs.primary.copy(alpha = if (isDark) 0.22f else 0.14f)
                                 else cs.onSurface.copy(alpha = if (isDark) 0.08f else 0.05f),
-                                RoundedCornerShape(10.dp),
+                                RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                             )
                             .border(
                                 if (selected) 1.dp else 0.dp,
                                 if (selected) cs.primary.copy(alpha = 0.5f) else Color.Transparent,
-                                RoundedCornerShape(10.dp),
+                                RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                             )
                             .clickable { onSelected(i); expanded = false }
                             .padding(horizontal = 14.dp, vertical = 8.dp),

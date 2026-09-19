@@ -1237,3 +1237,29 @@ badge/图标底等装饰位，不属容器层）。`tools_sheet_unify.py` 存档
 18dp（提示卡预览/提纲卡/LogViewer 卡片×3/分段条容器/压缩对话框）、13dp（统计 chips×5/滚轮格）、
 15dp（32dp chip=全胶囊）、24dp（正则 pills）、30dp（图片查看器玻璃工具条）全部归入
 MemoRadius 三档：容器 20 / 嵌套 16 / 胶囊 999。至此全站圆角只剩四档 + ≤10dp 小装饰位。
+
+## 5.27 圆角 token 收口 + MCP OAuth 的 API 33 崩溃（2026-09-19）
+
+承 §5.26：前两轮把**值**归了档，但**引用**没换——全站仍有 264 处位置参数式 + 91 处
+`RoundedCornerShape(topStart = 20.dp, topEnd = …)` 命名参数式直接写数字，圆角改一处要改 355 处。
+
+- **脚本**：`tools/radius_token_sweep.py`（照 `7f68ba2` sheet 统一脚本的存档惯例）。按值映射
+  `999→PILL_DP / 20,14→CARD_DP / 16→INNER_DP / 10,9,8,6,11→SMALL_DP`，命名参数式
+  `20,18,12→CARD_DP`；**必须整段匹配 `RoundedCornerShape\([^()]*\)` 再替内部每个 `= N.dp`**——
+  第一版只匹配首个参数，结果 `topStart` 换了 `topEnd` 没换，sheet 会两角不对称（脚本已修）。
+- **新档 `MemoRadius.SMALL_DP = 10`**：规范 README 原话 "**Small labels and inputs use the tighter
+  end of the radius scale**"，三档收档时丢了这一端，导致 r6/r8/r9/r10/r11 无处归。
+- **`MemoRadius.kt` 从 `app/…ui` 搬到 `core/ui/…ui/theme`**：`MemoSnackbar`（core:ui）的 toast 卡
+  吃不到 app 的 token，之前 `1f849b0` 扫了 app 68 文件正是漏了这里（r14→20 两处）。
+  搬动要改 68 个 import + 给新引用的文件补 import。
+- **13 处有意例外保留字面量**，由 **`RadiusTokenGuardTest`** 按「文件 → 值 → 次数」登记
+  （**不按行号**，行号会漂）：r0 直角 ×2、r2 微圆 ×3、r3 统计条 ×3、r4 行内代码、r50 伪胶囊 ×4。
+  守卫照 `ShapePercentRegressionTest` 扫主源码的路子，新写字面 dp 即红。
+- 值真变的只有 30 点位，其余 226 处**外观一模一样**。跳变最大的一处存疑：
+  `ModelDetailSheet.kt:1019 SegmentedMulti` 12→**20**——它是 sheet 内的**嵌套**分段条，
+  按档位也许该给 INNER 16，待真机判定。
+- ⚠️ **`app:lintDebug` 被 `McpOAuth.kt` 挡住（与圆角无关）**：`URLDecoder.decode(s, Charset)` /
+  `URLEncoder.encode(s, Charset)` 的 **Charset 重载要 API 33**，`minSdk = 26` → Android 8~12 上
+  走 MCP OAuth **会在回调解析处 `NoSuchMethodError` 崩**，7 处（292/293/300/301/1089/1090/1094）。
+  改字符串重载 `decode(s, "UTF-8")`（API 1 就有，行为等价）。`toByteArray(StandardCharsets.UTF_8)`
+  这类不受影响，别一起改。**教训：lint 的 NewApi 能抓到单测和编译都抓不到的机型崩溃。**

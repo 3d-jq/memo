@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.snackbar
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.EaseOut
@@ -295,8 +296,8 @@ private fun ToastItem(
                 .alpha((fade * baseOpacity).coerceIn(0f, 1f))
                 .scale((1f - visualIndex * 0.03f) * interactiveScale)
                 .graphicsLayer { translationY = stackOffset + slideUp + dragOffset.floatValue }
-                .shadow(16.dp, RoundedCornerShape(14.dp))
-                .background(cs.surfaceContainerHigh.copy(alpha = 0.98f), RoundedCornerShape(14.dp))
+                .shadow(16.dp, RoundedCornerShape(MemoRadius.CARD_DP.dp))
+                .background(cs.surfaceContainerHigh.copy(alpha = 0.98f), RoundedCornerShape(MemoRadius.CARD_DP.dp))
                 .clickable {
                     if (!dismissing.value) {
                         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)

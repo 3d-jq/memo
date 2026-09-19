@@ -2,6 +2,7 @@
 
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -137,7 +138,7 @@ fun MiniMapSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = cs.overlaySurfaceColor(),
         dragHandle = null,
     ) {
@@ -272,7 +273,7 @@ private fun MiniMapSearchToggle(
                     .weight(1f)
                     .height(36.dp),
                 singleLine = true,
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = cs.surfaceVariant.copy(alpha = if (isDark) 0.35f else 0.6f),
                     unfocusedContainerColor = cs.surfaceVariant.copy(alpha = if (isDark) 0.35f else 0.6f),
@@ -339,7 +340,7 @@ private fun MiniMapRow(
                     modifier = Modifier
                         .widthIn(max = maxBubbleWidth)
                         .clickable { onJump(user.id) }
-                        .background(userBg, RoundedCornerShape(16.dp))
+                        .background(userBg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
@@ -355,7 +356,7 @@ private fun MiniMapRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onJump(assistant.id) }
-                    .background(assistantBg, RoundedCornerShape(16.dp))
+                    .background(assistantBg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }

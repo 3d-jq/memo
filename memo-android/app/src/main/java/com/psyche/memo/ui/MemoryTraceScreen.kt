@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -212,7 +212,7 @@ fun MemoryTraceScreen(
     // _confirmClear (L141-204) — mobile bottom sheet.
     if (clearSheet) {
         ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = { clearSheet = false }, dragHandle = null) {
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
                 MemoSheetHandle()
@@ -315,11 +315,11 @@ private fun TraceCard(trace: MemoryTrace, modifier: Modifier = Modifier, onTap: 
         Column(
             modifier = modifier
                 .fillMaxWidth()
-                .background(if (pressed) withAlpha(cs.onSurface, 0.04) else app.surfaceCard, RoundedCornerShape(16.dp))
+                .background(if (pressed) withAlpha(cs.onSurface, 0.04) else app.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .border(
                     0.6.dp,
                     cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f),
-                    RoundedCornerShape(16.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
                 .padding(start = 14.dp, top = 12.dp, end = 14.dp, bottom = 12.dp),
         ) {
@@ -712,7 +712,7 @@ private fun TraceErrorLine(text: String, warning: Boolean) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(withAlpha(color, 0.10), RoundedCornerShape(10.dp))
+            .background(withAlpha(color, 0.10), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
         Icon(
@@ -731,8 +731,8 @@ private fun TraceErrorLine(text: String, warning: Boolean) {
 private fun TracePill(label: String, color: Color) {
     Box(
         modifier = Modifier
-            .background(withAlpha(color, 0.14), RoundedCornerShape(999.dp))
-            .border(1.dp, withAlpha(color, 0.28), RoundedCornerShape(999.dp))
+            .background(withAlpha(color, 0.14), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .border(1.dp, withAlpha(color, 0.28), RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
         Text(label, style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = color, lineHeight = 12.sp))

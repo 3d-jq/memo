@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.chat
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
@@ -284,7 +284,7 @@ fun ReasoningBudgetSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(modifier = Modifier.fillMaxWidth().imePadding()) {
@@ -294,7 +294,7 @@ fun ReasoningBudgetSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(16.dp))
@@ -440,7 +440,7 @@ fun ReasoningBudgetSheet(
         val valid = parsed != null && (parsed == -1 || parsed >= 0)
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { customOpen = false },
             title = { Text(stringResource(UiR.string.reasoning_budget_sheet_custom_label)) },
             text = {

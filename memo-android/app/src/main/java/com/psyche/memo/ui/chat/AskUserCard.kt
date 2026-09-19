@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.chat
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.tween
@@ -255,7 +255,7 @@ fun AskUserToolCard(
                         ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
                     },
                 ),
-                RoundedCornerShape(16.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .padding(start = 16.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
         horizontalAlignment = Alignment.Start,
@@ -848,7 +848,7 @@ internal fun AskUserPanel(
                         ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
                     },
                 ),
-                RoundedCornerShape(20.dp),
+                RoundedCornerShape(MemoRadius.CARD_DP.dp),
             )
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {

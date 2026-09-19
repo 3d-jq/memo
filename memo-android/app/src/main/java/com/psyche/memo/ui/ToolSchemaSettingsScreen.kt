@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -121,7 +121,7 @@ fun ToolSchemaResetAllDialog(
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
-                .background(cs.surface, RoundedCornerShape(16.dp))
+                .background(cs.surface, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 12.dp),
         ) {
             Text(
@@ -192,7 +192,7 @@ fun ToolSchemaModifiedBadge(label: String) {
     val cs = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
-            .background(cs.primary.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+            .background(cs.primary.copy(alpha = 0.12f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Text(

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
@@ -305,7 +306,7 @@ fun ThemeSettingsScreen(
     deleteTarget?.let { target ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(UiR.string.custom_theme_delete)) },
             text = { Text(stringResource(UiR.string.custom_theme_delete_confirm)) },
@@ -415,7 +416,7 @@ private fun ThemeSwatchItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = LocalIndication.current,
@@ -581,7 +582,7 @@ private fun CustomThemeEditorSheet(
     var tertiary by remember { mutableStateOf(ColorPickerState(initial?.tertiaryArgb)) }
 
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp),
@@ -691,7 +692,7 @@ private fun SvArea(state: ColorPickerState) {
         modifier = Modifier
             .fillMaxWidth()
             .height(160.dp)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .pointerInput(Unit) {
                 detectTapGestures { update(state, it, size.width.toFloat(), size.height.toFloat()) }
             }
@@ -720,7 +721,7 @@ private fun HueBar(state: ColorPickerState) {
         modifier = Modifier
             .fillMaxWidth()
             .height(18.dp)
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .pointerInput(Unit) {
                 detectTapGestures { updateHue(state, it, size.width.toFloat()) }
             }
@@ -778,7 +779,7 @@ private fun ImportThemeSheet(
     var text by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp),

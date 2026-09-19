@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -409,7 +409,7 @@ fun ProviderDetailScreen(
     if (showDelete) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { showDelete = false },
             title = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_title)) },
             text = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_content)) },
@@ -830,7 +830,7 @@ private fun PromptCachingTtlSegmented(
     val semantic = LocalSemanticColors.current
     Row(
         modifier = Modifier
-            .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.08f else 0.05f), RoundedCornerShape(11.dp))
+            .background(cs.onSurface.copy(alpha = if (semantic.isDark) 0.08f else 0.05f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .padding(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -845,7 +845,7 @@ private fun PromptCachingTtlSegmented(
                     color = if (selected) cs.onPrimary else cs.onSurface.copy(alpha = 0.7f),
                 ),
                 modifier = Modifier
-                    .background(if (selected) cs.primary else Color.Transparent, RoundedCornerShape(9.dp))
+                    .background(if (selected) cs.primary else Color.Transparent, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
                     .clickable { onChanged(key) }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
@@ -916,8 +916,8 @@ private fun BottomTabs(
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp)
-            .background(semantic.surfaceCard, RoundedCornerShape(16.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(4.dp),
     ) {
         listOf(leftIcon to leftLabel, rightIcon to rightLabel).forEachIndexed { i, (icon, label) ->
@@ -975,7 +975,7 @@ private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDis
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -1247,7 +1247,7 @@ private fun ModelsTab(
         }
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { pendingDelete = null },
             title = { Text(confirmTitle) },
             text = { Text(content) },
@@ -1272,7 +1272,7 @@ private fun ModelsTab(
     if (deleteAllConfirm) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleteAllConfirm = false },
             // 原版 `_deleteAllModels`（L3276-3326）：标题是通用「确认删除」，
             // 正文才是「此操作不可撤回」。

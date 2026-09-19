@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -516,7 +517,7 @@ private fun ChipSection(
                     focusedTextColor = cs.onSurface,
                     unfocusedTextColor = cs.onSurface,
                 ),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = if (numericKeyboard) KeyboardType.Number else KeyboardType.Text,
                     imeAction = ImeAction.Done,
@@ -537,8 +538,8 @@ private fun RemovableChip(label: String, isDark: Boolean, onRemove: () -> Unit) 
     val cs = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
-            .background(cs.primary.copy(alpha = if (isDark) 0.22f else 0.12f), RoundedCornerShape(999.dp))
-            .border(0.6.dp, cs.primary.copy(alpha = if (isDark) 0.36f else 0.26f), RoundedCornerShape(999.dp)),
+            .background(cs.primary.copy(alpha = if (isDark) 0.22f else 0.12f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .border(0.6.dp, cs.primary.copy(alpha = if (isDark) 0.36f else 0.26f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

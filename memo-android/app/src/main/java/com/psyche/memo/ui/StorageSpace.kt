@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -783,10 +783,10 @@ private fun UsageBar(categories: List<StorageCategory>, totalBytes: Long) {
         modifier = Modifier
             .fillMaxWidth()
             .height(12.dp)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(10.dp)),
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
     ) {
         if (items.isNotEmpty() && totalBytes > 0) {
-            Row(modifier = Modifier.fillMaxSize().background(Color.Transparent, RoundedCornerShape(10.dp))) {
+            Row(modifier = Modifier.fillMaxSize().background(Color.Transparent, RoundedCornerShape(MemoRadius.SMALL_DP.dp))) {
                 items.forEach { c ->
                     var flex = ((c.stats.bytes.toDouble() / totalBytes) * 1000).toInt()
                     if (flex <= 0) flex = 1
@@ -1105,7 +1105,7 @@ fun StorageCategoryScreen(
     confirm?.let { spec ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { confirm = null },
             title = { Text(stringResource(UiR.string.storage_space_clear_confirm_title)) },
             text = {

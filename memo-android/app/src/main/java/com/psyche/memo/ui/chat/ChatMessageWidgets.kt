@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.chat
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
@@ -147,7 +147,7 @@ fun UserContextMenu(
                 .width(220.dp)
                 .background(
                     cs.surfaceContainerHigh.copy(alpha = 0.97f),
-                    RoundedCornerShape(16.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
                 // 源码 chat_message_widget.dart:1503-1512 —— border 画在
                 // 圆角外层:dark onSurface@0.08 / light outlineVariant@0.2。
@@ -155,7 +155,7 @@ fun UserContextMenu(
                     width = 1.dp,
                     color = if (isDark) cs.onSurface.copy(alpha = 0.08f)
                     else cs.outlineVariant.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 ),
         ) {
             UserMenuItem(Lucide.Copy, UiR.string.share_provider_sheet_copy_button) {

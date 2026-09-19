@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.animateFloatAsState
@@ -654,8 +654,8 @@ private fun ModelCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(16.dp))
-            .border(0.6.dp, semantic.hairline, RoundedCornerShape(16.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, semantic.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -802,7 +802,7 @@ private fun TaskPromptSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
@@ -817,7 +817,7 @@ private fun TaskPromptSheet(
                     .align(Alignment.CenterHorizontally)
                     .width(40.dp)
                     .height(4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
             )
             Spacer(Modifier.height(14.dp))
             // _ThinkingSwitchRow — 16sp medium α0.92 + IosSwitch, v4 padding.

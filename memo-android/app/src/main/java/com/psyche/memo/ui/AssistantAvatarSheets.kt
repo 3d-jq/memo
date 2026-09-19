@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -143,7 +143,7 @@ internal fun AvatarPickerSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 全站自绘 40x4 拖柄
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
@@ -197,7 +197,7 @@ internal fun EmojiPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.emojiTitle)) },
         text = {
@@ -285,7 +285,7 @@ internal fun AvatarUrlDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.urlTitle)) },
         text = {
@@ -337,7 +337,7 @@ internal fun QQAvatarDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.qqTitle)) },
         text = {

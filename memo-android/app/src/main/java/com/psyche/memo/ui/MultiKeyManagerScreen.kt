@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -395,7 +395,7 @@ fun MultiKeyManagerScreen(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { showStrategySheet = false },
             containerColor = cs.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
             dragHandle = null,
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp)) {
@@ -454,7 +454,7 @@ fun MultiKeyManagerScreen(
     if (showDeleteErrors) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { showDeleteErrors = false },
             title = { Text(stringResource(R.string.multi_key_page_delete_errors_confirm_title)) },
             text = { Text(stringResource(R.string.multi_key_page_delete_errors_confirm_content)) },
@@ -554,7 +554,7 @@ private fun KeyRow(
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .background(statusColor.copy(alpha = 0.12f), RoundedCornerShape(999.dp))
+                    .background(statusColor.copy(alpha = 0.12f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             ) {
                 Text(statusText, style = TextStyle(fontSize = 11.sp, color = statusColor))
@@ -626,7 +626,7 @@ private fun SheetHandle() {
             modifier = Modifier
                 .width(40.dp)
                 .height(4.dp)
-                .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
         )
     }
 }
@@ -669,7 +669,7 @@ private fun AddKeysSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(
@@ -721,7 +721,7 @@ private fun EditKeySheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(

@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.chat
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
@@ -86,7 +86,7 @@ fun MessageMoreSheet(
         sheetState = rememberMemoSheetState(),
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = cs.overlaySurfaceColor(),
     ) {
         Column(
@@ -101,7 +101,7 @@ fun MessageMoreSheet(
                     .padding(top = 6.dp, bottom = 6.dp)
                     .align(Alignment.CenterHorizontally)
                     .size(width = 40.dp, height = 4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
             )
             Spacer(Modifier.height(4.dp))
             MoreActionItem(Lucide.TextSelect, UiR.string.message_more_sheet_select_copy) {
@@ -193,7 +193,7 @@ fun MessageEditSheet(
         sheetState = rememberMemoSheetState(),
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = cs.overlaySurfaceColor(),
     ) {
         Column(
@@ -208,7 +208,7 @@ fun MessageEditSheet(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .size(width = 40.dp, height = 4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
             )
             Spacer(Modifier.height(10.dp))
             Row(
@@ -264,7 +264,7 @@ fun MessageEditSheet(
                 },
                 minLines = 8,
                 maxLines = Int.MAX_VALUE,
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = cs.primary.copy(alpha = 0.45f),
                     unfocusedBorderColor = Color.Transparent,
@@ -288,7 +288,7 @@ fun RegenerateConfirmDialog(
 ) {
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = onDismiss,
         title = {
             Text(

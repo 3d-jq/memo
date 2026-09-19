@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -304,7 +304,7 @@ private fun EasterEggSheet(container: AppContainerImpl, onDismiss: () -> Unit) {
     ) }
 
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
             MemoSheetHandle()

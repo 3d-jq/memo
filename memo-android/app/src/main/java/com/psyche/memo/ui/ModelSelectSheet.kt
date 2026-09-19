@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -208,7 +208,7 @@ fun ModelSelectSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         // memo draws its own handle; Material3's built-in one is suppressed.
         dragHandle = null,
     ) {
@@ -228,7 +228,7 @@ fun ModelSelectSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
                 Spacer(Modifier.height(8.dp))
             }
@@ -614,8 +614,8 @@ private fun AbilityPill(
 ) {
     Row(
         modifier = Modifier
-            .background(color.copy(alpha = bgAlpha), RoundedCornerShape(999.dp))
-            .border(0.5.dp, color.copy(alpha = borderAlpha), RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = bgAlpha), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .border(0.5.dp, color.copy(alpha = borderAlpha), RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 6.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
@@ -626,8 +626,8 @@ private fun AbilityPill(
 private fun Pill(color: Color, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     Row(
         modifier = Modifier
-            .background(color.copy(alpha = 0.15f), RoundedCornerShape(999.dp))
-            .border(0.5.dp, color.copy(alpha = 0.2f), RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.15f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .border(0.5.dp, color.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),

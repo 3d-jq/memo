@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -147,7 +148,7 @@ internal fun SubPageInput(
                     )
                 }
             },
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceFill,
                 unfocusedContainerColor = semantic.surfaceFill,
@@ -174,8 +175,8 @@ private fun ProxyTypeField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceFill, RoundedCornerShape(10.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.12f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .clickable(onClick = onOpenSheet)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -319,7 +320,7 @@ fun ProviderNetworkPage(
     // two-option bottom sheet (C12), not a free-text field.
     if (proxyTypeSheetVisible) {
         ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = { proxyTypeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier
@@ -590,7 +591,7 @@ private fun BareField(
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         },
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = semantic.surfaceFill,
             unfocusedContainerColor = semantic.surfaceFill,

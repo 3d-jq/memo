@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -496,7 +497,7 @@ internal fun MemoryEntryEditSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = app.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
     ) {
         Column(
@@ -512,7 +513,7 @@ internal fun MemoryEntryEditSheet(
                     Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(withAlpha(cs.onSurface, 0.2), RoundedCornerShape(999.dp)),
+                        .background(withAlpha(cs.onSurface, 0.2), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
                 )
             }
             Spacer(Modifier.height(12.dp))

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.theme.MemoRadius
 import android.util.Base64
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -93,7 +94,7 @@ private fun ToolImageThumb(
                 width = (height.value * aspect).coerceIn(0f, maxWidth.value).dp,
                 height = height,
             )
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .background(cs.surfaceContainerHighest)
             .clickable(enabled = model != null, onClick = onTap),
         contentAlignment = Alignment.Center,

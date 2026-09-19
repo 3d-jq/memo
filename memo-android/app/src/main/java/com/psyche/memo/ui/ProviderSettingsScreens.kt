@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -244,7 +245,7 @@ fun ProviderEditScreen(
     if (showDelete) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { showDelete = false },
             title = { Text(stringResource(UiR.string.provider_detail_page_delete_provider_title)) },
             text = { Text(stringResource(UiR.string.providers_page_delete_selected_confirm_content)) },

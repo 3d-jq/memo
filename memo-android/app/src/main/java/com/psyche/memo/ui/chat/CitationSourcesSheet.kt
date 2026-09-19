@@ -1,6 +1,6 @@
 package com.psyche.memo.ui.chat
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import android.content.ActivityNotFoundException
@@ -374,8 +374,8 @@ private fun IndexBadge(index: Int) {
         modifier = Modifier
             .width(if (index >= 10) 24.dp else 18.dp)
             .height(18.dp)
-            .background(cs.primary.copy(alpha = 0.08f), RoundedCornerShape(9.dp))
-            .border(0.5.dp, cs.primary.copy(alpha = 0.22f), RoundedCornerShape(9.dp)),
+            .background(cs.primary.copy(alpha = 0.08f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+            .border(0.5.dp, cs.primary.copy(alpha = 0.22f), RoundedCornerShape(MemoRadius.SMALL_DP.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -394,7 +394,7 @@ private fun CitationTag(tag: CitationSourceTag) {
     val cs = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
-            .background(cs.onSurface.copy(alpha = 0.06f), RoundedCornerShape(6.dp))
+            .background(cs.onSurface.copy(alpha = 0.06f), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
             .padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
         Text(
@@ -429,8 +429,8 @@ fun CitationSourcesSummaryCard(items: List<CitationSourceItem>, onTap: () -> Uni
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .background(Color.Transparent, RoundedCornerShape(20.dp))
-            .border(0.8.dp, cs.onSurface.copy(alpha = if (isDark) 0.16f else 0.10f), RoundedCornerShape(20.dp))
+            .background(Color.Transparent, RoundedCornerShape(MemoRadius.CARD_DP.dp))
+            .border(0.8.dp, cs.onSurface.copy(alpha = if (isDark) 0.16f else 0.10f), RoundedCornerShape(MemoRadius.CARD_DP.dp))
             .clickable(onClick = onTap)
             .padding(horizontal = 10.dp, vertical = 8.dp),
     ) {
@@ -486,7 +486,7 @@ fun CitationSourcesSheet(items: List<CitationSourceItem>, onDismiss: () -> Unit)
     ModalBottomSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = cs.overlaySurfaceColor(),
         dragHandle = null,
     ) {

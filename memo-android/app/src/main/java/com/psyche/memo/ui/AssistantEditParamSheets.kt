@@ -1,6 +1,6 @@
 package com.psyche.memo.ui
 
-import com.psyche.memo.ui.MemoRadius
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -92,7 +92,7 @@ internal fun ParamSliderSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘 40x4 拖柄
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
@@ -104,7 +104,7 @@ internal fun ParamSliderSheet(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .size(width = 40.dp, height = 4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
             )
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -257,7 +257,7 @@ internal fun spreadLabelStops(
 private fun ValuePill(text: String, widest: String, onTap: (() -> Unit)?) {
     val cs = MaterialTheme.colorScheme
     val isDark = LocalSemanticColors.current.isDark
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp)
     Box(
         modifier = Modifier
             .clip(shape)
@@ -310,7 +310,7 @@ internal fun MaxTokensSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
@@ -323,7 +323,7 @@ internal fun MaxTokensSheet(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
                     .size(width = 40.dp, height = 4.dp)
-                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp)),
+                    .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
             )
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -404,7 +404,7 @@ internal fun ContextMessageInputDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(title) },
         text = {

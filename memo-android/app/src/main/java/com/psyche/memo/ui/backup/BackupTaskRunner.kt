@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.backup
 
+import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -75,7 +76,7 @@ internal class BackupTaskRunner(
             // Not dismissible: the task is running and the user must pick an
             // action (cancel or acknowledge) instead of dismissing silently.
             onDismissRequest = {},
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             text = {
                 TaskProgressDialogCard(

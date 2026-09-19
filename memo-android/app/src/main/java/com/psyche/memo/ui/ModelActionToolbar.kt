@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -113,7 +114,7 @@ internal fun ModelActionToolbar(
         Row(
             modifier = Modifier
                 .padding(horizontal = horizontalMargin)
-                .background(semantic.surfaceFill, RoundedCornerShape(999.dp))
+                .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.PILL_DP.dp))
                 .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
@@ -236,9 +237,9 @@ private fun StreamingToggleButton(
         modifier = Modifier
             .background(
                 if (useStream) cs.onSurface.copy(alpha = 0.08f) else Color.Transparent,
-                RoundedCornerShape(999.dp),
+                RoundedCornerShape(MemoRadius.PILL_DP.dp),
             )
-            .border(0.5.dp, cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(999.dp))
+            .border(0.5.dp, cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -318,10 +319,10 @@ private fun ToolbarButton(
     Row(
         modifier = modifier
             .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
-            .background(background, RoundedCornerShape(999.dp))
+            .background(background, RoundedCornerShape(MemoRadius.PILL_DP.dp))
             .then(
                 if (bordered != null) {
-                    Modifier.border(1.dp, bordered, RoundedCornerShape(999.dp))
+                    Modifier.border(1.dp, bordered, RoundedCornerShape(MemoRadius.PILL_DP.dp))
                 } else {
                     Modifier
                 },
