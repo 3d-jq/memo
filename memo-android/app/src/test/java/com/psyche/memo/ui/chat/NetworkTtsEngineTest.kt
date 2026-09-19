@@ -40,11 +40,11 @@ class NetworkTtsEngineTest {
     fun networkEngineIsUsedOnlyForSupportedServices() {
         assertFalse(shouldUseNetworkEngine(null))
         assertTrue(shouldUseNetworkEngine(openAi))
-        // qwenAudio 是 WebSocket，还没接：宁可退回系统引擎，也不要静默不出声。
+        // qwenAudio 的 DashScope WebSocket 已接线（2026-09-19），同样走网络引擎。
         val qwenAudio = QwenAudioTtsOptions(
             "q", true, "QwenAudio", "k", "", "cn-beijing", "m", "v", "pcm", 24000,
         )
-        assertFalse(shouldUseNetworkEngine(qwenAudio))
+        assertTrue(shouldUseNetworkEngine(qwenAudio))
         assertEquals(NetworkTtsKind.qwenAudio, qwenAudio.kind)
     }
 

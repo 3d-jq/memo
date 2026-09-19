@@ -42,6 +42,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.Key
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
@@ -75,8 +77,11 @@ import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
@@ -536,6 +541,49 @@ private fun McpServerEditSheet(
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                         onClick = { headers.add("" to "") },
                     )
+                    // MCP-3 OAuth：Streamable HTTP/SSE 服务器可先在浏览器里完成
+                    // 授权（系统浏览器 + 本地回环回调），令牌写进 server.oauth。
+                    if (transport == "http" || transport == "sse") {
+                        Spacer(Modifier.height(10.dp))
+                        val oauthScope = rememberCoroutineScope()
+                        var oauthBusy by remember { mutableStateOf(false) }
+                        var oauthResult by remember { mutableStateOf<String?>(null) }
+                        val oauthContext = androidx.compose.ui.platform.LocalContext.current
+                        val authorizeDoneText = stringResource(R.string.mcp_server_edit_sheet_authorize_done)
+                        val authorizeFailedText = stringResource(R.string.mcp_server_edit_sheet_authorize_failed)
+                        IosTileButton(
+                            label = if (oauthBusy) {
+                                stringResource(R.string.message_export_sheet_exporting)
+                            } else {
+                                stringResource(R.string.mcp_server_edit_sheet_authorize)
+                            },
+                            icon = Lucide.Key,
+                            backgroundColor = cs.primary.copy(alpha = 0.85f),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            enabled = !oauthBusy && url.isNotBlank(),
+                            onClick = {
+                                oauthBusy = true
+                                oauthScope.launch {
+                                    val result = container.mcpConnections.authorizeOAuth(
+                                        currentServer(),
+                                        oauthContext,
+                                    )
+                                    oauthBusy = false
+                                    oauthResult = result.fold(
+                                        onSuccess = { authorizeDoneText },
+                                        onFailure = { authorizeFailedText.format(it.message ?: it.toString()) },
+                                    )
+                                }
+                            },
+                        )
+                        oauthResult?.let { message ->
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = message,
+                                style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)),
+                            )
+                        }
+                    }
                 } else {
                     // 工具卡（mcp_server_edit_sheet.dart L511-690）：原版在工具 tab 里
                     // 没有计数/同步行 —— 同步按钮在 sheet 顶栏右侧，列表就是

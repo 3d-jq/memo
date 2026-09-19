@@ -57,7 +57,10 @@ class McpConnectionManager(
             update(server.id) { it.copy(status = Status.connecting, error = null) }
             runCatching {
                 clients.remove(server.id)?.close()
-                val client = McpClient(server, http)
+                // MCP-3 OAuth：令牌快照存 server.oauth；到期先刷再连，有效则附
+                // Authorization 头（`mcp_client.dart` 的 OAuth HTTP 客户端等价）。
+                val effective = withOAuth(refreshIfNeeded(server))
+                val client = McpClient(effective, http)
                 client.initialize()
                 val tools = client.listTools()
                 clients[server.id] = client
@@ -70,6 +73,53 @@ class McpConnectionManager(
                 }
             }
         }
+    }
+
+    /**
+     * MCP-3：发起 OAuth 授权（系统浏览器 + 本地回环回调），成功后把令牌写进
+     * `server.oauth` 并重连。
+     */
+    suspend fun authorizeOAuth(
+        server: McpServerConfig,
+        context: android.content.Context,
+    ): Result<McpOAuthState> = runCatching {
+        val state = McpOAuthService.authorize(
+            serverUrl = server.url,
+            serverName = server.name,
+            client = http,
+            headers = server.headers,
+            launchAuthorizationUrl = { uri ->
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(android.content.Intent.ACTION_VIEW)
+                            .setData(android.net.Uri.parse(uri.toString()))
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }.isSuccess
+            },
+        )
+        val updated = server.copy(oauth = state.toJson())
+        repository.save(updated)
+        connect(updated)
+        state
+    }
+
+    /** 令牌过期（含 1 分钟余量）时先刷新；失败保持旧值让连接报错。 */
+    private suspend fun refreshIfNeeded(server: McpServerConfig): McpServerConfig {
+        val state = McpOAuthState.tryFromJson(server.oauth?.toString()) ?: return server
+        if (!state.shouldRefresh()) return server
+        return runCatching {
+            val next = McpOAuthService.refresh(state, http)
+            val updated = server.copy(oauth = next.toJson())
+            repository.save(updated)
+            updated
+        }.getOrElse { server }
+    }
+
+    private fun withOAuth(server: McpServerConfig): McpServerConfig {
+        val state = McpOAuthState.tryFromJson(server.oauth?.toString()) ?: return server
+        if (state.shouldRefresh()) return server
+        return server.copy(headers = server.headers + ("Authorization" to state.authorizationHeader))
     }
 
     /** Connects every enabled server (McpProvider.initConnectedServers). */

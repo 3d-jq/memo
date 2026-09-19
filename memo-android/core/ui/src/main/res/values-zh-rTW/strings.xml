@@ -1399,6 +1399,9 @@
     <string name="mcp_page_tools_count">工具: %1$s/%2$s</string>
     <string name="mcp_page_undo">撤銷</string>
     <string name="mcp_server_edit_sheet_add_header">新增請求標頭</string>
+    <string name="mcp_server_edit_sheet_authorize">使用 OAuth 登入</string>
+    <string name="mcp_server_edit_sheet_authorize_done">OAuth 權杖已保存——點保存後重新連線。</string>
+    <string name="mcp_server_edit_sheet_authorize_failed">OAuth 授權失敗：%1$s</string>
     <string name="mcp_server_edit_sheet_cancel">取消</string>
     <string name="mcp_server_edit_sheet_custom_headers_title">自訂請求標頭</string>
     <string name="mcp_server_edit_sheet_enabled_label">是否啟用</string>

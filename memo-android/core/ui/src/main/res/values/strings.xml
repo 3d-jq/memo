@@ -1397,6 +1397,9 @@ Updating Memo first is the safer choice.</string>
     <string name="mcp_page_tools_count">Tools: %1$s/%2$s</string>
     <string name="mcp_page_undo">Undo</string>
     <string name="mcp_server_edit_sheet_add_header">Add Header</string>
+    <string name="mcp_server_edit_sheet_authorize">Sign in with OAuth</string>
+    <string name="mcp_server_edit_sheet_authorize_done">OAuth tokens saved — tap Save then reconnect.</string>
+    <string name="mcp_server_edit_sheet_authorize_failed">OAuth authorization failed: %1$s</string>
     <string name="mcp_server_edit_sheet_cancel">Cancel</string>
     <string name="mcp_server_edit_sheet_custom_headers_title">Custom Headers</string>
     <string name="mcp_server_edit_sheet_enabled_label">Enabled</string>
