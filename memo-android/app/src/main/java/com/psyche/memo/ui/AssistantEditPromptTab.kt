@@ -40,8 +40,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -88,6 +86,7 @@ import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Clock
+import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Maximize2
 import com.composables.icons.lucide.MessageSquare
@@ -357,7 +356,7 @@ private fun SystemPromptCard(
                 IosButton(
                     label = stringResource(UiR.string.assistant_edit_system_prompt_import_button),
                     onTap = onImport,
-                    icon = Icons.Filled.FileOpen,
+                    icon = Lucide.FileText,
                     dense = true,
                     neutral = false,
                 )

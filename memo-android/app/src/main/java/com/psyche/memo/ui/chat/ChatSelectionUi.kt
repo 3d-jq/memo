@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -62,6 +66,8 @@ fun ChatSelectionExportBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(cs.surface.copy(alpha = 0.94f), RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .imePadding()
             .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -121,6 +127,8 @@ fun ChatSelectionDeleteBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(cs.surface.copy(alpha = 0.94f), RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .imePadding()
             .padding(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {

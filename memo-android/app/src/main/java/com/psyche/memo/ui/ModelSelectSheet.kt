@@ -21,9 +21,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.psyche.memo.common.Haptics
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -491,7 +488,7 @@ private fun ModelTile(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (pinnedNow) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                if (pinnedNow) Lucide.Heart else Lucide.Heart,
                 contentDescription = stringResource(UiR.string.model_select_sheet_favorite_tooltip),
                 tint = cs.primary,
                 modifier = Modifier.size(20.dp),

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.PaddingValues
@@ -105,7 +106,8 @@ fun NetworkProxyScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(cs.surface)
-            .windowInsetsPadding(WindowInsets.statusBars),
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .imePadding(),
     ) {
         MemoTopBar(
             title = stringResource(UiR.string.settings_page_network_proxy),
