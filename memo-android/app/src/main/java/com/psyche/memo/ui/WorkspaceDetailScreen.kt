@@ -1359,7 +1359,9 @@ internal fun FileEditorSheet(
     // 内容在 sheet 打开后才异步读到，所以 key 里带上 initial：读到就填进去。
     var text by remember(title, initial) { mutableStateOf(initial) }
     ModalBottomSheet(
-        sheetState = rememberMemoSheetState(),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
     ) {

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -79,7 +80,9 @@ fun SkillSelectorSheet(
     }
 
     ModalBottomSheet(
-        sheetState = rememberMemoSheetState(),
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
     ) {

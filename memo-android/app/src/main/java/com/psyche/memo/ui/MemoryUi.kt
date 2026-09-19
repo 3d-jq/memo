@@ -468,7 +468,9 @@ internal fun <T> MemoryOptionPickerSheet(
     onDismiss: () -> Unit,
     onSelected: (T) -> Unit,
 ) {
-    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

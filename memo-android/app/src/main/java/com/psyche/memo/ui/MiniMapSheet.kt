@@ -138,7 +138,7 @@ fun MiniMapSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        containerColor = cs.surface,
+        containerColor = cs.overlaySurfaceColor(),
         dragHandle = null,
     ) {
         // DraggableScrollableSheet initial 0.55 — approximated with a

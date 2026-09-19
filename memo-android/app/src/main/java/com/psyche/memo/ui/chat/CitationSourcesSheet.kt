@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -484,8 +485,8 @@ fun CitationSourcesSheet(items: List<CitationSourceItem>, onDismiss: () -> Unit)
     ModalBottomSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        containerColor = cs.surface,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        containerColor = cs.overlaySurfaceColor(),
         dragHandle = null,
     ) {
         Column(Modifier.padding(horizontal = 12.dp)) {

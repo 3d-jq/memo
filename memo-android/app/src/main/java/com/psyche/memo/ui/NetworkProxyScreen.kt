@@ -298,7 +298,9 @@ fun NetworkProxyScreen(
 
     // L377-418 — proxy type bottom sheet: http / https / socks5.
     if (typeSheetVisible) {
-        ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = { typeSheetVisible = false }, dragHandle = null) {
+        ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(), onDismissRequest = { typeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

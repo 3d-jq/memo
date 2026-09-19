@@ -578,7 +578,9 @@ private fun CustomThemeEditorSheet(
     var secondary by remember { mutableStateOf(ColorPickerState(initial?.secondaryArgb)) }
     var tertiary by remember { mutableStateOf(ColorPickerState(initial?.tertiaryArgb)) }
 
-    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -773,7 +775,9 @@ private fun ImportThemeSheet(
 ) {
     var text by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
-    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

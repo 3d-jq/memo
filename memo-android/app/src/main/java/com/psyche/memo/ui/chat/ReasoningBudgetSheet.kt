@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseInCubic
@@ -282,7 +283,7 @@ fun ReasoningBudgetSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = null,
     ) {
         Column(modifier = Modifier.fillMaxWidth().imePadding()) {

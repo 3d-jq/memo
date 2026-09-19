@@ -971,7 +971,7 @@ private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDis
     ModalBottomSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = null,
     ) {

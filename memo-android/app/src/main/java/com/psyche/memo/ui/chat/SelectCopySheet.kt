@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -62,7 +63,7 @@ fun SelectCopySheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = null,
     ) {
         Column(

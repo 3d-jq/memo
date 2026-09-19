@@ -86,8 +86,8 @@ fun BottomToolsSheet(
     ModalBottomSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
-        containerColor = cs.surface,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        containerColor = cs.overlaySurfaceColor(),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = null,
     ) {
         Column(

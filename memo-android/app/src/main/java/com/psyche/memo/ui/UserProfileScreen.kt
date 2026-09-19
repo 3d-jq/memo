@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -311,7 +312,9 @@ private fun ProfileFieldSheet(
     var value by remember { mutableStateOf(target.current ?: "") }
     val canClear = !target.current.isNullOrEmpty()
 
-    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
         ) {

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.backup
 
+import com.psyche.memo.ui.overlaySurfaceColor
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -259,7 +260,7 @@ fun BackupReminderTimeSheet(
         sheetState = sheetState,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
     ) {
         Column(
             Modifier

@@ -1160,8 +1160,8 @@ private fun CustomRangeSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘容器，禁用 Material 默认 handle
-        shape = RoundedCornerShape(22.dp),
-        containerColor = cs.surfaceContainerHigh,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        containerColor = cs.overlaySurfaceColor(),
     ) {
         Column(
             Modifier
@@ -1312,8 +1312,8 @@ private fun StatsDatePickerSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
-        shape = RoundedCornerShape(22.dp),
-        containerColor = cs.surfaceContainerHigh,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        containerColor = cs.overlaySurfaceColor(),
     ) {
         Column(Modifier.fillMaxWidth().padding(start = 14.dp, top = 12.dp, end = 14.dp, bottom = 14.dp)) {
             // Header — L741-792.

@@ -1185,7 +1185,7 @@ private fun SystemPromptEditorSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
-        shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(

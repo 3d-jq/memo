@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -416,7 +417,9 @@ fun BehaviorStartupSettingsScreen(
 
     // L1574-1616 —— always / scroll / never 三选弹层。
     if (navModeSheetVisible) {
-        ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = { navModeSheetVisible = false }, dragHandle = null) {
+        ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(), onDismissRequest = { navModeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()

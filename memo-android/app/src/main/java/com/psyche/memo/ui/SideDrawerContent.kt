@@ -890,8 +890,8 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { menuFor = null },
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            containerColor = cs.surface,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
             Column(
@@ -1093,8 +1093,8 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { moveTarget = null },
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            containerColor = cs.surface,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
             // assistant_rows 整表 + 逐条解 JSON 不在组合期做（§5.13）。
@@ -1196,8 +1196,8 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { assistantMenuFor = null },
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            containerColor = cs.surface,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
             Column(

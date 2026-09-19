@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -326,7 +327,9 @@ fun RenderingSettingsScreen(
     // ---- 文字大小 ----
     if (sizeSheetVisible) {
         ModalBottomSheet(
-            sheetState = rememberMemoSheetState(),
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(),
             onDismissRequest = { sizeSheetVisible = false },
             dragHandle = null,
         ) {
@@ -375,7 +378,9 @@ fun RenderingSettingsScreen(
     // ---- 文字颜色 ----
     if (colorSheetVisible) {
         ModalBottomSheet(
-            sheetState = rememberMemoSheetState(),
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(),
             onDismissRequest = { colorSheetVisible = false },
             dragHandle = null,
         ) {
@@ -481,7 +486,9 @@ fun RenderingSettingsScreen(
     // ---- 提示词 ----
     if (phrasesSheetVisible) {
         ModalBottomSheet(
-            sheetState = rememberMemoSheetState(),
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(),
             onDismissRequest = { phrasesSheetVisible = false },
             dragHandle = null,
         ) {

@@ -313,7 +313,9 @@ fun TtsServicesScreen(
 
     // _showMobileErrorDetails L681-741.
     errorDetails?.let { message ->
-        ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = { errorDetails = null }, dragHandle = null) {
+        ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(), onDismissRequest = { errorDetails = null }, dragHandle = null) {
             Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp)) {
                 MemoSheetHandle()
                 Text(
@@ -626,7 +628,9 @@ private fun SystemTtsConfigSheet(container: AppContainerImpl, onDismiss: () -> U
         } ?: emptyList()
     }
 
-    ModalBottomSheet(sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
+    ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(Modifier.padding(horizontal = 12.dp).padding(bottom = 16.dp)) {
             MemoSheetHandle()
             Text(

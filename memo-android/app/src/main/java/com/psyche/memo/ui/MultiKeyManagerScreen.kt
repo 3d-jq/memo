@@ -393,7 +393,7 @@ fun MultiKeyManagerScreen(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { showStrategySheet = false },
-            containerColor = cs.surface,
+            containerColor = cs.overlaySurfaceColor(),
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
             dragHandle = null,
         ) {
@@ -665,8 +665,8 @@ private fun AddKeysSheet(
     ModalBottomSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
-        containerColor = cs.surface,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        containerColor = cs.overlaySurfaceColor(),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = null,
     ) {
         Column(
@@ -717,8 +717,8 @@ private fun EditKeySheet(
     ModalBottomSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
-        containerColor = cs.surface,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        containerColor = cs.overlaySurfaceColor(),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         dragHandle = null,
     ) {
         Column(
