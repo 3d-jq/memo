@@ -1171,3 +1171,42 @@ SVG 既是图也是文档 —— 能塞脚本、外部引用、`<foreignObject>`
 - 模型选择：Flutter `showModelSelector`（model_select_sheet.dart 2533 行）→ Android `ModelSelectSheet`。视觉主体已对齐（卡片行 r14、品牌头像 28、单行名、Lucide 心形、搜索框 surfaceFill+r14 边框聚焦 primary 50%、chip 点击滚动分组）。**已补齐**：可拖拽高度（`_initialSize`/`_maxSize` 0.8 + `minChildSize` 0.4 → 同 ModelDetailSheet 的 NestedScrollConnection 等价物：initial==max 故只保留收缩半边，列表在顶下拉压缩高度、到 0.4 即 `sheetState.hide()` 关闭）。已补齐：长按模型详情 sheet（ModelDetailSheet.kt，编辑/创建双模式 + Basic/Advanced/BuiltInTools 三 tab + ModelRegistry.inferFull 完整投影 + 类型切换缓存 + headers/body 覆盖 + 内置工具按 ProviderKind 分类）。已补齐：详情 sheet 可拖拽高度（原版 DraggableScrollableSheet 0.4-0.95 initial 0.8 → Compose 原生 NestedScrollConnection 等价移植：列表在顶下拉压缩高度、到 0.4 即 sheetState.hide() 关闭（对齐 shouldCloseOnMinExtent），顶上推长高到 0.95 后列表接管；头部下拉关闭走 ModalBottomSheet 自带 drag-to-dismiss）。已补齐：ModelTagWrap 能力标签（ModelRegistry 正则推断）、pinnedModels 收藏系统（收藏组置顶 + 书签跳转 + 搜索聚合去重）、搜索跳转首个匹配组；吸顶 provider 头（_stickyProviderHeader）按用户决定不复刻。
 
 - 搜索体系（S1 已落地）：数据层 `core/data/model/SearchServiceOptions.kt`（24 个类，toJson 逐键对齐 search_service.dart；`type` 判别 + `apiKeys`↔extraApiKeys；step 别名→stepfun；未知类型回落 BingLocal）+ `repo/SearchSettingsLogic.kt`（纯 codec/夹取，带测试）+ `repo/SearchSettingsRepository.kt`（服务列表=search_service_rows 实体表，selected/common/enabled/autoTest=preference 键）。引擎 `app/provider/search/`：`SearchParsers`（各 provider 响应映射 + Bing/DDG HTML 解析用 jsoup + uddg 解包 + URL 归一化，带 fixture 测试）、`HttpSearchEngine`（8 provider 分发，未移植类型抛诚实错误）、`SearchApiKeyRotator`（[primary,...extras] 轮换 + parseBatch/mask）、`SearchToolService`（search_web 定义/描述/引用系统提示词/executeSearch 打 6 位 id）。接线：`ChatViewModel.offeredTools` 在 assistant.searchEnabled 时提供 search_web；`ToolHandler` 执行；`buildSystemPrompt` 注入 assistant.systemPrompt + 搜索引用块（message_builder_service.injectSearchPrompt L1734-1750）。**已补齐**（2026-09-12 核对）：搜索设置 sheet / 服务列表页 / 编辑器（24 类型表单）/ API keys 池页 / 连接测试（S2，输入栏 Globe + 设置页"搜索"行 + `search_services` 路由）；23 个 provider 引擎（S3，kelivo 除外——上游端点+内置令牌按品牌规则不移植）；**S4 用量查询卡**（`SearchUsageService` 已接进 `SearchServiceEditorScreen`，Tavily 余额/LinkUp 余额/进度条）；**`{{message}}` 消息模板已进请求组装**（`PromptTransformer.applyMessageTemplate`，见 §5.12 已修表）。**未做/不做**：上下文条数限制（= `applyContextLimit`，用户暂缓）、`{{message}}` 之外的模板变量与上下文条数门控仍缺。**「启动时自动测试连接」原以为原版移动端没有执行路径 —— 2026-09-16 查证是错的，已按原版补齐（见 §5.18②）**。
+
+## 5.25 剩余功能收官（2026-09-19，五批全通）
+
+用户「补齐剩余的所有功能」——按备份 → 语音 → 导出图片 → MCP-3 顺序全部落地（每批编译 + 定向测试 + 全量回归 + 本地提交，未 push，未装机）。
+
+### ① 备份子块 7：前向兼容闸门（完整版）
+
+- **`core/data/db/SchemaMigrations.kt`**（新）：`BackupSchemaVerdict`（current/needsUpgrade/forwardCompatible/forwardUndeclared/unreadable）+ `classifyBackup` + `PUBLISHED_SCHEMA_VERSIONS={1,2,3}` + `readSchemaVersion`（只读 user_version）+ `upgradeFileInPlace`（drift 1→2→3 迁移逐字 SQL 化：conversation_rows 两列 + 5 个 ADD COLUMN + tombstone/extension 两表 + 索引）+ `normalizeForwardCompatible`（**有意偏差**：只删未知表 + user_version 折回，不重建列——Android SQL 全显式列名、无 drift 校验器，未知列无害；pre-3.35 SQLite 删列要重建表）。
+- **`BackupManifestCodec` 修正**：`acceptsFormat` 换成上游语义（精确匹配 / 拒更旧 / 更新必须 1..FORMAT_VERSION 自证——**旧版会误收上游拒收的归档**）；`declaresNewerBuild` 改双轴（formatVersion > 当前 **或** database.schemaVersion > 当前）；`minimumReadableSchemaVersion` 可空（缺声明=forwardUndeclared）。
+- **BackupSnapshotBuilder**：写 `SchemaMigrations.MINIMUM_READABLE_SCHEMA_VERSION=2`（上游写常量而非当前版本——之前写 3 会把能读的旧构建挡在门外）。
+- **BackupRestorer**：未知 manifest 条目（非 settings/database/upload/avatars/images/fonts）来自同版=拒、来自新版=剥掉；includeChats 必须 database 块（settings-only 必须没有）；声明范围 1..schemaVersion；unreadable 拒、forwardUndeclared 需 `allowUnverifiedForwardCompatible`；解压后按文件 user_version 迁移/归一化再换库/合并。
+- **UI**：`ui/backup/ForwardCompatDialogs.kt`（`ForwardCompatDialogs` 宿主 + `ForwardCompatDialogHost`；Compose 弹窗是声明式的，suspend 侧经宿主状态挂起等结果）；本地导入选模式前 inspect + 同意；WebDAV/S3 下载完成后把 prompt 传进服务层，REFUSE 映射 `BackupCancelledException`（静默取消）。
+- 测试：`BackupManifestTest` 矩阵重写（acceptsFormat 七态/declaresNewerBuild 双轴）+ `SchemaMigrationsTest`（判定矩阵/迁移/归一化/**KNOWN_TABLES 与 asset SQL 锁死**——列表漏一个表名归一化就会删真表！）+ `BackupForwardCompatGateTest`（真实 pack 归档走闸门五例；Robolectric 里 `replaceDatabase` 的 rename 会失败 → 成功路径用 MERGE 验证）。
+
+### ② 备份子块 8：Cherry Studio / Chatbox 导入
+
+- **`core/data/backup/cherry/`**：`CherryDirectBackupReader.kt`（直备 zip：metadata.json 版本闸〔v7+ SQLite 拒〕+ LevelDB .log/.ldb 解析〔块句柄/写批/重启段〕+ **Snappy 块解码** + UTF-16LE/UTF-8 localStorage 候选 + **V8 值扫描器**〔0xff 版本头 + 对象/稠密稀疏数组/引用/字符串/日期〕）；`CherryImporter.kt`（whole-file JSON → zip 探测三梯〔根 .json → 其它 .json → 猜测探测 + blocked 扩展名 + 32M/256M 预算〕→ gzip → 直备；providers〔anthropic→claude、gemini→google、host 无尾斜杠补 /v1|/v1beta、反斜杠逗号转义拆 key、multi-key〕、assistants、topic/block〔code 围栏/thinking 包裹/error 引用〕拼装、附件物化〔base64/content/相对路径/文件名/uuid+ext 五级回退〕、`cherry_img_*` data-url 落盘、commit 到 ConversationDao/MessageDao）。
+- **`core/data/backup/chatbox/`**：`ChatboxImporter.kt`（v2 zip：manifest 校验〔format/版本/exportItems/stats 对账/ checksum 校验〕+ 成员一致性 + 压缩比/条目预算 + session 资源 storageKey→URI 重写〔messages/threads/forks/copilot/screenshots〕+ 资源暂存发布；legacy 单 JSON 兼容）；`ChatboxImportRunner.kt`（providers〔classify + host/path 规范化含 openai/openrouter 特例〕、assistant = 会话设置 + 首条 system 提示词、threads 与 session.messages 去重合并、contentParts 五类 part 转 TextPart/ImagePart/ReasoningPart/FilePart、tool 消息 JSON 载荷、myCopilots 补助手、Chatbox 标签 + tag_map/collapsed 三键业务写入）。
+- **UI**：备份页「从 Cherry Studio 导入」「从 Chatbox 导入」两行死入口接线（Cherry 先实验性确认弹窗〔上游内联文案原样〕）；成功后走既有重启对话框 + 计数明细（上游两种 locale 都用英文计数行，原样保留）。
+- 测试：`ThirdPartyImportTest`（Cherry whole-file JSON 全链路落库 + 多 key + /v1 补齐 + code 块围栏；Chatbox legacy JSON + merge 去重 + deepseek 默认 baseUrl；v7 直备拒收）。⚠️ Chatbox 的派生线程 id 是 `chatbox_default_<sessionId>`，测试按它查库。
+
+### ③ 语音：qwenAudio TTS WebSocket（12/12 收官）
+
+- `NetworkTts.qwenAudio` + `QwenAudioTtsSession`（OkHttp WebSocketListener）：onOpen 发 run-task（SpeechSynthesizer / text_type=PlainText / voice/format/sample_rate）→ 30s 等 task-started → continue-task（文本）+ finish-task → 120s 等 task-finished；二进制帧进 ByteArrayOutputStream；task-failed/error 取 header.error_message|error_code|payload.message；PCM 经既有 `pcmToWav` 转 WAV；mime 按 `_audioMimeForFormat`。websocketUrl：workspace 空 → `wss://dashscope.aliyuncs.com/api-ws/v1/inference`，否则 `wss://<ws>.<region>.maas.aliyuncs.com/...`（region 缺省 cn-beijing）。`isSupported` 恒 true；两个旧断言（「qwenAudio 未接」）随附更新。
+
+### ④ UI-7i：消息导出图片
+
+- `ui/chat/ChatExportImage.kt`：**离屏 ComposeView 渲染引擎**——不可见 Dialog（alpha 0 + NOT_TOUCHABLE/NOT_FOCUSABLE + dim 0）承载 ComposeView，`ProvideSemanticColors + MaterialTheme` 下渲染导出文档（标题 + 秒级日期 + 每条消息角色名/时间/气泡 Markdown + ImagePart 内联图），两帧后 draw 进 ARGB_8888 位图；导出 sheet 第三选项（`message_export_sheet_export_image`）接线，PNG 写 `cache/exports/` 后经 `resolveShareableImage` 走系统分享。
+- **有意偏差（记 §5.11 语义）**：①上游切片拼接 + 空白裁剪是绕 Flutter 纹理上限的，Compose 离屏 Canvas 一次画完，不需要；②上游的图片预览 sheet 省略，截完直接分享；③导出文档复用 `MarkdownText` 渲染气泡正文。
+
+### ⑤ MCP-3：OAuth 授权流程
+
+- **`app/provider/mcp/McpOAuth.kt`**：`McpOAuthService`（RFC 9728 受保护资源元数据两候选 + RFC 8414/OIDC 三候选发现链，issuer 对账 + S256 PKCE 要求；DCR 动态注册；PKCE(S256)+state+resource 授权 URL；iss 参数校验；授权码换令牌〔none/client_secret_post/client_secret_basic 三种认证方式〕；refresh；发现/注册缓存与失效）+ `McpOAuthParsing.parseBearerChallenges`（未引号逗号分段 + 「首 token 无=即新挑战」分组，非 Bearer 丢弃）+ `McpOAuthLoopbackCallback`（127.0.0.1 一次性 ServerSocket，5 分钟超时，回 200 HTML）+ SSRF（`requireDiscoveredHttpsUri` 名字级 + `validatePublicTarget` DNS 全地址解析级，IPv4 私有段/IPv6 fc,fd,fe8x,ff/映射地址全查，回环仅服务器自身放行）+ `McpOAuthStore`。
+- **集成**：`McpConnectionManager.connect` 前置 `refreshIfNeeded`（过期自动刷新）+ `withOAuth`（有效令牌附 `Authorization` 头到 server.headers）；`authorizeOAuth(server, context)` 用系统浏览器发起授权、成功写 `McpServerConfig.oauth`（schema 既有字段）并重连；编辑页 http/sse 传输显示「使用 OAuth 登录」按钮 + 结果行。STDIO 不适用；「会话内 MCP sheet」上游无调用点 = 死代码不移植。
+- 测试：`McpOAuthTest`（挑战解析含引号/多挑战、SSRF 主机全矩阵、发现候选 URL、canonicalResource、State JSON 往返/刷新窗口）。
+
+### 收官清单（剩余=零）
+
+1~8 备份子块 ✅ / 12 家网络 TTS + 7 种 ASR ✅ / MCP-1/2/3 ✅ / UI-7 全系（含图片导出）✅ / §5.12 五批 ✅。**有意不移植**（勿当待办）：S5 内置搜索（上游端点+令牌，品牌规则）、图片查看器桌面专属件、STDIO MCP、sherpa_onnx、desktop/ 整目录。
