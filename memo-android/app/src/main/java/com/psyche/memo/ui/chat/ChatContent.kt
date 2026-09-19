@@ -1783,6 +1783,79 @@ fun ChatContent(
             imageLine = { uri -> if (markdown) "![image]($uri)" else uri },
         )
         com.psyche.memo.ui.chat.MessageExportSheet(
+            onImage = {
+                // UI-7i：widget 截图引擎 —— 离屏 ComposeView 渲染导出文档后
+                // PNG 编码并交给系统分享（上游是 RepaintBoundary + 预览 sheet；
+                // 这里直接走分享面板，预览步骤省略，PORTING §5.25）。
+                showExportSheet = false
+                val coroutine = coroutineScope
+                val appContext = container.appContext
+                val datePattern =
+                    appContext.getString(UiR.string.message_export_sheet_date_time_with_seconds_pattern)
+                val dateLine = java.text.SimpleDateFormat(datePattern, java.util.Locale.getDefault())
+                    .format(java.util.Date())
+                val exportedAsTemplate =
+                    appContext.getString(UiR.string.message_export_sheet_exported_as)
+                val failedTemplate =
+                    appContext.getString(UiR.string.message_export_sheet_export_failed)
+                com.psyche.memo.ui.chat.ChatExportImage.render(
+                    context = appContext,
+                    title = exportTitle,
+                    dateLine = dateLine,
+                    messages = selectedMessages,
+                    roleNameOf = roleNameOf,
+                    timeOf = timeOf,
+                    scheme = cs,
+                ) { bitmap ->
+                    if (bitmap == null) {
+                        com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                            com.psyche.memo.ui.snackbar.AppNotification(
+                                message = failedTemplate.format("render failed"),
+                                type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+                            ),
+                        )
+                        return@render
+                    }
+                    coroutine.launch {
+                        val pngFile = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            runCatching {
+                                val dir = java.io.File(appContext.cacheDir, "exports").apply { mkdirs() }
+                                val target = java.io.File(dir, "chat-export-${System.currentTimeMillis()}.png")
+                                target.outputStream().use { out ->
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                                }
+                                target
+                            }.getOrNull()
+                        }
+                        val shareUri = pngFile?.let {
+                            com.psyche.memo.ui.chat.resolveShareableImage(appContext, it.path)
+                        }
+                        if (pngFile == null || shareUri == null) {
+                            com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                                com.psyche.memo.ui.snackbar.AppNotification(
+                                    message = failedTemplate.format("encode failed"),
+                                    type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+                                ),
+                            )
+                            return@launch
+                        }
+                        val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "image/png"
+                            putExtra(android.content.Intent.EXTRA_STREAM, shareUri)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        runCatching {
+                            appContext.startActivity(android.content.Intent.createChooser(send, null))
+                        }
+                        com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                            com.psyche.memo.ui.snackbar.AppNotification(
+                                message = exportedAsTemplate.format(pngFile.name),
+                                type = com.psyche.memo.ui.snackbar.NotificationType.SUCCESS,
+                            ),
+                        )
+                    }
+                }
+            },
             onMarkdown = {
                 showExportSheet = false
                 exportPending = true to buildExport(true)
