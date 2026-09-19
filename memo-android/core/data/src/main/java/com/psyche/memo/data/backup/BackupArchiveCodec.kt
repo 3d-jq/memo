@@ -28,7 +28,7 @@ import java.util.zip.ZipOutputStream
  * asset directories in a fixed order, with the manifest last (it must be
  * written after every other entry so it can describe them).
  */
-internal object BackupArchiveCodec {
+object BackupArchiveCodec {
 
     private const val BUFFER_SIZE = 64 * 1024
 
