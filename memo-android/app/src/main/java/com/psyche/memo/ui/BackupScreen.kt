@@ -143,6 +143,11 @@ fun BackupScreen(
     var pendingExport by remember { mutableStateOf<File?>(null) }
     var restoringFile by remember { mutableStateOf<File?>(null) }
     var showImportModeDialog by remember { mutableStateOf(false) }
+    // 子块 7 —— 前向兼容：本地导入先 inspect + 同意对话框；远端恢复把 prompt
+    // 传进服务层（下载完成后在进度浮层之上弹）。上游顺序是先模式后兼容性，
+    // 这里沿用既有「格式检查 → 模式」的位置，拒绝时少弹一次模式框。
+    val forwardCompatDialogs = remember { com.psyche.memo.ui.backup.ForwardCompatDialogs() }
+    var importAllowUnverified by remember { mutableStateOf(false) }
     var restartReport by remember { mutableStateOf<RestoreReportUi?>(null) }
 
     // ── WebDAV (sub-block 5) ──────────────────────────────────────────────
@@ -253,12 +258,30 @@ fun BackupScreen(
                 toast(schemaTooNew, NotificationType.ERROR)
                 return@launch
             }
+            importAllowUnverified = false
+            when (val decision = com.psyche.memo.ui.backup.resolveForwardCompatibility(
+                inspect = { container.backupService.inspectBackupCompatibility(staged) },
+                dialogs = forwardCompatDialogs,
+            )) {
+                com.psyche.memo.ui.backup.ForwardCompatDecision.PROCEED -> {}
+                com.psyche.memo.ui.backup.ForwardCompatDecision.PROCEED_UNVERIFIED ->
+                    importAllowUnverified = true
+                com.psyche.memo.ui.backup.ForwardCompatDecision.CANCELLED -> {
+                    staged.delete()
+                    return@launch
+                }
+                com.psyche.memo.ui.backup.ForwardCompatDecision.UNREADABLE -> {
+                    staged.delete()
+                    toast(schemaTooNew, NotificationType.ERROR)
+                    return@launch
+                }
+            }
             restoringFile = staged
             showImportModeDialog = true
         }
     }
 
-    fun runImport(file: File, mode: RestoreMode) {
+    fun runImport(file: File, mode: RestoreMode, allowUnverified: Boolean = false) {
         scope.launch {
             var report: com.psyche.memo.data.backup.RestoreReportView? = null
             val ok = runner.run(
@@ -270,6 +293,7 @@ fun BackupScreen(
                     mode = mode,
                     onProgress = { progress(it) },
                     isCancelled = isCancelled,
+                    allowUnverifiedForwardCompatible = allowUnverified,
                 )
             }
             file.delete()
@@ -315,6 +339,9 @@ fun runWebDavRestore(item: com.psyche.memo.data.backup.WebDavFileItem, mode: Res
                 mode = mode,
                 onProgress = { progress(it) },
                 isCancelled = isCancelled,
+                forwardCompatibilityPrompt = com.psyche.memo.ui.backup.forwardCompatibilityPrompt(
+                    forwardCompatDialogs,
+                ),
             )
         }
         val done = report
@@ -431,6 +458,9 @@ fun runS3Restore(item: com.psyche.memo.data.backup.S3FileItem, mode: RestoreMode
                 mode = mode,
                 onProgress = { progress(it) },
                 isCancelled = isCancelled,
+                forwardCompatibilityPrompt = com.psyche.memo.ui.backup.forwardCompatibilityPrompt(
+                    forwardCompatDialogs,
+                ),
             )
         }
         val done = report
@@ -728,15 +758,19 @@ fun deleteS3Item(item: com.psyche.memo.data.backup.S3FileItem) {
                 showImportModeDialog = false
                 val file = restoringFile
                 restoringFile = null
-                if (file != null) runImport(file, mode)
+                val allowUnverified = importAllowUnverified
+                importAllowUnverified = false
+                if (file != null) runImport(file, mode, allowUnverified)
             },
             onDismiss = {
                 showImportModeDialog = false
+                importAllowUnverified = false
                 restoringFile?.delete()
                 restoringFile = null
             },
         )
     }
+    com.psyche.memo.ui.backup.ForwardCompatDialogHost(forwardCompatDialogs)
 
     restartReport?.let { report ->
         BackupRestartRequiredDialog(

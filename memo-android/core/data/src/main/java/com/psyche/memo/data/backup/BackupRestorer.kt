@@ -3,8 +3,10 @@ package com.psyche.memo.data.backup
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.psyche.memo.data.db.AssistantMemoryRowDao
+import com.psyche.memo.data.db.BackupSchemaVerdict
 import com.psyche.memo.data.db.MemoDatabase
 import com.psyche.memo.data.db.MemoSchema
+import com.psyche.memo.data.db.SchemaMigrations
 import com.psyche.memo.data.db.MemoryEntryRowDao
 import com.psyche.memo.data.db.PayloadEntityDao
 import com.psyche.memo.data.settings.KeyDisposition
@@ -19,7 +21,7 @@ import java.io.File
 /**
  * What a completed restore did, so the UI can report it honestly.
  */
-internal data class RestoreReport(
+data class RestoreReport(
     val mode: RestoreMode,
     val entityRowsWritten: Int,
     val preferenceKeysWritten: Int,
@@ -51,7 +53,7 @@ enum class RestoreMode { OVERWRITE, MERGE }
  * quiesced, which is correct for the offline, user-initiated local-file flow
  * but is not a substitute for the staged pipeline.
  */
-internal class BackupRestorer(
+class BackupRestorer(
     private val context: Context,
     private val database: MemoDatabase,
     private val preferenceRepository: PreferenceRepository,
@@ -63,19 +65,61 @@ internal class BackupRestorer(
      * @param onProgress `(phase, processed, total)`; total is -1 when unknown.
      * @param isCancelled polled between entries so a cancelled restore stops
      *   before it starts mutating live data.
+     * @param allowUnverifiedForwardCompatible the user's informed consent for
+     *   a backup from a NEWER build that made no compatibility declaration
+     *   (`allowUnverifiedForwardCompatible` in `data_sync.dart`). Without it a
+     *   `forwardUndeclared` schema is refused; the consent dialog lives in the
+     *   app layer (`ForwardCompatDialogs`).
      */
     fun restore(
         archive: File,
         mode: RestoreMode,
         onProgress: (phase: String, processed: Long, total: Long) -> Unit = { _, _, _ -> },
         isCancelled: () -> Boolean = { false },
+        allowUnverifiedForwardCompatible: Boolean = false,
     ): RestoreReport {
         require(archive.isFile) { "备份文件不存在" }
 
         onProgress(PHASE_READING_MANIFEST, 0, -1)
-        val manifest = BackupArchiveCodec.readManifest(archive)
+        var manifest = BackupArchiveCodec.readManifest(archive)
         check(BackupManifestCodec.acceptsFormat(manifest)) {
             "该备份文件格式版本不受支持（format=${manifest.format}，需要至少 ${manifest.minimumReadableFormatVersion}）"
+        }
+
+        // ── 前向兼容闸门（`_preflightVersionedBackup` 的判定部分）──────────
+        // 归档里本版本不认识的条目：来自更新的构建 = 归档层的未知表/列，剥掉后
+        // 继续；来自同版本或更旧 = 归档本身畸形，拒绝（`manifest_entry_scope`）。
+        val unknownEntries = manifest.entries.keys.filter { name -> !isKnownEntryName(name) }
+        if (unknownEntries.isNotEmpty()) {
+            check(BackupManifestCodec.declaresNewerBuild(manifest)) {
+                "备份内包含本版本不认识的条目（${unknownEntries.first()}），且备份未声明来自更新的版本"
+            }
+            // 从 manifest 里剥掉，等于上游“解压后从盘上删除”：之后的任何阶段
+            // 都不会再碰它们。
+            manifest = manifest.copy(entries = manifest.entries.filterKeys { it !in unknownEntries.toSet() })
+        }
+        var schemaVerdict: BackupSchemaVerdict? = null
+        if (manifest.includeChats) {
+            val database = requireNotNull(manifest.database) { "备份声明包含会话，但 manifest 缺少 database 块" }
+            val declared = database.minimumReadableSchemaVersion
+            check(declared == null || (declared in 1..database.schemaVersion)) { "备份的数据库兼容性声明无效" }
+            schemaVerdict = SchemaMigrations.classifyBackup(database.schemaVersion, declared)
+            when (schemaVerdict) {
+                BackupSchemaVerdict.UNREADABLE ->
+                    throw IllegalStateException("该备份的数据库格式比当前版本新，无法读取；请更新 Memo 后重试")
+                BackupSchemaVerdict.FORWARD_UNDECLARED ->
+                    check(allowUnverifiedForwardCompatible) {
+                        "该备份来自更新的版本且未声明能否被本版本读取；如仍要导入，请在确认对话框中选择「仍要导入」"
+                    }
+                BackupSchemaVerdict.CURRENT,
+                BackupSchemaVerdict.NEEDS_UPGRADE,
+                BackupSchemaVerdict.FORWARD_COMPATIBLE,
+                -> {}
+            }
+        } else {
+            // settings-only payload must not carry a database block
+            // (`manifest_database`).
+            check(manifest.database == null) { "备份的 manifest 携带了与载荷不符的 database 块" }
         }
 
         val staging = File(context.cacheDir, "memo_restore_${System.currentTimeMillis()}")
@@ -111,6 +155,22 @@ internal class BackupRestorer(
                 val stagedDb = File(staging, BackupManifestCodec.ENTRY_DATABASE)
                 require(stagedDb.isFile) { "备份声明包含会话，但归档内缺少 database/kelivo.db" }
                 verifySqliteHeader(stagedDb)
+                // `prepareSnapshotForRestore`：以文件里的 user_version 为准。
+                // 老 schema 先原位迁移；forwardCompatible/forwardUndeclared 的
+                // 新 schema 剥掉本版不认识的表并把 user_version 折回当前值，
+                // 之后才允许换入/合并。
+                val stagedVersion = SchemaMigrations.readSchemaVersion(stagedDb)
+                if (SchemaMigrations.needsUpgrade(stagedVersion)) {
+                    SchemaMigrations.upgradeFileInPlace(stagedDb)
+                } else if (stagedVersion > SchemaMigrations.CURRENT_SCHEMA_VERSION) {
+                    check(
+                        schemaVerdict == BackupSchemaVerdict.FORWARD_COMPATIBLE ||
+                            schemaVerdict == BackupSchemaVerdict.FORWARD_UNDECLARED,
+                    ) { "该备份的数据库格式比当前版本新，无法读取；请更新 Memo 后重试" }
+                    SchemaMigrations.normalizeForwardCompatible(stagedDb)
+                } else if (stagedVersion != SchemaMigrations.CURRENT_SCHEMA_VERSION) {
+                    throw IllegalStateException("备份的数据库 schema 版本无法识别（$stagedVersion）")
+                }
                 if (mode == RestoreMode.OVERWRITE) {
                     replaceDatabase(stagedDb)
                     databaseRestored = true
@@ -351,6 +411,17 @@ internal class BackupRestorer(
             "备份中的数据库不是有效的 SQLite 文件"
         }
     }
+
+    /**
+     * The manifest entry names this build has a use for
+     * (`_preflightVersionedBackup`'s known-entry set): the two payload files
+     * plus the four asset roots. Anything else is the archive-level
+     * counterpart of an unknown table — tolerated only from a newer build.
+     */
+    private fun isKnownEntryName(name: String): Boolean =
+        name == BackupManifestCodec.ENTRY_SETTINGS ||
+            name == BackupManifestCodec.ENTRY_DATABASE ||
+            BackupArchiveCodec.ASSET_ROOTS.any { name.startsWith("$it/") }
 
     /**
      * Replaces the live database with [stagedDb] and reopens the connection.

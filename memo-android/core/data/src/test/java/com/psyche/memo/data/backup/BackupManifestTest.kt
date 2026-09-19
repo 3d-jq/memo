@@ -130,25 +130,70 @@ class BackupManifestTest {
     }
 
     @Test
+    fun `format gate follows the upstream matrix`() {
+        fun manifestWith(formatVersion: Int, declared: Int?): BackupManifest {
+            val raw = encodeSample()
+                .replace("\"formatVersion\":2", "\"formatVersion\":$formatVersion")
+                .let { json ->
+                    if (declared == null) {
+                        json.replace("\"minimumReadableFormatVersion\":2,", "")
+                    } else {
+                        json.replace(
+                            "\"minimumReadableFormatVersion\":2",
+                            "\"minimumReadableFormatVersion\":$declared",
+                        )
+                    }
+                }
+            return BackupManifestCodec.decode(raw)
+        }
+
+        // Exact match reads as-is, regardless of what it declares.
+        assertTrue(BackupManifestCodec.acceptsFormat(manifestWith(formatVersion = 2, declared = 2)))
+        // Older archive formats were never supported and still are not.
+        assertFalse(BackupManifestCodec.acceptsFormat(manifestWith(formatVersion = 1, declared = 1)))
+        // A NEWER archive is admitted only while its declaration vouches for
+        // this build (1..FORMAT_VERSION).
+        assertTrue(BackupManifestCodec.acceptsFormat(manifestWith(formatVersion = 3, declared = 2)))
+        assertTrue(BackupManifestCodec.acceptsFormat(manifestWith(formatVersion = 3, declared = 1)))
+        assertFalse(BackupManifestCodec.acceptsFormat(manifestWith(formatVersion = 3, declared = 3)))
+        assertFalse(BackupManifestCodec.acceptsFormat(manifestWith(formatVersion = 3, declared = null)))
+        assertFalse(BackupManifestCodec.acceptsFormat(manifestWith(formatVersion = 3, declared = 0)))
+    }
+
+    @Test
     fun `rejects an archive whose format version is below its own floor`() {
+        // An archive cannot vouch for a floor ABOVE the format it declares —
+        // the writer contradicts itself, so it cannot be trusted.
         val json = encodeSample().replace(
+            "\"formatVersion\":2",
+            "\"formatVersion\":3",
+        ).replace(
             "\"minimumReadableFormatVersion\":2",
-            "\"minimumReadableFormatVersion\":5",
+            "\"minimumReadableFormatVersion\":3",
         )
         val manifest = BackupManifestCodec.decode(json)
-        // Format version 2 < floor 5 => this archive is internally inconsistent
-        // and cannot be trusted.
         assertFalse(BackupManifestCodec.acceptsFormat(manifest))
     }
 
     @Test
     fun `flags an archive written by a newer build`() {
-        val json = encodeSample().replace(
-            "\"minimumReadableFormatVersion\":2",
-            "\"minimumReadableFormatVersion\":99",
+        // Format axis: a newer formatVersion (already vouched for by the
+        // format gate).
+        val newerFormat = BackupManifestCodec.decode(
+            encodeSample()
+                .replace("\"formatVersion\":2", "\"formatVersion\":3")
+                .replace("\"minimumReadableFormatVersion\":2", "\"minimumReadableFormatVersion\":2"),
         )
-        val manifest = BackupManifestCodec.decode(json)
-        assertTrue(BackupManifestCodec.declaresNewerBuild(manifest))
+        assertTrue(BackupManifestCodec.declaresNewerBuild(newerFormat))
+        // Schema axis: the database block describes a schema newer than this
+        // build knows, even at the same archive format.
+        val newerSchema = BackupManifestCodec.decode(
+            encodeSample().replace("\"schemaVersion\":3", "\"schemaVersion\":4"),
+        )
+        assertTrue(BackupManifestCodec.declaresNewerBuild(newerSchema))
+        // A settings-only archive has no schema at all; only the format axis
+        // can flag it.
+        assertFalse(BackupManifestCodec.declaresNewerBuild(BackupManifestCodec.decode(encodeSample())))
     }
 
     @Test

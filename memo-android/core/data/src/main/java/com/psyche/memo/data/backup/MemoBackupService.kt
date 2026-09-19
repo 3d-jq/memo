@@ -1,7 +1,9 @@
 package com.psyche.memo.data.backup
 
 import android.content.Context
+import com.psyche.memo.data.db.BackupSchemaVerdict
 import com.psyche.memo.data.db.MemoDatabase
+import com.psyche.memo.data.db.SchemaMigrations
 import com.psyche.memo.data.settings.PreferenceRepository
 import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
@@ -71,12 +73,16 @@ class MemoBackupService(
      * @param databaseFile a staged copy of the archive, or the archive itself;
      *   restore reads `manifest.json` from it first so a foreign file is
      *   rejected before anything is written.
+     * @param allowUnverifiedForwardCompatible the user's informed consent for
+     *   a backup from a newer build that made no compatibility declaration
+     *   (resolved by the app layer's consent dialog before calling this).
      */
     fun restoreFromFile(
         archive: File,
         mode: RestoreMode,
         onProgress: BackupProgressSink? = null,
         isCancelled: () -> Boolean = { false },
+        allowUnverifiedForwardCompatible: Boolean = false,
     ): RestoreReportView {
         val bridge = ProgressBridge(onProgress)
         val restorer = BackupRestorer(context, database, preferenceRepository)
@@ -86,6 +92,7 @@ class MemoBackupService(
                 mode = mode,
                 onProgress = { phase, processed, total -> bridge.report(phase, processed, total) },
                 isCancelled = { isCancelled() },
+                allowUnverifiedForwardCompatible = allowUnverifiedForwardCompatible,
             )
         } catch (cancelled: IllegalStateException) {
             if (cancelled.message == CANCELLED_MESSAGE) throw BackupCancelledException()
@@ -226,15 +233,36 @@ class MemoBackupService(
     }
 
     /**
-     * `restoreFromWebDav` — stream the archive down to cache, then run the
-     * normal restore over it.
+     * What restoring a backup would mean for this build, determined from its
+     * manifest alone (`DataSync.inspectBackupCompatibility`). Null = no
+     * readable manifest or no SQLite payload — nothing to ask about; the
+     * restore itself reports any real problem.
      */
-    fun restoreFromWebDav(
+    fun inspectBackupCompatibility(archive: File): BackupCompatibility? = runCatching {
+        val manifest = BackupArchiveCodec.readManifest(archive)
+        val database = manifest.database ?: return@runCatching null
+        BackupCompatibility(
+            schemaVersion = database.schemaVersion,
+            verdict = SchemaMigrations.classifyBackup(
+                schemaVersion = database.schemaVersion,
+                declaredMinimumReadable = database.minimumReadableSchemaVersion,
+            ),
+        )
+    }.getOrNull()
+
+    /**
+     * `restoreFromWebDav` — stream the archive down to cache, then run the
+     * normal restore over it. [forwardCompatibilityPrompt] is asked once the
+     * archive is on disk and before anything is read out of it (the progress
+     * overlay is already up by then; a dialog stacks above it).
+     */
+    suspend fun restoreFromWebDav(
         config: WebDavConfig,
         item: WebDavFileItem,
         mode: RestoreMode,
         onProgress: BackupProgressSink? = null,
         isCancelled: () -> Boolean = { false },
+        forwardCompatibilityPrompt: ForwardCompatibilityPrompt? = null,
     ): RestoreReportView {
         val bridge = ProgressBridge(onProgress)
         val restorer = BackupRestorer(context, database, preferenceRepository)
@@ -243,30 +271,47 @@ class MemoBackupService(
             client(config).download(item, staged) { processed, total ->
                 bridge.report(BackupPhase.wireOf(BackupPhase.DOWNLOADING), processed, total)
             }
-            return restoreStaged(restorer, staged, mode, bridge, isCancelled)
+            return restoreStaged(restorer, staged, mode, bridge, isCancelled, forwardCompatibilityPrompt)
         } finally {
             runCatching { staged.delete() }
         }
     }
 
     /**
-     * Shared restore tail for the remote sources: run [restorer] over the
-     * already-downloaded archive and project the internal report onto the
-     * public view the UI consumes.
+     * Shared restore tail for the remote sources: settle the forward-
+     * compatibility question through [forwardCompatibilityPrompt], then run
+     * [restorer] over the already-downloaded archive and project the internal
+     * report onto the public view the UI consumes.
      */
-    private fun restoreStaged(
+    private suspend fun restoreStaged(
         restorer: BackupRestorer,
         staged: File,
         mode: RestoreMode,
         bridge: ProgressBridge,
         isCancelled: () -> Boolean,
+        forwardCompatibilityPrompt: ForwardCompatibilityPrompt?,
     ): RestoreReportView {
+        var allowUnverified = false
+        if (forwardCompatibilityPrompt != null) {
+            // `_askForwardCompatibility`: a refusal is reported as a
+            // cancellation — the prompt owns the explanation, so there is
+            // nothing left for the restore to say.
+            val compatibility = inspectBackupCompatibility(staged)
+            if (compatibility != null) {
+                when (forwardCompatibilityPrompt(compatibility)) {
+                    ForwardCompatibilityAnswer.PROCEED -> {}
+                    ForwardCompatibilityAnswer.PROCEED_UNVERIFIED -> allowUnverified = true
+                    ForwardCompatibilityAnswer.REFUSE -> throw BackupCancelledException()
+                }
+            }
+        }
         val report = try {
             restorer.restore(
                 archive = staged,
                 mode = mode,
                 onProgress = { phase, processed, total -> bridge.report(phase, processed, total) },
                 isCancelled = isCancelled,
+                allowUnverifiedForwardCompatible = allowUnverified,
             )
         } catch (cancelled: IllegalStateException) {
             if (cancelled.message == CANCELLED_MESSAGE) throw BackupCancelledException()
@@ -349,12 +394,13 @@ class MemoBackupService(
      * `S3BackupProvider.restoreFromItem` — stream the object down to cache,
      * then run the normal restore over it.
      */
-    fun restoreFromS3(
+    suspend fun restoreFromS3(
         config: S3Config,
         item: S3FileItem,
         mode: RestoreMode,
         onProgress: BackupProgressSink? = null,
         isCancelled: () -> Boolean = { false },
+        forwardCompatibilityPrompt: ForwardCompatibilityPrompt? = null,
     ): RestoreReportView {
         val bridge = ProgressBridge(onProgress)
         val restorer = BackupRestorer(context, database, preferenceRepository)
@@ -369,7 +415,7 @@ class MemoBackupService(
                 },
                 isCancelled = isCancelled,
             )
-            return restoreStaged(restorer, staged, mode, bridge, isCancelled)
+            return restoreStaged(restorer, staged, mode, bridge, isCancelled, forwardCompatibilityPrompt)
         } finally {
             runCatching { staged.delete() }
         }
@@ -387,6 +433,36 @@ class MemoBackupService(
         internal const val CANCELLED_MESSAGE = "备份已取消"
     }
 }
+
+/**
+ * What restoring a backup would mean for this build, determined from its
+ * manifest alone (`BackupCompatibility` in `data_sync.dart`).
+ */
+data class BackupCompatibility(
+    val schemaVersion: Int,
+    val verdict: BackupSchemaVerdict,
+)
+
+/** How a caller answers a [ForwardCompatibilityPrompt]. */
+enum class ForwardCompatibilityAnswer {
+    /** Restore normally. */
+    PROCEED,
+
+    /** The backup is newer than this build and made no compatibility promise,
+     *  and the user accepted the risk anyway. */
+    PROCEED_UNVERIFIED,
+
+    /** Do not restore. The prompt owns the explanation. */
+    REFUSE,
+}
+
+/**
+ * Asked once a backup is on disk and before anything is read out of it.
+ * Exists for the WebDAV and S3 restores, which cannot inspect the archive
+ * before downloading it. Runs on the caller's context, so it may show UI.
+ */
+typealias ForwardCompatibilityPrompt =
+    suspend (BackupCompatibility) -> ForwardCompatibilityAnswer
 
 /**
  * What the app layer may know about a manifest — no internal format types.

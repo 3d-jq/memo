@@ -1,5 +1,6 @@
 package com.psyche.memo.data.backup
 
+import com.psyche.memo.data.db.SchemaMigrations
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -25,7 +26,7 @@ import kotlinx.serialization.json.put
  * omits the `database` block entirely for settings-only payloads; keeping the
  * writer explicit makes that alignment reviewable line by line.
  */
-internal object BackupManifestCodec {
+object BackupManifestCodec {
 
     const val FORMAT = "kelivo-backup"
     const val FORMAT_VERSION = 2
@@ -120,8 +121,10 @@ internal object BackupManifestCodec {
             DatabaseInfo(
                 entry = obj["entry"]?.jsonPrimitive?.content ?: ENTRY_DATABASE,
                 schemaVersion = obj["schemaVersion"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
+                // Absent or malformed = no declaration (the forwardUndeclared
+                // axis), not zero.
                 minimumReadableSchemaVersion = obj[KEY_SCHEMA_MINIMUM_READABLE]
-                    ?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
+                    ?.jsonPrimitive?.content?.toIntOrNull(),
                 conversationCount = obj["conversationCount"]
                     ?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
                 messageCount = obj["messageCount"]?.jsonPrimitive?.content?.toIntOrNull() ?: 0,
@@ -148,33 +151,50 @@ internal object BackupManifestCodec {
         )
     }
 
-    /** `_acceptsArchiveFormat`: this build can read the archive at all. */
+    /**
+     * `_acceptsArchiveFormat` (with the `format` marker check upstream runs
+     * alongside it): whether this build may read an archive of the manifest's
+     * format version. An exact match, plus one relaxation: a NEWER archive
+     * that vouches for us through `minimumReadableFormatVersion` (a
+     * declaration in 1..[FORMAT_VERSION]). An undeclared newer archive is
+     * refused — unlike the database axis there are no undeclared newer
+     * archives in the wild to serve, since every build that can write a newer
+     * format also writes the declaration. Older archive formats were never
+     * supported and still are not.
+     */
     fun acceptsFormat(manifest: BackupManifest): Boolean =
-        manifest.format == FORMAT &&
-            manifest.formatVersion >= manifest.minimumReadableFormatVersion
+        manifest.format == FORMAT && when {
+            manifest.formatVersion == FORMAT_VERSION -> true
+            manifest.formatVersion < FORMAT_VERSION -> false
+            else -> manifest.minimumReadableFormatVersion in 1..FORMAT_VERSION
+        }
 
     /**
-     * `_declaresNewerBuild`: the archive was written by a build whose format is
-     * newer than this one understands, so the user must consent to drop what
-     * cannot be read.
+     * `_declaresNewerBuild`: the manifest was written by a build newer than
+     * this one, on either axis — a newer archive format, or a newer database
+     * schema. Both move independently and both matter: a newer build can add
+     * an ignorable directory without touching the schema, and a settings-only
+     * backup has no schema at all.
      */
     fun declaresNewerBuild(manifest: BackupManifest): Boolean =
-        manifest.minimumReadableFormatVersion > FORMAT_VERSION
+        manifest.formatVersion > FORMAT_VERSION ||
+            (manifest.database?.schemaVersion ?: 0) > SchemaMigrations.CURRENT_SCHEMA_VERSION
 
     private val JSON = Json { ignoreUnknownKeys = true; isLenient = true }
 }
 
-internal data class EntryMetadata(val bytes: Long, val sha256: String)
+data class EntryMetadata(val bytes: Long, val sha256: String)
 
-internal data class DatabaseInfo(
+data class DatabaseInfo(
     val entry: String,
     val schemaVersion: Int,
-    val minimumReadableSchemaVersion: Int,
+    /** `minimumReadableSchemaVersion` declaration; null when absent. */
+    val minimumReadableSchemaVersion: Int?,
     val conversationCount: Int,
     val messageCount: Int,
 )
 
-internal data class BackupManifest(
+data class BackupManifest(
     val format: String,
     val formatVersion: Int,
     val minimumReadableFormatVersion: Int,

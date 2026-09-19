@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.psyche.memo.data.db.MemoDatabase
 import com.psyche.memo.data.db.MemoSchema
 import com.psyche.memo.data.db.PayloadEntityDao
+import com.psyche.memo.data.db.SchemaMigrations
 import com.psyche.memo.data.settings.PreferenceRepository
 import java.io.File
 
@@ -88,7 +89,10 @@ internal class BackupSnapshotBuilder(
                 databaseInfo = DatabaseInfo(
                     entry = BackupManifestCodec.ENTRY_DATABASE,
                     schemaVersion = MemoSchema.DB_VERSION,
-                    minimumReadableSchemaVersion = MemoSchema.DB_VERSION,
+                    // Upstream writes the SchemaMigrations constant, not the
+                    // current version: a purely additive future schema keeps
+                    // older builds able to read our backups.
+                    minimumReadableSchemaVersion = SchemaMigrations.MINIMUM_READABLE_SCHEMA_VERSION,
                     conversationCount = countRows(database.readableDatabase, "conversation_rows"),
                     messageCount = countRows(database.readableDatabase, "message_rows"),
                 )
