@@ -289,16 +289,17 @@ class McpOAuthLoopbackCallback(
                     val parameters = query.split('&').mapNotNull { pair ->
                         val idx = pair.indexOf('=')
                         if (idx <= 0) return@mapNotNull null
-                        URLDecoder.decode(pair.substring(0, idx), StandardCharsets.UTF_8) to
-                            URLDecoder.decode(pair.substring(idx + 1), StandardCharsets.UTF_8)
+                        // String 重载（API 1）——Charset 重载要 API 33，minSdk 26 会 NoSuchMethodError。
+                        URLDecoder.decode(pair.substring(0, idx), "UTF-8") to
+                            URLDecoder.decode(pair.substring(idx + 1), "UTF-8")
                     }.toMap()
                     val redirectBase = "http://127.0.0.1:${socket.localPort}/callback"
                     URI("$redirectBase?$query").let { base ->
                         URI(
                             base.scheme, base.authority, base.path,
                             parameters.entries.joinToString("&") { (k, v) ->
-                                "${java.net.URLEncoder.encode(k, StandardCharsets.UTF_8)}=" +
-                                    java.net.URLEncoder.encode(v, StandardCharsets.UTF_8)
+                                "${java.net.URLEncoder.encode(k, "UTF-8")}=" +
+                                    java.net.URLEncoder.encode(v, "UTF-8")
                             },
                             null,
                         )
@@ -1083,15 +1084,16 @@ object McpOAuthService {
         callback.scheme == redirect.scheme && callback.authority == redirect.authority &&
             callback.path == redirect.path
 
+    // 一律用 String 重载（API 1）：Charset 重载要 API 33，minSdk 26 上会 NoSuchMethodError。
     private fun parseQuery(rawQuery: String?): Map<String, String> =
         rawQuery.orEmpty().split('&').filter { it.contains('=') }.associate { pair ->
             val idx = pair.indexOf('=')
-            URLDecoder.decode(pair.substring(0, idx), StandardCharsets.UTF_8) to
-                URLDecoder.decode(pair.substring(idx + 1), StandardCharsets.UTF_8)
+            URLDecoder.decode(pair.substring(0, idx), "UTF-8") to
+                URLDecoder.decode(pair.substring(idx + 1), "UTF-8")
         }
 
     private fun encodeQuery(value: String): String =
-        java.net.URLEncoder.encode(value, StandardCharsets.UTF_8)
+        java.net.URLEncoder.encode(value, "UTF-8")
 
     private fun randomBase64Url(bytes: Int): String =
         Base64.getUrlEncoder().withoutPadding()
