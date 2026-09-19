@@ -211,7 +211,7 @@ fun MemoryTraceScreen(
     // _confirmClear (L141-204) — mobile bottom sheet.
     if (clearSheet) {
         ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = { clearSheet = false }, dragHandle = null) {
             Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
                 MemoSheetHandle()

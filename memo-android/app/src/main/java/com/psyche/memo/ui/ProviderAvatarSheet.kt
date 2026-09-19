@@ -72,7 +72,7 @@ internal fun ProviderAvatarSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = null,
     ) {
         Column(
@@ -135,7 +135,7 @@ internal fun ProviderIconPickerDialog(
                     onValueChange = { query = it },
                     singleLine = true,
                     placeholder = { Text(stringResource(UiR.string.provider_avatar_icon_search_hint)) },
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(20.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(10.dp))
@@ -203,7 +203,7 @@ internal fun ProviderAvatarTextDialog(
                 onValueChange = { value = it },
                 singleLine = true,
                 placeholder = { Text(hint) },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
         },

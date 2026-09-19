@@ -201,7 +201,7 @@ fun GenerationServicesScreen(
     deleteTarget?.let { service ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.generation_services_delete_title)) },
             text = { Text(deleteMessageFmt.format(service.displayName)) },

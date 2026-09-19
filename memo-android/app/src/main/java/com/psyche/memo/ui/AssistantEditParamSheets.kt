@@ -91,7 +91,7 @@ internal fun ParamSliderSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘 40x4 拖柄
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
@@ -309,7 +309,7 @@ internal fun MaxTokensSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
@@ -403,7 +403,7 @@ internal fun ContextMessageInputDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(title) },
         text = {

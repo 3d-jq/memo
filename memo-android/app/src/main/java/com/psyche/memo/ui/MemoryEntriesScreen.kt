@@ -496,7 +496,7 @@ internal fun MemoryEntryEditSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = app.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
     ) {
         Column(

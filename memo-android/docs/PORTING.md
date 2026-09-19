@@ -1210,3 +1210,16 @@ SVG 既是图也是文档 —— 能塞脚本、外部引用、`<foreignObject>`
 ### 收官清单（剩余=零）
 
 1~8 备份子块 ✅ / 12 家网络 TTS + 7 种 ASR ✅ / MCP-1/2/3 ✅ / UI-7 全系（含图片导出）✅ / §5.12 五批 ✅。**有意不移植**（勿当待办）：S5 内置搜索（上游端点+令牌，品牌规则）、图片查看器桌面专属件、STDIO MCP、sherpa_onnx、desktop/ 整目录。
+
+## 5.26 圆角与组件风格采纳 Apple 参考系（2026-09-19）
+
+用户指定：圆角与组件设计风格采自 `D:\program\Apple Copy`（Pinguo/Pinguo Design System，Apple HIG 风），
+**配色不变**（仍走 Memo 主题语义色）。
+
+- **圆角 token `ui/MemoRadius.kt`**：CARD=20dp（全局圆角 19.2px ≈ 20dp：卡片/sheet/对话框/输入框）、
+  INNER=16dp（容器内嵌套块 = radius−4）、PILL=999（按钮/标签全胶囊）。
+- **统一范围**：87 个 sheet + 58 个 AlertDialog 的 16dp → 20dp；SectionCard/SettingsSectionCard/
+  IosFormField 12dp → 20dp；IosButton/IosTileButton 12dp → 胶囊（Pill）；MemoSheetOptionRow 14dp → 16dp（内嵌层）。
+- **同时采纳的概念**（已满足或随批落地）：静音卡片 = 发丝描边（已有 0.6dp）+ 极低透明度分层阴影
+  （浮动件已用）；触控 44×44（已有）；「靠间距不靠分隔线」（SectionCard 节奏）。
+- 有意不动：聊天气泡形状（聊天内容自己的形状语言）、用户头像圆、勾选件。

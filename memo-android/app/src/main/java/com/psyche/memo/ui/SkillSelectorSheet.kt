@@ -81,7 +81,7 @@ fun SkillSelectorSheet(
 
     ModalBottomSheet(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,

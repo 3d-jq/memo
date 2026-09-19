@@ -75,7 +75,7 @@ internal class BackupTaskRunner(
             // Not dismissible: the task is running and the user must pick an
             // action (cancel or acknowledge) instead of dismissing silently.
             onDismissRequest = {},
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             text = {
                 TaskProgressDialogCard(

@@ -166,7 +166,7 @@ fun ForwardCompatDialogHost(dialogs: ForwardCompatDialogs) {
     dialogs.consent?.let { args ->
         AlertDialog(
             onDismissRequest = { dialogs.settle(false) },
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             title = {
                 Text(
@@ -207,7 +207,7 @@ fun ForwardCompatDialogHost(dialogs: ForwardCompatDialogs) {
     if (dialogs.showUnreadable) {
         AlertDialog(
             onDismissRequest = { dialogs.settle(false) },
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             title = {
                 Text(

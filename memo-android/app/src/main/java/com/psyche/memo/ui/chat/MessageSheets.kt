@@ -85,7 +85,7 @@ fun MessageMoreSheet(
         sheetState = rememberMemoSheetState(),
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = cs.overlaySurfaceColor(),
     ) {
         Column(
@@ -192,7 +192,7 @@ fun MessageEditSheet(
         sheetState = rememberMemoSheetState(),
         dragHandle = null, // 原版自绘 40x4 拖柄，禁用 Material 默认 handle
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = cs.overlaySurfaceColor(),
     ) {
         Column(
@@ -287,7 +287,7 @@ fun RegenerateConfirmDialog(
 ) {
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
         title = {
             Text(

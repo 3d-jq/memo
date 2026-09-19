@@ -75,7 +75,7 @@ fun MemoAlertDialog(
     val semantic = LocalSemanticColors.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = title?.let { t ->
             {
@@ -134,7 +134,7 @@ fun MemoSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
         dragHandle = null,
     ) {
         Column(

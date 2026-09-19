@@ -672,7 +672,7 @@ fun SearchServiceEditorScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { showDeleteConfirm = false },
             title = { Text(stringResource(R.string.search_service_editor_delete_title)) },
             text = { Text(stringResource(R.string.search_service_editor_delete_message, displayName)) },

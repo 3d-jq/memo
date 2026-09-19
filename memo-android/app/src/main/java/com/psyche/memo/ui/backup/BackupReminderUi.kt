@@ -260,7 +260,7 @@ fun BackupReminderTimeSheet(
         sheetState = sheetState,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
     ) {
         Column(
             Modifier
@@ -470,7 +470,7 @@ fun BackupReminderFrequencySheet(
         sheetState = sheetState,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
     ) {
         Column(
             Modifier
@@ -551,7 +551,7 @@ fun BackupReminderCustomDaysDialog(
     val days = text.toIntOrNull()
     val valid = days != null && days in 1..365
     AlertDialog(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
         title = { Text(androidx.compose.ui.res.stringResource(UiR.string.backup_reminder_custom_dialog_title)) },
         text = {

@@ -283,7 +283,7 @@ fun ReasoningBudgetSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = null,
     ) {
         Column(modifier = Modifier.fillMaxWidth().imePadding()) {
@@ -439,7 +439,7 @@ fun ReasoningBudgetSheet(
         val valid = parsed != null && (parsed == -1 || parsed >= 0)
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { customOpen = false },
             title = { Text(stringResource(UiR.string.reasoning_budget_sheet_custom_label)) },
             text = {

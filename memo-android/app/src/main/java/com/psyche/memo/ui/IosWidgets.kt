@@ -366,7 +366,7 @@ fun IosTileButton(
         label = "iosTilePress",
     )
 
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(MemoRadius.PILL_DP.dp)
     val content = if (enabled) foreground else withAlpha(foreground, 0.45)
     Row(
         modifier = modifier
@@ -649,8 +649,8 @@ fun IosButton(
     val ringColor = if (neutral) withAlpha(cs.outlineVariant, 0.35) else withAlpha(cs.primary, 0.45)
     var row: Modifier = Modifier
         .graphicsLayer { scaleX = scale; scaleY = scale }
-        .background(background, RoundedCornerShape(12.dp))
-    if (!filled) row = row.border(BorderStroke(1.dp, ringColor), RoundedCornerShape(12.dp))
+        .background(background, RoundedCornerShape(MemoRadius.PILL_DP.dp))
+    if (!filled) row = row.border(BorderStroke(1.dp, ringColor), RoundedCornerShape(MemoRadius.PILL_DP.dp))
     Row(
         modifier = modifier
             .then(row)
@@ -738,8 +738,8 @@ fun IosSheetButton(
     }
     var box: Modifier = Modifier
         .graphicsLayer { scaleX = scale; scaleY = scale }
-        .background(background, RoundedCornerShape(12.dp))
-    if (ringColor != null) box = box.border(BorderStroke(1.dp, ringColor), RoundedCornerShape(12.dp))
+        .background(background, RoundedCornerShape(MemoRadius.PILL_DP.dp))
+    if (ringColor != null) box = box.border(BorderStroke(1.dp, ringColor), RoundedCornerShape(MemoRadius.PILL_DP.dp))
     Box(
         modifier = modifier
             .then(box)
@@ -1005,7 +1005,7 @@ internal fun IosFormField(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(semantic.surfaceCardFill, RoundedCornerShape(12.dp))
+                    .background(semantic.surfaceCardFill, RoundedCornerShape(MemoRadius.CARD_DP.dp))
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 contentAlignment = Alignment.TopStart,
             ) {

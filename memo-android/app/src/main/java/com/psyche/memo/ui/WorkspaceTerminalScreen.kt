@@ -122,7 +122,7 @@ fun WorkspaceTerminalScreen(
     if (pendingCloseTab != null) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { pendingCloseTabId = null },
             title = {
                 Text(stringResource(R.string.workspace_terminal_close_confirm_title, pendingCloseTab.number.toString()))

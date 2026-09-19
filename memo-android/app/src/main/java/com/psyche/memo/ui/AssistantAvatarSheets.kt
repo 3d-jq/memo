@@ -142,7 +142,7 @@ internal fun AvatarPickerSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 全站自绘 40x4 拖柄
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(
@@ -196,7 +196,7 @@ internal fun EmojiPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.emojiTitle)) },
         text = {
@@ -284,7 +284,7 @@ internal fun AvatarUrlDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.urlTitle)) },
         text = {
@@ -336,7 +336,7 @@ internal fun QQAvatarDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = { Text(stringResource(strings.qqTitle)) },
         text = {

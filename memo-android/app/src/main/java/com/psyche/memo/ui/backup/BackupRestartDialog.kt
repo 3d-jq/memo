@@ -59,7 +59,7 @@ fun BackupRestartRequiredDialog(
     AlertDialog(
         // dismissible: false — the user must acknowledge the restart prompt.
         onDismissRequest = {},
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = {
             Text(

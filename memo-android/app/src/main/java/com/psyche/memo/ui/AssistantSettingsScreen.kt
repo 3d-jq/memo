@@ -253,7 +253,7 @@ fun AssistantSettingsScreen(
         // _confirmDelete L532-559.
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_title)) },
             text = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_content)) },
@@ -537,7 +537,7 @@ private fun AddAssistantSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null, // 原版自绘 40x4 拖柄
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(

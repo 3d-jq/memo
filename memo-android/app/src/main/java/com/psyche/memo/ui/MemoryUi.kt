@@ -236,7 +236,7 @@ private fun MemoryConfirmDialog(
     val cs = MaterialTheme.colorScheme
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { onResult(false) },
         title = { Text(title) },
         text = { Text(content) },
@@ -471,7 +471,7 @@ internal fun <T> MemoryOptionPickerSheet(
     onSelected: (T) -> Unit,
 ) {
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier

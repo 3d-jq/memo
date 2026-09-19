@@ -648,7 +648,7 @@ private fun SnapshotConfirmDialog(
     val cs = MaterialTheme.colorScheme
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(message) },

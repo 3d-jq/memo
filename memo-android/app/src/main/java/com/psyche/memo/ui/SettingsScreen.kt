@@ -339,7 +339,7 @@ fun SettingsScreen(
     // L52-96,159-165 — color mode sheet: system / light / dark.
     if (colorModeSheetVisible) {
         ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = { colorModeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier

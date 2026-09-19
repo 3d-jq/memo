@@ -890,7 +890,7 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { menuFor = null },
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
@@ -1029,7 +1029,7 @@ fun SideDrawerContent(
         val deleteDoneText = stringResource(UiR.string.side_drawer_delete_snackbar, target.title)
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_title)) },
             text = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_content, "1")) },
@@ -1063,7 +1063,7 @@ fun SideDrawerContent(
         var name by remember(target.id) { mutableStateOf(target.title) }
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { renameTarget = null },
             title = { Text(stringResource(UiR.string.side_drawer_menu_rename)) },
             text = {
@@ -1097,7 +1097,7 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { moveTarget = null },
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
@@ -1169,7 +1169,7 @@ fun SideDrawerContent(
     if (multiDeleteConfirm) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { multiDeleteConfirm = false },
             title = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_title)) },
             text = { Text(stringResource(UiR.string.side_drawer_selection_delete_confirm_content, selectedIds.size.toString())) },
@@ -1202,7 +1202,7 @@ fun SideDrawerContent(
         ModalBottomSheet(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { assistantMenuFor = null },
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             containerColor = cs.overlaySurfaceColor(),
             dragHandle = null,
         ) {
@@ -1272,7 +1272,7 @@ fun SideDrawerContent(
     assistantDeleteTarget?.let { target ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { assistantDeleteTarget = null },
             title = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_title)) },
             text = { Text(stringResource(UiR.string.assistant_settings_delete_dialog_content)) },

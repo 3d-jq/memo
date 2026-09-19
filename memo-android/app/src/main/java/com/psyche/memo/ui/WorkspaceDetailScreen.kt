@@ -394,7 +394,7 @@ fun WorkspaceDetailScreen(
     installError?.let { message ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { installError = null },
             title = { Text(stringResource(R.string.workspace_rootfs_install_failed)) },
             text = { Text(message) },
@@ -442,7 +442,7 @@ fun WorkspaceDetailScreen(
     deleteTarget?.let { entry ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { deleteTarget = null },
             title = {
                 Text(
@@ -876,7 +876,7 @@ private fun WorkspaceEnvironmentsCard(
     failure?.let { (label, message) ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { failure = null },
             title = { Text(stringResource(R.string.workspace_env_install_failed)) },
             text = {
@@ -1017,7 +1017,7 @@ private fun InstallRootfsDialog(
     var url by remember(workspaceName) { mutableStateOf(defaultRootfsUrl()) }
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.workspace_install_rootfs)) },
         text = {
@@ -1368,7 +1368,7 @@ internal fun FileEditorSheet(
     var text by remember(title, initial) { mutableStateOf(initial) }
     ModalBottomSheet(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,

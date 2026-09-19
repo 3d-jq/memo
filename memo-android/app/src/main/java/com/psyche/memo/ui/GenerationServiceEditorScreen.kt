@@ -304,7 +304,7 @@ fun GenerationServiceEditorScreen(
     if (confirmDelete) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { confirmDelete = false },
             title = { Text(stringResource(R.string.generation_services_delete_title)) },
             text = { Text(deleteMessageFmt.format(initial.displayName)) },

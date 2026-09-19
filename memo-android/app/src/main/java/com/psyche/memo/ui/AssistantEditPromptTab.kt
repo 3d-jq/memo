@@ -893,7 +893,7 @@ private fun PresetEditSheet(
         onDismissRequest = onDismiss,
         dragHandle = null,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
     ) {
         Column(
             Modifier
@@ -1121,7 +1121,7 @@ private fun TimeVarEnableDialog(
     val cs = MaterialTheme.colorScheme
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.assistant_edit_prompt_time_var_dialog_title)) },
         text = {
@@ -1150,7 +1150,7 @@ private fun TimeVarEnableDialog(
 private fun AppendTimeInfoDialog(onDismiss: () -> Unit) {
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.assistant_edit_prompt_append_time_info_title)) },
         text = {
@@ -1186,7 +1186,7 @@ private fun SystemPromptEditorSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = semantic.overlaySurface(cs),
     ) {
         Column(

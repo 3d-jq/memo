@@ -1104,7 +1104,7 @@ fun StorageCategoryScreen(
     confirm?.let { spec ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { confirm = null },
             title = { Text(stringResource(UiR.string.storage_space_clear_confirm_title)) },
             text = {

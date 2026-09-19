@@ -107,11 +107,11 @@ internal fun SectionCard(content: @Composable () -> Unit) {
     val semantic = LocalSemanticColors.current
     Surface(
         color = semantic.surfaceCard,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         border = androidx.compose.foundation.BorderStroke(0.6.dp, semantic.hairline),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp)),
+            .clip(RoundedCornerShape(MemoRadius.CARD_DP.dp)),
     ) {
         Column(modifier = Modifier.padding(vertical = 4.dp)) { content() }
     }
@@ -232,7 +232,7 @@ internal fun ActionSheet(
     actions: List<SheetAction>,
 ) {
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
@@ -266,7 +266,7 @@ internal fun languageLabelRes(locale: AppLocale): Int = when (locale) {
  * 自绘 sheet 拖柄（用户 2026-09-12：全站统一手绘，Material 原生胶囊把手一律不用）。
  * 40×4、onSurface@20%、全圆，含上方 8dp 与下方 [trailingGap] 间距 —— 直接放在
  * `ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 dragHandle = null)` 内容的第一个子项即可。
  * 列表用 `verticalArrangement = spacedBy(...)` 的 sheet 传 `trailingGap = 0.dp`，
  * 免得间距叠成双份。
@@ -347,7 +347,7 @@ internal fun MemoSheetOptionRow(
             .fillMaxWidth()
             .then(if (subtitle == null) Modifier.height(48.dp) else Modifier.heightIn(min = 48.dp))
             .testTag(SHEET_OPTION_TAG)
-            .background(LocalSemanticColors.current.surfaceCard, RoundedCornerShape(14.dp))
+            .background(LocalSemanticColors.current.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable {
                 if (haptics.onListItemTap) Haptics.soft(view)
                 onClick()
@@ -417,7 +417,7 @@ internal fun LanguageSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = onDismiss, dragHandle = null) {
         Column(
             modifier = Modifier
@@ -649,7 +649,7 @@ internal fun SettingsTextField(
                 Text(hint, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f)))
             },
             trailingIcon = trailing,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
             colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceFill,
                 unfocusedContainerColor = semantic.surfaceFill,

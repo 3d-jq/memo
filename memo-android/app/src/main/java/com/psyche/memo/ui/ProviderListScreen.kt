@@ -434,7 +434,7 @@ fun ProvidersScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { showDeleteConfirm = false },
             title = {
                 Text(

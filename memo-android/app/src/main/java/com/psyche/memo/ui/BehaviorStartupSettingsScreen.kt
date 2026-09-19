@@ -418,7 +418,7 @@ fun BehaviorStartupSettingsScreen(
     // L1574-1616 —— always / scroll / never 三选弹层。
     if (navModeSheetVisible) {
         ModalBottomSheet(containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
 sheetState = rememberMemoSheetState(), onDismissRequest = { navModeSheetVisible = false }, dragHandle = null) {
             Column(
                 modifier = Modifier

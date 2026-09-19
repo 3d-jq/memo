@@ -207,7 +207,7 @@ fun ModelSelectSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         // memo draws its own handle; Material3's built-in one is suppressed.
         dragHandle = null,
     ) {

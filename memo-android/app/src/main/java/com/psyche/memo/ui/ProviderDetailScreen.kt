@@ -408,7 +408,7 @@ fun ProviderDetailScreen(
     if (showDelete) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { showDelete = false },
             title = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_title)) },
             text = { Text(stringResource(com.psyche.memo.ui.R.string.provider_detail_page_delete_provider_content)) },
@@ -974,7 +974,7 @@ private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDis
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = null,
     ) {
         Column(
@@ -1246,7 +1246,7 @@ private fun ModelsTab(
         }
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { pendingDelete = null },
             title = { Text(confirmTitle) },
             text = { Text(content) },
@@ -1271,7 +1271,7 @@ private fun ModelsTab(
     if (deleteAllConfirm) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { deleteAllConfirm = false },
             // 原版 `_deleteAllModels`（L3276-3326）：标题是通用「确认删除」，
             // 正文才是「此操作不可撤回」。

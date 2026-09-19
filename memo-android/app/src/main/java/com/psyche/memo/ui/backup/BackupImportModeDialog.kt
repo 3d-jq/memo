@@ -64,7 +64,7 @@ fun BackupImportModeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
         title = {
             Text(

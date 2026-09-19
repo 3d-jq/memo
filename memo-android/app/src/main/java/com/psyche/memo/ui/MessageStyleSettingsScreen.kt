@@ -430,7 +430,7 @@ fun MessageStyleSettingsScreen(
         // L503-582 — reset confirmation.
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { showResetConfirm = false },
             text = { Text(stringResource(UiR.string.message_style_settings_page_reset_confirm)) },
             confirmButton = {
@@ -467,7 +467,7 @@ fun MessageStyleSettingsScreen(
         }
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { colorPicker = null },
             title = { Text(title) },
             text = {

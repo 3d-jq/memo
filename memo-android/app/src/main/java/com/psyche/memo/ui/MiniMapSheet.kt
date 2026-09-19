@@ -137,7 +137,7 @@ fun MiniMapSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         containerColor = cs.overlaySurfaceColor(),
         dragHandle = null,
     ) {

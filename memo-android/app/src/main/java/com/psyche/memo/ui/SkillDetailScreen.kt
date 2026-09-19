@@ -143,7 +143,7 @@ fun SkillDetailScreen(
         val invalid = fileName.isNotBlank() && fileName.contains('\\')
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { creating = false },
             title = { Text(stringResource(R.string.skill_detail_page_new_file)) },
             text = {
@@ -196,7 +196,7 @@ fun SkillDetailScreen(
     deleteTarget?.let { entry ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.skill_detail_page_delete_file)) },
             text = { Text(stringResource(R.string.skill_detail_page_delete_confirm, entry.relativePath)) },
@@ -302,7 +302,7 @@ private fun SkillFileEditor(
     var content by remember(title) { mutableStateOf(initialContent) }
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
         title = { Text(title, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold) },
         text = {

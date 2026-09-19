@@ -394,7 +394,7 @@ fun MultiKeyManagerScreen(
             sheetState = rememberMemoSheetState(),
             onDismissRequest = { showStrategySheet = false },
             containerColor = cs.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
             dragHandle = null,
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp)) {
@@ -453,7 +453,7 @@ fun MultiKeyManagerScreen(
     if (showDeleteErrors) {
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = { showDeleteErrors = false },
             title = { Text(stringResource(R.string.multi_key_page_delete_errors_confirm_title)) },
             text = { Text(stringResource(R.string.multi_key_page_delete_errors_confirm_content)) },
@@ -668,7 +668,7 @@ private fun AddKeysSheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = null,
     ) {
         Column(
@@ -720,7 +720,7 @@ private fun EditKeySheet(
         sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         containerColor = cs.overlaySurfaceColor(),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = null,
     ) {
         Column(

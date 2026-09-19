@@ -913,7 +913,7 @@ private fun ApprovalDenyDialog(
     val cs = MaterialTheme.colorScheme
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(UiR.string.tool_approval_deny_title)) },
         text = {
@@ -1044,7 +1044,7 @@ fun ToolDetailSheet(part: ToolUiPart, onDismiss: () -> Unit) {
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = null,
     ) {
         // 拖拽调高：CustomBottomSheet 的手势在 Compose 里用 nestedScroll 等价
