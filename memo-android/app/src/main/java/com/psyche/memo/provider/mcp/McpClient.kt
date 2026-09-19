@@ -40,6 +40,8 @@ data class McpRemoteTool(
 class McpClient(
     private val server: McpServerConfig,
     private val http: OkHttpClient,
+    /** `mcp_request_timeout_ms_v1`，由调用方注入；缺省 60s（上游默认）。 */
+    private val requestTimeoutMs: Long = DEFAULT_RESPONSE_TIMEOUT_MS,
 ) : Closeable {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -266,7 +268,7 @@ class McpClient(
             }
         }
         if (expectId == null) return JsonObject(emptyMap())
-        val deadline = System.currentTimeMillis() + RESPONSE_TIMEOUT_MS
+        val deadline = System.currentTimeMillis() + requestTimeoutMs
         while (System.currentTimeMillis() < deadline) {
             val message = sseMessages.poll(500, TimeUnit.MILLISECONDS) ?: continue
             if ((message["id"] as? JsonPrimitive)?.content?.toIntOrNull() == expectId) return message
@@ -308,7 +310,9 @@ class McpClient(
     companion object {
         const val PROTOCOL_VERSION = "2025-11-25"
         private const val SSE_ENDPOINT_TIMEOUT_SECONDS = 15L
-        private const val RESPONSE_TIMEOUT_MS = 60_000L
+
+        /** 上游 `mcp_client.dart` 的默认响应超时；`mcp_request_timeout_ms_v1` 覆盖它。 */
+        const val DEFAULT_RESPONSE_TIMEOUT_MS = 60_000L
         private val JSON = "application/json".toMediaType()
     }
 }

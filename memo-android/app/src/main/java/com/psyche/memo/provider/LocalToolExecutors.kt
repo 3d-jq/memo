@@ -27,10 +27,10 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * Executors for the Android local tools — the Flutter side implements these in
- * local_tools_service.dart (clipboard / calculate / text_to_speech) and in the
- * host's DeviceLocalToolsHandler.kt (screen time / calendar). Unported tools
- * keep returning the honest execution_error from ToolHandler.
+ * Android 本地工具的执行器。上游分布在 `local_tools_service.dart`（剪贴板 / 计算 /
+ * 语音播放 / 日历 / 屏幕时间）与自研的 `render_visual`、`render_mermaid` 两件套。
+ * 本机确实没有执行器的（iOS-only 定位/天气/健康/提醒）由 ToolHandler 兜底成
+ * execution_error，不会伪装成功。
  */
 object LocalToolExecutors {
 

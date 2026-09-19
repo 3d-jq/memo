@@ -17,12 +17,14 @@ import java.util.concurrent.ConcurrentHashMap
  * (mcp_provider.dart): one client per server, connect runs the handshake and
  * refreshes tools/list, failures surface as an error status + message.
  *
- * OAuth authorization states are not ported; a server that requires OAuth
- * fails the handshake and reports the transport error.
+ * OAuth 已接（`McpOAuth`）：连接前先 `refreshIfNeeded`，有有效令牌就附
+ * Authorization 头。STDIO 是桌面专属，不在本端口范围内。
  */
 class McpConnectionManager(
     private val repository: McpRepository,
     private val http: OkHttpClient,
+    /** `mcp_request_timeout_ms_v1`，由容器注入（这里不直接碰偏好存储）。 */
+    private val requestTimeoutMsProvider: () -> Long = { McpClient.DEFAULT_RESPONSE_TIMEOUT_MS },
 ) {
 
     enum class Status { idle, connecting, connected, error }
@@ -60,7 +62,7 @@ class McpConnectionManager(
                 // MCP-3 OAuth：令牌快照存 server.oauth；到期先刷再连，有效则附
                 // Authorization 头（`mcp_client.dart` 的 OAuth HTTP 客户端等价）。
                 val effective = withOAuth(refreshIfNeeded(server))
-                val client = McpClient(effective, http)
+                val client = McpClient(effective, http, requestTimeoutMsProvider())
                 client.initialize()
                 val tools = client.listTools()
                 clients[server.id] = client

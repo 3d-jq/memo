@@ -12,10 +12,12 @@ import java.time.DayOfWeek
 import java.time.ZonedDateTime
 
 /**
- * tool_handler_service.dart buildToolCallHandler 的 Native 分派。覆盖有执行路径
- * 的工具子集（get_time_info / ask_user_input_v0 / calendar_create 审批门 /
- * search_web 搜索引擎）；MCP / memory 执行器未移植，未提供的工具不会出现在请求里。
- * 未覆盖的工具用 execution_error 如实上报，模型可据此重试。
+ * tool_handler_service.dart buildToolCallHandler 的 Native 分派，顺序一致：审批门 →
+ * 本地工具（[com.psyche.memo.provider.LocalToolExecutors]）→ ask_user 交互服务 →
+ * MCP 透传（[com.psyche.memo.provider.mcp]）→ 兜底 execution_error。
+ * 到这里没被接住的只有两种情况：模型编出不存在的工具名，或该工具在本机没有执行器
+ * （iOS-only 的定位/天气/健康/提醒，以及未移植的 STDIO MCP）——如实回 execution_error
+ * 让模型自行处置。
  */
 class ToolHandler(
     private val approvalService: ToolApprovalService?,

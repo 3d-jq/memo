@@ -33,8 +33,8 @@ import java.time.format.DateTimeFormatter
  * (upstream: the recall and memory gates are independent) and searches past
  * conversations through [com.psyche.memo.data.db.MessageDao.searchMessagesForAssistant].
  *
- * Not ported yet: the Smart Add LLM merge — memory_update falls back to the
- * upstream exact-duplicate SKIP/NEW path.
+ * Smart Add 已接：`memory_update` 走 [MemorySmartAdd] 判 NEW/MERGE/UPDATE/SKIP
+ * （未配记忆模型时退化成上游的精确重复 SKIP/NEW 路径）。
  */
 object MemoryTools {
 

@@ -1778,14 +1778,12 @@ class ChatViewModel(
                         ?.takeIf { it.isNotBlank() } ?: selectedProviderId.value,
                     model = selectedModelId.value,
                 )
-                // Only tools with a native dispatch path are offered:
-                // get_time_info has an executor, ask_user_input_v0 routes to the
-                // interaction service, calendar_create exercises the approval
-                // gate (its executor is unported → honest execution_error after
-                // approval), search_web runs through the ported search engine.
-                // MCP/memory executors are unported, so their tools are not
-                // offered. Deviation from the original's full
-                // LocalToolsService.buildToolDefinitions set.
+                // 提供给模型的工具集（offeredTools）：本地工具里 Android 有执行器的
+                // 那一组（时间/剪贴板/TTS/计算/屏幕时间/日历读写 + 自研 render_visual、
+                // render_mermaid）、ask_user 走交互服务、search_web 走已移植搜索引擎，
+                // 再加记忆 / 技能 / 工作区 / 生成图片·视频 / 已连接 MCP 服务器的工具。
+                // 与上游的差集只有平台性的：iOS-only 本地工具（定位/天气/健康/提醒）
+                // 按 isAvailableOnThisPlatform 剔除，STDIO MCP 是桌面专属。
                 // （tools 在压缩阈值估算前就已组装，见上。）
                 runGenerationLoop(
                     assistantId = assistantId,

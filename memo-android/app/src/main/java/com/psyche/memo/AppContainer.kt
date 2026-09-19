@@ -223,7 +223,13 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         com.psyche.memo.ui.AsrServicesStore(preferenceRepository)
     }
     val mcpConnections: com.psyche.memo.provider.mcp.McpConnectionManager by lazy {
-        com.psyche.memo.provider.mcp.McpConnectionManager(mcpRepository, httpClient)
+        // 「请求超时」是设置页可改的（TIMEOUT_KEY 存裸毫秒数），每次连接现读。
+        com.psyche.memo.provider.mcp.McpConnectionManager(mcpRepository, httpClient) {
+            preferenceRepository.readJson(
+                com.psyche.memo.ui.TIMEOUT_KEY,
+            )?.trim()?.removeSurrounding("\"")?.toLongOrNull()
+                ?: com.psyche.memo.provider.mcp.McpClient.DEFAULT_RESPONSE_TIMEOUT_MS
+        }
     }
 
     /** HTTP search dispatch (ported provider subset). */
