@@ -893,7 +893,7 @@ internal fun MessageRow(
                                             com.psyche.memo.ui.chat.TtsPlayer.togglePause()
 
                                         com.psyche.memo.ui.chat.MessageTtsAction.SPEAK ->
-                                            com.psyche.memo.ui.chat.TtsPlayer.speak(context, assistantReplyForTts(timelineSettings.ttsTextSelectionMode, msg.content), ownerId = msg.id)
+                                            com.psyche.memo.ui.chat.TtsPlayer.speakAssistantReply(context, msg.content, ownerId = msg.id)
                                     }
                                 },
                             )

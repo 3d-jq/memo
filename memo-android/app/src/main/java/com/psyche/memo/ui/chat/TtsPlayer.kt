@@ -205,6 +205,15 @@ object TtsPlayer {
         controllerRef?.speak(content, ownerId)
     }
 
+    /**
+     * 朗读一条**助手消息**（原版 `_speakAssistantMessage` →
+     * `TtsTextSelection.apply(message.content, mode: settings.ttsTextSelectionMode)`，
+     * home_page_controller.dart:1818）：模式在点的这一刻现读，所以设置页改完立刻生效。
+     */
+    fun speakAssistantReply(context: Context, content: String, ownerId: String? = null) {
+        speak(context, assistantReplyForTts(servicesStoreRef?.textSelectionMode(), content), ownerId)
+    }
+
     fun togglePause() {
         controller(null)?.togglePause()
     }

@@ -1808,9 +1808,7 @@ class ChatViewModel(
                     val text = allParts.filterIsInstance<TextPart>().joinToString("") { it.text }
                         .let { round ->
                             com.psyche.memo.ui.chat.assistantReplyForTts(
-                                modeValue = container.preferenceRepository
-                                    .readJson("tts_text_selection_mode_v1")
-                                    ?.trim()?.trim('"')?.takeIf { mode -> mode.isNotEmpty() },
+                                modeValue = container.ttsServicesStore.textSelectionMode(),
                                 content = round,
                             )
                         }

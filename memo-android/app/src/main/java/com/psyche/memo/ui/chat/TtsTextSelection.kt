@@ -340,8 +340,8 @@ private fun withoutInlineCode(line: String): String {
 
 /**
  * 朗读一条**助手消息**前要念的文（`home_page_controller.dart:1818`）。
- * 模式取自 `tts_text_selection_mode_v1`（存的是枚举名），由调用方传来 ——
- * 聊天侧走 [ChatTimelineSettings]，自动播放在 ChatViewModel 里现读。
+ * 模式取自 `tts_text_selection_mode_v1`（存的是枚举名），两处调用方都是**现读**：
+ * [TtsPlayer.speakAssistantReply] 与自动播放 —— 设置页改完立刻生效，不缓存进组合。
  */
 fun assistantReplyForTts(modeValue: String?, content: String): String =
     TtsTextSelection.apply(content, mode = ttsTextSelectionModeOf(modeValue))

@@ -155,11 +155,6 @@ data class ChatTimelineSettings(
     val showProviderInChatMessage: Boolean = false,
     /** `display_show_token_stats_v1`（默认 true，:1072）—— 助手操作行末尾的 token 统计（CMW:3395-3405）。 */
     val showTokenStats: Boolean = true,
-    /**
-     * `tts_text_selection_mode_v1`（tts_provider/settings_provider 那侧的键，存枚举名）——
-     * 点朗读时**先按这个模式取文**，再剥 markdown（home_page_controller.dart:1818）。
-     */
-    val ttsTextSelectionMode: String = "fullText",
 ) {
     companion object {
         fun fromPrefs(read: (key: String) -> String?): ChatTimelineSettings {
@@ -203,8 +198,6 @@ data class ChatTimelineSettings(
                 showModelTimestamp = bool("display_show_model_timestamp_v1", true),
                 showProviderInChatMessage = bool("display_show_provider_in_chat_message_v1", false),
                 showTokenStats = bool("display_show_token_stats_v1", true),
-                ttsTextSelectionMode = read("tts_text_selection_mode_v1")
-                    ?.trim()?.trim('"')?.takeIf { it.isNotEmpty() } ?: "fullText",
             )
         }
     }

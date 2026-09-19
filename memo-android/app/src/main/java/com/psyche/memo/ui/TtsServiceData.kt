@@ -528,6 +528,14 @@ class TtsServicesStore(
             prefs.writeJson(SystemTtsConfig.CACHE_REPLAY_KEY, JsonPrimitive(value).toString())
         }
 
+    /**
+     * 「朗读取哪部分文本」（`tts_text_selection_mode_v1`，存枚举名）。上游那是
+     * SettingsProvider 上的活值，所以朗读时现读，别在组合期缓存。
+     */
+    fun textSelectionMode(): String? =
+        prefs.readJson(SystemTtsConfig.TEXT_SELECTION_KEY)
+            ?.trim()?.trim('"')?.takeIf { it.isNotEmpty() }
+
     companion object {
         /** BusinessEntityKind.ttsService.tableName. */
         const val TABLE = "tts_service_rows"

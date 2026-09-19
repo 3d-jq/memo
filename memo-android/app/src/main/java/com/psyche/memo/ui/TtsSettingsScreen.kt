@@ -241,10 +241,16 @@ private fun TtsTextSelectionRow(
             )
         }
         Spacer(Modifier.width(12.dp))
+        // 上游是 `AnimatedOpacity(selected ? 1 : 0, 160ms)`：勾选**只在选中行**出现。
+        // 之前无条件画，五行全带勾，看起来就像"没有可以选择的地方"。
+        val checkAlpha by androidx.compose.animation.core.animateFloatAsState(
+            if (selected) 1f else 0f,
+            animationSpec = androidx.compose.animation.core.tween(160),
+        )
         Icon(
             Lucide.Check,
             contentDescription = null,
-            tint = cs.primary,
+            tint = cs.primary.copy(alpha = checkAlpha),
             modifier = Modifier.size(18.dp),
         )
     }

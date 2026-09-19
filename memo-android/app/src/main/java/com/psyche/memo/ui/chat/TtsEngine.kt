@@ -88,6 +88,9 @@ data class SystemTtsConfig(
         const val LANGUAGE_KEY = "tts_language_v1"
         const val CACHE_REPLAY_KEY = "tts_cache_network_audio_for_replay_v1"
 
+        /** 「朗读取哪部分文本」：存 `TtsTextSelectionMode.name`（settings_provider.dart:401）。 */
+        const val TEXT_SELECTION_KEY = "tts_text_selection_mode_v1"
+
         /** `tts_provider.dart:79` 「flutter_tts platform value, 0.5 is normal」。 */
         const val DEFAULT_SPEECH_RATE = 0.5
         const val DEFAULT_PITCH = 1.0

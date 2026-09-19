@@ -417,6 +417,9 @@ fun ChatContent(
         }
         renderAndShareChatImage(
             container = container,
+            // 离屏渲染要起一个不可见 Dialog，只有 Activity 上下文才有 window token
+            // （传 applicationContext 会 BadTokenException 直接崩）。
+            windowContext = context,
             title = title,
             messages = picked,
             roleNameOf = roleNameOf,
@@ -2084,6 +2087,7 @@ fun ChatContent(
  */
 private fun renderAndShareChatImage(
     container: com.psyche.memo.AppContainerImpl,
+    windowContext: android.content.Context,
     title: String,
     messages: List<com.psyche.memo.ui.chat.MessageExport.ExportMessage>,
     roleNameOf: (com.psyche.memo.ui.chat.MessageExport.ExportMessage) -> String,
@@ -2098,8 +2102,16 @@ private fun renderAndShareChatImage(
         .format(java.util.Date())
     val exportedAsTemplate = appContext.getString(UiR.string.message_export_sheet_exported_as)
     val failedTemplate = appContext.getString(UiR.string.message_export_sheet_export_failed)
+    fun fail(reason: String) = com.psyche.memo.ui.snackbar.SnackbarManager.show(
+        com.psyche.memo.ui.snackbar.AppNotification(
+            message = failedTemplate.format(reason),
+            type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+        ),
+    )
+    // 只有 Activity 才持有 window token；拿不到就如实报失败，别让 Dialog.show() 崩掉进程。
+    val host = windowContext.findActivity() ?: return fail("no activity context")
     com.psyche.memo.ui.chat.ChatExportImage.render(
-        context = appContext,
+        context = host,
         title = title,
         dateLine = dateLine,
         messages = messages,
@@ -2155,4 +2167,11 @@ private fun renderAndShareChatImage(
             )
         }
     }
+}
+
+/** 往上剥 ContextWrapper 找 Activity（Dialog 要有 window token 的上下文才行）。 */
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

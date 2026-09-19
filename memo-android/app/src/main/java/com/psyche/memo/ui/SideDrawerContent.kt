@@ -12,6 +12,7 @@ import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.BotMessageSquare
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -69,8 +70,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -396,19 +395,26 @@ fun SideDrawerContent(
                         }
                     }
             ) {
-                TextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = {},
-                    textStyle = TextStyle(fontSize = 14.sp, color = cs.onSurface),
-                    singleLine = true,
-                    shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
-                    leadingIcon = {
-                        // Tapping the prefix toggles global search mode
-                        // (side_drawer.dart L2270-2327: prefix is the toggle).
+                // 原版胶囊 = `isCollapsed: true`（L1940）+ `contentPadding(h14, v11)`
+                // （L2115-2118）+ 14sp 文字 ⇒ 高约 42dp，圆角 14（L2122）。Material3 1.3.2
+                // 的 TextField 没有 contentPadding 形参、内置上下各 16dp，会鼓出一截，
+                // 所以按原版几何自己拼这颗胶囊。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(SEARCH_FIELD_HEIGHT_DP.dp)
+                        .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                        .background(cs.surfaceVariant.copy(alpha = 0.6f)),
+                ) {
+                    Row(
+                        modifier = Modifier.matchParentSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // 前缀图标位：原版 padding left 10 / right 4、图标 16
+                        // （side_drawer.dart L1941-1949）；点击切换话题/全局搜索模式。
                         Box(
                             modifier = Modifier
+                                .padding(start = 10.dp, end = 4.dp)
                                 .clickable {
                                     globalSearchMode = !globalSearchMode
                                     globalHasRun = false
@@ -423,8 +429,15 @@ fun SideDrawerContent(
                                 tint = cs.onSurface.copy(alpha = 0.72f),
                             )
                         }
-                    },
-                    trailingIcon = {
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = TextStyle(fontSize = 14.sp, color = cs.onSurface),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 4.dp),
+                        )
                         if (query.isNotEmpty()) {
                             IconButton(
                                 onClick = { query = "" },
@@ -438,15 +451,8 @@ fun SideDrawerContent(
                                 )
                             }
                         }
-                    },
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = cs.surfaceVariant.copy(alpha = 0.6f),
-                        unfocusedContainerColor = cs.surfaceVariant.copy(alpha = 0.6f),
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                    ),
-                )
+                    }
+                }
                 if (query.isEmpty()) {
                     Box(
                         modifier = Modifier.matchParentSize(),
@@ -1748,6 +1754,9 @@ private fun SkeletonBar(widthFactor: Float, height: androidx.compose.ui.unit.Dp,
  * （[excludeAssistantId] 只有单条路径给）+ 是否批量（批量才有 snackbar、
  * 才退多选并处理「当前会话被移走」）。
  */
+/** 原版搜索胶囊高：contentPadding 上下 11 + 14sp 行高 ≈ 42dp（side_drawer.dart L2115-2118）。 */
+private const val SEARCH_FIELD_HEIGHT_DP = 42
+
 private data class MoveRequest(
     val conversations: List<Conversation>,
     val excludeAssistantId: String?,

@@ -1356,3 +1356,32 @@ MemoRadius 三档：容器 20 / 嵌套 16 / 胶囊 999。至此全站圆角只�
   `AndroidUiSettings`，取消即丢图），要引第三方库或自写裁剪界面，不是几行开关。
 - `send_markdown_image_links_as_images_v1` —— 要移植 `parseTextAndImages`（markdown 图链接
   扫描 + 远程/本地/data 三类闸门）并和「模型支持视觉才发图」的剥离逻辑配合，中批，单独做。
+
+## 5.30 §5.29 装机后三处返修（2026-09-19 晚，用户实测）
+
+用户装机后回的三个问题，都是**"接线接对了但东西是坏的"**，门禁和单测看不见，只有真机能看见：
+
+- **多选导出图片一点就闪退**：`ChatExportImage.render` 是把离屏 `ComposeView` 装进一个
+  不可见 `Dialog` 的，而 `Dialog` **只有 Activity 上下文才有 window token**。调用方传的
+  是 `container.appContext` → `Dialog.show()` 抛 `BadTokenException` 直接崩主线程。
+  （这条不是 §5.29 引入的，导出 sheet 那条路本来就带这个雷，我把第三颗钮放出来才必现。）
+  现在从 Compose 侧拿上下文、沿 `ContextWrapper` 往上 `findActivity()`，拿不到就如实
+  报"导出失败"而不是崩进程；并加了源码守卫 `ChatExportImageWindowTokenTest`
+  （照 `ToolTranscriptContentTest` 的扫描手法），钉住"渲染必须用 host、不许用 appContext"。
+  **教训：凡是起窗口（Dialog/Popup/BottomSheet 之外的手撸 Dialog）的代码，参数必须是
+  Activity 上下文，且必须真机点一次。**
+- **「朗读取哪部分文本」看着不能选**：五行、点行写库、朗读读库**都在**，坏在
+  `TtsTextSelectionRow` 把那颗勾**无条件画出来**了 —— 上游是
+  `AnimatedOpacity(opacity: selected ? 1 : 0, 160ms)`（`tts_settings_page.dart:222-230`），
+  勾只出现在选中行。五行全带勾 ⇒ 既看不出当前选了哪个、点下去也"没变化"。
+  另外模式值原来是从 `ChatTimelineSettings`（`remember {}` 一次性读）传的，去设置页改完
+  回到聊天再朗读用的还是旧值；上游是 provider 的活值，所以改成朗读那一刻现读
+  （`TtsPlayer.speakAssistantReply` → `store.textSelectionMode()`），并把
+  `ChatTimelineSettings.ttsTextSelectionMode` 这个中间缓存删掉（不留死配置）。
+- **侧栏搜索胶囊比原版鼓**：原版 `isCollapsed: true`（`side_drawer.dart:1940`）+
+  `contentPadding: symmetric(h14, v11)`（L2115-2118）+ 14sp 文字 ⇒ 约 **42dp**，圆角 14
+  （L2122）；Memo 用的是 Material3 `TextField`，而**这个版本（1.3.2）的 TextField 没有
+  `contentPadding` 形参**（试着传 `contentPaddingWithoutLabel` 直接编译不过——候选签名里
+  就没有这个参数），它内置上下各 16dp，所以高出那一截。改成按原版几何自己拼：42dp 高的
+  圆角胶囊 + `BasicTextField`，前缀位 padding start 10 / end 4、图标 16dp
+  （L1941-1949），清空钮 28dp 照旧。
