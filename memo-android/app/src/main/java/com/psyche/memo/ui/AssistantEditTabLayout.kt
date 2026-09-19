@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -350,12 +351,12 @@ private fun AssistantTabLayoutTile(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .background(semantic.surfaceCard)
             .border(
                 width = 0.8.dp,
                 color = cs.outlineVariant.copy(alpha = if (semantic.isDark) 0.12f else 0.08f),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .padding(start = 12.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

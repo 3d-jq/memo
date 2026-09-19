@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import android.speech.SpeechRecognizer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -417,9 +418,9 @@ internal fun AsrEditorProviderChoice(kind: AsrServiceKind, selected: Boolean, on
         modifier = Modifier
             .background(
                 if (pressed) withAlpha(cs.onSurface, 0.06).compositeOver(base) else base,
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
-            .border(0.8.dp, if (selected) withAlpha(cs.primary, 0.5) else withAlpha(cs.outlineVariant, 0.22), RoundedCornerShape(12.dp))
+            .border(0.8.dp, if (selected) withAlpha(cs.primary, 0.5) else withAlpha(cs.outlineVariant, 0.22), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 9.dp),
     )
@@ -442,7 +443,7 @@ internal fun AsrEditorSystemStatusRow(available: Boolean?, checking: Boolean, on
             .padding(horizontal = 12.dp, vertical = 10.dp)
             .background(
                 if (available == false) withAlpha(cs.error, if (app.isDark) 0.10 else 0.06) else app.surfaceFill,
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .clickable(enabled = !checking, onClick = onCheck)
             .padding(horizontal = 12.dp, vertical = 12.dp),

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.tween
@@ -596,7 +597,7 @@ private fun AskUserOptionRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .background(bg, RoundedCornerShape(14.dp))
+                .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .heightIn(min = 40.dp)
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
@@ -648,7 +649,7 @@ private fun AskUserOtherRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 40.dp)
-            .background(bg, RoundedCornerShape(14.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 10.dp, vertical = 7.dp),
     ) {
         if (multi) {
@@ -774,7 +775,7 @@ private fun AskUserSubmitButton(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .height(38.dp)
-                .background(base, RoundedCornerShape(14.dp))
+                .background(base, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .padding(horizontal = 14.dp),
         ) {
             Icon(

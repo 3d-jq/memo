@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import com.psyche.memo.common.logging.ContextLogMessage
 import com.psyche.memo.common.logging.ContextLogSnapshot
@@ -323,7 +324,7 @@ private fun LogViewerTabsAndPages(
                             .fillMaxSize()
                             .background(
                                 if (selected) cs.primary.copy(alpha = 0.14f) else Color.Transparent,
-                                RoundedCornerShape(14.dp),
+                                RoundedCornerShape(MemoRadius.INNER_DP.dp),
                             )
                             .clickable { scope.launch { pagerState.animateScrollToPage(index) } },
                         contentAlignment = Alignment.Center,
@@ -421,7 +422,7 @@ private fun LogFilesList(
                         .size(36.dp)
                         .background(
                             if (isCurrentLog) cs.primary.copy(alpha = if (isDark) 0.22f else 0.14f) else semantic.surfaceFill,
-                            RoundedCornerShape(12.dp),
+                            RoundedCornerShape(MemoRadius.INNER_DP.dp),
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -903,9 +904,9 @@ private fun InlineErrorPreview(text: String) {
             .fillMaxWidth()
             .background(
                 androidx.compose.ui.graphics.lerp(semantic.surfaceFill, cs.error, if (isDark) 0.12f else 0.07f),
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
-            .border(1.dp, cs.error.copy(alpha = if (isDark) 0.32f else 0.22f), RoundedCornerShape(12.dp))
+            .border(1.dp, cs.error.copy(alpha = if (isDark) 0.32f else 0.22f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1151,8 +1152,8 @@ private fun DetailSectionCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
-            .border(0.6.dp, semantic.hairline, RoundedCornerShape(12.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, semantic.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1194,8 +1195,8 @@ private fun CodeBlock(text: String, tone: CodeTone) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(bg, RoundedCornerShape(12.dp))
-            .border(1.dp, border, RoundedCornerShape(12.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, border, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(12.dp),
     ) {
         Text(
@@ -1235,8 +1236,8 @@ private fun CollapsibleCodeBlock(text: String, tone: CodeTone) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(bg, RoundedCornerShape(12.dp))
-            .border(1.dp, border, RoundedCornerShape(12.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, border, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(12.dp),
     ) {
         val visibleLen = if (expanded) minOf(shown, text.length) else minOf(collapsedChars, text.length)
@@ -1463,7 +1464,7 @@ private fun ContextLoadOlderFooter(loading: Boolean, hasMore: Boolean, onTap: ()
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 8.dp)
-                .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .clickable(onClick = onTap)
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
@@ -1482,8 +1483,8 @@ private fun ContextSummaryBar(snapshots: List<ContextLogSnapshot>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(0.6.dp, semantic.hairline, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, semantic.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1569,8 +1570,8 @@ private fun ContextSnapshotCard(snapshot: ContextLogSnapshot, onTap: () -> Unit)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.08f else 0.06f), RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.08f else 0.06f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onTap),
     ) {
         Column(Modifier.padding(start = 14.dp, top = 12.dp, end = 14.dp, bottom = 10.dp)) {
@@ -1697,8 +1698,8 @@ private fun ContextInfoCard(snapshot: ContextLogSnapshot) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(0.6.dp, semantic.hairline, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, semantic.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(14.dp),
     ) {
         val providerName = displayProviderName(snapshot.provider)
@@ -1788,8 +1789,8 @@ private fun ContextSegmentBlock(segment: ContextSegment) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.08f else 0.06f), RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.08f else 0.06f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .combinedClickable(
                 onClick = { if (hasText) expanded = !expanded },
                 onLongClick = {
@@ -2002,8 +2003,8 @@ private fun SettingsTileCard(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f), RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) { content() }
 }
@@ -2026,8 +2027,8 @@ private fun SettingTile(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f), RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.26f else 0.38f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(modifier = Modifier.clickable { expanded = !expanded }, verticalAlignment = Alignment.CenterVertically) {

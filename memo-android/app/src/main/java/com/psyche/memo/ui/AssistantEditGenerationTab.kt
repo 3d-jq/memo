@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -290,7 +291,7 @@ private fun OverrideField(
             placeholder = {
                 Text(hint, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f)))
             },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(MemoRadius.INNER_DP.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceFill,
                 unfocusedContainerColor = semantic.surfaceFill,

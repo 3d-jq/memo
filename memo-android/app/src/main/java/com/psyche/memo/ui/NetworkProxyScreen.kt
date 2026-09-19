@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -445,8 +446,8 @@ private fun ProxyTestButton(
     Row(
         modifier = Modifier
             .then(if (enabled) Modifier.clickable(onClick = onTap) else Modifier)
-            .background(cs.onSurface.copy(alpha = if (isDark) 0.06f else 0.05f), RoundedCornerShape(12.dp))
-            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.22f else 0.18f), RoundedCornerShape(12.dp))
+            .background(cs.onSurface.copy(alpha = if (isDark) 0.06f else 0.05f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.22f else 0.18f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

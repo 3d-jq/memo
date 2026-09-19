@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -143,11 +144,11 @@ fun AssistantEditQuickPhraseTab(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                        .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .border(
                             0.6.dp,
                             cs.outlineVariant.copy(alpha = if (semantic.isDark) 0.08f else 0.06f),
-                            RoundedCornerShape(14.dp),
+                            RoundedCornerShape(MemoRadius.INNER_DP.dp),
                         )
                         .clickable {
                             Haptics.light(view)

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -137,7 +138,7 @@ fun BottomToolsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable {
                         Haptics.light(view)
                         onOpenInstructionInjection()
@@ -161,7 +162,7 @@ fun BottomToolsSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
-                        .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                        .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .combinedClickable(
                             onClick = {
                                 Haptics.light(view)
@@ -193,7 +194,7 @@ fun BottomToolsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable {
                         Haptics.light(view)
                         onOpenSkills()
@@ -217,7 +218,7 @@ fun BottomToolsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable {
                         Haptics.light(view)
                         onOpenMcp()
@@ -242,7 +243,7 @@ fun BottomToolsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable {
                         Haptics.light(view)
                         onOpenWorkspace()
@@ -267,7 +268,7 @@ fun BottomToolsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable {
                         Haptics.light(view)
                         onOpenImageGeneration()
@@ -289,7 +290,7 @@ fun BottomToolsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable {
                         Haptics.light(view)
                         onOpenVideoGeneration()
@@ -312,7 +313,7 @@ fun BottomToolsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable {
                         Haptics.light(view)
                         onOpenContextManagement()
@@ -336,7 +337,7 @@ fun BottomToolsSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
-                        .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                        .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .combinedClickable(
                             onClick = {
                                 Haptics.light(view)
@@ -385,7 +386,7 @@ private fun ToolAction(
     Column(
         modifier = modifier
             .height(72.dp)
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,

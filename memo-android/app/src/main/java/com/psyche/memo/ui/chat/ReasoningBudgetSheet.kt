@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
@@ -380,7 +381,7 @@ fun ReasoningBudgetSheet(
                         .height(48.dp)
                         .background(
                             if (ThemeState.useLayeredSheetTiles) semantic.surfaceCardFill else Color.Transparent,
-                            RoundedCornerShape(14.dp),
+                            RoundedCornerShape(MemoRadius.INNER_DP.dp),
                         )
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,

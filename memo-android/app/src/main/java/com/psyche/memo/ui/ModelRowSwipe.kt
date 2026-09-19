@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -96,11 +97,11 @@ internal fun ModelRowWithSwipe(
                 .width(actionWidthDp)
                 .fillMaxSize()
                 .padding(vertical = 4.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .background(
                     if (semantic.isDark) cs.error.copy(alpha = 0.22f) else cs.error.copy(alpha = 0.14f),
                 )
-                .border(1.dp, cs.error.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .border(1.dp, cs.error.copy(alpha = 0.35f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .clickable {
                     Haptics.light(view)
                     revealed = false

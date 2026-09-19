@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -243,11 +244,11 @@ fun ModelSelectSheet(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     // Flutter InputDecoration: filled surfaceFill, r14
                     // border outlineVariant 40%, focused primary 50%.
-                    .background(semanticSearch.surfaceFill, RoundedCornerShape(14.dp))
+                    .background(semanticSearch.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .border(
                         1.dp,
                         if (searchFocused) cs.primary.copy(alpha = 0.5f) else cs.outlineVariant.copy(alpha = 0.4f),
-                        RoundedCornerShape(14.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     ),
             ) {
                 TextField(
@@ -436,7 +437,7 @@ private fun ModelTile(
             // 卡间距 8（原来是 12/12），行高仍是 48。
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .background(bg, RoundedCornerShape(14.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -640,8 +641,8 @@ private fun ProviderChip(name: String, selected: Boolean, onClick: () -> Unit) {
     val bg = if (selected) cs.primary.copy(alpha = 0.08f) else cs.surface
     Row(
         modifier = Modifier
-            .background(bg, RoundedCornerShape(14.dp))
-            .border(1.dp, cs.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, cs.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,

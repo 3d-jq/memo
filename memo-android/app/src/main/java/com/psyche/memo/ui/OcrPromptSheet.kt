@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -125,7 +126,7 @@ fun OcrPromptSheet(
                         style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f)),
                     )
                 },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
@@ -117,7 +118,7 @@ private fun ContextUsageCard(usage: ChatViewModel.ContextUsage) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCardFill, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCardFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,7 +180,7 @@ private fun OptionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCardFill, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCardFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onTap)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,

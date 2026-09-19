@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -334,7 +335,7 @@ fun AddProviderSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp)
-                        .background(cs.primary, RoundedCornerShape(12.dp))
+                        .background(cs.primary, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .clickable(onClick = ::onAdd),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -374,7 +375,7 @@ internal fun SegTabBar(tabs: List<String>, selected: Int, onSelect: (Int) -> Uni
                     .fillMaxHeight()
                     .background(
                         if (isSelected) cs.primary.copy(alpha = 0.14f) else Color.Transparent,
-                        RoundedCornerShape(14.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
                     .clickable { onSelect(index) },
                 contentAlignment = Alignment.Center,
@@ -431,7 +432,7 @@ internal fun InputRow(
             onValueChange = onValueChange,
             minLines = minLines,
             textStyle = MaterialTheme.typography.bodyMedium,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceCard,
                 unfocusedContainerColor = semantic.surfaceCard,
@@ -491,8 +492,8 @@ fun ShareProviderSheet(
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterHorizontally)
-                    .background(Color.White, RoundedCornerShape(12.dp))
-                    .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                    .background(Color.White, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                    .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(10.dp),
             ) {
                 QrCodeView(
@@ -582,8 +583,8 @@ internal fun MultiProviderExportSheet(
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Column(
                         modifier = Modifier
-                            .background(Color.White, RoundedCornerShape(12.dp))
-                            .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                            .background(Color.White, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                            .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .padding(10.dp),
                     ) {
                         QrCodeView(
@@ -679,8 +680,8 @@ internal fun IosTileButtonCompact(
     val semantic = LocalSemanticColors.current
     Column(
         modifier = modifier
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -771,7 +772,7 @@ internal fun ApiPathField(
                 readOnly = true,
                 singleLine = true,
                 textStyle = textStyle,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceCard,
                     unfocusedContainerColor = semantic.surfaceCard,
@@ -800,7 +801,7 @@ internal fun ApiPathField(
             androidx.compose.material3.DropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 containerColor = semantic.surfaceCard,
                 tonalElevation = 0.dp,
                 shadowElevation = 6.dp,

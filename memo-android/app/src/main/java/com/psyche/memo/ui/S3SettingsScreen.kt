@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
@@ -191,11 +192,11 @@ fun S3SettingsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 2.dp)
-                            .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .border(
                                 1.dp,
                                 cs.outlineVariant.copy(alpha = 0.18f),
-                                RoundedCornerShape(12.dp),
+                                RoundedCornerShape(MemoRadius.INNER_DP.dp),
                             )
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,

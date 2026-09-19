@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -656,8 +657,8 @@ private fun PreviewPanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(scrim, RoundedCornerShape(14.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
+            .background(scrim, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.18f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(12.dp),
     ) {
         Text(

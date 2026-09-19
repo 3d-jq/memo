@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -127,7 +128,7 @@ fun WorldBookSheet(
                             .height(if (book.description.trim().isEmpty()) 52.dp else 66.dp)
                             .background(
                                 if (ThemeState.useLayeredSheetTiles) semantic.surfaceCardFill else Color.Transparent,
-                                RoundedCornerShape(14.dp),
+                                RoundedCornerShape(MemoRadius.INNER_DP.dp),
                             )
                             .clickable(enabled = !disabled || selected) {
                                 Haptics.light(view)

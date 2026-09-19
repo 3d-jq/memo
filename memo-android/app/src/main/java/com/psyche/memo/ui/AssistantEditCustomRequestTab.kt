@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -280,7 +281,7 @@ private fun CustomRequestField(
         singleLine = singleLine,
         minLines = if (singleLine) 1 else minLines,
         maxLines = if (singleLine) 1 else maxLines,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = semantic.surfaceCardFill,
             unfocusedContainerColor = semantic.surfaceCardFill,

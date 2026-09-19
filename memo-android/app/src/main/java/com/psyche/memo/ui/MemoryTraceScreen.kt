@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -436,8 +437,8 @@ private fun TraceDetailOverlay(trace: MemoryTrace, onClose: () -> Unit) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .background(app.surfaceCard, RoundedCornerShape(14.dp))
-                    .border(0.6.dp, app.hairline, RoundedCornerShape(14.dp))
+                    .background(app.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                    .border(0.6.dp, app.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(14.dp),
             ) {
                 TraceKv(stringResource(UiR.string.memory_trace_field_time), fmtTimestamp(trace.startedAt))
@@ -501,8 +502,8 @@ private fun TraceStepCard(step: MemoryTraceStep) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(app.surfaceCard, RoundedCornerShape(14.dp))
-            .border(0.6.dp, app.hairline, RoundedCornerShape(14.dp))
+            .background(app.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, app.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -563,11 +564,11 @@ private fun TraceMutationTile(mutation: MemoryTraceMutation) {
     Column(
         Modifier
             .fillMaxWidth()
-            .background(app.surfaceFill, RoundedCornerShape(12.dp))
+            .background(app.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .border(
                 0.6.dp,
                 cs.outlineVariant.copy(alpha = if (app.isDark) 0.22f else 0.34f),
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .padding(start = 12.dp, top = 10.dp, end = 12.dp, bottom = 10.dp),
     ) {
@@ -658,11 +659,11 @@ private fun TraceCollapsibleCode(label: String, text: String) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .background(app.surfaceFill, RoundedCornerShape(12.dp))
+                .background(app.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .border(
                     0.6.dp,
                     cs.outlineVariant.copy(alpha = if (app.isDark) 0.22f else 0.34f),
-                    RoundedCornerShape(12.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
                 .padding(12.dp),
         ) {

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -209,9 +210,9 @@ internal fun SwipeDeleteRow(
                     .fillMaxSize()
                     .background(
                         cs.error.copy(alpha = if (semantic.isDark) 0.22f else 0.14f),
-                        RoundedCornerShape(14.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
-                    .border(1.dp, cs.error.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                    .border(1.dp, cs.error.copy(alpha = 0.35f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable {
                         scope.launch { anim.snapTo(0f) }
                         onDelete()
@@ -275,11 +276,11 @@ private fun QuickPhraseCard(phrase: QuickPhrase, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .border(
                 0.6.dp,
                 cs.outlineVariant.copy(alpha = if (semantic.isDark) 0.1f else 0.08f),
-                RoundedCornerShape(14.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .clickable(onClick = onClick)
             .padding(14.dp),
@@ -363,7 +364,7 @@ internal fun QuickPhraseEditSheet(
                 onValueChange = { title = it },
                 singleLine = true,
                 label = { Text(stringResource(R.string.quick_phrase_title_label)) },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,
@@ -379,7 +380,7 @@ internal fun QuickPhraseEditSheet(
                 minLines = 5,
                 maxLines = 8,
                 label = { Text(stringResource(R.string.quick_phrase_content_label)) },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,

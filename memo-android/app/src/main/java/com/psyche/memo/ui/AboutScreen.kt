@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -128,7 +129,7 @@ fun AboutScreen(
                             contentDescription = null,
                             modifier = Modifier
                                 .size(54.dp)
-                                .clip(RoundedCornerShape(12.dp)),
+                                .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp)),
                         )
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {

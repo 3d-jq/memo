@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -509,7 +510,7 @@ private fun ProvidersSearchField(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, top = 8.dp)
-            .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -571,7 +572,7 @@ private fun ProviderCard(
         modifier = Modifier
             .fillMaxWidth()
             .scale(if (isDragging) 0.95f else 1f),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (enabled) semantic.surfaceCard else cs.errorContainer,
         ),

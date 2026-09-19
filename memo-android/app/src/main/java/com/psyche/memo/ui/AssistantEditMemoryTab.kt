@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -599,9 +600,9 @@ private fun SummaryCard(
     val semantic = LocalSemanticColors.current
     androidx.compose.material3.Surface(
         color = semantic.surfaceCard,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         border = androidx.compose.foundation.BorderStroke(0.6.dp, semantic.hairline),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MemoRadius.INNER_DP.dp)),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -868,7 +869,7 @@ private fun MemoryNumberDialog(
                     isError = error != null,
                     placeholder = { Text(hint, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f))) },
                     supportingText = supporting,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedContainerColor = semantic.surfaceFill,
                         unfocusedContainerColor = semantic.surfaceFill,

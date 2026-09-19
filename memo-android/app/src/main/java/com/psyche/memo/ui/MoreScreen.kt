@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import android.content.Intent
 import androidx.core.net.toUri
 import androidx.compose.foundation.border
@@ -107,7 +108,7 @@ private fun LeaderBoardItem(
     val host = url.substringAfter("://").substringBefore('/')
     Column(
         modifier = modifier
-            .border(0.6.dp, cs.outline.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+            .border(0.6.dp, cs.outline.copy(alpha = 0.12f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable { onOpen(url) }
             .padding(8.dp),
     ) {

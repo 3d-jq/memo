@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -197,7 +198,7 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(cs.errorContainer.copy(alpha = 0.30f), RoundedCornerShape(12.dp))
+                            .background(cs.errorContainer.copy(alpha = 0.30f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

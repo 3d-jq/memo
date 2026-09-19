@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
@@ -160,7 +161,7 @@ fun McpAssistantSheet(
                                     } else {
                                         androidx.compose.ui.graphics.Color.Transparent
                                     },
-                                    RoundedCornerShape(14.dp),
+                                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                                 )
                                 .clickable {
                                     Haptics.light(view)

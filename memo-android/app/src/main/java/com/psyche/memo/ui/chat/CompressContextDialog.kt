@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -154,7 +155,7 @@ fun CompressContextDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .clickable {
                                 Haptics.light(view)
                                 showModelSheet = true
@@ -180,7 +181,7 @@ fun CompressContextDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -305,7 +306,7 @@ private fun NumberField(
         singleLine = true,
         enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         modifier = Modifier.fillMaxWidth(),
     )
 }

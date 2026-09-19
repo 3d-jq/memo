@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -1396,13 +1397,13 @@ private fun StorageImageTile(
     val cs = MaterialTheme.colorScheme
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .background(cs.onSurface.copy(alpha = 0.03f))
             .border(
                 width = 1.dp,
                 // 原版 _ImageTile：未选 onSurface@10%、选中 primary@55%。
                 color = if (selected) cs.primary.copy(alpha = 0.55f) else cs.onSurface.copy(alpha = 0.10f),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .combinedClickable(onClick = onTap, onLongClick = onToggle),
     ) {
@@ -1445,9 +1446,9 @@ private fun StorageFileRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .background(cs.onSurface.copy(alpha = 0.03f))
-            .border(1.dp, cs.onSurface.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .border(1.dp, cs.onSurface.copy(alpha = 0.08f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .combinedClickable(
                 onClick = {
                     if (selectMode) onToggle() else openDocument(context, entry.path, mimeOfName(entry.name))

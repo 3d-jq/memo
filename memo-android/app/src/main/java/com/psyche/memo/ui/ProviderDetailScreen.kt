@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -794,7 +795,7 @@ private fun ServiceAccountJsonInput(
                     style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f)),
                 )
             },
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceCard,
                 unfocusedContainerColor = semantic.surfaceCard,
@@ -882,7 +883,7 @@ private fun LabeledInput(
             placeholder = hint?.let {
                 { Text(it, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f))) }
             },
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
             trailingIcon = trailing,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceCard,
@@ -926,7 +927,7 @@ private fun BottomTabs(
                     .weight(1f)
                     .background(
                         if (selected) cs.primary.copy(alpha = 0.10f) else Color.Transparent,
-                        RoundedCornerShape(12.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
                     .clickable { onSelect(i) }
                     .padding(vertical = 8.dp),

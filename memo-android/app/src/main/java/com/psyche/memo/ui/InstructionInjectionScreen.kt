@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -210,11 +211,11 @@ private fun InstructionCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .border(
                 0.6.dp,
                 cs.outlineVariant.copy(alpha = if (semantic.isDark) 0.1f else 0.08f),
-                RoundedCornerShape(14.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .combinedClickable(onClick = onClick, onLongClick = onDelete)
             .padding(14.dp),
@@ -351,7 +352,7 @@ private fun InstructionField(
         minLines = minLines,
         maxLines = if (minLines == 1) 1 else 8,
         label = { Text(label) },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = semantic.surfaceFill,
             unfocusedContainerColor = semantic.surfaceFill,
@@ -458,7 +459,7 @@ fun InstructionInjectionSheet(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+                                    .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                                     .combinedClickable(
                                         onClick = {
                                             repo.toggleActive(item.id, assistantId)

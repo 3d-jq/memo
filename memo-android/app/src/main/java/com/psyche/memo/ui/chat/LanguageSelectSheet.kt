@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
@@ -117,7 +118,7 @@ fun LanguageSelectSheet(
                     .height(48.dp)
                     .background(
                         cs.surfaceContainerHigh.copy(alpha = 0.6f),
-                        RoundedCornerShape(14.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
                     .clickable { onSelect(TranslateLanguage(TranslateLanguage.CLEAR_TRANSLATION, "", "")) }
                     .padding(horizontal = 12.dp),
@@ -154,7 +155,7 @@ private fun LanguageRow(lang: TranslateLanguage, onClick: () -> Unit) {
             .height(48.dp)
             .background(
                 cs.surfaceContainerHigh.copy(alpha = 0.6f),
-                RoundedCornerShape(14.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp),

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -168,7 +169,7 @@ private fun ToolSchemaDialogButton(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(cs.surface.copy(alpha = 0.0f), RoundedCornerShape(12.dp))
+            .background(cs.surface.copy(alpha = 0.0f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -232,7 +233,7 @@ fun ToolSchemaToolRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(base, if (compact) RoundedCornerShape(14.dp) else RoundedCornerShape(0.dp))
+            .background(base, if (compact) RoundedCornerShape(MemoRadius.INNER_DP.dp) else RoundedCornerShape(0.dp))
             .clickable(onClick = onTap)
             .padding(start = padH, top = padV, end = padH, bottom = padV),
         verticalAlignment = Alignment.CenterVertically,

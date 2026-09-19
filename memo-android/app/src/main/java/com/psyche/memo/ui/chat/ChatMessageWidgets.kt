@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
@@ -240,7 +241,7 @@ fun TokenDisplay(
                 Column(
                     modifier = Modifier
                         .padding(bottom = 8.dp)
-                        .background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp))
+                        .background(cs.surfaceContainerHigh, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {

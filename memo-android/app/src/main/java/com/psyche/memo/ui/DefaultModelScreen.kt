@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.animateFloatAsState
@@ -702,7 +703,7 @@ private fun ModelCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .scale(scale)
-                    .background(color, RoundedCornerShape(12.dp))
+                    .background(color, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -846,7 +847,7 @@ private fun TaskPromptSheet(
                 value = text,
                 onValueChange = { text = it },
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 maxLines = maxLines,
                 placeholder = {
                     Text(

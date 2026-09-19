@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -323,7 +324,7 @@ private fun HistoryConversationTile(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(vertical = 6.dp)
-                    .background(cs.errorContainer, RoundedCornerShape(14.dp))
+                    .background(cs.errorContainer, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
@@ -365,7 +366,7 @@ private fun HistoryConversationCard(
     val semantic = LocalSemanticColors.current
     Surface(
         color = semantic.surfaceCard,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp)
@@ -377,7 +378,7 @@ private fun HistoryConversationCard(
                 .border(
                     1.dp,
                     cs.outlineVariant.copy(alpha = 0.16f),
-                    RoundedCornerShape(14.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
                 .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,

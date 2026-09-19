@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -1028,7 +1029,7 @@ private fun KeywordsBlock(
                 modifier = Modifier
                     .weight(1f)
                     .height(40.dp)
-                    .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -1062,7 +1063,7 @@ private fun KeywordsBlock(
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .clickable(enabled = input.isNotBlank()) { onAdd() },
                 contentAlignment = Alignment.Center,
             ) {

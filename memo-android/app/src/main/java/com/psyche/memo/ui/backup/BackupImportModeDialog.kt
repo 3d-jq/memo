@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.backup
 
+import com.psyche.memo.ui.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -129,9 +130,9 @@ private fun ImportModeCard(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .background(cardColor)
-            .border(1.dp, withAlpha(cs.outlineVariant, 0.18), RoundedCornerShape(14.dp))
+            .border(1.dp, withAlpha(cs.outlineVariant, 0.18), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(interactionSource = interaction, indication = null) { onTap() }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -236,7 +237,7 @@ internal fun EmojiPickerDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                                     .background(withAlpha(cs.primary, 0.08))
                                     .clickable { onPick(emoji) },
                                 contentAlignment = Alignment.Center,
@@ -397,7 +398,7 @@ private fun AvatarDialogField(
             .focusRequester(focus),
         singleLine = true,
         placeholder = { Text(placeholder, style = TextStyle(fontSize = 16.sp, color = cs.onSurface.copy(alpha = 0.45f))) },
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = semantic.surfaceFill,
             unfocusedContainerColor = semantic.surfaceFill,

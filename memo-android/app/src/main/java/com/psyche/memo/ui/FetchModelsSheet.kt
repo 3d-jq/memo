@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -246,7 +247,7 @@ internal fun FetchModelsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .background(semantic.surfaceFill, RoundedCornerShape(12.dp)),
+                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp)),
             ) {
                 TextField(
                     value = query,
@@ -383,7 +384,7 @@ private fun GroupHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable { onToggleCollapse() }
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.animation.core.animateFloatAsState
@@ -307,11 +308,11 @@ private fun AssistantCard(item: Assistant, pressed: Boolean) {
     Box(
         Modifier
             .fillMaxWidth()
-            .background(if (pressed) overlay.compositeOver(base) else base, RoundedCornerShape(14.dp))
+            .background(if (pressed) overlay.compositeOver(base) else base, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .border(
                 0.8.dp,
                 cs.outlineVariant.copy(alpha = if (semantic.isDark) 0.12f else 0.08f),
-                RoundedCornerShape(14.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .padding(12.dp),
     ) {
@@ -450,8 +451,8 @@ private fun SwipeRevealRow(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(action.container, RoundedCornerShape(14.dp))
-                        .border(0.8.dp, action.border, RoundedCornerShape(14.dp))
+                        .background(action.container, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                        .border(0.8.dp, action.border, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .clickable {
                             Haptics.light(view)
                             snapTo(0f)
@@ -573,7 +574,7 @@ private fun AddAssistantSheet(
                         color = cs.onSurface.copy(alpha = 0.45f),
                     )
                 },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = LocalSemanticColors.current.surfaceFill,
                     unfocusedContainerColor = LocalSemanticColors.current.surfaceFill,
@@ -623,8 +624,8 @@ private fun IosSheetButton(label: String, filled: Boolean, onClick: () -> Unit) 
         Modifier
             .scale(scale)
             .fillMaxWidth()
-            .background(if (filled) cs.primary else Color.Transparent, RoundedCornerShape(12.dp))
-            .border(0.8.dp, cs.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .background(if (filled) cs.primary else Color.Transparent, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.8.dp, cs.primary.copy(alpha = 0.5f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,

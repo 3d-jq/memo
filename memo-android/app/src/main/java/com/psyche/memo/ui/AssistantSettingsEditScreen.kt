@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -453,7 +454,7 @@ internal fun EditSegTabBar(tabs: List<String>, selected: Int, onSelect: (Int) ->
                     Modifier
                         .width(segWidth)
                         .height(36.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .background(if (isSelected) cs.primary.copy(alpha = 0.14f) else Color.Transparent)
                         .clickable { onSelect(index) },
                     contentAlignment = Alignment.Center,
@@ -735,7 +736,7 @@ private fun BasicSettingsTab(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .background(semanticBg.surfaceFill)
                             .clickable { modelSheet = true }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -820,9 +821,9 @@ private fun BasicSettingsTab(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                                 .background(semanticBg.surfaceFill)
-                                .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                                 .clickable {
                                     bgPicker.launch(
                                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),

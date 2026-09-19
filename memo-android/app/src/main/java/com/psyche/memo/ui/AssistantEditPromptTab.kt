@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -334,7 +335,7 @@ private fun SystemPromptCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp)),
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp)),
     ) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -406,7 +407,7 @@ private fun SystemPromptCard(
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .background(withAlpha(cs.errorContainer, 0.30)),
                     ) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
@@ -456,7 +457,7 @@ private fun PromptField(
             .border(
                 1.dp,
                 if (focused) withAlpha(cs.primary, 0.5) else withAlpha(cs.outlineVariant, 0.35),
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .padding(12.dp),
     ) {
@@ -510,7 +511,7 @@ private fun MessageTemplateCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp)),
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp)),
     ) {
         Column(Modifier.padding(12.dp)) {
             Text(
@@ -667,7 +668,7 @@ private fun PresetConversationCard(
     Box(
         Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp)),
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp)),
     ) {
         Column(Modifier.padding(12.dp)) {
             BoxWithConstraints {
@@ -1216,8 +1217,8 @@ private fun SystemPromptEditorSheet(
                 Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .background(semantic.surfaceFill, RoundedCornerShape(14.dp))
-                    .border(1.dp, withAlpha(cs.outlineVariant, 0.2), RoundedCornerShape(14.dp))
+                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                    .border(1.dp, withAlpha(cs.outlineVariant, 0.2), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(12.dp),
             ) {
                 BasicTextField(

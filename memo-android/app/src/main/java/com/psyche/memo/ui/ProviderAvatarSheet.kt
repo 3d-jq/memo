@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -157,7 +158,7 @@ internal fun ProviderIconPickerDialog(
                             Box(
                                 modifier = Modifier
                                     .size(52.dp)
-                                    .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                                     .clickable { onPick(option.asset) },
                                 contentAlignment = Alignment.Center,
                             ) {

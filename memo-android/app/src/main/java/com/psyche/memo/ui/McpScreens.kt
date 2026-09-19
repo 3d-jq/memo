@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -233,8 +234,8 @@ private fun McpServerCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(0.6.dp, semantic.hairline, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, semantic.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -503,8 +504,8 @@ private fun McpServerEditSheet(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
-                                .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                                .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                                 .padding(12.dp),
                         ) {
                             McpField(
@@ -609,8 +610,8 @@ private fun McpServerEditSheet(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
-                                .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                                .border(1.dp, cs.outlineVariant.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                                 .padding(12.dp),
                         ) {
                             Row(
@@ -761,7 +762,7 @@ private fun McpField(
             placeholder = hint?.let {
                 { Text(it, style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f))) }
             },
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceFill,
                 unfocusedContainerColor = semantic.surfaceFill,
@@ -838,7 +839,7 @@ private fun McpJsonEditSheet(
                         Text(it, style = TextStyle(fontSize = 12.sp, color = cs.error))
                     }
                 },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,
@@ -962,7 +963,7 @@ private fun McpTimeoutSheet(container: AppContainerImpl, onDismiss: () -> Unit) 
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                     keyboardType = androidx.compose.ui.text.input.KeyboardType.Number,
                 ),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,

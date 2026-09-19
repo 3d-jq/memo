@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -150,8 +151,8 @@ private fun MemoryPromptField(value: String, onValueChange: (String) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(app.surfaceCard, RoundedCornerShape(14.dp))
-            .border(1.dp, app.hairlineStrong, RoundedCornerShape(14.dp))
+            .background(app.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, app.hairlineStrong, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp)
             .height(220.dp),
     ) {

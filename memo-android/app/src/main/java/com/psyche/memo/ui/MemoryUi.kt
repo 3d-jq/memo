@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -265,9 +266,9 @@ internal fun MemoryInfoBanner(body: String, title: String? = null, icon: ImageVe
             .fillMaxWidth()
             .background(
                 withAlpha(cs.primaryContainer, if (app.isDark) 0.20 else 0.35),
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
-            .border(0.6.dp, withAlpha(cs.primary, 0.10), RoundedCornerShape(12.dp))
+            .border(0.6.dp, withAlpha(cs.primary, 0.10), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(12.dp),
     ) {
         Row {
@@ -396,7 +397,7 @@ internal fun MemorySearchField(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 42.dp)
-            .background(app.surfaceFill, RoundedCornerShape(12.dp))
+            .background(app.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -592,11 +593,11 @@ internal fun MemoryEntryCard(
     Column(
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 6.dp)
-            .background(app.surfaceCard, RoundedCornerShape(14.dp))
+            .background(app.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .border(
                 0.6.dp,
                 if (selected) withAlpha(cs.primary, 0.45) else app.hairline,
-                RoundedCornerShape(14.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .padding(12.dp),
     ) {
@@ -660,7 +661,7 @@ internal fun MemoryModelMissingNotice(onGoSelect: () -> Unit) {
     Column(
         Modifier
             .padding(horizontal = 12.dp, vertical = 8.dp)
-            .background(withAlpha(cs.errorContainer, 0.30), RoundedCornerShape(12.dp))
+            .background(withAlpha(cs.errorContainer, 0.30), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(12.dp),
     ) {
         Row {
@@ -692,7 +693,7 @@ internal fun MemoryOrphanBanner(count: Int, onCleanup: () -> Unit) {
     Row(
         modifier = Modifier
             .padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 8.dp)
-            .background(withAlpha(cs.errorContainer, 0.30), RoundedCornerShape(12.dp))
+            .background(withAlpha(cs.errorContainer, 0.30), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

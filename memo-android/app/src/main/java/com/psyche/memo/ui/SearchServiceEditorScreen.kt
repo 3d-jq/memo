@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -979,7 +980,7 @@ private fun FieldBlock(
                 ),
                 placeholder = placeholder,
                 supportingText = supporting,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,
@@ -1005,7 +1006,7 @@ private fun MultiKeyEntry(count: Int, onOpen: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .clickable(onClick = onOpen)
                 .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1053,7 +1054,7 @@ private fun TestCard(
                         style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f)),
                     )
                 },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = semantic.surfaceFill,
                     unfocusedContainerColor = semantic.surfaceFill,
@@ -1217,7 +1218,7 @@ fun SearchApiKeysScreen(
                                     style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.45f)),
                                 )
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedContainerColor = semantic.surfaceFill,
                                 unfocusedContainerColor = semantic.surfaceFill,

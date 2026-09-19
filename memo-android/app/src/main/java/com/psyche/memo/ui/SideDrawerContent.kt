@@ -2,6 +2,7 @@
 
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -1124,7 +1125,7 @@ fun SideDrawerContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
-                            .background(cs.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                            .background(cs.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .clickable {
                                 moveTarget = null
                                 container.conversationDao.update(
@@ -1468,7 +1469,7 @@ private fun SelectionAction(
     Row(
         modifier = modifier
             .alpha(if (enabled) 1f else 0.4f)
-            .background(bg, RoundedCornerShape(14.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 12.dp, vertical = 12.dp),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
@@ -1498,7 +1499,7 @@ private fun MenuRow(
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .height(48.dp)
-            .background(cs.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .background(cs.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable { onClick() }
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1582,7 +1583,7 @@ private fun GlobalSearchResults(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 2.dp)
-                        .background(cs.primary.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+                        .background(cs.primary.copy(alpha = 0.10f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .clickable { onOpenConversation(result.conversationId) }
                         .padding(start = 14.dp, top = 9.dp, end = 14.dp, bottom = 9.dp),
                 ) {

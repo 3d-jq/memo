@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import android.app.Dialog
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -190,7 +191,7 @@ object ChatExportImage {
                     .widthIn(max = 320.dp)
                     .background(
                         if (isUser) cs.primary.copy(alpha = 0.14f) else cs.onSurface.copy(alpha = 0.05f),
-                        RoundedCornerShape(12.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
                     .padding(10.dp),
             ) {

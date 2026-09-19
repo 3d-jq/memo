@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.graphics.Color
@@ -598,8 +599,8 @@ fun SettingsSectionCard(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
-            .border(1.dp, semantic.hairline, RoundedCornerShape(12.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, semantic.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(vertical = 4.dp),
     ) { content() }
 }

@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -214,7 +215,7 @@ internal fun NicknameDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
+                        .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     if (text.isEmpty()) {

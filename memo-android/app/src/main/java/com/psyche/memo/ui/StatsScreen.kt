@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -420,8 +421,8 @@ private fun StatsSectionCard(title: String, content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(12.dp))
-            .border(0.6.dp, semantic.hairline, RoundedCornerShape(12.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, semantic.hairline, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(14.dp),
     ) {
         Text(
@@ -861,8 +862,8 @@ private fun UsageDetailBubble(
         Modifier
             .offset(x = left, y = 8.dp)
             .width(bubbleWidth)
-            .shadow(9.dp, RoundedCornerShape(12.dp))
-            .background(cs.surfaceContainerHigh, RoundedCornerShape(12.dp))
+            .shadow(9.dp, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .background(cs.surfaceContainerHigh, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(start = 12.dp, top = 10.dp, end = 12.dp, bottom = 11.dp),
     ) {
         Column {
@@ -1400,7 +1401,7 @@ private fun StatsDatePickerSheet(
                                         .height(34.dp)
                                         .background(
                                             if (isSelected) cs.onSurface.copy(alpha = if (semantic.isDark) 0.18f else 0.14f) else Color.Transparent,
-                                            RoundedCornerShape(12.dp),
+                                            RoundedCornerShape(MemoRadius.INNER_DP.dp),
                                         )
                                         .clickable(enabled = enabled) {
                                             selectedDate = date

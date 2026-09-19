@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -1120,8 +1121,8 @@ private fun AreaSelector(area: WorkspaceStorageArea, onSelect: (WorkspaceStorage
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
+            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.15f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(3.dp),
     ) {
         listOf(
@@ -1326,7 +1327,7 @@ private fun WorkspaceBottomTabs(tab: Int, onSelect: (Int) -> Unit) {
                     .weight(1f)
                     .background(
                         if (selected) cs.primary.copy(alpha = 0.10f) else Color.Transparent,
-                        RoundedCornerShape(12.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
                     .clickable { onSelect(index) }
                     .padding(vertical = 8.dp),

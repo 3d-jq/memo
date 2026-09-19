@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import com.psyche.memo.ui.rememberMemoSheetState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -181,7 +182,7 @@ private fun SelectionActionButton(
     )
     Row(
         modifier = modifier
-            .background(bg, RoundedCornerShape(14.dp))
+            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,
@@ -222,8 +223,8 @@ private fun SelectionToggleCard(
     val fg = if (selected) cs.primary else cs.onSurface.copy(alpha = if (enabled) 0.9f else 0.35f)
     Row(
         modifier = modifier
-            .background(base, RoundedCornerShape(14.dp))
-            .border(1.dp, border, RoundedCornerShape(14.dp))
+            .background(base, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, border, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(enabled = enabled, onClick = onTap)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.Center,
@@ -324,7 +325,7 @@ private fun ExportOptionTile(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .background(LocalSemanticColors.current.surfaceFill, RoundedCornerShape(14.dp))
+            .background(LocalSemanticColors.current.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onTap)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,

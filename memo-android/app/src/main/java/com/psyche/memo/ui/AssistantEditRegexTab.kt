@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -210,8 +211,8 @@ private fun RegexRuleCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
-            .border(0.7.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.08f else 0.06f), RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(0.7.dp, cs.outlineVariant.copy(alpha = if (isDark) 0.08f else 0.06f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(onClick = onTap)
             .padding(14.dp),
     ) {
@@ -456,7 +457,7 @@ private fun RegexTextField(
         singleLine = !multiline,
         minLines = if (multiline) 3 else 1,
         maxLines = if (multiline) 8 else 1,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = semantic.surfaceFill,
             unfocusedContainerColor = semantic.surfaceFill,
@@ -481,12 +482,12 @@ private fun ScopeChoiceCard(
         modifier = Modifier
             .background(
                 if (selected) cs.primary.copy(alpha = 0.16f) else semantic.surfaceFill,
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .border(
                 1.dp,
                 if (selected) cs.primary.copy(alpha = 0.55f) else cs.outlineVariant.copy(alpha = if (isDark) 0.14f else 0.12f),
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .clickable(onClick = onTap)
             .padding(horizontal = 14.dp, vertical = 10.dp),

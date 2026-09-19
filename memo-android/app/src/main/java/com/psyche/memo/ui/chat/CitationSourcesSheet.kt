@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.rememberMemoSheetState
 import android.content.ActivityNotFoundException
@@ -248,7 +249,7 @@ fun CitationSourceCard(item: CitationSourceItem, displayIndex: Int, onTap: (Cita
             .padding(bottom = 4.dp)
             .background(
                 cs.surfaceContainerHighest.copy(alpha = 0.45f),
-                RoundedCornerShape(12.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             )
             .clickable { onTap(item) }
             .padding(start = 8.dp, top = 20.dp, end = 4.dp, bottom = 20.dp),

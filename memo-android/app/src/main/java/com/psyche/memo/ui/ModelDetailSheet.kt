@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -908,11 +909,11 @@ private fun DetailField(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(semantic.surfaceCard, RoundedCornerShape(14.dp))
+            .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .border(
                 1.dp,
                 if (focused) cs.primary.copy(alpha = 0.5f) else cs.outlineVariant.copy(alpha = 0.4f),
-                RoundedCornerShape(14.dp),
+                RoundedCornerShape(MemoRadius.INNER_DP.dp),
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -959,8 +960,8 @@ private fun SegmentedSingle(options: List<String>, value: Int, onChanged: (Int) 
     Row(
         Modifier
             .fillMaxWidth()
-            .background(semantic.surfaceFill, RoundedCornerShape(12.dp))
-            .border(1.dp, cs.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .border(1.dp, cs.outlineVariant.copy(alpha = 0.35f), RoundedCornerShape(MemoRadius.INNER_DP.dp)),
     ) {
         options.forEachIndexed { i, label ->
             val sel = i == value
@@ -969,7 +970,7 @@ private fun SegmentedSingle(options: List<String>, value: Int, onChanged: (Int) 
                     .weight(1f)
                     .background(
                         if (sel) cs.primary.copy(alpha = 0.14f) else Color.Transparent,
-                        RoundedCornerShape(12.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
                     .clickable { onChanged(i) }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -999,7 +1000,7 @@ private fun SegmentedMulti(options: List<String>, isSelected: List<Boolean>, onC
     val semantic = LocalSemanticColors.current
     val allSelected = isSelected.isNotEmpty() && isSelected.all { it }
     val selectedCount = isSelected.count { it }
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(MemoRadius.INNER_DP.dp)
     Box(
         Modifier
             .fillMaxWidth()
@@ -1136,7 +1137,7 @@ private fun OutlinedAddButton(label: String, onClick: () -> Unit) {
                 Haptics.light(view)
                 onClick()
             }
-            .border(1.dp, cs.primary.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .border(1.dp, cs.primary.copy(alpha = 0.5f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1337,7 +1338,7 @@ private fun ToolsTab(
                 Modifier
                     .fillMaxWidth()
                     .alpha(if (enabled) 1f else 0.45f)
-                    .background(LocalSemanticColors.current.surfaceFill, RoundedCornerShape(12.dp))
+                    .background(LocalSemanticColors.current.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

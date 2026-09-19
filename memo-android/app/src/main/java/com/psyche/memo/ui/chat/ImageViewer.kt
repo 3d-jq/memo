@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.MemoRadius
 import android.content.ContentValues
 import android.provider.MediaStore
 import androidx.compose.foundation.background
@@ -220,9 +221,9 @@ internal fun ChartAttachmentCard(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(aspect)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .background(cs.onSurface.copy(alpha = 0.04f))
-            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+            .border(0.6.dp, cs.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .clickable(enabled = !unavailable && viewIndex >= 0) {
                 onOpenViewer(viewable, viewIndex)
             },

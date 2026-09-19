@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -97,11 +98,11 @@ fun TagsManagerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(LocalSemanticColors.current.surfaceFill, RoundedCornerShape(14.dp))
+                    .background(LocalSemanticColors.current.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .border(
                         1.dp,
                         cs.outlineVariant.copy(alpha = if (LocalSemanticColors.current.isDark) 0.12f else 0.10f),
-                        RoundedCornerShape(14.dp),
+                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
                     )
                     .clickable {
                         Haptics.light(view)

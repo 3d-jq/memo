@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -379,7 +380,7 @@ fun TranslateScreen(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .background(cs.surface)
                     .clickable { if (!loading) showLanguageSheet = true }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -405,7 +406,7 @@ fun TranslateScreen(
             Spacer(Modifier.width(12.dp))
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
                     .background(cs.primary)
                     .clickable { if (loading) stop() else translate() }
                     .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -491,9 +492,9 @@ private fun TranslateCard(modifier: Modifier = Modifier, content: @Composable ()
     val cs = MaterialTheme.colorScheme
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(MemoRadius.INNER_DP.dp))
             .background(cs.surface)
-            .border(1.dp, withAlpha(cs.outlineVariant, 0.25), RoundedCornerShape(12.dp)),
+            .border(1.dp, withAlpha(cs.outlineVariant, 0.25), RoundedCornerShape(MemoRadius.INNER_DP.dp)),
     ) { content() }
 }
 

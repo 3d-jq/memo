@@ -1,5 +1,6 @@
 package com.psyche.memo.ui.backup
 
+import com.psyche.memo.ui.MemoRadius
 import com.psyche.memo.ui.overlaySurfaceColor
 import android.text.format.DateFormat
 import androidx.compose.foundation.background
@@ -136,9 +137,9 @@ fun BackupReminderBanner(
                 .fillMaxWidth()
                 .background(
                     if (pressed) bg.copy(alpha = bg.alpha + 0.05f) else bg,
-                    RoundedCornerShape(14.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
-                .border(0.6.dp, border, RoundedCornerShape(14.dp))
+                .border(0.6.dp, border, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                 .padding(start = 12.dp, top = 10.dp, end = 8.dp, bottom = 10.dp),
             verticalAlignment = Alignment.Top,
         ) {
@@ -307,11 +308,11 @@ fun BackupReminderTimeSheet(
                             .align(Alignment.Center)
                             .fillMaxWidth()
                             .height(WHEEL_ITEM_EXTENT)
-                            .background(bandColor, RoundedCornerShape(12.dp))
+                            .background(bandColor, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                             .border(
                                 1.dp,
                                 cs.primary.copy(alpha = if (isDark) 0.30f else 0.18f),
-                                RoundedCornerShape(12.dp),
+                                RoundedCornerShape(MemoRadius.INNER_DP.dp),
                             ),
                     )
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -526,7 +527,7 @@ private fun FrequencyTile(label: String, selected: Boolean, onTap: () -> Unit) {
                         pressed -> cs.onSurface.copy(alpha = 0.05f)
                         else -> Color.Transparent
                     },
-                    RoundedCornerShape(12.dp),
+                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
                 )
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,

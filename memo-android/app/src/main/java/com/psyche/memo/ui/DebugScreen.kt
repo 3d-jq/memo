@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.ui.MemoRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
@@ -94,11 +95,11 @@ fun DebugScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(cs.surfaceContainerHigh, RoundedCornerShape(14.dp))
+                        .background(cs.surfaceContainerHigh, RoundedCornerShape(MemoRadius.INNER_DP.dp))
                         .border(
                             0.5.dp,
                             if (isDark) cs.onSurface.copy(alpha = 0.06f) else cs.outlineVariant.copy(alpha = 0.12f),
-                            RoundedCornerShape(14.dp),
+                            RoundedCornerShape(MemoRadius.INNER_DP.dp),
                         )
                         .padding(start = 14.dp, top = 12.dp, end = 14.dp, bottom = 14.dp),
                 ) {
