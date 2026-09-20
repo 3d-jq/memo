@@ -1531,4 +1531,34 @@ RemoteBackupListSheet）。**两处假懒加载**（SkillsScreen、ProviderSetti
 守卫：`SvgIconCacheTest`（接管判据与缓存键）。**帧率本身只有真机能判**，请重点滑一滑
 设置→供应商→获取模型。
 
+## 5.33 图标名单的维护模型 + 删掉那颗坏掉的 Kelivo 头像（2026-09-20）
+
+用户问「大模型图标和大模型有对应的名单吧，要不断维护是不是」——**是**，一共两张表加一条
+零维护的兜底，都在 `app/src/main/java/com/psyche/memo/ui/`：
+
+| 表 | 规模 | 作用 | 出处 |
+| --- | --- | --- | --- |
+| `BrandIconCatalog.kt` | **58 项** | 供应商头像选择页里**手动挑**的那颗；存的值是 Dart 的 asset 串（`assets/icons/openai.svg`），渲染时拼成 `file:///android_asset/icons/…` | 1:1 上游 `lib/utils/brand_assets.dart` 的 `selectableIcons` |
+| `BrandAssets.kt` | 70 条正则 | **按名字自动配图**（`openai\|gpt\|o\d → openai.svg`），用在供应商列表行、默认模型页、ASR 服务行 | 上游同一文件的 `_mapping` |
+| 兜底（免维护） | — | `avatarType='lobehub'` → 按名字走 LobeHub 图标 CDN（`unpkg.com/@lobehub/icons-static-svg@latest`）；另有 emoji／远程 URL／本地文件 | 上游同款 |
+
+真实维护成本只有两处：① 上游改 `brand_assets.dart` 时跟着同步一次（比对结论：上游引用的
+63 个图标我们**一条不缺**，另外自己多了 17 条：cerebras／elevenlabs／groq／nvidia／ppio／
+vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「加一行正则 + 往
+`app/src/main/assets/icons/` 拷一个 SVG」，**要发版**才生效（走 CDN 的那条不用）。
+不做的事：不把「匹配不到就自动请求 CDN」当默认——那会让头像走网络（隐私 + 离线首启空白），
+要改得用户点名。
+
+**本轮修的缺陷**：`BrandIconCatalog` 里留着上游第 59 项 `("kelivo", "Kelivo",
+"assets/icons/kelivo.png")`，而我们仓库只有 `memo.png`、**没有 kelivo.png** ⇒ 头像页那一格
+既是一个打不开的空图、又把 "Kelivo" 显示给用户，违反品牌红线。用户「这个去掉吧」→ 删掉该行，
+58 项。守卫补在 `ProviderAvatarTest`：`everyCatalogAssetExistsAndCarriesNoUpstreamBrand`
+逐条查「表里引用的文件真在 `src/main/assets/icons/` 里」+「id/label/asset 都不许带 kelivo」，
+计数测试同步改 58。**已证伪**：把那行加回去，两条测试立刻变红。
+
+顺带确认：剩下的 `kelivo` 字样只出现在**内部标识符与出处注释**里（`KelivoOptions` 类、
+序列化值 `"type":"kelivo"`、注释引用 Dart 路径），界面标签早已是
+`search_service_name_memo`；品牌红线允许注释留出处。
+
+
 

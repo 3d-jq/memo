@@ -1,10 +1,13 @@
 package com.psyche.memo.ui
 
 /**
- * 可选择的品牌内置图标目录 —— 1:1 取自 `lib/utils/brand_assets.dart`
- * `BrandAssets.selectableIcons`（59 项）。**存的值就是 Dart 的 asset 串**
- * （`assets/icons/openai.svg`），这样 Flutter 备份里的 `avatarValue` 能直接用、
- * 反向也兼容；渲染时再拼成 Coil 认的 `file:///android_asset/...`。
+ * 可选择的品牌内置图标目录 —— 取自 `lib/utils/brand_assets.dart`
+ * `BrandAssets.selectableIcons`，**58 项**：上游那 59 项里的
+ * `("kelivo", "Kelivo", "assets/icons/kelivo.png")` 按品牌红线删掉了（用户
+ * 2026-09-20「这个去掉吧」）—— 它既把 "Kelivo" 显示给用户，指向的资源我们仓库里
+ * 也根本不存在（我们有的是 `memo.png`），选上就是一格打不开的空图。
+ * **存的值就是 Dart 的 asset 串**（`assets/icons/openai.svg`），这样 Flutter 备份里的
+ * `avatarValue` 能直接用、反向也兼容；渲染时再拼成 Coil 认的 `file:///android_asset/...`。
  */
 object BrandIconCatalog {
 
@@ -46,7 +49,6 @@ object BrandIconCatalog {
         BrandIconOption("tinyfish", "TinyFish", "assets/icons/tinyfish-color.svg"),
         BrandIconOption("internlm", "InternLM", "assets/icons/internlm-color.svg"),
         BrandIconOption("cohere", "Cohere", "assets/icons/cohere-color.svg"),
-        BrandIconOption("kelivo", "Kelivo", "assets/icons/kelivo.png"),
         BrandIconOption("tensdaq", "Tensdaq", "assets/icons/tensdaq-color.svg"),
         BrandIconOption("marucode", "MaruCode", "assets/icons/marucode.png"),
         BrandIconOption("longcat", "LongCat", "assets/icons/longcat.png"),
