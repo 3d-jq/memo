@@ -107,7 +107,7 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
 - **上下文压缩机制＝opencode 阈值机制**（用户 2026-09-11「这个上下文压缩这个机制这个部分 我们要改 不用原项目这个」→ 2026-09-13「改成 opencode 那个压缩阈值来压缩」）：估算 tokens 超过「上下文窗口 − max(输出预算, buffer)」时，发送前把较早的上下文归纳成**锚定摘要检查点**插进**同一个会话**（`CompactionPart`，`boundaryOrder` 之前的消息不再进请求，检查点整条替换成 `<conversation-checkpoint>` user 轮次），最近 tokens 原样保留。纯逻辑 `core/common/SessionCompaction.kt`（照 `opencode/packages/core/src/session/compaction.ts`），设置键 `context_compaction_{auto,keep_tokens,buffer,window}_v1`，模型级上下文长度写 `modelOverrides[modelId].contextWindow`（模型编辑页 Advanced）。**不要再改回「新建会话 + 摘要作首条消息」那套**（`CompressText`/`Utf16SafeCut` 旧机制已删）；唯一未接：provider 报 context-length 后的自动压缩重试
 - ~~语音剩余~~ **✅ 全部收官**（qwenAudio TTS WebSocket 已接线，ASR 7 种全通；sherpa_onnx 是桌面离线件不移植）
 - ~~收尾-5：Toast 用 sonner 替换~~ **已关闭**（用户 2026-09-13「这个不用做了 已经弄好了toast这个部分」）：保留手撸 `MemoSnackbar`（core:ui/snackbar/），不引 sonner
-- ~~UI-7i 图片导出~~ **✅ 已收官**（2026-09-19 `ui/chat/ChatExportImage.kt`：离屏 ComposeView 渲染导出文档 → draw 成 ARGB 位图 → PNG 编码分享；导出 sheet 第三选项接线。**有意偏差**：上游的切片拼接/透明裁剪是绕 Flutter 纹理上限的，Compose 离屏一次画完不需要；上游的预览 sheet 省略，直接走系统分享）
+- ~~UI-7i 图片导出~~ **❌ 已整块撤掉（2026-09-20 用户「导出图片这个功能去掉吧」）**：2026-09-19 曾落地（离屏 ComposeView 渲染 → ARGB 位图 → PNG 分享），真机一点就闪退两层：`Dialog` 无 window token（非 Activity 上下文）、`ComposeView` 找不到 ViewTree owner（`MainActivity` 是纯 `ComponentActivity`，owner 只装在 activity-compose 自己那棵树上；lifecycle 2.9.1 又把它对 Kotlin 藏了，没有公开 API 可写）。第二层在本工程补不干净 → `ChatExportImage.kt` 与多选导出栏第三颗钮、导出 sheet 图片行全部删除，**文本导出（.md/.txt）不受影响**。详见 PORTING §5.31（含以后重做的正确起点：在现有组合里画 + `GraphicsLayer.toImageBitmap()`）
 - S5：kelivo 内置搜索（上游端点+内置令牌，按品牌规则不移植，低优先）
 - 图片查看器桌面专属件（复制钮/缩放三钮/拖拽关图/桌面翻页箭头——compact=手机端不含，低优先）
 

@@ -237,7 +237,7 @@ source.properties file` —— 报这个就是 NDK 缺失/装坏，不是代码�
 | UI-7f | 记忆关于页 + 注入种子：`MemoryAboutScreen`（6 段参考文案，FAQ 段带小标题）+ 记忆设置入口；`InstructionInjectionRepository` 空表时用 `learning_mode_prompt_v1`（回退 STUDYING 默认提示词，`LearningModePrompt.DEFAULT` 逐字）播种第一条注入项，`learning_mode_enabled_v1` 为真时默认勾选 | ✅ 本轮 |
 | UI-7g | 助手 MCP sheet：输入栏 Hammer 按钮（原为空实现）→ `McpAssistantSheet`（已连接服务器 + 启用/总数标签 + 单行开关 + 全选/清空，写 assistant.mcpServerIds） | ✅ 本轮 |
 | UI-7h | 建议气泡：`core:common/SuggestionText`（parseSuggestions 去项目符号/编号/引号 + 上限 3 条、buildContent 最近 8 轮/尾部 4000 字符，带单测）+ 回复完成后按 `suggestion_generation_enabled_v1` 生成（suggestion 模型/prompt/thinking）写回 conversation.chatSuggestions + `ChatSuggestionBubbles`（最后一条助手消息下方，点按按 `suggestion_insert_on_tap_only_v1` 插入或直接发送） | ✅ 本轮 |
-| UI-7i | 消息多选 + 导出：更多 sheet 的 Select Messages 进入选择态（锚点消息配对的 user/assistant 预选、行内 20dp 复选框 + 点按切换、顶栏换成关闭/已选计数/反选/全选、底部输入栏换成导出栏或删除栏）；`MessageExport`（part 遍历 + markdown/txt 文档构建，带单测）；导出走 CreateDocument（.md/.txt）。**未移植**：图片导出（widget 截图引擎，按钮暂不渲染）、选择态 mini-map | ✅ 本轮（图片导出 ⬜） |
+| UI-7i | 消息多选 + 导出：更多 sheet 的 Select Messages 进入选择态（锚点消息配对的 user/assistant 预选、行内 20dp 复选框 + 点按切换、顶栏换成关闭/已选计数/反选/全选、底部输入栏换成导出栏或删除栏）；`MessageExport`（part 遍历 + markdown/txt 文档构建，带单测）；导出走 CreateDocument（.md/.txt）。**不移植**：图片导出（2026-09-20 用户拍板整块撤掉，见 §5.31）、选择态 mini-map | ✅ 本轮（图片导出 ❌ 已撤销） |
 | 修复 | 智谱 400：`glm-5.3-flash` 是始终思考模型，只接受 `reasoning_effort` 的 low/high/max（其他值/`thinking:{type:disabled}` 报 1210）。移植 `applyVendorReasoningKnobs` 到 `ReasoningBudget.vendorReasoningFields`——智谱/小米/火山 `thinking:{type}`、DashScope `enable_thinking`、OpenRouter `reasoning`、Laguna `chat_template_kwargs`，通用 OpenAI 兼容端点才发 `reasoning_effort`（curl 实测确认） | ✅ 本轮 |
 | 修复 | 关于页闪退：`R.mipmap.ic_launcher` 是 adaptive-icon XML（`mipmap-anydpi/ic_launcher.xml`），Compose `Image` 只吃 VectorDrawable / PNG / JPG / WEBP，adaptive-icon XML 抛 `IllegalArgumentException` 直接 FATAL。改成 `R.drawable.ic_launcher_foreground`（`drawable-*/ic_launcher_foreground.png`，每 dpi 都有）——视觉上跟 launcher icon 一样（就是 launcher 的前景层） | ✅ 本轮 |
 | 修复 | 语音服务 / 备份 / 赞助 UI 壳子（无功能）：原版 Flutter 端有这 3 个页面，Android 端之前缺。3 个新文件 `BackupScreen.kt` / `LocalSnapshotsScreen.kt` / `PendingUiShells.kt`（只装 `SponsorScreen`，其它 Provider 子页`MultiKeyManagerScreen` / `ProviderNetworkPage` / `ProviderCustomRequestPage` / `BalanceScreen` 已有完整实现在 `MultiKeyManagerScreen.kt` / `ProviderSubPages.kt` / `BalanceScreen.kt`，通过 `ProviderDetailScreen` 内部 state 弹出，不重复定义）。**BackupScreen** 6 个 section 跟原版 `backup_page.dart` L303-840 一一对应：备份管理（Chats / Files 开关，2 行）、备份提醒（启用开关 / 频率 / 上次备份，3 行）、本地副本（启用开关 / 管理副本入口，2 行——按原版 L1546-1600 `_LocalSnapshotMobileSection` 结构，`Saved a copy now` 按钮在子页不在主页）、本地备份（导出到文件 / 导入备份文件 / 从 Cherry Studio 导入 / 从 Chatbox 导入，4 行）、WebDAV 备份（服务器设置 / 测试连接 / 恢复，3 行——服务器设置进 sub-page，不是行内字段）、S3 备份（同上 3 行）。**LocalSnapshotsScreen** 7 个 settings（启用 / 频率 / 保留数 / 保留上周 / 保留每月 / 空间限制 / 保存时通知——4 个开关 3 个 nav row）+ 全宽 primary `IosTileButton` "立即保存副本"（原版 L148-153）。**SponsorScreen** 2 个 section（赞助方式 / 赞助者，赞助方式含 Afdian + WeChat Sponsor 2 行）。所有 label 走 `stringResource(...)`，新加 3 个 ARB key `backup_page_wifi_only` / `backup_page_while_charging` / `local_snapshot_on_device_copies`（en + zh + zh_Hans + zh_Hant，`arb_to_android.py` 重生成）。`MainActivity.kt` 加 `backup` / `local_snapshots` / `sponsor` 三条路由。`SettingsScreen.kt` 加 `onOpenBackup` / `onOpenSponsor` 回调 + 接线 Backup 行 + 重新打开 Sponsor 行（之前因品牌规则被砍，这批按"原版 UI 全移植"要求加回来）。`EditNavRow` 从 `private` 升 `internal` 方便壳子复用。`BackupSwitchRow` / `LocalSnapshotSwitchRow` 严格对齐原版 `_iosSwitchRow`（`backup_page.dart` L2219 `EdgeInsets.symmetric(horizontal: 12, vertical: 2)`——switch 行 30dp 故意比 nav 行 42dp 矮 12dp）。功能下一批：BackupProvider / WebDAV / S3 / LocalSnapshot / Sponsor QR 走 RikkaHub `data-sync` + `app` 对应模块。 | ✅ 本轮 |
@@ -347,7 +347,7 @@ source.properties file` —— 报这个就是 NDK 缺失/装坏，不是代码�
 
 ### 仍挂账（PORTING.md 既有 ⬜，非本次新发现）
 > **2026-09-12 清理**：原先挂在这里的 **M2d 记忆收尾**（Smart Add LLM 合并 / pipeline / 哈希冻结自愈 / tab 内条目列表）与 **C（tab 布局管理页）**都已落地（批次表 M2d-b / M2d-c / C 行），已从挂账里删掉；**S4 用量卡**、**消息模板/预设对话卡** 同理（见 §6 两条已改写）。别再当待办。
-> **现行剩余**：备份子块 **7/8**（§5.10.4）、**§5.12 五个接线批**（渲染/输入/聊天行为/语音/模型）、S5 搜索 kelivo + 启动自测（不移植）、MCP-3（OAuth + 会话内 sheet；STDIO 桌面专属不移植）、UI-7i 图片导出 + 选择态 mini-map。**已关闭**：收尾-5（Toast→sonner）——用户 2026-09-13「不用做了，toast 已经弄好了」，保留手撸 `MemoSnackbar`；**上下文压缩机制换成 opencode 阈值机制**——用户 2026-09-13「改成 opencode 那个压缩阈值来压缩」，见 §5.11 + 批次表「待改」行；**助手域三处遗留全部补齐**（2026-09-13 用户「给我做完吧 我要使用了」）：「管理总结」列表（编辑/清除会话总结）、「流式输出」开关（非流式路径 `completeAsChunks`）、`applyContextLimit`（限制上下文条数）。
+> **现行剩余**：备份子块 **7/8**（§5.10.4）、**§5.12 五个接线批**（渲染/输入/聊天行为/语音/模型）、S5 搜索 kelivo + 启动自测（不移植）、MCP-3（OAuth + 会话内 sheet；STDIO 桌面专属不移植）、选择态 mini-map（**UI-7i 图片导出已整块撤销**：2026-09-20 用户拍板，根因与删除清单见 §5.31）。**已关闭**：收尾-5（Toast→sonner）——用户 2026-09-13「不用做了，toast 已经弄好了」，保留手撸 `MemoSnackbar`；**上下文压缩机制换成 opencode 阈值机制**——用户 2026-09-13「改成 opencode 那个压缩阈值来压缩」，见 §5.11 + 批次表「待改」行；**助手域三处遗留全部补齐**（2026-09-13 用户「给我做完吧 我要使用了」）：「管理总结」列表（编辑/清除会话总结）、「流式输出」开关（非流式路径 `completeAsChunks`）、`applyContextLimit`（限制上下文条数）。
 - **搜索服务列表出现重复 Bing**（2026-09-10 用户反馈，指示"先不管"）：代码层无重复 bug（编辑器新建用 UUID id、`SearchSettingsRepository.addService` 按 id 去重、列表只渲染表数据）→ 疑为真机数据层两行（默认 `default` 行 + 用户/测试添加的 `bing_local` 行）。若处理：同 type 去重会误伤 searxng/anysearch 等多实例配置，只能针对 `bing_local`（无配置差异）或让用户手删。
 - **日志页三个 tab 已全部通电**（2026-09-11 用户问"上下文/应用日志是没有接线吗"，本轮接上；原先只有请求日志是通的）：
   - **上下文**：模型搬到 `core:common/.../logging/ContextLogModels.kt`（写入端 `ContextLogger` 之外，`ContextSource`/`ContextSegment`/`ContextLogSnapshot`/`ContextLogTailReader` 都在这里），新增 `ContextTag`/`ContextTags`/`TokenEstimator`；标签随 `LlmMessage.contextTags` 走（= 上游 map 里的 `_kelivo_ctx_segments`；provider 客户端逐字段拼 JSON，所以 Android 不需要"发请求前 strip"这一步）。组装侧新增 `app/logging/ContextLogAssembler.kt`（`buildSnapshot`/`logPrepared` + 标签助手 `systemMessageTags`/`appendedSystemMessageTags`/`joinSystemParts`），`ChatViewModel` 在 history 拼装处打标签、世界书 `inject(..., tagContextLog = true)` 也带标签，请求前 `logPrepared` 一条快照。
@@ -1196,7 +1196,7 @@ SVG 既是图也是文档 —— 能塞脚本、外部引用、`<foreignObject>`
 
 - `NetworkTts.qwenAudio` + `QwenAudioTtsSession`（OkHttp WebSocketListener）：onOpen 发 run-task（SpeechSynthesizer / text_type=PlainText / voice/format/sample_rate）→ 30s 等 task-started → continue-task（文本）+ finish-task → 120s 等 task-finished；二进制帧进 ByteArrayOutputStream；task-failed/error 取 header.error_message|error_code|payload.message；PCM 经既有 `pcmToWav` 转 WAV；mime 按 `_audioMimeForFormat`。websocketUrl：workspace 空 → `wss://dashscope.aliyuncs.com/api-ws/v1/inference`，否则 `wss://<ws>.<region>.maas.aliyuncs.com/...`（region 缺省 cn-beijing）。`isSupported` 恒 true；两个旧断言（「qwenAudio 未接」）随附更新。
 
-### ④ UI-7i：消息导出图片
+### ④ UI-7i：消息导出图片（❌ 2026-09-20 整块撤销，见 §5.31）
 
 - `ui/chat/ChatExportImage.kt`：**离屏 ComposeView 渲染引擎**——不可见 Dialog（alpha 0 + NOT_TOUCHABLE/NOT_FOCUSABLE + dim 0）承载 ComposeView，`ProvideSemanticColors + MaterialTheme` 下渲染导出文档（标题 + 秒级日期 + 每条消息角色名/时间/气泡 Markdown + ImagePart 内联图），两帧后 draw 进 ARGB_8888 位图；导出 sheet 第三选项（`message_export_sheet_export_image`）接线，PNG 写 `cache/exports/` 后经 `resolveShareableImage` 走系统分享。
 - **有意偏差（记 §5.11 语义）**：①上游切片拼接 + 空白裁剪是绕 Flutter 纹理上限的，Compose 离屏 Canvas 一次画完，不需要；②上游的图片预览 sheet 省略，截完直接分享；③导出文档复用 `MarkdownText` 渲染气泡正文。
@@ -1209,7 +1209,7 @@ SVG 既是图也是文档 —— 能塞脚本、外部引用、`<foreignObject>`
 
 ### 收官清单（剩余=零）
 
-1~8 备份子块 ✅ / 12 家网络 TTS + 7 种 ASR ✅ / MCP-1/2/3 ✅ / UI-7 全系（含图片导出）✅ / §5.12 五批 ✅。**有意不移植**（勿当待办）：S5 内置搜索（上游端点+令牌，品牌规则）、图片查看器桌面专属件、STDIO MCP、sherpa_onnx、desktop/ 整目录。
+1~8 备份子块 ✅ / 12 家网络 TTS + 7 种 ASR ✅ / MCP-1/2/3 ✅ / UI-7 全系（含图片导出，**图片导出后于 §5.31 撤销**）✅ / §5.12 五批 ✅。**有意不移植**（勿当待办）：S5 内置搜索（上游端点+令牌，品牌规则）、图片查看器桌面专属件、STDIO MCP、sherpa_onnx、desktop/ 整目录。
 
 ## 5.26 圆角与组件风格采纳 Apple 参考系（2026-09-19）
 
@@ -1324,6 +1324,7 @@ MemoRadius 三档：容器 20 / 嵌套 16 / 胶囊 999。至此全站圆角只�
   （`cs.secondary`），接到 §5.25 已落地的 `ChatExportImage`。两条上游语义：导出的是**会话
   时间序**的选中消息（不是点选顺序）、**先收多选再导出**；从导出 sheet 进来时不收
   （上游 sheet 也不收）。**有意偏差**（UI-7i 已记）：不补 `showImagePreviewSheet`，直接系统分享。
+  **→ 本条 2026-09-20 整块撤销，见 §5.31。**
 - **MCP 工具结果非文本块**（`mcp_tool_service.dart:248-324`）：按原顺序累加成一整段 markdown —
   image 块 base64 落盘（`filesDir/tool_images/mcp_img_<微秒>.<ext>`）后**就地**写一行
   `![](...)`（目的地含空格/括号/`<>`/非 ASCII 时按 `encodeMarkdownImageDestination` 包 `<>`，
@@ -1370,6 +1371,8 @@ MemoRadius 三档：容器 20 / 嵌套 16 / 胶囊 999。至此全站圆角只�
   （照 `ToolTranscriptContentTest` 的扫描手法），钉住"渲染必须用 host、不许用 appContext"。
   **教训：凡是起窗口（Dialog/Popup/BottomSheet 之外的手撸 Dialog）的代码，参数必须是
   Activity 上下文，且必须真机点一次。**
+  **→ 这条只修掉了第一层崩，第二层（ComposeView 缺 ViewTree owner）在本工程补不干净，
+  2026-09-20 用户拍板把整个图片导出撤掉，见 §5.31。**
 - **「朗读取哪部分文本」看着不能选**：五行、点行写库、朗读读库**都在**，坏在
   `TtsTextSelectionRow` 把那颗勾**无条件画出来**了 —— 上游是
   `AnimatedOpacity(opacity: selected ? 1 : 0, 160ms)`（`tts_settings_page.dart:222-230`），
@@ -1385,3 +1388,38 @@ MemoRadius 三档：容器 20 / 嵌套 16 / 胶囊 999。至此全站圆角只�
   就没有这个参数），它内置上下各 16dp，所以高出那一截。改成按原版几何自己拼：42dp 高的
   圆角胶囊 + `BasicTextField`，前缀位 padding start 10 / end 4、图标 16dp
   （L1941-1949），清空钮 28dp 照旧。
+
+## 5.31 多选导出图片整块撤掉（2026-09-20，用户「导出图片这个功能去掉吧」）
+
+§5.30 只修掉了第一层崩，真机第二层还在，而且这层**在 Memo 里补不干净**：
+
+- 改成把 `ComposeView` 挂进 Activity 的 `android.R.id.content` 之后，报的是
+  `IllegalStateException: ViewTreeLifecycleOwner not found from ComposeView`。根因不是
+  Dialog，而是**这颗 ComposeView 的祖先链上压根没有 owner**：`MainActivity` 是纯
+  `ComponentActivity`（本工程没有 appcompat），owner 三件套是 `activity-compose` 装在
+  **它自己那棵 ComposeView** 上的，我们新加的是它的**兄弟节点**，往上走找不到。
+  RikkaHub 的 `BitmapComposer` 同款写法能跑，是因为它挂在 `decorView` 下且宿主是
+  `AppCompatActivity`（AppCompat 的 `installViewTreeOwners()` 会把 owner 装到 decorView）——
+  这条参照系在本工程不成立。
+- 想自己装也装不上：Compose 1.8.3 里 `AbstractComposeView` 查的是
+  `androidx.lifecycle.ViewTreeLifecycleOwner.get(...)`，而 lifecycle **2.9.1** 把这个类的
+  Kotlin 侧可见性收掉了（javap 看得到 `public static set/get`，Kotlin 报
+  `Unresolved reference`；公开只剩 `androidx.lifecycle.findViewTreeLifecycleOwner` 这个**只读**
+  扩展）。`ComposeView.setOwner(...)` 在 1.8.3 也已删除。把三个 `implementation` 依赖点名
+  提上来仍不可见 —— 也就是**没有公开 API 可写这颗 tag**，剩下的路只有「加一个 Java 薄壳
+  文件绕过 Kotlin 的 deprecation 屏蔽」或「把 MainActivity 换成 AppCompatActivity」，
+  两条都是为一个次要功能动全局，用户拍板不偿试：**功能整块去掉**。
+
+删掉的东西：`ui/chat/ChatExportImage.kt`、它的两条测试（含 §5.30 加的源码守卫
+`ChatExportImageWindowTokenTest`）、`ChatContent` 里的 `exportSelectedAsImage` /
+`renderAndShareChatImage` / `findActivity()`、多选导出栏的第三颗 `Lucide.Image`、
+`MessageExportSheet` 的图片选项行。**文本导出（.md / .txt）不受影响**，多选栏剩两颗钮。
+ARB 生成的 `chat_selection_export_image` 等字符串保留（`strings.xml` 是生成物，门禁校验
+零 diff，手删会红）。
+
+**这是有意偏离原版**（原版 `home_page_controller.dart:2141-2168` 有图片导出）：§5.25 的
+「UI-7i 图片导出 ✅」与 §5.29 的「第三颗钮恢复渲染」两条按本撤销，批次表 UI-7i 行与
+§5.25 收官清单同步标注。以后若再要这个能力，起点应该是**在现有组合里画 +
+`GraphicsLayer.toImageBitmap()`**（组合内天然有 owner，不需要窗口、不需要挂视图树），
+而不是重走 ComposeView 那条路。
+

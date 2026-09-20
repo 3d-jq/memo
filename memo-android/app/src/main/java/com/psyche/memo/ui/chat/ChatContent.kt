@@ -396,39 +396,6 @@ fun ChatContent(
     }
     val timeOf: (Long) -> String = { millis -> com.psyche.memo.ui.chat.timeStr(millis) }
 
-    /**
-     * 多选导出图片（home_page_controller.dart:2141-2168 `exportSelectedAsImage`）：
-     * 空选只提示、**不**收多选；有选中先 `cancelSelection()` 再导出。
-     */
-    fun exportSelectedAsImage(cancelSelection: Boolean) {
-        val (title, picked) = exportSelection()
-        if (picked.isEmpty()) {
-            com.psyche.memo.ui.snackbar.SnackbarManager.show(
-                com.psyche.memo.ui.snackbar.AppNotification(
-                    message = container.appContext.getString(UiR.string.home_page_select_messages_to_share),
-                    type = com.psyche.memo.ui.snackbar.NotificationType.INFO,
-                ),
-            )
-            return
-        }
-        if (cancelSelection) {
-            selecting = false
-            selectedIds = emptySet()
-        }
-        renderAndShareChatImage(
-            container = container,
-            // 离屏渲染要起一个不可见 Dialog，只有 Activity 上下文才有 window token
-            // （传 applicationContext 会 BadTokenException 直接崩）。
-            windowContext = context,
-            title = title,
-            messages = picked,
-            roleNameOf = roleNameOf,
-            timeOf = timeOf,
-            scheme = cs,
-            scope = coroutineScope,
-        )
-    }
-
     // 附件选取（bottom_tools_sheet → file_upload_service）：URI 先拷进 upload
     // 目录再进待发列表，发送后并入用户消息 parts。图片同时过画质管线
     // （image_upload_quality_v1 五档 → quality / maxLongEdge / 透明闸门）。
@@ -1447,7 +1414,6 @@ fun ChatContent(
                     showThinkingContent = selShowThinkingContent,
                     onExportMarkdown = { showExportSheet = true },
                     onExportTxt = { showExportSheet = true },
-                    onExportImage = { exportSelectedAsImage(cancelSelection = true) },
                     onToggleThinkingTools = {
                         selShowThinkingTools = !selShowThinkingTools
                         if (!selShowThinkingTools) selShowThinkingContent = false
@@ -1826,12 +1792,6 @@ fun ChatContent(
             imageLine = { uri -> if (markdown) "![image]($uri)" else uri },
         )
         com.psyche.memo.ui.chat.MessageExportSheet(
-            onImage = {
-                // UI-7i：widget 截图引擎（离屏 ComposeView → PNG → 系统分享）。
-                // 从导出 sheet 进来时**不**收多选，上游 sheet 也不收。
-                showExportSheet = false
-                exportSelectedAsImage(cancelSelection = false)
-            },
             onMarkdown = {
                 showExportSheet = false
                 exportPending = true to buildExport(true)
@@ -2078,100 +2038,4 @@ fun ChatContent(
             },
         )
     }
-}
-
-/**
- * 多选导出图片的渲染与交付（UI-7i）：离屏 ComposeView 画导出文档 → PNG 落
- * `cache/exports` → 系统分享。上游成功后进图片预览 sheet（`showImagePreviewSheet`）
- * 再分「保存 / 分享」，那一步按 PORTING §5.25 记的有意偏差省略。
- */
-private fun renderAndShareChatImage(
-    container: com.psyche.memo.AppContainerImpl,
-    windowContext: android.content.Context,
-    title: String,
-    messages: List<com.psyche.memo.ui.chat.MessageExport.ExportMessage>,
-    roleNameOf: (com.psyche.memo.ui.chat.MessageExport.ExportMessage) -> String,
-    timeOf: (Long) -> String,
-    scheme: androidx.compose.material3.ColorScheme,
-    scope: kotlinx.coroutines.CoroutineScope,
-) {
-    val appContext = container.appContext
-    val datePattern =
-        appContext.getString(UiR.string.message_export_sheet_date_time_with_seconds_pattern)
-    val dateLine = java.text.SimpleDateFormat(datePattern, java.util.Locale.getDefault())
-        .format(java.util.Date())
-    val exportedAsTemplate = appContext.getString(UiR.string.message_export_sheet_exported_as)
-    val failedTemplate = appContext.getString(UiR.string.message_export_sheet_export_failed)
-    fun fail(reason: String) = com.psyche.memo.ui.snackbar.SnackbarManager.show(
-        com.psyche.memo.ui.snackbar.AppNotification(
-            message = failedTemplate.format(reason),
-            type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
-        ),
-    )
-    // 只有 Activity 才持有 window token；拿不到就如实报失败，别让 Dialog.show() 崩掉进程。
-    val host = windowContext.findActivity() ?: return fail("no activity context")
-    com.psyche.memo.ui.chat.ChatExportImage.render(
-        context = host,
-        title = title,
-        dateLine = dateLine,
-        messages = messages,
-        roleNameOf = roleNameOf,
-        timeOf = timeOf,
-        scheme = scheme,
-    ) { bitmap ->
-        if (bitmap == null) {
-            com.psyche.memo.ui.snackbar.SnackbarManager.show(
-                com.psyche.memo.ui.snackbar.AppNotification(
-                    message = failedTemplate.format("render failed"),
-                    type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
-                ),
-            )
-            return@render
-        }
-        scope.launch {
-            val pngFile = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching {
-                    val dir = java.io.File(appContext.cacheDir, "exports").apply { mkdirs() }
-                    val target = java.io.File(dir, "chat-export-${System.currentTimeMillis()}.png")
-                    target.outputStream().use { out ->
-                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                    }
-                    target
-                }.getOrNull()
-            }
-            val shareUri = pngFile?.let {
-                com.psyche.memo.ui.chat.resolveShareableImage(appContext, it.path)
-            }
-            if (pngFile == null || shareUri == null) {
-                com.psyche.memo.ui.snackbar.SnackbarManager.show(
-                    com.psyche.memo.ui.snackbar.AppNotification(
-                        message = failedTemplate.format("encode failed"),
-                        type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
-                    ),
-                )
-                return@launch
-            }
-            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                type = "image/png"
-                putExtra(android.content.Intent.EXTRA_STREAM, shareUri)
-                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            runCatching {
-                appContext.startActivity(android.content.Intent.createChooser(send, null))
-            }
-            com.psyche.memo.ui.snackbar.SnackbarManager.show(
-                com.psyche.memo.ui.snackbar.AppNotification(
-                    message = exportedAsTemplate.format(pngFile.name),
-                    type = com.psyche.memo.ui.snackbar.NotificationType.SUCCESS,
-                ),
-            )
-        }
-    }
-}
-
-/** 往上剥 ContextWrapper 找 Activity（Dialog 要有 window token 的上下文才行）。 */
-private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
-    is android.app.Activity -> this
-    is android.content.ContextWrapper -> baseContext.findActivity()
-    else -> null
 }

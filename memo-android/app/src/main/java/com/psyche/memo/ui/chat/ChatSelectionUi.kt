@@ -57,7 +57,6 @@ fun ChatSelectionExportBar(
     showThinkingContent: Boolean,
     onExportMarkdown: () -> Unit,
     onExportTxt: () -> Unit,
-    onExportImage: () -> Unit,
     onToggleThinkingTools: () -> Unit,
     onToggleThinkingContent: () -> Unit,
 ) {
@@ -90,15 +89,6 @@ fun ChatSelectionExportBar(
             ) {
                 Haptics.light(view)
                 onExportMarkdown()
-            }
-            SelectionActionButton(
-                icon = Lucide.Image,
-                label = stringResource(UiR.string.chat_selection_export_image),
-                color = cs.secondary,
-                modifier = Modifier.weight(1f),
-            ) {
-                Haptics.light(view)
-                onExportImage()
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -254,7 +244,6 @@ private fun SelectionToggleCard(
 fun MessageExportSheet(
     onMarkdown: () -> Unit,
     onTxt: () -> Unit,
-    onImage: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -288,18 +277,6 @@ fun MessageExportSheet(
                 )
             }
             Spacer(Modifier.height(10.dp))
-            // 图片导出（原版第三颗按钮 / UI-7i widget 截图引擎）。
-            if (onImage != null) {
-                ExportOptionTile(
-                    icon = Lucide.Image,
-                    title = stringResource(UiR.string.message_export_sheet_export_image),
-                    subtitle = stringResource(UiR.string.message_export_sheet_batch_export_image_subtitle),
-                ) {
-                    Haptics.light(view)
-                    onImage()
-                }
-                Spacer(Modifier.height(4.dp))
-            }
             ExportOptionTile(
                 icon = Lucide.BookOpenText,
                 title = stringResource(UiR.string.message_export_sheet_markdown),
