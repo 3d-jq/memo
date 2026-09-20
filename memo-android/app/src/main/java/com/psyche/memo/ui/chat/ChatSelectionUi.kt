@@ -45,6 +45,7 @@ import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Wrench
 import com.psyche.memo.common.Haptics
 import com.psyche.memo.ui.theme.LocalSemanticColors
+import com.psyche.memo.ui.theme.selectionChipColor
 import com.psyche.memo.ui.R as UiR
 
 /**
@@ -172,10 +173,12 @@ private fun SelectionActionButton(
     onTap: () -> Unit,
 ) {
     val isDark = LocalSemanticColors.current.isDark
-    val bg = androidx.compose.ui.graphics.lerp(
-        color.copy(alpha = if (isDark) 0.18f else 0.14f),
-        androidx.compose.ui.graphics.Color.White,
-        if (isDark) 0f else 0.02f,
+    // 与抽屉那一排共用上游同一条式子（`chat_selection_export_bar.dart:169-172` ≡
+    // `sidebar_selection_bars.dart:231-234`）：原来是往白/黑 lerp 的近似，两处不一致。
+    val bg = selectionChipColor(
+        onSurface = MaterialTheme.colorScheme.onSurface,
+        color = color,
+        isDark = isDark,
     )
     Row(
         modifier = modifier

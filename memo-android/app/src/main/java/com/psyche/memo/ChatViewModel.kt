@@ -1836,7 +1836,7 @@ class ChatViewModel(
                 val segmentsJson = encodeSegments(allSegments)
                 val finalParts = markFailed(
                     assistantId,
-                    com.psyche.memo.ui.chat.generationErrorText(e),
+                    com.psyche.memo.ui.chat.generationErrorDisplayText(container.appContext, e),
                     allParts,
                     segmentsJson,
                 )
@@ -2433,7 +2433,7 @@ class ChatViewModel(
                 persistFinal(
                     markFailed(
                         messageId,
-                        com.psyche.memo.ui.chat.generationErrorText(e),
+                        com.psyche.memo.ui.chat.generationErrorDisplayText(container.appContext, e),
                         allParts,
                         encodeSegments(allSegments),
                     ),
@@ -2922,6 +2922,16 @@ class ChatViewModel(
         segmentsJson: String? = null,
     ): List<MessagePart> {
         val hasText = parts.any { it is TextPart && it.text.isNotEmpty() }
+        // 失败提示（原版 home_page_controller.dart:508-515：SnackBar 走
+        // `generationInterrupted: <错误>`）。有半成品时气泡里不写错误行，这条就是唯一告知。
+        com.psyche.memo.ui.snackbar.SnackbarManager.show(
+            com.psyche.memo.ui.snackbar.AppNotification(
+                message = container.appContext.getString(
+                    com.psyche.memo.ui.R.string.generation_interrupted,
+                ) + ": " + errorText.lineSequence().first(),
+                type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+            ),
+        )
         val finalParts = if (hasText) parts else parts + TextPart(errorText)
         val msgs = _messages.value
         val index = msgs.indexOfLast { it.id == assistantId }

@@ -36,6 +36,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -996,6 +998,43 @@ private fun ProviderKindSheet(current: String, onSelect: (String) -> Unit, onDis
     }
 }
 
+/**
+ * 模型行三个动作的持有者。
+ *
+ * 为什么要这么绕一层：[ModelRowWithSwipe] 收的是三个 `()->Unit`，在列表里就地
+ * 现造的话「实参变了」永远成立 ⇒ 行不可跳过重组。这个对象在 [ModelsTab] 的存活期
+ * 内是同一个实例（`@Stable` ⇒ 组合期按引用比较），于是行只在**自己的**
+ * modelId/selected/check 真的变了才重组合。
+ */
+@Stable
+private class ModelRowHandlers(
+    val toggleSelect: (String) -> Unit,
+    val edit: (String) -> Unit,
+    val requestDelete: (String) -> Unit,
+)
+
+/** 一行模型：把带参动作就地绑到 [modelId]（每次本组合真正重跑时才新建 lambda）。 */
+@Composable
+private fun ModelRowCell(
+    modelId: String,
+    cfg: ProviderConfig,
+    selectMode: Boolean,
+    selected: Boolean,
+    check: ModelCheckResult?,
+    handlers: ModelRowHandlers,
+) {
+    ModelRowWithSwipe(
+        modelId = modelId,
+        cfg = cfg,
+        selectMode = selectMode,
+        selected = selected,
+        check = check,
+        onToggleSelect = { handlers.toggleSelect(modelId) },
+        onEdit = { handlers.edit(modelId) },
+        onRequestDelete = { handlers.requestDelete(modelId) },
+    )
+}
+
 /** Models tab — list + fetch/add/delete/reorder + connection test (#10). */
 @Composable
 private fun ModelsTab(
@@ -1084,6 +1123,22 @@ private fun ModelsTab(
         )
     }
 
+    // 检测状态**按行观察**（见下面的 `check`）：这两处以前直接在 ModelsTab 的
+    // 组合体里读 `checks`，于是批量检测每 500ms 落一条结果就把整表重跑一遍
+    // （N 行 × M 条 = N*M 次行重组，每次还带一枚品牌 SVG 的冷解码）。
+    // derivedStateOf 只在**布尔真的翻转**时才让本组合失效。
+    val anyFailed by remember(models, checks) {
+        derivedStateOf { models.any { checks[it]?.state == ModelCheckState.FAILURE } }
+    }
+    // 行动作提成一个存活期内不变的 @Stable 对象：行实参全稳定 ⇒ 行可跳过重组。
+    val rowHandlers = remember(selected, checks) {
+        ModelRowHandlers(
+            toggleSelect = { id -> if (id in selected) selected.remove(id) else selected.add(id) },
+            edit = { id -> detailModel = id },
+            requestDelete = { id -> pendingDelete = listOf(id) to DeleteKind.ROW },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1122,17 +1177,15 @@ private fun ModelsTab(
                     .weight(1f)
                     .fillMaxWidth(),
             ) { model, _ ->
-                ModelRowWithSwipe(
+                // 本行的检测结果：只有这一条的状态变了才重组合这一行。
+                val check by remember(model, checks) { derivedStateOf { checks[model] } }
+                ModelRowCell(
                     modelId = model,
                     cfg = cfg,
                     selectMode = selectMode,
-                    selected = selected.contains(model),
-                    check = checks[model],
-                    onToggleSelect = {
-                        if (selected.contains(model)) selected.remove(model) else selected.add(model)
-                    },
-                    onEdit = { detailModel = model },
-                    onRequestDelete = { pendingDelete = listOf(model) to DeleteKind.ROW },
+                    selected = model in selected,
+                    check = check,
+                    handlers = rowHandlers,
                 )
             }
         }
@@ -1145,7 +1198,7 @@ private fun ModelsTab(
             hasModels = models.isNotEmpty(),
             allSelected = selected.size == models.size && models.isNotEmpty(),
             selectionCount = selected.size,
-            hasFailed = models.any { checks[it]?.state == ModelCheckState.FAILURE },
+            hasFailed = anyFailed,
             onFetch = { showFetch = true },
             onAddNew = { showCreate = true },
             onDeleteAll = { deleteAllConfirm = true },

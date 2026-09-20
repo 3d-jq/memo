@@ -563,6 +563,7 @@
     <string name="camera_permission_denied_message">未授予相機權限</string>
     <string name="chain_of_thought_collapse">收起</string>
     <string name="chain_of_thought_expand_steps">展開更多 %1$s 步</string>
+    <string name="chat_attachment_unreadable_skipped">已跳過 %1$s 個本機無法讀取的附件（圖片格式不支援）。</string>
     <string name="chat_history_page_cancel">取消</string>
     <string name="chat_history_page_delete">刪除</string>
     <string name="chat_history_page_delete_all_dialog_content">確認要刪除所有未置頂的對話嗎？已置頂的會保留。</string>
@@ -979,6 +980,13 @@
     <string name="flutter_log_setting_subtitle">開啟後會將 Flutter 錯誤與 print 輸出寫入 logs/flutter_logs.txt</string>
     <string name="flutter_log_setting_title">Flutter日誌列印</string>
     <string name="font_picker_choose_local_file">選擇本機檔案</string>
+    <string name="generation_error_auth">鑑權失敗，請檢查該供應商的 API Key。</string>
+    <string name="generation_error_content_moderation">請求被供应商的內容安全審核攔截。</string>
+    <string name="generation_error_context_length">對話長度超出該模型的上下文上限。請先壓縮上下文、減少輸入內容，或改用上下文窗口更大的模型。</string>
+    <string name="generation_error_quota">該供應商帳號的餘額或額度不足。</string>
+    <string name="generation_error_rate_limited">供應商正在限流，請稍候片刻再重試。</string>
+    <string name="generation_error_timeout">供應商回應逾時。請重試，或改用回應更快的模型。</string>
+    <string name="generation_error_unsupported_image">供應商拒絕了這條訊息裡的圖片（多數只接受 webp、png、jpeg、gif）。</string>
     <string name="generation_interrupted">生成已中斷</string>
     <string name="generation_selector_hint">選好服務後，直接讓模型生成即可（模型會呼叫生成工具）</string>
     <string name="generation_selector_manage">管理生成服務</string>

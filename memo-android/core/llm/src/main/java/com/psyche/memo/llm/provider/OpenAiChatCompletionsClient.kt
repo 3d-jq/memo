@@ -159,7 +159,9 @@ class OpenAiChatCompletionsClient(
         val response = await(call)
         return try {
             if (!response.isSuccessful) {
-                throw IOException("HTTP ${response.code}")
+                // 必须带响应体：429/401 的真正原因（限流说明、余额、key 无效）全在 body 里，
+                // 裸 `HTTP 429` 用户和日志都无从下手（同 httpFailure 的理由）。
+                throw httpFailure(response)
             }
             val text = withContext(Dispatchers.IO) { response.body?.string() } ?: "{}"
             val obj = json.parseToJsonElement(text).jsonObject

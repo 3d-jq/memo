@@ -412,6 +412,17 @@ fun ChatContent(
                 val imported = uris.mapNotNull {
                     com.psyche.memo.provider.AttachmentStore.import(context, it, imageCompress)
                 }
+                // 系统解不动的图片（HEIC 在 API 26/27）会被整张丢掉：原字节发出去厂商
+                // 直接 400，整条消息都发不出去，所以宁可在这里说清楚。
+                val dropped = uris.size - imported.size
+                if (dropped > 0) {
+                    com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                        com.psyche.memo.ui.snackbar.AppNotification(
+                            message = context.getString(UiR.string.chat_attachment_unreadable_skipped, dropped.toString()),
+                            type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+                        ),
+                    )
+                }
                 vm.addAttachments(imported)
             }
         }
@@ -439,6 +450,17 @@ fun ChatContent(
             coroutineScope.launch {
                 val imported = uris.mapNotNull {
                     com.psyche.memo.provider.AttachmentStore.import(context, it, imageCompress)
+                }
+                // 系统解不动的图片（HEIC 在 API 26/27）会被整张丢掉：原字节发出去厂商
+                // 直接 400，整条消息都发不出去，所以宁可在这里说清楚。
+                val dropped = uris.size - imported.size
+                if (dropped > 0) {
+                    com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                        com.psyche.memo.ui.snackbar.AppNotification(
+                            message = context.getString(UiR.string.chat_attachment_unreadable_skipped, dropped.toString()),
+                            type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+                        ),
+                    )
                 }
                 vm.addAttachments(imported)
             }

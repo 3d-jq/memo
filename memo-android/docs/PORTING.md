@@ -1423,3 +1423,112 @@ ARB 生成的 `chat_selection_export_image` 等字符串保留（`strings.xml` �
 `GraphicsLayer.toImageBitmap()`**（组合内天然有 owner，不需要窗口、不需要挂视图树），
 而不是重走 ComposeView 那条路。
 
+## 5.32 体验五连修（2026-09-20，用户「按照你的改吧，我们现在在修复体验，上游也没有做好。我们要做好」）
+
+⚠️ **规则变化，比这批改动更要紧**：用户明确授权**体验类修复可以超出上游**。上游没有中文
+错误文案、上游的 HEIC 靠 `image_picker` 插件转好、上游不管列表性能——这些都不再是"不做"的
+理由。**默认仍是 1:1**（行为、几何、文案照 Dart 源码），但**每一条超出上游的改动都在本节
+点名**，以后翻 §5.11 找不到出处时先来这儿看。
+
+### ① 抽屉多选「移动/删除」芯片底色（用户「太黑看不清」）
+
+角色色（onSurface／primary／error）与上游一字不差，错在**我们自己手搓的底色混合**：
+`SideDrawerContent.kt` 把它写成 `color*0.14 + onSurface*0.86` 且强行 `alpha=1f`——等于拿
+onSurface 当 86% 的主色压底，默认浅色算出**不透明近黑 #262830**，深蓝/暗红的字与图标压在上
+面直接看不见。上游是 `alphaBlend(onSurface@0.04, color@(isDark?0.18:0.14))`，两颗操作数都带
+alpha，结果是一颗**半透明淡染色**（`sidebar_selection_bars.dart:231-234`，与
+`chat_selection_export_bar.dart:169-172` 同一条式子）。改成共用
+`ColorMath.kt` 的 `selectionChipColor(onSurface, color, isDark)`，聊天多选栏原本往白/黑 lerp
+的近似一并换掉 ⇒ 两屏自动统一。守卫：`ColorMathTest`（钉住 0x2C434E78 与"必须半透明"）。
+（上一轮 `949af1d` 只是把这排的 `enabled` 打开，之前被 40% 禁用蒙层掩盖，所以这会儿才暴露。）
+
+### ② 相册图片被厂商 400（`unsupported image`，只要 webp/png/jpeg/gif）
+
+真机原文：`.messages[7].image[0]: You have uploaded an unsupported image…`。链路上有三个缺口，
+缺一都出事：
+
+1. **HEIC 一路裸奔**：`AttachmentStore` 把 ContentResolver 声明的 `image/heic` 当权威 mime，
+   画质管线又不碰它（`detectFormat` 归 OTHER），原字节落盘。
+2. **请求侧照抄声明**：`MessageContent.mimeFor` 的次序本来是「显式声明 > data-URL > 扩展名」，
+   上游同次序——但上游**构造请求时压根不传 explicitMime**
+   （`message_generation_service.dart:423` `inferAttachmentMime(uri: path)`），于是先读文件头
+   16 字节嗅探（`multimodal_input_utils.dart:287-361`，只可能得 jpeg/png/gif/webp/pdf）。
+3. **扩展名表自造了 heic**：`mimeFor` 里有 `"heic" -> "image/heic"`，上游全仓 `image/heic`
+   零匹配（它的表里没有 heic）。
+
+改法：① `AttachmentStore.import` 里对 HEIC/HEIF 做一次**格式转换**（新增
+`ImageCompressor.isHeic`（ISO BMFF：主品牌在第 8..12 字节，兼容品牌从第 16 起，**别照
+`ftyp` 后立刻取 4 字节那样写，那是 minor version**）+ `transcodeToJpeg`，走 BitmapFactory
+重编码，不受"必须更小"约束）——这一步上游没有，因为它的 `image_picker` 默认 `heicToJpg`，
+我们换 SAF/PhotoPicker 就得自己补；② `MessageContent` 补 `sniffMimeFromBytes`（1:1）并把
+`mimeFor` 改成「显式 > data-URL > **嗅探** > 扩展名 > png 兜底」，四个请求构造点一律
+`explicit = null`；③ 删掉 heic 扩展名分支（`.bmp` 保留，上游表里真有）。
+转不动的（API 26/27 没有 HEIF 解码器）在选图那刻**丢弃并 SnackBar 告知**，绝不发上去——
+一条不支持的图会让**整条消息**发不出去。守卫：`MessageContentTest`（嗅探 + 永不声明 heic）、
+`ImageCompressorTest`（品牌盒位）。
+
+### ③ 代码块流式输出时"大小一直变"
+
+四个来源，前两条各占一半：
+
+1. **折叠预览取末尾几行 + 允许换行** = 一行源码对应几视觉行随内容变 ⇒ 框高每 tick 抖。
+   改成折叠预览期**强制不换行**（`codeBlockPreviewWraps`，长行横向滚动），N 行源码恒等于
+   N 视觉行。尾部跟随本身保留（那是用户 09-18 点的「折叠也要看得到在输出」）。
+2. **手动展开态每帧被冲掉**：`remember(stateKey)` 里 stateKey 含全文哈希，流式每个 token
+   都换 key ⇒ `manual` 退回 null，用户点开的展开下一帧就被自动折叠抢回去。上游是
+   StatefulWidget 的 `_manuallyToggled`，与内容无关 ⇒ 改成不键控的 `remember`。
+3. **流式中就上高亮**：上游 `_closed` 闸门（`markdown_with_highlight.dart:2820-2829`）在未
+   闭合围栏期间按纯文本渲染；我们照 token 边界实时高亮，斜体/粗体来回出现⇒字宽变，跨过
+   300 行/12000 字阈值还会整块退回纯文本再跳回来。⇒ `rememberHighlightedCode(…, highlight =
+   !isStreaming)`。
+4. **缺高度过渡**：上游 `AnimatedSize(220ms)`（:2639-2643），我们跨阈值是硬跳、被整条列表
+   的自动跟随放大 ⇒ 补 `animateContentSize(tween(220))`。
+
+守卫：`CodeBlockExpansionTest`（预览不换行那条）。
+
+### ④ 供应商报错看不懂
+
+上游本身也是**把 `e.toString()` 原样写进气泡**（`chat_actions.dart:2605`），只有
+`home_page_controller.dart:508-515` 那条 SnackBar 带中文前缀。所以"翻成人话"没有上游依据——
+本条按用户「我们要做好」**有意超出上游**，四类改动：
+
+- **带内错误帧**（这条是补漏，不是加法）：1.x 状态码的流里塞 `{"error":…}`／`event: error`／
+  Responses 的 `response.failed`·`response.incomplete` 时，上游
+  `throwIfInBandStreamError`（`chat_api_helpers.dart:857-919`）会抛；我们没移植，于是**半成品
+  被当成功落库**，连报错都没有。新增 `core/llm/.../provider/InBandStreamError.kt`，四个解码入口
+  （ChatCompletions／Responses／Claude／Gemini）在解析正文前一律过一遍。
+- **状态码必须带响应体**：`OpenAiChatCompletionsClient.listModels` 还在抛裸 `HTTP 429`，
+  换成 `httpFailure(response)`（同 §5.24 那批的理由）。
+- **中文分类**：`GenerationErrorText.classifyGenerationError` 判 7 类（上下文超长／图片格式／
+  内容审核／余额额度／限流／鉴权／超时），气泡与 SnackBar 显示「中文一句 + 换行 + 原始信息」。
+  **判不出就不分类**，只给原文——宁可英文也别给一句错的中文。只认带上下文的状态码写法
+  （`HTTP 429`、`"status_code":429`），裸数字正则会拿 token 数误判成 413。
+- **失败一定有提示**：`markFailed` 里补 SnackBar `生成已中断：<第一行>`（有半成品时气泡里
+  不写错误行，这条是唯一告知）。
+
+新文案落在 `lib/l10n/app_{en,zh,zh_Hant}.arb`（8 个键，`chatAttachmentUnreadableSkipped` +
+`generationError*` 七个）→ `tools/arb_to_android.py` 生成 strings.xml。**ARB 是上游文件**，
+加键等于改上游 l10n；先例是「流式等待提示」那批（同为本工程新增功能）。⚠️ 往 ARB 插键时
+锚点必须匹配「键 + 冒号 + 引号开头的值」，`"@xxx": {` 是元数据对象，插进去键会隐身
+（本轮踩过一次，生成器照样"成功"但键根本没进去）。
+
+### ⑤ 「获取模型」列表滑动掉帧 + 全站同类
+
+主嫌：**每行冷解码两枚 SVG**（`FetchModelsSheet` 每行的品牌 logo + `deepthink.svg`，coil-svg
+→ androidsvg）。新增 `ui/SvgIconCache.kt`：按「asset 路径 + 目标像素」缓存已解码位图，解码仍
+走 Coil 自己的管线（同一个 SvgDecoder、软件位图、`Dp.roundToPx()` 与 `Modifier.size` 同一
+取整）⇒ **像素与几何都不变**，未就绪那一帧仍回落 `AsyncImage`。只接管
+`file:///android_asset/**/*.svg`，远程/PNG 一律不碰。
+
+其余是机械项：组合期的 filter/group/sortedBy 全部 `remember`、勾选判定换 Set、行 lambda 用
+`@Stable` 动作持有者 + `rememberUpdatedState`（FetchModelsSheet／ModelSelectSheet／
+ProviderDetail 重排表／LocalSnapshots 卡片）、每行现建 `SimpleDateFormat` 换成按 locale 缓存的
+formatter（ChatHistory／LocalSnapshots）、两处 `items(size){}` 补 key（LogViewer／
+RemoteBackupListSheet）。**两处假懒加载**（SkillsScreen、ProviderSettingsScreens 的
+`item{ SectionCard{ forEachIndexed } }`）**刻意没拆成 `items(...)`**：卡片是一整张圆角描边面，
+拆开就会看到一段一段的角——改成 `key(行标识)` + 行实参全稳定，外观一字不动。
+
+守卫：`SvgIconCacheTest`（接管判据与缓存键）。**帧率本身只有真机能判**，请重点滑一滑
+设置→供应商→获取模型。
+
+

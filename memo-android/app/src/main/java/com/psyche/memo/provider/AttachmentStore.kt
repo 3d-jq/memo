@@ -41,17 +41,25 @@ object AttachmentStore {
         // 图片先过画质管线（file_upload_service.dart:56/77 的 ImageCompressor）；
         // 压过就是 JPEG（image_compressor.dart:105-107 强制 .jpg），名字与 mime 跟着走。
         val compressed = if (isImage) ImageCompressor.compress(bytes, config) else null
-        val data = compressed ?: bytes
+        // HEIC/HEIF 画质管线是不碰的（`detectFormat` 归 OTHER），上游那侧根本不会出现 HEIC，
+        // 因为 image_picker 插件默认 heicToJpg；我们走 SAF/PhotoPicker 绕过了它，所以这里
+        // 补一次**格式转换**。转不动（API 26/27 没有 HEIF 解码器）就整张丢掉并报提示 ——
+        // 原字节发出去厂商会 400「unsupported image」，那是**整条消息都发不出去**。
+        val heic = isImage && compressed == null && ImageCompressor.isHeic(bytes)
+        val transcoded = if (heic) ImageCompressor.transcodeToJpeg(bytes) else null
+        if (heic && transcoded == null) return null
+        val data = compressed ?: transcoded ?: bytes
+        val becameJpeg = compressed != null || transcoded != null
         val outputName = when {
             !isImage -> safeName
-            compressed != null -> safeName.substringBeforeLast('.', safeName) + ".jpg"
+            becameJpeg -> safeName.substringBeforeLast('.', safeName) + ".jpg"
             else -> safeName
         }
         val saved = store(dir, data, outputName) ?: return null
         return ChatViewModel.PendingAttachment(
             uri = saved.absolutePath,
             mime = when {
-                compressed != null -> "image/jpeg"
+                becameJpeg -> "image/jpeg"
                 else -> mime ?: guessMime(ext, isImage)
             },
             name = saved.name,

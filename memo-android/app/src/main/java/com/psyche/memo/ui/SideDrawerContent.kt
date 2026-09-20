@@ -3,6 +3,8 @@
 package com.psyche.memo.ui
 
 import com.psyche.memo.ui.theme.MemoRadius
+import com.psyche.memo.ui.theme.LocalSemanticColors
+import com.psyche.memo.ui.theme.selectionChipColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -1521,14 +1523,10 @@ private fun SelectionAction(
     onClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    // Color.alphaBlend equivalent: blend color@14% over onSurface@4%.
-    val base = cs.onSurface.copy(alpha = 0.04f)
-    val f = 0.14f
-    val bg = Color(
-        red = color.red * f + base.red * (1f - f),
-        green = color.green * f + base.green * (1f - f),
-        blue = color.blue * f + base.blue * (1f - f),
-        alpha = 1f,
+    val bg = selectionChipColor(
+        onSurface = cs.onSurface,
+        color = color,
+        isDark = LocalSemanticColors.current.isDark,
     )
     Row(
         modifier = modifier

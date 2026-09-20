@@ -1683,11 +1683,13 @@ private fun ContextSnapshotDetailOverlay(snapshot: ContextLogSnapshot, onClose: 
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 16.dp),
         ) {
-            item {
+            item(key = "ctx_info") {
                 ContextInfoCard(snapshot)
                 Spacer(Modifier.height(14.dp))
             }
-            items(snapshot.messages.size) { index ->
+            // 带 key：同文件另三个列表（405/686/1417）都带，这里漏了。快照本身不重排，
+            // 但缺 key 会让 LazyList 在增删时整段按位置重建（丢掉每组的展开态）。
+            items(snapshot.messages.size, key = { "ctx_msg_$it" }) { index ->
                 val message = snapshot.messages[index]
                 ContextMessageGroup(message)
                 if (index != snapshot.messages.lastIndex) Spacer(Modifier.height(14.dp))

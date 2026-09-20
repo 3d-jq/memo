@@ -20,6 +20,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -51,6 +52,18 @@ data class RemoteBackupRow(
  * Generic over the source item so WebDAV and S3 share one sheet — the original
  * has a single `_RemoteListSheet` for both.
  */
+/**
+ * 远端列表的 item key：显示名优先（同一目录/前缀的 href/key 唯一），
+ * 万一上游返回了同名条目就补 `#2`、`#3` —— LazyList 撞 key 是直接抛异常的。
+ */
+internal fun remoteBackupRowKeys(names: List<String>): List<String> {
+    val seen = HashMap<String, Int>()
+    return names.map { name ->
+        val times = seen.merge(name, 1) { old, one -> old + one } ?: 1
+        if (times == 1) name else "$name#$times"
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun <T> RemoteBackupListSheet(
@@ -63,6 +76,10 @@ fun <T> RemoteBackupListSheet(
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // 一次投影：以前 `rowOf(item)` 摊在 item 组合体里，每行每次重组都分配一个
+    // RemoteBackupRow；连带 key 也从这里取（同名时补序号，见 [remoteBackupRowKeys]）。
+    val rows = remember(items) { items.map { it to rowOf(it) } }
+    val rowKeys = remember(rows) { remoteBackupRowKeys(rows.map { it.second.displayName }) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -111,9 +128,8 @@ fun <T> RemoteBackupListSheet(
                         .fillMaxWidth()
                         .weight(1f),
                 ) {
-                    items(items.size) { index ->
-                        val item = items[index]
-                        val row = rowOf(item)
+                    items(rows.size, key = { rowKeys[it] }) { index ->
+                        val (item, row) = rows[index]
                         Row(
                             Modifier
                                 .fillMaxWidth()

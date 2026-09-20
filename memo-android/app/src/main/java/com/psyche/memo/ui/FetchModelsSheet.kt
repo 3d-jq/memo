@@ -34,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -175,6 +176,28 @@ internal fun invertVisible(models: List<String>, visibleIds: List<String>): List
 internal val SILICONFLOW_FREE_MODEL_IDS = listOf("THUDM/GLM-4-9B-0414", "Qwen/Qwen3-8B")
 
 /**
+ * 一个组头的派生数据：组名、组内 id、是否整组已加。
+ *
+ * 拆出来是为了 **能 remember**：面板每次重组（搜索框每敲一个字、勾选变一次）
+ * 以前都要 `groupItems.all { it.id in selected }`（selected 是 `List` ⇒ 每行 O(N)）
+ * 并重新 `map { it.id }` 分配一份新列表。这里按「分组结果 + 勾选集合」算一次。
+ */
+internal class FetchedGroupRow(
+    val name: String,
+    val ids: List<String>,
+    val allAdded: Boolean,
+    val items: List<LlmModelInfo>,
+)
+
+internal fun deriveFetchedGroups(
+    groups: List<Pair<String, List<LlmModelInfo>>>,
+    selected: Set<String>,
+): List<FetchedGroupRow> = groups.map { (name, items) ->
+    val ids = items.map { it.id }
+    FetchedGroupRow(name = name, ids = ids, allAdded = ids.all { it in selected }, items = items)
+}
+
+/**
  * 是否只显示免费模型：内置 SiliconFlow 且没有用户 key（多 Key 模式看
  * `apiKeys`，否则看 `apiKey`）。
  */
@@ -186,6 +209,12 @@ internal fun restrictToFreeModels(cfg: ProviderConfig): Boolean {
 }
 
 // ------------------------------------------------------------------ 面板
+
+/**
+ * 面板里的圆角形状提成常量：`RoundedCornerShape(...)` 每次组合都新造实例，
+ * 修饰符链的等值比较永远是「变了」⇒ 该行必重排。
+ */
+private val FetchSheetInnerShape = RoundedCornerShape(MemoRadius.INNER_DP.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -223,11 +252,60 @@ internal fun FetchModelsSheet(
         loading = false
     }
 
-    val visible = filterFetchedModels(items, query)
-    val groups = groupFetchedModels(visible, embeddingsLabel, otherLabel)
-    val visibleIds = visible.map { it.id }
+    val visible = remember(items, query) { filterFetchedModels(items, query) }
+    val groups = remember(visible, embeddingsLabel, otherLabel) {
+        groupFetchedModels(visible, embeddingsLabel, otherLabel)
+    }
+    val visibleIds = remember(visible) { visible.map { it.id } }
     val selected = cfg.models
-    val allSelected = visibleIds.isNotEmpty() && visibleIds.all { it in selected }
+    // 勾选判据走 Set（以前每行 `in selected` 是对 List 的 O(N) 线性扫）。
+    val selectedSet = remember(selected) { selected.toSet() }
+    val groupRows = remember(groups, selectedSet) { deriveFetchedGroups(groups, selectedSet) }
+    val allSelected = remember(visibleIds, selectedSet) {
+        visibleIds.isNotEmpty() && visibleIds.all { it in selectedSet }
+    }
+
+    // 面板存活期内 cfg / onCfgChange 通过 State 引用读，好让下面三个行回调
+    // 的实例始终不变（行实参稳定 ⇒ 可跳过重组）。
+    val cfgRef = rememberUpdatedState(cfg)
+    val onCfgChangeRef = rememberUpdatedState(onCfgChange)
+    val groupIdsRef = rememberUpdatedState(groupRows.associate { it.name to it.ids })
+
+    val onToggleModel: (String) -> Unit = remember {
+        { modelId ->
+            val cur = cfgRef.value
+            onCfgChangeRef.value(
+                cur.copy(
+                    models = toggleModelSelection(
+                        models = cur.models,
+                        modelId = modelId,
+                        added = modelId in cur.models,
+                    ),
+                ),
+            )
+        }
+    }
+    val onToggleGroup: (String) -> Unit = remember {
+        { group ->
+            val ids = groupIdsRef.value[group]
+            if (!ids.isNullOrEmpty()) {
+                val cur = cfgRef.value
+                onCfgChangeRef.value(
+                    cur.copy(
+                        models = toggleGroupSelection(
+                            models = cur.models,
+                            groupIds = ids,
+                            allAdded = ids.all { it in cur.models },
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+    val onToggleCollapse: (String) -> Unit = remember {
+        // 原来：`collapsed[group] = !isCollapsed`（isCollapsed = collapsed[group] == true）
+        { group -> collapsed[group] = collapsed[group] != true }
+    }
 
     fun apply(next: List<String>) {
         onCfgChange(cfg.copy(models = next))
@@ -247,7 +325,7 @@ internal fun FetchModelsSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp)),
+                    .background(semantic.surfaceFill, FetchSheetInnerShape),
             ) {
                 TextField(
                     value = query,
@@ -323,41 +401,25 @@ internal fun FetchModelsSheet(
                     }
 
                     else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                        groups.forEach { (group, groupItems) ->
-                            val isCollapsed = collapsed[group] == true
-                            val allAdded = groupItems.all { it.id in selected }
-                            item(key = "h_$group") {
+                        groupRows.forEach { group ->
+                            val isCollapsed = collapsed[group.name] == true
+                            item(key = "h_${group.name}") {
                                 GroupHeader(
-                                    title = group,
+                                    group = group.name,
                                     expanded = !isCollapsed,
-                                    allAdded = allAdded,
-                                    onToggleCollapse = { collapsed[group] = !isCollapsed },
-                                    onToggleGroup = {
-                                        apply(
-                                            toggleGroupSelection(
-                                                models = selected,
-                                                groupIds = groupItems.map { it.id },
-                                                allAdded = allAdded,
-                                            ),
-                                        )
-                                    },
+                                    allAdded = group.allAdded,
+                                    onToggleCollapse = onToggleCollapse,
+                                    onToggleGroup = onToggleGroup,
                                 )
                             }
                             if (!isCollapsed) {
-                                items(groupItems, key = { "m_${it.id}" }) { model ->
+                                items(group.items, key = { "m_${it.id}" }) { model ->
                                     FetchedModelRow(
-                                        model = model,
-                                        added = model.id in selected,
+                                        modelId = model.id,
+                                        displayName = model.displayName,
+                                        added = model.id in selectedSet,
                                         cfg = cfg,
-                                        onToggle = {
-                                            apply(
-                                                toggleModelSelection(
-                                                    models = selected,
-                                                    modelId = model.id,
-                                                    added = model.id in selected,
-                                                ),
-                                            )
-                                        },
+                                        onToggle = onToggleModel,
                                     )
                                 }
                             }
@@ -372,11 +434,11 @@ internal fun FetchModelsSheet(
 /** 组头（L3652-3847）：surfaceFill r12、chevron 旋转 220ms、组名 + 整组加/减。 */
 @Composable
 private fun GroupHeader(
-    title: String,
+    group: String,
     expanded: Boolean,
     allAdded: Boolean,
-    onToggleCollapse: () -> Unit,
-    onToggleGroup: () -> Unit,
+    onToggleCollapse: (String) -> Unit,
+    onToggleGroup: (String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -384,8 +446,8 @@ private fun GroupHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .background(semantic.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
-            .clickable { onToggleCollapse() }
+            .background(semantic.surfaceFill, FetchSheetInnerShape)
+            .clickable { onToggleCollapse(group) }
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -408,14 +470,14 @@ private fun GroupHeader(
         }
         Spacer(Modifier.width(16.dp))
         Text(
-            text = title,
+            text = group,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(8.dp))
-        IconButton(onClick = onToggleGroup) {
+        IconButton(onClick = { onToggleGroup(group) }) {
             Icon(
                 if (allAdded) Lucide.Minus else Lucide.Plus,
                 contentDescription = stringResource(
@@ -435,10 +497,11 @@ private fun GroupHeader(
 /** 一行模型（L3857-4001）：28dp 品牌头像 + 名称/能力标签 + 加/减。 */
 @Composable
 private fun FetchedModelRow(
-    model: LlmModelInfo,
+    modelId: String,
+    displayName: String,
     added: Boolean,
     cfg: com.psyche.memo.data.model.ProviderConfig,
-    onToggle: () -> Unit,
+    onToggle: (String) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Row(
@@ -449,21 +512,21 @@ private fun FetchedModelRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(modifier = Modifier.size(28.dp)) {
-            ProviderAvatarSmall(providerKey = model.id, displayName = model.id, size = 28.dp)
+            ProviderAvatarSmall(providerKey = modelId, displayName = modelId, size = 28.dp)
         }
         Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = model.displayName.ifEmpty { model.id },
+                text = displayName.ifEmpty { modelId },
                 style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(4.dp))
-            ModelTagRow(modelId = model.id, cfg = cfg)
+            ModelTagRow(modelId = modelId, cfg = cfg)
         }
         Spacer(Modifier.width(8.dp))
-        IconButton(onClick = onToggle) {
+        IconButton(onClick = { onToggle(modelId) }) {
             Icon(
                 if (added) Lucide.Minus else Lucide.Plus,
                 contentDescription = stringResource(

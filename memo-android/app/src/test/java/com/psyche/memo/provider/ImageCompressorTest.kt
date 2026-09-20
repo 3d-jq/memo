@@ -134,6 +134,37 @@ class ImageCompressorTest {
         assertFalse(ImageCompressor.shouldSkip(bigJpeg(), ImageCompressConfig(true, 85, 1568, false)))
     }
 
+    /**
+     * HEIC/HEIF 判定（ISO BMFF：偏移 4 是 `ftyp`，兼容品牌从偏移 12 起每 4 字节一组）。
+     * 画质管线本来就不碰它（`detectFormat` 归 OTHER），`AttachmentStore` 靠这个判定决定
+     * 要不要转码 —— 相册 HEIC 原字节发给厂商必被 400（用户 2026-09-20 实测）。
+     */
+    @Test
+    fun detectsHeicBrandsInTheFtypBox() {
+        // 布局：[size 4][ftyp][主品牌][minor version 4][兼容品牌…]
+        fun ftyp(major: String, vararg compatible: String): ByteArray =
+            byteArrayOf(0, 0, 0, 0x18) + "ftyp".toByteArray(Charsets.ISO_8859_1) +
+                major.toByteArray(Charsets.ISO_8859_1) +
+                byteArrayOf(0, 0, 0, 0) +
+                compatible.joinToString("").toByteArray(Charsets.ISO_8859_1)
+
+        assertTrue(ImageCompressor.isHeic(ftyp("heic")))
+        assertTrue(ImageCompressor.isHeic(ftyp("hevc")))
+        // 截图常见：主品牌 mif1，兼容品牌里才有 heic。
+        assertTrue(ImageCompressor.isHeic(ftyp("mif1", "heic")))
+        assertFalse(ImageCompressor.isHeic(ftyp("isom", "mp41", "avc1")))
+        assertFalse(ImageCompressor.isHeic(ftyp("avif")))
+        assertFalse(ImageCompressor.isHeic(bytes(0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0, 0, 0, 0, 0)))
+        assertFalse(ImageCompressor.isHeic(ByteArray(8)))
+    }
+
+    /** 认不出格式（含 HEIC）时 `transcodeToJpeg` 直接返回 null，不去解码浪费内存。 */
+    @Test
+    fun transcodeOnlyAcceptsHeicInput() {
+        assertEquals(null, ImageCompressor.transcodeToJpeg(bytes(0xFF, 0xD8, 0xFF, 0xE0)))
+        assertEquals(null, ImageCompressor.transcodeToJpeg(ByteArray(0)))
+    }
+
     // ---- 缩放/采样 ----
 
     @Test

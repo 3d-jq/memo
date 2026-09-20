@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -144,6 +146,15 @@ internal fun collapsedCodePreview(
     return (if (fromTail) lines.takeLast(keep) else lines.take(keep)).joinToString("\n")
 }
 
+/**
+ * 折叠预览要不要换行。**流式中的折叠预览强制不换行**：换行时「一行源码 = 几行视觉行」
+ * 随内容变，预览框高每 tick 抖一次，整条列表跟着动（用户 2026-09-20「代码块在大模型输出
+ * 的时候大小会变，导致界面一直变」）。不换行时 N 行源码恒等于 N 视觉行，框高锁死在
+ * [CodeBlockConfig.autoCollapseLines] 行；长行横向滚动，看完再按设置决定展开态。
+ */
+internal fun codeBlockPreviewWraps(wrap: Boolean, expanded: Boolean, isStreaming: Boolean): Boolean =
+    wrap && (expanded || !isStreaming)
+
 /** 语言标签：fence 的 info 原样显示，空则「代码」/「Code」。 */
 @Composable
 private fun codeLanguageLabel(language: String?): String {
@@ -166,7 +177,9 @@ internal fun CodeBlockView(
     val full = remember(code) { trimTrailingNewlines(code ?: "") }
     val stateKey = remember(language, full) { codeBlockStateKey(language, full) }
     // 展开态：手动记忆优先，否则按设置自动折叠（原版 _isEffectivelyExpanded）。
-    var manual by remember(stateKey) { mutableStateOf(codeBlockExpansion.get(stateKey)) }
+    // **不能按 stateKey 做 remember 的键**：流式每个 token 都在换 stateKey，手动展开
+    // 下一帧就被冲回自动折叠态（原版是 StatefulWidget 的 _manuallyToggled，跟内容无关）。
+    var manual by remember { mutableStateOf(codeBlockExpansion.get(stateKey)) }
     val exceeds = remember(full, config.autoCollapseLines) {
         codeExceedsLineThreshold(full, config.autoCollapseLines)
     }
@@ -202,6 +215,9 @@ internal fun CodeBlockView(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // 原版 AnimatedSize(220ms)（dart:2639-2643）：折叠/展开、预览窗口
+                // 切换都做成高度过渡，而不是硬跳一格把整个列表拽一下。
+                .animateContentSize(tween(CODE_BLOCK_SIZE_ANIM_MS))
                 .clip(RoundedCornerShape(corner))
                 .background(bodyBg)
                 .drawWithContent {
@@ -286,7 +302,11 @@ internal fun CodeBlockView(
                             fromTail = config.isStreaming,
                         )
                     }
-                    val textModifier = if (config.wrap) {
+                    // 折叠预览强制**不换行**：换行时「一行源码 = 几行视觉行」随内容变，
+                    // 框高就每 tick 抖一次（用户 2026-09-20「输出时大小会变，界面一直变」）。
+                    // 不换行时 N 行源码恒等于 N 视觉行，预览高度锁死在 autoCollapseLines 行。
+                    val previewWrap = codeBlockPreviewWraps(config.wrap, expanded, config.isStreaming)
+                    val textModifier = if (previewWrap) {
                         Modifier.fillMaxWidth()
                     } else {
                         Modifier.horizontalScroll(rememberScrollState())
@@ -294,14 +314,21 @@ internal fun CodeBlockView(
                     // 语法高亮（照 RikkaHub `:highlight` 模块 + 原版
                     // `markdown_with_highlight.dart:2825-2828` 的流式上限 300 行/12000 字；
                     // 超限或语言不支持时 `rememberHighlightedCode` 内部退回纯文本）。
-                    val highlighted = rememberHighlightedCode(visible, language, expanded)
+                    // 流式中**整段不高亮**：原版靠 `_closed` 闸门（dart:2820-2829）在未闭合
+                    // 围栏期间按纯文本渲染 —— 高亮会随 token 边界来回改斜体/粗体，字宽跟着变。
+                    val highlighted = rememberHighlightedCode(
+                        visible,
+                        language,
+                        expanded,
+                        highlight = !config.isStreaming,
+                    )
                     Text(
                         text = highlighted,
                         fontSize = 13.sp,
                         lineHeight = 19.5.sp,
                         fontFamily = LocalMarkdownCodeFont.current,
                         color = cs.onSurface,
-                        softWrap = config.wrap,
+                        softWrap = previewWrap,
                         modifier = textModifier,
                     )
                 }
@@ -344,6 +371,9 @@ private fun CodeBlockIconAction(
 }
 
 private const val CODE_BLOCK_FILL_ALPHA = 0.80f
+
+/** 原版 `AnimatedSize(220ms)`。 */
+private const val CODE_BLOCK_SIZE_ANIM_MS = 220
 
 /**
  * 原版 `_codeBlockBorderColor`：调色板的 `outlineVariant` 是纯黑/纯白时，改用

@@ -51,4 +51,16 @@ class CodeBlockExpansionTest {
         assertEquals("line10", collapsedCodePreview(code, 0, fromTail = true))
         assertEquals("line1", collapsedCodePreview(code, -3))
     }
+
+    /**
+     * 流式中的折叠预览强制不换行（用户 2026-09-20「代码块在输出时大小会变，界面一直变」）：
+     * 换行时「一行源码 = 几视觉行」随内容变，框高就每 tick 抖。其余三种状态都照设置走。
+     */
+    @Test
+    fun `streaming collapsed preview never wraps`() {
+        assertEquals(false, codeBlockPreviewWraps(wrap = true, expanded = false, isStreaming = true))
+        assertEquals(true, codeBlockPreviewWraps(wrap = true, expanded = true, isStreaming = true))
+        assertEquals(true, codeBlockPreviewWraps(wrap = true, expanded = false, isStreaming = false))
+        assertEquals(false, codeBlockPreviewWraps(wrap = false, expanded = true, isStreaming = false))
+    }
 }

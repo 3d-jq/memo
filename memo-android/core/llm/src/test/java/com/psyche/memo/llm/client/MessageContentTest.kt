@@ -180,4 +180,47 @@ class MessageContentTest {
             (openAi[1] as JsonObject)["text"]!!.jsonPrimitive.content,
         )
     }
+
+    /**
+     * `sniffMimeFromBytes`（multimodal_input_utils.dart:322-361）—— 只认这五种魔数，
+     * 其余一律 null。**没有 heic 分支是有意的**：上游从不向请求声明 image/heic。
+     */
+    @Test
+    fun sniffsImageMimeFromTheMagicBytes() {
+        fun b(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
+        assertEquals("image/jpeg", MessageContent.sniffMimeFromBytes(b(0xFF, 0xD8, 0xFF, 0xE0)))
+        assertEquals(
+            "image/png",
+            MessageContent.sniffMimeFromBytes(b(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)),
+        )
+        assertEquals("image/gif", MessageContent.sniffMimeFromBytes(b(0x47, 0x49, 0x46, 0x38, 0x39, 0x61)))
+        assertEquals(
+            "image/webp",
+            MessageContent.sniffMimeFromBytes(
+                b(0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50),
+            ),
+        )
+        assertEquals("application/pdf", MessageContent.sniffMimeFromBytes(b(0x25, 0x50, 0x44, 0x46)))
+        // HEIC 的 ISO BMFF 头必须嗅不出东西，好让调用方转码而不是声明 image/heic。
+        assertEquals(
+            null,
+            MessageContent.sniffMimeFromBytes(
+                b(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63),
+            ),
+        )
+        assertEquals(null, MessageContent.sniffMimeFromBytes(b(0x00, 0x01)))
+    }
+
+    /**
+     * 请求侧不再声明 image/heic（用户 2026-09-20 真机 400「unsupported image」）：
+     * 上游的扩展名表里没有 heic，落到 `image/png` 兜底；Android 侧靠 `AttachmentStore`
+     * 把 HEIC 转成 JPEG，所以正常路径根本到不了这里。
+     */
+    @Test
+    fun neverDeclaresHeicEvenWhenTheFileEndsInHeic() {
+        assertEquals("image/png", MessageContent.mimeFor("/upload/photo.heic", explicit = null))
+        // 上游的次序是「显式声明最优先」，所以我们只是在**请求侧不再传**（见 4 个调用点
+        // 都写 explicit = null）；这里把这条次序钉住，免得以后有人把它改成嗅探优先。
+        assertEquals("image/heic", MessageContent.mimeFor("/upload/photo.heic", "image/heic"))
+    }
 }

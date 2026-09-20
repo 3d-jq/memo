@@ -239,6 +239,9 @@ class GeminiClient(
     private fun decodeEvent(event: com.psyche.memo.llm.stream.SseEvent, state: GeminiStreamState): List<StreamChunk> {
         val data = event.data
         if (data.isEmpty()) return emptyList()
+        // 带内错误帧（200 OK 里塞 {"error":…}）必须在解析正文前抛出，
+        // 否则半成品会被当成功收尾。chat_api_helpers.dart:857-919。
+        throwIfInBandStreamError(data)
         val obj = try {
             json.parseToJsonElement(data).jsonObject
         } catch (e: Exception) {

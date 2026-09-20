@@ -38,6 +38,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -84,6 +86,79 @@ data class ModelOption(
     val providerName: String,
     val modelId: String,
     val selected: Boolean = false,
+)
+
+/** 思考能力胶囊的图标（与品牌头像同走 [cachedSvgIcon]，避免每行冷解码）。 */
+private const val DEEPTHINK_ASSET = "file:///android_asset/icons/deepthink.svg"
+
+/**
+ * 行内胶囊/卡片的圆角形状提成常量：`RoundedCornerShape(...)` 每次组合都新造一个
+ * 实例，修饰符链的等值比较就永远是「变了」。
+ */
+private val SheetPillShape = RoundedCornerShape(MemoRadius.PILL_DP.dp)
+private val SheetInnerShape = RoundedCornerShape(MemoRadius.INNER_DP.dp)
+
+/** 收藏组之外的一个供应商分组（组名 = 供应商名，保持 options 里的服务端顺序）。 */
+internal data class ModelPickerGroup(val name: String, val models: List<ModelOption>)
+
+/**
+ * 选择面板的列表派生结果：搜索命中、收藏置顶、组头下标（provider chip 点跳用）。
+ * 纯函数，被 [ModelSelectSheet] 用 `remember(options, query, pinned)` 缓存。
+ */
+internal class ModelPickerLayout(
+    val favorites: List<ModelOption>,
+    val groups: List<ModelPickerGroup>,
+    val favoriteOffset: Int,
+    val headerIndex: Map<String, Int>,
+)
+
+/**
+ * Favorites aggregation (L1016-1082): pins matching the search ride on top and
+ * are removed from their own group while searching; with no search they show on
+ * top AND in place.
+ */
+internal fun buildModelPickerLayout(
+    options: List<ModelOption>,
+    query: String,
+    pinned: Set<String>,
+): ModelPickerLayout {
+    val filtered = options.filter {
+        query.isBlank() ||
+            it.modelId.contains(query, ignoreCase = true) ||
+            it.providerName.contains(query, ignoreCase = true)
+    }
+    val grouped = filtered.groupBy { it.providerName }
+    val favs = filtered.filter { it.providerId + "::" + it.modelId in pinned }
+    val favKeys = favs.mapTo(HashSet(favs.size)) { it.providerId + "::" + it.modelId }
+    val groups = if (query.isBlank()) {
+        grouped.map { (name, models) -> ModelPickerGroup(name, models) }
+    } else {
+        grouped
+            .mapValues { (_, models) -> models.filter { "${it.providerId}::${it.modelId}" !in favKeys } }
+            .filterValues { it.isNotEmpty() }
+            .map { (name, models) -> ModelPickerGroup(name, models) }
+    }
+    val favoriteOffset = if (favs.isNotEmpty()) 1 + favs.size else 0
+    val headerIndex = buildMap {
+        var i = favoriteOffset
+        groups.forEach { group ->
+            put(group.name, i)
+            i += 1 + group.models.size
+        }
+    }
+    return ModelPickerLayout(favs, groups, favoriteOffset, headerIndex)
+}
+
+/**
+ * 一行的三个动作。提成 `@Stable` 对象（实例在面板存活期内不变）是为了让
+ * [ModelTile] 保持**可跳过**：以前每行现造 onClick/onLongClick/onTogglePin 三个
+ * lambda，面板一重组（拖 sheet、翻收藏、改搜索词）整屏行都得重组合 + 重解码图标。
+ */
+@Stable
+internal class ModelTileActions(
+    val select: (ModelOption) -> Unit,
+    val openDetail: (ModelOption) -> Unit,
+    val togglePin: (String, String) -> Unit,
 )
 
 /** provider_rows → picker options (kelivo showModelSelector's option list). */
@@ -152,14 +227,28 @@ fun ModelSelectSheet(
     // Long-press opens the model detail sheet (model_detail_sheet.dart
     // _modelTile onLongPress); a successful save refreshes the options.
     var detailTarget by remember { mutableStateOf<ModelOption?>(null) }
-    fun togglePinned(providerId: String, modelId: String) {
-        val key = "$providerId::$modelId"
-        val next = pinned.value.toMutableSet()
-        if (!next.add(key)) next.remove(key)
-        pinned.value = next
-        scope.launch(Dispatchers.IO) {
-            writePinnedModels(container, next)
-        }
+    val onSelectRef = rememberUpdatedState(onSelect)
+    val onDismissRef = rememberUpdatedState(onDismiss)
+    // 行内三个动作提成「面板存活期内不变」的一个 @Stable 对象。此前每行现造
+    // onClick/onLongClick/onTogglePin 三个 lambda，参数永远算「变了」，面板一重组
+    // （拖 sheet、翻收藏、改搜索词）整屏行都得重组合 —— 顺带每行重解码一次 SVG。
+    val rowActions = remember(pinned, container, scope) {
+        ModelTileActions(
+            select = { option ->
+                onSelectRef.value(option)
+                onDismissRef.value()
+            },
+            openDetail = { option ->
+                scope.launch { delay(220); detailTarget = option }
+            },
+            togglePin = { providerId, modelId ->
+                val key = "$providerId::$modelId"
+                val next = pinned.value.toMutableSet()
+                if (!next.add(key)) next.remove(key)
+                pinned.value = next
+                scope.launch(Dispatchers.IO) { writePinnedModels(container, next) }
+            },
+        )
     }
     // _jumpToFavorites (L1527): clear the search then scroll to the
     // favorites header, which sits at index 0 whenever it exists.
@@ -169,6 +258,11 @@ fun ModelSelectSheet(
     }
     val cs = MaterialTheme.colorScheme
     val providers = remember(options) { options.map { it.providerName }.distinct() }
+    // 搜索命中 + 收藏置顶 + 组头下标：整表派生一次，随 options/query/pinned 才重算
+    // （此前在 sheet 内容 lambda 里，拖 sheet 每帧都重算）。
+    val pickerLayout = remember(options, query, pinned.value) {
+        buildModelPickerLayout(options, query, pinned.value)
+    }
     // DraggableScrollableSheet (model_select_sheet.dart L838-843): initial and
     // max child size 0.8 (`_initialSize`/`_maxSize` L334-335), min 0.4. Its
     // linked scroll is ported the Compose-native way — a NestedScrollConnection
@@ -228,7 +322,7 @@ fun ModelSelectSheet(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(cs.onSurface.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp)),
+                        .background(cs.onSurface.copy(alpha = 0.2f), SheetPillShape),
                 )
                 Spacer(Modifier.height(8.dp))
             }
@@ -244,11 +338,11 @@ fun ModelSelectSheet(
                     .padding(horizontal = 16.dp, vertical = 8.dp)
                     // Flutter InputDecoration: filled surfaceFill, r14
                     // border outlineVariant 40%, focused primary 50%.
-                    .background(semanticSearch.surfaceFill, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                    .background(semanticSearch.surfaceFill, SheetInnerShape)
                     .border(
                         1.dp,
                         if (searchFocused) cs.primary.copy(alpha = 0.5f) else cs.outlineVariant.copy(alpha = 0.4f),
-                        RoundedCornerShape(MemoRadius.INNER_DP.dp),
+                        SheetInnerShape,
                     ),
             ) {
                 TextField(
@@ -298,34 +392,13 @@ fun ModelSelectSheet(
             }
 
             // Scrollable grouped model list fills the rest of the sheet.
-            val filtered = options.filter {
-                query.isBlank() ||
-                    it.modelId.contains(query, ignoreCase = true) ||
-                    it.providerName.contains(query, ignoreCase = true)
-            }
-            val grouped = filtered.groupBy { it.providerName }
-            // Favorites aggregation (L1016-1082): pins matching the search
-            // ride on top and are removed from their own group while
-            // searching; with no search they show on top AND in place.
-            val favs = filtered.filter { it.providerId + "::" + it.modelId in pinned.value }
-            val favKeys = favs.map { it.providerId + "::" + it.modelId }.toSet()
-            val groupedDisplay = if (query.isBlank()) grouped
-            else grouped
-                .mapValues { (_, models) ->
-                    models.filter { "${it.providerId}::${it.modelId}" !in favKeys }
-                }
-                .filterValues { it.isNotEmpty() }
-            val favOffset = if (favs.isNotEmpty()) 1 + favs.size else 0
-
-            val headerIndex = remember(groupedDisplay, favOffset) {
-                buildMap {
-                    var i = favOffset
-                    groupedDisplay.forEach { (p, models) ->
-                        put(p, i)
-                        i += 1 + models.size
-                    }
-                }
-            }
+            // 派生数据在 [ModelSelectSheet] 外层一次算好并 remember（这里只读）：
+            // 此前 filter+groupBy 写在 sheet 内容 lambda 里，拖动 sheet 高度
+            // （sheetFraction 每帧变）与每次搜索输入都会把全表重算一遍。
+            val favs = pickerLayout.favorites
+            val groupedDisplay = pickerLayout.groups
+            val favOffset = pickerLayout.favoriteOffset
+            val headerIndex = pickerLayout.headerIndex
             // _scrollToFirstSearchGroup: on entering search, jump to the
             // favorites header when present, else the first matching group.
             var lastQueryForJump by remember { mutableStateOf("") }
@@ -358,10 +431,19 @@ fun ModelSelectSheet(
                         )
                     }
                     items(favs, key = { "fav::${it.providerId}::${it.modelId}" }) { option ->
-                        ModelTile(option, pinned = pinned.value, cfg = modelCfgs[option.providerId], onTogglePin = ::togglePinned, showProviderLabel = true, onClick = { onSelect(option); onDismiss() }, onLongClick = { scope.launch { delay(220); detailTarget = option } })
+                        // 收藏组里的行必然是已 pin 的（favs 就是按 pinned 过滤出来的）。
+                        ModelTile(
+                            option = option,
+                            pinnedNow = true,
+                            cfg = modelCfgs[option.providerId],
+                            showProviderLabel = true,
+                            actions = rowActions,
+                        )
                     }
                 }
-                groupedDisplay.forEach { (providerName, models) ->
+                groupedDisplay.forEach { group ->
+                    val providerName = group.name
+                    val models = group.models
                     item(key = "h_$providerName") {
                         Text(
                             text = providerName,
@@ -374,7 +456,13 @@ fun ModelSelectSheet(
                         )
                     }
                     items(models, key = { "${it.providerId}::${it.modelId}" }) { option ->
-                        ModelTile(option, pinned = pinned.value, cfg = modelCfgs[option.providerId], onTogglePin = ::togglePinned, onClick = { onSelect(option); onDismiss() }, onLongClick = { scope.launch { delay(220); detailTarget = option } })
+                        ModelTile(
+                            option = option,
+                            pinnedNow = "${option.providerId}::${option.modelId}" in pinned.value,
+                            cfg = modelCfgs[option.providerId],
+                            showProviderLabel = false,
+                            actions = rowActions,
+                        )
                     }
                 }
             }
@@ -421,12 +509,10 @@ fun ModelSelectSheet(
 @OptIn(ExperimentalFoundationApi::class)
 private fun ModelTile(
     option: ModelOption,
-    pinned: Set<String>,
-    onTogglePin: (String, String) -> Unit,
+    pinnedNow: Boolean,
+    actions: ModelTileActions,
     cfg: com.psyche.memo.data.model.ProviderConfig? = null,
     showProviderLabel: Boolean = false,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val semantic = LocalSemanticColors.current
@@ -437,8 +523,11 @@ private fun ModelTile(
             // 卡间距 8（原来是 12/12），行高仍是 48。
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .fillMaxWidth()
-            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .background(bg, SheetInnerShape)
+            .combinedClickable(
+                onClick = { actions.select(option) },
+                onLongClick = { actions.openDetail(option) },
+            )
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -476,14 +565,12 @@ private fun ModelTile(
             ModelTagRow(modelId = option.modelId, cfg = cfg)
         }
         // Favorite toggle — solid heart when pinned (settings.togglePinModel).
-        val pinKey = option.providerId + "::" + option.modelId
-        val pinnedNow = pinKey in pinned
         val view = LocalView.current
         Box(
             modifier = Modifier
                 .size(36.dp)
                 .clickable {
-                    onTogglePin(option.providerId, option.modelId)
+                    actions.togglePin(option.providerId, option.modelId)
                     Haptics.light(view)
                 },
             contentAlignment = Alignment.Center,
@@ -587,14 +674,29 @@ internal fun ModelTagRow(modelId: String, cfg: com.psyche.memo.data.model.Provid
                     bgAlpha = if (isDark) 0.3f else 0.18f,
                     borderAlpha = 0.25f,
                 ) {
-                    coil.compose.AsyncImage(
-                        model = "file:///android_asset/icons/deepthink.svg",
-                        contentDescription = null,
-                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+                    // 同一枚 12dp 图标在整屏每一行都会出现：命中 [cachedSvgIcon] 就直接画位图，
+                    // 未命中保持原 AsyncImage 路径（首帧外观不变）。
+                    val tint = remember(isDark, cs.secondary) {
+                        androidx.compose.ui.graphics.ColorFilter.tint(
                             if (isDark) cs.secondary else cs.secondary.copy(alpha = 0.9f),
-                        ),
-                        modifier = Modifier.size(12.dp),
-                    )
+                        )
+                    }
+                    val decoded = cachedSvgIcon(DEEPTHINK_ASSET, 12.dp)
+                    if (decoded != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = decoded,
+                            contentDescription = null,
+                            colorFilter = tint,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    } else {
+                        coil.compose.AsyncImage(
+                            model = DEEPTHINK_ASSET,
+                            contentDescription = null,
+                            colorFilter = tint,
+                            modifier = Modifier.size(12.dp),
+                        )
+                    }
                 }
             }
         }
@@ -614,8 +716,8 @@ private fun AbilityPill(
 ) {
     Row(
         modifier = Modifier
-            .background(color.copy(alpha = bgAlpha), RoundedCornerShape(MemoRadius.PILL_DP.dp))
-            .border(0.5.dp, color.copy(alpha = borderAlpha), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .background(color.copy(alpha = bgAlpha), SheetPillShape)
+            .border(0.5.dp, color.copy(alpha = borderAlpha), SheetPillShape)
             .padding(horizontal = 6.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         content = content,
@@ -626,8 +728,8 @@ private fun AbilityPill(
 private fun Pill(color: Color, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     Row(
         modifier = Modifier
-            .background(color.copy(alpha = 0.15f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
-            .border(0.5.dp, color.copy(alpha = 0.2f), RoundedCornerShape(MemoRadius.PILL_DP.dp))
+            .background(color.copy(alpha = 0.15f), SheetPillShape)
+            .border(0.5.dp, color.copy(alpha = 0.2f), SheetPillShape)
             .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -641,8 +743,8 @@ private fun ProviderChip(name: String, selected: Boolean, onClick: () -> Unit) {
     val bg = if (selected) cs.primary.copy(alpha = 0.08f) else cs.surface
     Row(
         modifier = Modifier
-            .background(bg, RoundedCornerShape(MemoRadius.INNER_DP.dp))
-            .border(1.dp, cs.outlineVariant.copy(alpha = 0.25f), RoundedCornerShape(MemoRadius.INNER_DP.dp))
+            .background(bg, SheetInnerShape)
+            .border(1.dp, cs.outlineVariant.copy(alpha = 0.25f), SheetInnerShape)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,

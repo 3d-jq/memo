@@ -56,7 +56,7 @@ object MessageContent {
     fun dataUrlFor(image: LlmImage): String? = when {
         image.uri.startsWith("http://") || image.uri.startsWith("https://") -> image.uri
         image.uri.startsWith("data:") -> image.uri
-        else -> readBase64(image.uri)?.let { "data:${mimeFor(image.uri, image.mime)};base64,$it" }
+        else -> readBase64(image.uri)?.let { "data:${mimeFor(image.uri, explicit = null)};base64,$it" }
     }
 
     /** OpenAI chat-completions content: plain string when text-only. */
@@ -109,7 +109,7 @@ object MessageContent {
                     put("type", "image")
                     putJsonObject("source") {
                         put("type", "base64")
-                        put("media_type", mimeFor(image.uri, image.mime))
+                        put("media_type", mimeFor(image.uri, explicit = null))
                         put("data", b64)
                     }
                 })
@@ -130,7 +130,7 @@ object MessageContent {
                     add(buildJsonObject {
                         putJsonObject("file_data") {
                             put("file_uri", image.uri)
-                            put("mime_type", mimeFor(image.uri, image.mime))
+                            put("mime_type", mimeFor(image.uri, explicit = null))
                         }
                     })
                     continue
@@ -138,7 +138,7 @@ object MessageContent {
                 val b64 = readBase64(image.uri) ?: continue
                 add(buildJsonObject {
                     putJsonObject("inline_data") {
-                        put("mime_type", mimeFor(image.uri, image.mime))
+                        put("mime_type", mimeFor(image.uri, explicit = null))
                         put("data", b64)
                     }
                 })
@@ -247,7 +247,7 @@ object MessageContent {
         }.getOrNull()
     }
 
-    /** Explicit mime > data-URI mime > extension > image/png (Claude default). */
+    /** Explicit mime > data-URI mime > **真字节嗅探** > extension > image/png (Claude default). */
     fun mimeFor(uri: String, explicit: String?): String {
         explicit?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
         if (uri.startsWith("data:")) {
@@ -256,6 +256,11 @@ object MessageContent {
             val mime = header.split(';').first().trim()
             if (mime.isNotEmpty() && mime != "base64") return mime
         }
+        // multimodal_input_utils.dart:287-361 `inferAttachmentMime`：本地文件先读文件头
+        // 16 字节嗅探，**声明的 mime 一律不信**（上游 message_generation_service.dart:423
+        // 调它时压根不传 explicitMime）。相册 HEIC 被按 image/heic 声明直发就是这里缺这一步，
+        // 厂商直接 400「unsupported image」。
+        sniffLocalMime(uri)?.let { return it }
         val path = uri.split('?').first()
         val dot = path.lastIndexOf('.')
         if (dot >= 0 && dot < path.length - 1) {
@@ -264,12 +269,45 @@ object MessageContent {
                 "png" -> return "image/png"
                 "gif" -> return "image/gif"
                 "webp" -> return "image/webp"
-                "heic" -> return "image/heic"
                 "bmp" -> return "image/bmp"
                 "pdf" -> return "application/pdf"
                 "txt", "md", "json", "csv" -> return "text/plain"
             }
         }
         return "image/png"
+    }
+
+    /**
+     * `sniffMimeFromBytes`（multimodal_input_utils.dart:322-361）1:1 —— 只可能返回
+     * jpeg/png/gif/webp/pdf，认不出就 null。**刻意没有 heic 分支**：上游全仓
+     * `image/heic` 零匹配，它从不向请求声明 HEIC（选图那侧由 image_picker 转成 JPEG，
+     * Android 侧这一步在 `AttachmentStore` 里补）。
+     */
+    internal fun sniffMimeFromBytes(bytes: ByteArray): String? {
+        fun at(index: Int, vararg wanted: Int): Boolean =
+            bytes.size > index + wanted.size - 1 && wanted.withIndex().all { (offset, value) ->
+                bytes[index + offset].toInt() and 0xFF == value
+            }
+        if (at(0, 0xFF, 0xD8, 0xFF)) return "image/jpeg"
+        if (at(0, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)) return "image/png"
+        if (at(0, 0x47, 0x49, 0x46, 0x38)) return "image/gif"
+        if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return "image/webp"
+        if (at(0, 0x25, 0x50, 0x44, 0x46)) return "application/pdf"
+        return null
+    }
+
+    /** 读本地文件头 16 字节嗅探；远端/data/读不到都返回 null。 */
+    private fun sniffLocalMime(uri: String): String? {
+        if (uri.startsWith("http://") || uri.startsWith("https://") || uri.startsWith("data:")) return null
+        val path = uri.substringBefore('?').removePrefix("file:")
+        return runCatching {
+            java.io.RandomAccessFile(path, "r").use { file ->
+                val toRead = minOf(16L, file.length()).toInt()
+                if (toRead <= 0) return null
+                val head = ByteArray(toRead)
+                file.readFully(head)
+                sniffMimeFromBytes(head)
+            }
+        }.getOrNull()
     }
 }

@@ -99,11 +99,12 @@ internal fun rememberHighlightedCode(
     code: String,
     language: String?,
     modifierKey: Any? = null,
+    highlight: Boolean = true,
 ): AnnotatedString {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val palette = if (dark) AtomOneDarkPalette else AtomOneLightPalette
-    return remember(code, language, palette, modifierKey) {
-        if (!shouldHighlightCode(code)) {
+    return remember(code, language, palette, modifierKey, highlight) {
+        if (!highlight || !shouldHighlightCode(code)) {
             AnnotatedString(code)
         } else {
             buildAnnotatedString {

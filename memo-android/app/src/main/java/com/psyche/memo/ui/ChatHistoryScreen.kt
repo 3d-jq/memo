@@ -66,9 +66,12 @@ import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.LocalSemanticColors
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 1:1 port of lib/features/chat/pages/chat_history_page.dart.
@@ -460,9 +463,29 @@ private fun HistoryConversationCard(
     }
 }
 
-/** L396-402: zh/latin timestamp format. */
-private fun formatConversationTime(millis: Long): String {
-    val locale = Locale.getDefault()
-    val pattern = if (locale.language == "zh") "yyyy年M月d日 HH:mm:ss" else "yyyy-MM-dd HH:mm:ss"
-    return SimpleDateFormat(pattern, locale).format(Date(millis))
+/**
+ * L396-402: zh/latin timestamp format.
+ *
+ * 2026-09-20 卡顿修复：以前**每一行每次重组**都 `Locale.getDefault()` + `new
+ * SimpleDateFormat(pattern, locale)`（构造要解析模式、抓一遍 locale 数据），
+ * 历史列表滚动时这笔固定开销按行乘一遍。formatter 是**无状态且线程安全**的
+ * [java.time.format.DateTimeFormatter]（SimpleDateFormat 不是，所以不能同样静态持有，
+ * 也顺带避开 lint 的 ConstantLocale），按「locale + 模式」缓存在进程级 map 里。
+ *
+ * 输出与旧写法逐字相同 —— 由 `ChatHistoryTimeFormatTest` 用同一批时间戳对
+ * SimpleDateFormat 逐项比对钉住。
+ */
+internal fun conversationTimePattern(locale: Locale): String =
+    if (locale.language == "zh") "yyyy年M月d日 HH:mm:ss" else "yyyy-MM-dd HH:mm:ss"
+
+private val conversationTimeFormatters = ConcurrentHashMap<String, DateTimeFormatter>()
+
+internal fun formatConversationTime(millis: Long, locale: Locale = Locale.getDefault()): String {
+    val pattern = conversationTimePattern(locale)
+    val formatter = conversationTimeFormatters.getOrPut("${locale.toLanguageTag()}|$pattern") {
+        DateTimeFormatter.ofPattern(pattern, locale)
+    }
+    return formatter.format(
+        LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault()),
+    )
 }

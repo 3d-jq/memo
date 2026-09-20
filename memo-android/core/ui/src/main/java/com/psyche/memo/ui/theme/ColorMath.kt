@@ -56,6 +56,21 @@ fun alphaBlendTranslucent(fg: Color, fgAlpha: Double, bg: Color, bgAlpha: Double
     )
 }
 
+/**
+ * 多选动作芯片的底色：上游 `sidebar_selection_bars.dart:231-234` 与
+ * `chat_selection_export_bar.dart:169-172` 同一条式子
+ * `Color.alphaBlend(onSurface.withValues(0.04), color.withValues(isDark ? 0.18 : 0.14))`。
+ * 两个操作数都带 alpha，所以结果是一颗**半透明**淡染色，叠在栏底（78% surface）上；
+ * 染色后的字与图标仍用原色，因此底色绝不能是不透明的深色——那样同色系的文字就糊了。
+ */
+fun selectionChipColor(onSurface: Color, color: Color, isDark: Boolean): Color =
+    alphaBlendTranslucent(
+        fg = onSurface,
+        fgAlpha = 0.04,
+        bg = color,
+        bgAlpha = if (isDark) 0.18 else 0.14,
+    )
+
 /** dart:ui `Color.lerp(a, b, t)` (painting.dart L393) — linear per channel, alpha included. */
 fun lerpColor(a: Color, b: Color, t: Double): Color =
     argb(

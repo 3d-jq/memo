@@ -681,22 +681,35 @@ internal fun ProviderAvatarSmall(
         }
     } else {
         val mono = semantic.isDark && BrandAssets.assetNeedsDarkInvert(asset)
+        val iconSize = size * 0.7f
+        // 每行现造一枚 ColorFilter 会让图片节点的实参永远「变脏」；同一主题下复用同一个。
+        val tint = remember(mono, cs.onSurface) {
+            if (mono) androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface) else null
+        }
+        // 解码产物命中缓存就直接画位图（滚出新行不再冷解码 SVG）；未命中时
+        // 保持原来的 AsyncImage 分支，首帧外观一字不差。
+        val decoded = cachedSvgIcon(asset, iconSize)
         Box(
             modifier = Modifier
                 .size(size)
                 .background(cs.primary.copy(alpha = if (semantic.isDark) 0.18f else 0.1f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            coil.compose.AsyncImage(
-                model = asset,
-                contentDescription = null,
-                colorFilter = if (mono) {
-                    androidx.compose.ui.graphics.ColorFilter.tint(cs.onSurface)
-                } else {
-                    null
-                },
-                modifier = Modifier.size(size * 0.7f),
-            )
+            if (decoded != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = decoded,
+                    contentDescription = null,
+                    colorFilter = tint,
+                    modifier = Modifier.size(iconSize),
+                )
+            } else {
+                coil.compose.AsyncImage(
+                    model = asset,
+                    contentDescription = null,
+                    colorFilter = tint,
+                    modifier = Modifier.size(iconSize),
+                )
+            }
         }
     }
 }

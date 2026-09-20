@@ -59,4 +59,61 @@ class GenerationErrorTextTest {
         val bare = Custom("")
         assertEquals(bare.toString(), generationErrorText(bare))
     }
+
+    /**
+     * 错误分类（超出上游的加法，见 `generationErrorDisplayText` 的文档）：
+     * 判据要盖住各家措辞，也要**不误判**——裸数字不是状态码。
+     */
+    @Test
+    fun classifiesProviderFailures() {
+        // 用户 2026-09-20 真机那条 400 原文。
+        assertEquals(
+            GenerationErrorKind.UnsupportedImage,
+            classifyGenerationError(
+                "HTTP 400 {\"error\":{\"message\":\".messages[7].image[0]: You have uploaded an " +
+                    "unsupported image. Please make sure your image is valid and has one of the " +
+                    "following formats: webp, png, jpeg, and gif.\"}}",
+            ),
+        )
+        assertEquals(
+            GenerationErrorKind.RateLimited,
+            classifyGenerationError("HTTP 429 Too Many Requests"),
+        )
+        assertEquals(
+            GenerationErrorKind.Quota,
+            classifyGenerationError("HTTP 400 {\"msg\":\"Insufficient Account Balance\"}"),
+        )
+        assertEquals(
+            GenerationErrorKind.ContextLength,
+            classifyGenerationError(
+                "This model's maximum context length is 8192 tokens, reduce the length of the input",
+            ),
+        )
+        assertEquals(
+            GenerationErrorKind.ContentModeration,
+            classifyGenerationError("HTTP 400 data_inspection_failed"),
+        )
+        assertEquals(
+            GenerationErrorKind.Auth,
+            classifyGenerationError("HTTP 401 {\"error\":{\"code\":\"invalid_api_key\"}}"),
+        )
+        assertEquals(
+            GenerationErrorKind.Timeout,
+            classifyGenerationError("java.net.SocketTimeoutException: timeout"),
+        )
+        // 各家状态码写法都要认得。
+        assertEquals(
+            GenerationErrorKind.RateLimited,
+            classifyGenerationError("{\"status_code\":429,\"error\":{\"message\":\"\"}}"),
+        )
+    }
+
+    /** 判不出就**别硬归类**：宁可只给原始信息，也不给用户一句错的中文。 */
+    @Test
+    fun leavesUnknownFailuresUnclassified() {
+        assertEquals(null, classifyGenerationError("boom"))
+        // 裸数字（token 数、请求 id）不能被当状态码误判。
+        assertEquals(null, classifyGenerationError("processed 4290 tokens in 402 ms, code 4133"))
+        assertEquals(null, classifyGenerationError("HTTP 500 internal server error"))
+    }
 }

@@ -30,10 +30,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,11 +84,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
-import java.util.Date
+import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import com.psyche.memo.ui.R as UiR
 
 /**
@@ -169,6 +171,24 @@ fun LocalSnapshotsScreen(container: AppContainerImpl, onBack: () -> Unit) {
                 if (written.isSuccess) NotificationType.SUCCESS else NotificationType.ERROR,
             )
         }
+    }
+
+    // ── 副本卡的四个动作 ────────────────────────────────────────────────────
+    // 用「身份不变的 @Stable 持有者 + 每次重组重赋字段」，而不是每张卡现造四个
+    // lambda：SnapshotCopyCard 的实参引用于是全程不变 ⇒ 备份进度刷新、设置开关这类
+    // 与某一张卡无关的状态变化，不再把整列卡片重组合一遍（每张卡里还要各建一次
+    // 时间 formatter 与四枚按钮）。
+    val copyActions = remember { SnapshotCopyActions() }
+    val copiesRef = rememberUpdatedState(copies)
+    copyActions.restore = { entry -> confirm = SnapshotConfirm.Restore(entry) }
+    copyActions.export = { entry ->
+        pendingExport = entry.file
+        exportLauncher.launch(entry.id)
+    }
+    copyActions.delete = { entry -> confirm = SnapshotConfirm.Delete(entry, copiesRef.value) }
+    copyActions.togglePin = { entry ->
+        service.setPinned(entry.id, !entry.pinned)
+        refresh()
     }
 
     fun takeNow() {
@@ -325,16 +345,10 @@ fun LocalSnapshotsScreen(container: AppContainerImpl, onBack: () -> Unit) {
                 } else {
                     copies.forEachIndexed { index, copy ->
                         if (index > 0) ShellDivider()
-                        SnapshotCopyCard(
-                            copy = copy,
-                            onRestore = { confirm = SnapshotConfirm.Restore(copy) },
-                            onExport = {
-                                pendingExport = copy.file
-                                exportLauncher.launch(copy.id)
-                            },
-                            onDelete = { confirm = SnapshotConfirm.Delete(copy, copies) },
-                            onTogglePin = { service.setPinned(copy.id, !copy.pinned); refresh() },
-                        )
+                        // 卡片仍然整体待在 ShellSection 这一张卡里（原版形态）：拆成
+                        // lazy item 会把卡片的圆角+描边切成一段一段，外观就变了。
+                        // 省下来的重组开销走 copyActions（见上面的注释）。
+                        SnapshotCopyCard(copy = copy, actions = copyActions)
                     }
                 }
             }
@@ -469,14 +483,23 @@ private sealed interface SnapshotConfirm {
 /** `local_snapshot_usage` is an ICU message with two named arguments. */
 private val LocalSnapshotUsageRes = UiR.string.local_snapshot_usage
 
+/**
+ * 一张副本卡的四个动作（身份不变的持有者：每次重组只重赋字段，见
+ * [LocalSnapshotsScreen] 里的 `copyActions`）。
+ */
+@Stable
+private class SnapshotCopyActions {
+    var restore: (LocalSnapshotEntry) -> Unit = {}
+    var export: (LocalSnapshotEntry) -> Unit = {}
+    var delete: (LocalSnapshotEntry) -> Unit = {}
+    var togglePin: (LocalSnapshotEntry) -> Unit = {}
+}
+
 /** `_CopyCard` L578-711 — archive icon, when/size, origin, contents, actions. */
 @Composable
 private fun SnapshotCopyCard(
     copy: LocalSnapshotEntry,
-    onRestore: () -> Unit,
-    onExport: () -> Unit,
-    onDelete: () -> Unit,
-    onTogglePin: () -> Unit,
+    actions: SnapshotCopyActions,
 ) {
     val cs = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp)) {
@@ -516,7 +539,7 @@ private fun SnapshotCopyCard(
             IosTileButton(
                 label = stringResource(UiR.string.local_snapshot_action_restore),
                 icon = Lucide.RotateCcw,
-                onClick = onRestore,
+                onClick = { actions.restore(copy) },
                 fontSize = 13.sp,
                 modifier = Modifier.weight(1f),
             )
@@ -524,7 +547,7 @@ private fun SnapshotCopyCard(
             IosTileButton(
                 label = stringResource(UiR.string.local_snapshot_action_export),
                 icon = Lucide.Share2,
-                onClick = onExport,
+                onClick = { actions.export(copy) },
                 fontSize = 13.sp,
                 modifier = Modifier.weight(1f),
             )
@@ -532,7 +555,7 @@ private fun SnapshotCopyCard(
             IosTileButton(
                 label = stringResource(UiR.string.local_snapshot_action_delete),
                 icon = Lucide.Trash2,
-                onClick = onDelete,
+                onClick = { actions.delete(copy) },
                 fontSize = 13.sp,
                 backgroundColor = cs.error,
                 foregroundColor = cs.error,
@@ -545,7 +568,7 @@ private fun SnapshotCopyCard(
                 if (copy.pinned) UiR.string.local_snapshot_action_unpin else UiR.string.local_snapshot_action_pin,
             ),
             icon = if (copy.pinned) Lucide.PinOff else Lucide.Pin,
-            onClick = onTogglePin,
+            onClick = { actions.togglePin(copy) },
             fontSize = 13.sp,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -675,8 +698,20 @@ private fun intervalLabel(days: Int): String = if (days <= LocalSnapshotSettings
 }
 
 /** `_whenLabel` L447-451 — local time, minute resolution. */
-private fun whenLabel(at: Instant): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-    .format(Date.from(at.atZone(ZoneId.systemDefault()).toInstant()))
+// formatter 提成进程级缓存（键 = locale + 模式）：以前**每张卡**、每次重组都要
+// `new SimpleDateFormat(...)` + `Locale.getDefault()`（构造要解析模式并取一遍
+// locale 数据）。DateTimeFormatter 不可变且线程安全，可以共享；输出与旧写法逐字相同
+// （由 LocalSnapshotWhenLabelTest 对拍钉住）。
+private val snapshotWhenFormatters = ConcurrentHashMap<String, DateTimeFormatter>()
+
+internal fun whenLabel(at: Instant): String {
+    val locale = Locale.getDefault()
+    val pattern = "yyyy-MM-dd HH:mm"
+    val formatter = snapshotWhenFormatters.getOrPut("${locale.toLanguageTag()}|$pattern") {
+        DateTimeFormatter.ofPattern(pattern, locale)
+    }
+    return formatter.format(at.atZone(ZoneId.systemDefault()))
+}
 
 private fun toast(message: String, type: NotificationType) {
     SnackbarManager.show(AppNotification(message, type))

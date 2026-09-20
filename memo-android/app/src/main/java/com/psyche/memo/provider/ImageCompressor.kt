@@ -74,6 +74,16 @@ object ImageCompressor {
 
     const val MIN_BYTES_TO_COMPRESS = 64 * 1024
 
+    /** 转码（非压缩）时的 JPEG 质量与长边上限：只求格式对，不追求变小。 */
+    const val TRANSCODE_QUALITY = 92
+    const val MAX_TRANSCODE_LONG_EDGE = 4096
+
+    /** ISO BMFF compatible brand：HEIF 静图家族（视频/通用 isom 不收）。 */
+    private val HEIC_BRANDS = setOf(
+        "heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs",
+        "hesv", "mif1", "msf1", "hif1", "hif2",
+    )
+
     enum class Format { JPEG, PNG, GIF, OTHER }
 
     /** 该图是否跳过压缩（原版 `compressBytes` 的提前返回 + `_compressTask` 的 switch）。 */
@@ -89,17 +99,55 @@ object ImageCompressor {
     /** 压缩成 JPEG；跳过 / 失败 / 没变小都返回 null。 */
     fun compress(bytes: ByteArray, config: ImageCompressConfig): ByteArray? {
         if (shouldSkip(bytes, config)) return null
-        return runCatching {
+        val result = encodeJpeg(bytes, config.maxLongEdge, config.quality) ?: return null
+        // 原版 :169-172：输出必须严格更小才采用。
+        return if (result.size >= bytes.size) null else result
+    }
+
+    /**
+     * HEIC/HEIF → JPEG 的**格式转换**（不受画质闸门管）：解码成功就重编码，解不动返回
+     * null。上游没有这一步，是因为 `image_picker` 插件默认 `heicToJpg: true`（Android
+     * 侧选图就已经是 JPEG）；Memo 用 SAF/PhotoPicker 选图绕过了它，相册里的 HEIC 会
+     * 原字节落盘，再按 `image/heic` 发给厂商 → 400「unsupported image」。
+     */
+    fun transcodeToJpeg(bytes: ByteArray, maxLongEdge: Int = MAX_TRANSCODE_LONG_EDGE): ByteArray? {
+        if (!isHeic(bytes)) return null
+        return encodeJpeg(bytes, maxLongEdge, TRANSCODE_QUALITY)
+    }
+
+    /**
+     * ISO BMFF 盒式判定：`ftyp` 在第 4..8 字节，**第 8..12 是主品牌**，第 12..16 是
+     * minor version（不是品牌），兼容品牌从第 16 字节起每 4 个一组。iPhone 的 `.HEIC`
+     * 照片主品牌就是 `heic`/`hevc`，截图常见主品牌 `mif1` + 兼容品牌 `heic`，所以两段都查。
+     */
+    internal fun isHeic(bytes: ByteArray): Boolean {
+        if (bytes.size < 12) return false
+        if (!isChunkType(bytes, 4, "ftyp")) return false
+        fun brandAt(offset: Int): Boolean =
+            offset + 4 <= bytes.size &&
+                String(bytes, offset, 4, Charsets.ISO_8859_1).lowercase() in HEIC_BRANDS
+        if (brandAt(8)) return true
+        var offset = 16
+        while (offset + 4 <= bytes.size) {
+            if (brandAt(offset)) return true
+            offset += 4
+        }
+        return false
+    }
+
+    /** 解字节 → 转正 → 长边收缩 → JPEG。尺寸/画质由调用方给。 */
+    private fun encodeJpeg(bytes: ByteArray, maxLongEdge: Int, quality: Int): ByteArray? =
+        runCatching {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
             val options = BitmapFactory.Options().apply {
-                inSampleSize = decodeSampleSize(bounds.outWidth, bounds.outHeight, config.maxLongEdge)
+                inSampleSize = decodeSampleSize(bounds.outWidth, bounds.outHeight, maxLongEdge)
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
             var bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return@runCatching null
             bitmap = bitmap.rotatedByExif(bytes)
-            val (targetW, targetH) = scaleToMaxLongEdge(bitmap.width, bitmap.height, config.maxLongEdge)
+            val (targetW, targetH) = scaleToMaxLongEdge(bitmap.width, bitmap.height, maxLongEdge)
             if (targetW != bitmap.width || targetH != bitmap.height) {
                 val scaled = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
                 if (scaled != bitmap) bitmap.recycle()
@@ -108,13 +156,11 @@ object ImageCompressor {
             // JPEG 没有 alpha 通道：透明区域铺白底（原版「透明压缩」打开时的口径）。
             val out = ByteArrayOutputStream()
             val flat = bitmap.flattenOnWhite()
-            flat.compress(Bitmap.CompressFormat.JPEG, config.quality.coerceIn(1, 100), out)
+            flat.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), out)
             if (flat != bitmap) flat.recycle()
             bitmap.recycle()
-            val result = out.toByteArray()
-            if (result.size >= bytes.size) null else result
+            out.toByteArray().takeIf { it.isNotEmpty() }
         }.getOrNull()
-    }
 
     /** image_compressor.dart:176-204 `_detectFormat`。 */
     internal fun detectFormat(bytes: ByteArray): Format {

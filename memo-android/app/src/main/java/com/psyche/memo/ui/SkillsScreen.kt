@@ -32,11 +32,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,7 +60,6 @@ import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.Trash2
 import com.psyche.memo.AppContainerImpl
-import com.psyche.memo.common.skill.SkillMetadata
 import com.psyche.memo.provider.SkillGitHubImporter
 import com.psyche.memo.provider.SkillImporter
 import com.psyche.memo.ui.snackbar.AppNotification
@@ -92,7 +94,17 @@ fun SkillsScreen(
     var showAddSheet by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showGitHubDialog by remember { mutableStateOf(false) }
-    var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+    // 待删技能名（原来存整个 SkillMetadata：对话框只用到 name，而行需要「稳定实参」
+    // 才能跳过重组，名字既是目录名也是唯一键）。
+    var deleteTarget by remember { mutableStateOf<String?>(null) }
+    val openDetailRef = rememberUpdatedState(onOpenDetail)
+    // 行动作只造一次：以前每行现造两个 lambda ⇒ 整列每帧都被判「参数变了」。
+    val rowActions = remember {
+        SkillRowActions(
+            open = { name -> openDetailRef.value(name) },
+            delete = { name -> deleteTarget = name },
+        )
+    }
 
     val importFailedFmt = stringResource(R.string.skills_page_import_failed)
 
@@ -162,14 +174,24 @@ fun SkillsScreen(
             if (skills.isEmpty()) {
                 item { SkillsEmptyState() }
             } else {
+                // 卡片仍是**一张** SectionCard（原版形态：一组行共用一个圆角面），
+                // 所以这里不做成 items(...)：拆成多个 lazy item 会把卡片切成一段一段
+                // 的圆角+描边，外观就变了。取而代之的是两件等价的事：
+                //  · `key(技能名)` —— 行的组合身份跟着技能走，删掉一个技能不会让
+                //    下面每一行继承上一行的 `showActions`（以前按下标记忆，会串）；
+                //  · 行实参全稳定（三个字符串 + 一个记住的动作对象）⇒ 行可跳过重组，
+                //    页面任何无关状态变化（弹层开关、reload）不再重组合整列。
                 item {
                     SectionCard {
                         skills.forEachIndexed { index, skill ->
-                            SkillRow(
-                                skill = skill,
-                                onTap = { onOpenDetail(skill.name) },
-                                onDelete = { deleteTarget = skill },
-                            )
+                            key(skill.name) {
+                                SkillRow(
+                                    name = skill.name,
+                                    description = skill.description,
+                                    compatibility = skill.compatibility,
+                                    actions = rowActions,
+                                )
+                            }
                             if (index != skills.lastIndex) DividerRow()
                         }
                     }
@@ -252,22 +274,22 @@ fun SkillsScreen(
         )
     }
 
-    deleteTarget?.let { target ->
+    deleteTarget?.let { targetName ->
         AlertDialog(
             containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
         onDismissRequest = { deleteTarget = null },
             title = { Text(stringResource(R.string.skills_page_delete_title)) },
-            text = { Text(stringResource(R.string.skills_page_delete_message, target.name)) },
+            text = { Text(stringResource(R.string.skills_page_delete_message, targetName)) },
             confirmButton = {
                 TextButton(onClick = {
-                    container.skillStore.deleteSkill(target.name)
+                    container.skillStore.deleteSkill(targetName)
                     // 同步清掉所有助手上对这个技能的引用（上游 deleteSkill 里的
                     // settingsStore.update 段）。
                     container.assistantStore.getAll().forEach { assistant ->
-                        if (target.name in assistant.enabledSkills) {
+                        if (targetName in assistant.enabledSkills) {
                             container.assistantStore.update(
-                                assistant.copy(enabledSkills = assistant.enabledSkills - target.name),
+                                assistant.copy(enabledSkills = assistant.enabledSkills - targetName),
                             )
                         }
                     }
@@ -312,19 +334,33 @@ private fun SkillsEmptyState() {
     }
 }
 
+/**
+ * 技能行的两个动作。提成 `@Stable` 对象（实例在页面存活期内不变）是为了让
+ * [SkillRow] 的实参全部稳定 —— 见上面列表处 `key(...)` 的说明。
+ */
+@Stable
+private class SkillRowActions(
+    val open: (String) -> Unit,
+    val delete: (String) -> Unit,
+)
+
 /** 技能行：图标 + 名字 + 描述（两行）；点进详情，长按出操作面板。 */
 @Composable
 private fun SkillRow(
-    skill: SkillMetadata,
-    onTap: () -> Unit,
-    onDelete: () -> Unit,
+    name: String,
+    description: String,
+    compatibility: String?,
+    actions: SkillRowActions,
 ) {
     val cs = MaterialTheme.colorScheme
     var showActions by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onTap, onLongClick = { showActions = true })
+            .combinedClickable(
+                onClick = { actions.open(name) },
+                onLongClick = { showActions = true },
+            )
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -341,13 +377,13 @@ private fun SkillRow(
             // ⓘ 紧贴技能名（TipHuggingLabel 是 RowScope 扩展，所以这里套一层 Row）。
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TipHuggingLabel(
-                    label = skill.name,
-                    tip = skill.description,
+                    label = name,
+                    tip = description,
                     labelStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                     maxLines = 1,
                 )
             }
-            skill.compatibility?.takeIf { it.isNotBlank() }?.let { compatibility ->
+            compatibility?.takeIf { it.isNotBlank() }?.let { compatibility ->
                 Text(
                     text = compatibility,
                     style = TextStyle(fontSize = 11.sp, color = cs.tertiary),
@@ -372,7 +408,7 @@ private fun SkillRow(
                     icon = Lucide.Trash2,
                     label = stringResource(R.string.skills_page_delete_title),
                     destructive = true,
-                ) { showActions = false; onDelete() },
+                ) { showActions = false; actions.delete(name) },
             ),
         )
     }

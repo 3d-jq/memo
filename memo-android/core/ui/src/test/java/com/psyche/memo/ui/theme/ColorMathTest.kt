@@ -1,6 +1,7 @@
 package com.psyche.memo.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -77,6 +78,30 @@ class ColorMathTest {
             alphaBlend(darkOnSurface, 0.06, darkSurface),
             alphaBlendTranslucent(darkOnSurface, 0.06, darkSurface, 1.0),
         )
+    }
+
+    @Test
+    fun selectionChipColorIsATranslucentTintNotAnOpaqueBlend() {
+        // sidebar_selection_bars.dart:231-234 ≡ chat_selection_export_bar.dart:169-172：
+        // alphaBlend(onSurface@0.04, color@0.14)（夜间 0.18）。两颗操作数都带 alpha，
+        // 所以底色必须是半透明的淡染色 —— 上面压的是同一颗 color 的字和图标。
+        assertEquals(
+            Color(0x2C434E78),
+            selectionChipColor(lightOnSurface, lightPrimary, isDark = false),
+        )
+        assertEquals(
+            alphaBlendTranslucent(lightOnSurface, 0.04, lightPrimary, 0.14),
+            selectionChipColor(lightOnSurface, lightPrimary, isDark = false),
+        )
+        assertEquals(
+            alphaBlendTranslucent(darkOnSurface, 0.04, darkPrimary, 0.18),
+            selectionChipColor(darkOnSurface, darkPrimary, isDark = true),
+        )
+        // 回归守卫：抽屉那排曾把底色手搓成 color*0.14 + onSurface*0.86 且 alpha=1f，
+        // 算出不透明近黑 #262830，深蓝文字压在上面完全看不见（2026-09-20 用户实测）。
+        val chip = selectionChipColor(lightOnSurface, lightPrimary, isDark = false)
+        assertTrue("底色必须半透明", (chip.toArgb() ushr 24) < 0xFF)
+        assertFalse("底色不得退化成不透明深色", chip.toArgb() == 0xFF262830.toInt())
     }
 
     @Test

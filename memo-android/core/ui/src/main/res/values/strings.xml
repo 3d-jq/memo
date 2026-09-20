@@ -561,6 +561,7 @@ Updating Memo first is the safer choice.</string>
     <string name="camera_permission_denied_message">Camera unavailable: permission not granted.</string>
     <string name="chain_of_thought_collapse">Collapse</string>
     <string name="chain_of_thought_expand_steps">Show %1$s more steps</string>
+    <string name="chat_attachment_unreadable_skipped">Skipped %1$s attachment(s) that this device cannot read (unsupported image format).</string>
     <string name="chat_history_page_cancel">Cancel</string>
     <string name="chat_history_page_delete">Delete</string>
     <string name="chat_history_page_delete_all_dialog_content">Delete every non-pinned conversation for this assistant? Pinned chats stay in place.</string>
@@ -977,6 +978,13 @@ Updating Memo first is the safer choice.</string>
     <string name="flutter_log_setting_subtitle">When enabled, Flutter errors and print output are written to logs/flutter_logs.txt (rotated daily).</string>
     <string name="flutter_log_setting_title">Flutter Logging</string>
     <string name="font_picker_choose_local_file">Choose Local File</string>
+    <string name="generation_error_auth">Authentication failed. Check the API key of this provider.</string>
+    <string name="generation_error_content_moderation">The content review of this provider blocked the request.</string>
+    <string name="generation_error_context_length">This conversation is longer than the context limit of the model. Compact the context, shorten the input, or choose a model with a larger context window.</string>
+    <string name="generation_error_quota">The balance or quota of this provider account is insufficient.</string>
+    <string name="generation_error_rate_limited">This provider is rate limiting the request. Please wait a moment and retry.</string>
+    <string name="generation_error_timeout">The provider did not respond in time. Retry, or switch to a faster model.</string>
+    <string name="generation_error_unsupported_image">The provider rejected an image in this message. Most providers only accept webp, png, jpeg and gif.</string>
     <string name="generation_interrupted">Generation interrupted</string>
     <string name="generation_selector_hint">Pick a service, then just ask the model to generate — it calls the generation tool.</string>
     <string name="generation_selector_manage">Manage generation services</string>

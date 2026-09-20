@@ -109,6 +109,11 @@ fun ProviderEditScreen(
     var models by remember { mutableStateOf(listOf<String>()) }
     var newModel by remember { mutableStateOf("") }
     var showDelete by remember { mutableStateOf(false) }
+    // 删除某一行的动作只造一次（按 **下标** 删，与原来逐字一致：模型名可以重复，
+    // 所以既不能用 name 当删除键，也不能给行加 name 的 key —— 会撞 key）。
+    val onRemoveModel: (Int) -> Unit = remember {
+        { index -> models = models.filterIndexed { j, _ -> j != index } }
+    }
 
     LaunchedEffect(providerId) {
         if (providerId != null) {
@@ -194,21 +199,7 @@ fun ProviderEditScreen(
                             style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = cs.primary),
                         )
                         models.forEachIndexed { i, m ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = m,
-                                    modifier = Modifier.weight(1f),
-                                    style = TextStyle(fontSize = 14.sp, color = cs.onSurface),
-                                )
-                                IconButton(onClick = { models = models.filterIndexed { j, _ -> j != i } }, modifier = Modifier.size(32.dp)) {
-                                    Icon(Lucide.Trash2, contentDescription = null, tint = cs.error, modifier = Modifier.size(18.dp))
-                                }
-                            }
+                            ProviderModelNameRow(index = i, name = m, onRemove = onRemoveModel)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
@@ -262,6 +253,37 @@ fun ProviderEditScreen(
                 }
             },
         )
+    }
+}
+
+/**
+ * 模型列表里的一行（名字 + 删除钮）。
+ *
+ * 单独成一个 composable 是为了**可跳过**：三个实参全是稳定类型（Int/String 与一个
+ * `remember` 住的删除动作）。以前这一行的 Row 直接摊在卡片里，`newModel` 输入框
+ * 每敲一个字，整个 item 重跑 ⇒ 几十个模型行全重组合。
+ */
+@Composable
+private fun ProviderModelNameRow(
+    index: Int,
+    name: String,
+    onRemove: (Int) -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = name,
+            modifier = Modifier.weight(1f),
+            style = TextStyle(fontSize = 14.sp, color = cs.onSurface),
+        )
+        IconButton(onClick = { onRemove(index) }, modifier = Modifier.size(32.dp)) {
+            Icon(Lucide.Trash2, contentDescription = null, tint = cs.error, modifier = Modifier.size(18.dp))
+        }
     }
 }
 
