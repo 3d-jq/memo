@@ -196,7 +196,11 @@ fun SideDrawerContent(
     var assistantList by remember { mutableStateOf<List<Assistant>>(emptyList()) }
     androidx.compose.runtime.LaunchedEffect(assistantsExpanded) {
         if (assistantsExpanded) {
-            assistantList = runCatching { container.assistantStore.getAll() }.getOrDefault(emptyList())
+            // getAll() 是整表读 + 每行解 JSON，冷启动后第一次展开最容易卡；
+            // LaunchedEffect 体默认在主线程 ⇒ 挪到 IO（PORTING §5.13）。
+            assistantList = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { container.assistantStore.getAll() }.getOrDefault(emptyList())
+            }
         }
     }
     // side_drawer.dart:4182-4190（话题）/ :3014（助手）：点一下是否关抽屉看设置。

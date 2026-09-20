@@ -137,26 +137,20 @@ fun StatsScreen(
         val (result, assistants) = withContext(Dispatchers.IO) {
             // Assistant/provider names mirror the page's maps
             // (stats_page.dart L184-195).
-            val parsedAssistants = runCatching {
-                PayloadEntityDao(
-                    container.database.readableDatabase,
-                    "assistant_rows",
-                    primaryKey = "id",
-                ).getAll()
-            }.getOrDefault(emptyList()).mapNotNull { row ->
-                runCatching {
-                    Assistant.fromJsonString(
-                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
-                        row.payload,
-                    )
-                }.getOrNull()
-            }
+            //
+            // 原来这里是自己 new 一个 PayloadEntityDao 把两张表**整表解一遍**、还每行
+            // 现造一个 `Json {}`；现在走容器那两个缓存过的入口（`assistantStore.getAll()`
+            // 会把每行写进 AssistantCache，`ProviderConfigCache` 同），既不再重复解码，
+            // 也顺手把抽屉/助手页要用的缓存喂暖。
+            val parsedAssistants = runCatching { container.assistantStore.getAll() }
+                .getOrDefault(emptyList())
             val assistantNames = buildMap {
                 parsedAssistants.forEach { assistant ->
                     put(assistant.id, assistant.name.trim().ifEmpty { unknownAssistantLabel })
                 }
                 put("_default", unknownAssistantLabel)
             }
+            val providerJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
             val providerNames = buildMap {
                 runCatching {
                     PayloadEntityDao(
@@ -165,12 +159,11 @@ fun StatsScreen(
                         primaryKey = "provider_key",
                     ).getAll()
                 }.getOrDefault(emptyList()).forEach { row ->
-                    runCatching {
-                        ProviderConfig.fromJsonString(
-                            kotlinx.serialization.json.Json { ignoreUnknownKeys = true },
-                            row.payload,
-                        )
-                    }.getOrNull()?.let { put(it.id, it.name) }
+                    val config = com.psyche.memo.data.db.ProviderConfigCache.get(row.id)
+                        ?: runCatching {
+                            ProviderConfig.fromJsonString(providerJson, row.payload)
+                        }.getOrNull()?.also { com.psyche.memo.data.db.ProviderConfigCache.put(row.id, it) }
+                    config?.let { put(it.id, it.name) }
                 }
             }
             val launchCount = runCatching {
@@ -661,13 +654,13 @@ private data class MetricTileData(
     val value: String,
 )
 
-/** L140-147 _formatCompact. */
-private fun formatCompact(value: Long): String = when {
-    value >= 1_000_000_000L -> String.format(Locale.US, "%.2fB", value / 1_000_000_000.0)
-    value >= 1_000_000L -> String.format(Locale.US, "%.2fM", value / 1_000_000.0)
-    value >= 1_000L -> String.format(Locale.US, "%.1fK", value / 1_000.0)
-    else -> value.toString()
-}
+/**
+ * 总览六格的数字。上游是 `_formatCompact`（≥1000 折成 `1.2K`／`3.45M`），
+ * **这里有意偏离**：用户 2026-09-20「总览不要 K、M 这些单位，直接就显示数字」——
+ * 缩写看着像概览、还读数不准，所以改成千分位全量数字（`12,345,678`）。
+ */
+private fun formatCompact(value: Long): String =
+    String.format(java.util.Locale.getDefault(), "%,d", value)
 
 /** StatsUsageChart — stats_usage_chart.dart. */
 @Composable

@@ -1512,15 +1512,19 @@ fun ChatContent(
         val capAssistant = assistantForSearch
         if (capAssistant != null && providerId.isNotEmpty() && modelId.isNotEmpty()) {
             androidx.compose.runtime.LaunchedEffect(capAssistant.id, providerId, modelId) {
-                val aa = container.currentAssistant()
-                if (aa != null) {
-                    if (!isToolModel(currentModelCfg, modelId) && aa.mcpServerIds.isNotEmpty()) {
-                        container.assistantStore.update(aa.copy(mcpServerIds = emptyList()))
-                    }
-                    if (!isReasoningModel(currentModelCfg, modelId) &&
-                        com.psyche.memo.llm.client.ReasoningBudget.isReasoningEnabled(aa.thinkingBudget)
-                    ) {
-                        container.assistantStore.update(aa.copy(thinkingBudget = 0))
+                // 这段是「模型不支持工具/推理就把助手上对应的绑定清掉」，读写都是真库操作
+                // （AssistantStore.get/update），主线程体里跑会看见掉帧 ⇒ 整段挪 IO。
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val aa = container.currentAssistant()
+                    if (aa != null) {
+                        if (!isToolModel(currentModelCfg, modelId) && aa.mcpServerIds.isNotEmpty()) {
+                            container.assistantStore.update(aa.copy(mcpServerIds = emptyList()))
+                        }
+                        if (!isReasoningModel(currentModelCfg, modelId) &&
+                            com.psyche.memo.llm.client.ReasoningBudget.isReasoningEnabled(aa.thinkingBudget)
+                        ) {
+                            container.assistantStore.update(aa.copy(thinkingBudget = 0))
+                        }
                     }
                 }
             }

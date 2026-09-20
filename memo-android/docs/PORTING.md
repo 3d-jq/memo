@@ -1560,5 +1560,53 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 序列化值 `"type":"kelivo"`、注释引用 Dart 路径），界面标签早已是
 `search_service_name_memo`；品牌红线允许注释留出处。
 
+## 5.34 设置域「点进去卡一下」：主线程读库的盲区（2026-09-20）
+
+用户：「现在是线程与性能优化，在这个设置界面里面很多界面点击都会加载卡一下，特别是那个统计」。
+
+**根因是一类，不是一处**：§5.13 的机器守卫 `CompositionThreadingTest` 只扫 `remember {}` 块，
+而 **`LaunchedEffect` / `DisposableEffect` 的函数体默认也跑在组合线程上**（换线程只有靠自己写
+`withContext(Dispatchers.IO)`）——这块一直是盲区，所以门禁全绿、真机才卡。扫描器（一次性脚本，
+用完已删）在 effect 体里抓到 6 处真库操作：
+
+- 四个设置子页 `LaunchedEffect(Unit)` 里裸读 `preferenceRepository.readJson`
+  （`AutoRetrySettingsScreen`／`ChatItemDisplaySettingsScreen`／`RenderingSettingsScreen`／
+  `MessageStyleSettingsScreen`）。偏好读**冷缓存未命中就是真 SQL 往返**，`rendering`/`message style`
+  一次点进去连读 5 个键。
+- `SideDrawerContent` 展开助手列表时 `assistantStore.getAll()`（整表 + 每行解 JSON）在主线程。
+- `ChatContent` 「模型不支持工具/推理就清掉助手绑定」那段，读写助手行在主线程的 effect 体里。
+
+六处全部包上 `withContext(Dispatchers.IO)`（快照状态跨线程写是安全的，仓库里
+`rememberLoaded` 就是这么做的）。**守卫补上同一套判据**：新增
+`no effect body touches the database without dispatchers IO`，词表含偏好读写/`getAll`/裸 SQL/
+各仓库取数方法，豁免机制沿用 `exemptions`；**已证伪**——把其中一处调度器改成 `Dispatchers.Main`
+立刻变红并报 `ui/MessageStyleSettingsScreen.kt:155 effect { preferenceRepository.readJson }`。
+
+统计页另外两处：① 它以前自己 new `PayloadEntityDao` 把 `assistant_rows`+`provider_rows`
+**整表解一遍**，而且 `Json { ignoreUnknownKeys = true }` 是**每行现造一个实例**；现在助手走
+容器那个会喂 `AssistantCache` 的 `assistantStore.getAll()`，供应商逐行先查
+`ProviderConfigCache`、`Json` 实例提到循环外。② 用户点名「总览不要 K、M 这些单位，直接显示数字」
+⇒ `formatCompact` 改成千分位全量数字（`12,345,678`），**有意偏离上游 `_formatCompact`**。
+
+**量到的事实**：`memo.db` 现在只有 5.5 MB，所以按时间段的 6 个聚合全表扫并不致命；也就是说
+剩下的卡顿更可能出在下面这三处，**都要用户点头才动**（已查清、未做）：
+
+1. **WAL 没开**：`MemoDatabase` 是裸 `SQLiteOpenHelper`，默认回滚日志（DELETE），写事务期间
+   读者要等（边流式写边翻设置就会卡）。`SchemaMigrations` 里已经写着
+   `PRAGMA wal_checkpoint(TRUNCATE)`，说明上游假设有 WAL。开 WAL 前必须审备份链路：
+   `LocalSnapshotStore` / WebDAV / merge 恢复拷贝 `memo.db` 时要不要带上 `-wal`。
+2. **`message_rows` 没有 `timestamp` 单列索引**（17 个索引全是 `conversation_id` 前缀），
+   统计页 6 条按时间的聚合都是整表扫。schema 是 drift 生成且门禁校验零 diff，所以加索引只能
+   在开库时 `CREATE INDEX IF NOT EXISTS`（不动 `memo_schema_v3.sql`）。
+3. **统计页整页是 `Column + verticalScroll`（非 lazy）**：`snapshot` 一到，一年热力图 +
+   趋势 Canvas + 各排行榜在一次组合里全画出来。改 Lazy 要保住原版那张卡片外观，工作量中等。
+4. 已知欠账（豁免在案）：`ui/chat/ChatContent.kt:617` 在 `remember {}` 里读会话行拿 assistantId
+   （带「新会话还没落库」的语义，不能简单挪线程）。
+
+**下一步取证**：`adb shell dumpsys gfxinfo com.psyche.memo.dev reset` → 用户点进统计页 →
+`dumpsys gfxinfo … framestats`，用五段耗时（MeasureLayout/Draw/Sync/CommandIssue/Swap）判定
+是组合成本还是等 DB，再决定动 1/2/3 的哪一条。
+
+
 
 

@@ -40,6 +40,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -148,17 +150,20 @@ fun MessageStyleSettingsScreen(
     var colorPicker by remember { mutableStateOf<String?>(null) } // "bg" | "border" | "text"
 
     LaunchedEffect(Unit) {
-        style = container.preferenceRepository.readJson("display_chat_message_background_style_v1")
-            ?.takeIf { it.isNotEmpty() } ?: "default"
-        fitContent = container.preferenceRepository.readJson("display_assistant_bubble_fit_content_v1") == "1"
-        splitParagraphs = container.preferenceRepository.readJson("display_assistant_bubble_split_paragraphs_v1") == "1"
-        assistantOverrides = BubbleOverrides.fromJson(
-            container.preferenceRepository.readJson("chat_bubble_style_overrides_v1"),
-        )
-        userOverrides = BubbleOverrides.fromJson(
-            container.preferenceRepository.readJson("chat_bubble_style_overrides_user_v1"),
-        )
-    }
+        // LaunchedEffect 体默认跑在组合线程上，里面的 readJson 是真会打 SQLite 的
+        withContext(Dispatchers.IO) {
+            style = container.preferenceRepository.readJson("display_chat_message_background_style_v1")
+                ?.takeIf { it.isNotEmpty() } ?: "default"
+            fitContent = container.preferenceRepository.readJson("display_assistant_bubble_fit_content_v1") == "1"
+            splitParagraphs = container.preferenceRepository.readJson("display_assistant_bubble_split_paragraphs_v1") == "1"
+            assistantOverrides = BubbleOverrides.fromJson(
+                container.preferenceRepository.readJson("chat_bubble_style_overrides_v1"),
+            )
+            userOverrides = BubbleOverrides.fromJson(
+                container.preferenceRepository.readJson("chat_bubble_style_overrides_user_v1"),
+            )
+        }
+}
 
     fun saveStyle(v: String) {
         style = v

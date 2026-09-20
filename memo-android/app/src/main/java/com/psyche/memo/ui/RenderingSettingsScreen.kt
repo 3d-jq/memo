@@ -36,6 +36,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -113,16 +115,19 @@ fun RenderingSettingsScreen(
     var colorSheetVisible by remember { mutableStateOf(false) }
     var phrasesSheetVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        val stored = container.preferenceRepository.readJson("display_auto_collapse_code_block_lines_v1")
-        collapseLines = (stored?.toIntOrNull() ?: 2).coerceIn(1, 999)
-        collapseLinesText = collapseLines.toString()
-        val indicator = ThinkingIndicatorSettings.fromPrefs { key ->
-            container.preferenceRepository.readJson(key)
+        // LaunchedEffect 体默认跑在组合线程上，里面的 readJson 是真会打 SQLite 的
+        withContext(Dispatchers.IO) {
+            val stored = container.preferenceRepository.readJson("display_auto_collapse_code_block_lines_v1")
+            collapseLines = (stored?.toIntOrNull() ?: 2).coerceIn(1, 999)
+            collapseLinesText = collapseLines.toString()
+            val indicator = ThinkingIndicatorSettings.fromPrefs { key ->
+                container.preferenceRepository.readJson(key)
+            }
+            indicatorFontSize = indicator.fontSizeSp
+            indicatorColorArgb = indicator.colorArgb
+            indicatorPhrases = indicator.phrases
         }
-        indicatorFontSize = indicator.fontSizeSp
-        indicatorColorArgb = indicator.colorArgb
-        indicatorPhrases = indicator.phrases
-    }
+}
     // 源码 L1903-1924 —— _commit：解析失败回落当前已存值，clamp 1-999。
     fun commitLines(text: String) {
         val parsed = text.toIntOrNull() ?: run { collapseLinesText = collapseLines.toString(); return }

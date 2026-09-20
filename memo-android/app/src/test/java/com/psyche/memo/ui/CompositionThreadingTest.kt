@@ -152,6 +152,100 @@ class CompositionThreadingTest {
         )
     }
 
+    /**
+     * 同一条约定在 **effect 体**上的守卫：`LaunchedEffect` / `DisposableEffect` 的 lambda
+     * 默认就跑在组合线程上（换线程只有靠自己写 `withContext(Dispatchers.IO)`），所以体里
+     * 出现「真的打库/读盘」的调用却没先切调度器，就等于组合期查库。
+     *
+     * 为什么单独补这一条：原来的守卫只扫 `remember {}`，于是设置域四个子页在
+     * `LaunchedEffect(Unit) { preferenceRepository.readJson(...) }` 里主线程读库，
+     * **门禁全绿、真机点进去卡一下**（用户 2026-09-20「很多界面点击都会加载卡一下」）。
+     * 偏好读取在 `remember` 里豁免过（进程内缓存），但冷启动后第一次未命中是真 SQL 往返，
+     * 在 effect 体里同样属主线程 I/O，所以这里纳入禁止项。
+     */
+    @Test
+    fun `no effect body touches the database without dispatchers IO`() {
+        val offenders = mutableListOf<String>()
+        uiDir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .sortedBy { it.invariantSeparatorsPath }
+            .forEach { file ->
+                val rel = file.relativeTo(uiDir).invariantSeparatorsPath
+                val text = blankComments(file.readText())
+                for (block in effectBlocks(text)) {
+                    val hit = EFFECT_FORBIDDEN.firstOrNull { block.text.contains(it) }
+                    val callAt = when {
+                        hit != null -> block.text.indexOf(hit)
+                        else -> constructThenCall.find(block.text)?.range?.first
+                    } ?: continue
+                    val wrapped = ioSwitch.find(block.text)
+                    if (wrapped != null && wrapped.range.first < callAt) continue
+                    val token = hit ?: "construct-then-call"
+                    if (exemptions.any { it.path == rel && it.token == token }) continue
+                    val line = block.line + block.text.substring(0, callAt).count { it == '\n' }
+                    offenders += "$rel:$line effect { …$token… } ← 主线程体里查库，缺 withContext(Dispatchers.IO)"
+                }
+            }
+
+        assertTrue(
+            "LaunchedEffect / DisposableEffect 体也在主线程上：查库/读文件要用 " +
+                "withContext(Dispatchers.IO) 包住（或用 rememberLoaded）。" +
+                "确实安全的写进 exemptions 并说明原因：\n" + offenders.joinToString("\n"),
+            offenders.isEmpty(),
+        )
+    }
+
+    /** effect 体专用的词表：偏好的冷读/写、整表读、裸 SQL、几个仓库的取数方法。 */
+    private val EFFECT_FORBIDDEN = listOf(
+        "preferenceRepository.readJson",
+        "preferenceRepository.writeJson",
+        ".getAll(",
+        ".rawQuery(",
+        ".execSQL(",
+        ".services(",
+        ".items(",
+        ".books(",
+        ".tags(",
+        "assistantStore",
+        "conversationDao",
+        "messageDao",
+    )
+
+    /** `withContext(Dispatchers.IO)`，带不带 `kotlinx.coroutines.` 限定名都算。 */
+    private val ioSwitch = Regex(
+        "withContext\\(\\s*(?:kotlinx\\.coroutines\\.)?Dispatchers\\.(?:IO|Default)",
+    )
+
+    private class EffectBlock(val line: Int, val text: String)
+
+    /** 扫 `LaunchedEffect(…) { … }` / `DisposableEffect(…) { … }` 的尾随 lambda 体。 */
+    private fun effectBlocks(source: String): List<EffectBlock> {
+        val out = mutableListOf<EffectBlock>()
+        var i = 0
+        while (i < source.length) {
+            val start = listOf("LaunchedEffect", "DisposableEffect")
+                .mapNotNull { name -> source.indexOf(name, i).takeIf { it >= 0 } }
+                .minOrNull() ?: break
+            val name = if (source.startsWith("LaunchedEffect", start)) "LaunchedEffect" else "DisposableEffect"
+            i = start + name.length
+            val before = source.getOrNull(start - 1)
+            if (before != null && (before.isLetterOrDigit() || before == '_' || before == '.')) continue
+            // 第一个 `(` 是 key 实参，第二个才是尾随 lambda：交给同一个解析器。
+            val paren = source.indexOf('(', i)
+            if (paren < 0) break
+            val afterArgs = matchingParen(source, paren) ?: break
+            val brace = trailingLambdaStart(source, afterArgs + 1) ?: { i = afterArgs + 1; null }()
+                ?: continue
+            val end = matchingBrace(source, brace) ?: break
+            out += EffectBlock(
+                line = source.substring(0, brace).count { it == '\n' } + 1,
+                text = source.substring(brace + 1, end),
+            )
+            i = end
+        }
+        return out
+    }
+
     private class RememberBlock(val line: Int, val text: String)
 
     /**

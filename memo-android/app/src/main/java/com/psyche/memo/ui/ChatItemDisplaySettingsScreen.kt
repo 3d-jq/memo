@@ -25,6 +25,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -144,10 +146,14 @@ fun ChatItemDisplaySettingsScreen(
         mutableStateOf(switchRows.associate { it.prefsKey to it.default })
     }
     LaunchedEffect(Unit) {
-        values = switchRows.associate {
-            it.prefsKey to (container.preferenceRepository.readJson(it.prefsKey)?.let { v -> v == "1" } ?: it.default)
+        // 组合线程不碰 SQLite：LaunchedEffect 体默认跑在主线程（PORTING §5.13）
+        // LaunchedEffect 体默认跑在组合线程上，里面的 readJson 是真会打 SQLite 的
+        withContext(Dispatchers.IO) {
+            values = switchRows.associate {
+                it.prefsKey to (container.preferenceRepository.readJson(it.prefsKey)?.let { v -> v == "1" } ?: it.default)
+            }
         }
-    }
+}
     fun writeBool(key: String, value: Boolean) {
         values = values + (key to value)
         container.preferenceRepository.writeJson(key, if (value) "1" else "0")

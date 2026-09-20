@@ -30,6 +30,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -112,46 +114,49 @@ fun AutoRetrySettingsScreen(
     var maxDelayText by remember { mutableStateOf("30000") }
 
     LaunchedEffect(Unit) {
-        val raw = container.preferenceRepository.readJson("auto_retry_options")
-        if (raw.isNullOrEmpty()) return@LaunchedEffect
-        runCatching {
-            val parsed = Json.parseToJsonElement(raw)
-            val obj = parsed as? kotlinx.serialization.json.JsonObject ?: return@LaunchedEffect
-            fun boolOf(k: String, d: Boolean) = obj[k]?.let {
-                (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
-            } ?: d
-            fun intOf(k: String, d: Int) = obj[k]?.let {
-                (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()
-            } ?: d
-            fun dblOf(k: String, d: Double) = obj[k]?.let {
-                (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
-            } ?: d
-            fun strList(k: String, d: List<String>) = obj[k]?.let { arr ->
-                (arr as? kotlinx.serialization.json.JsonArray)?.mapNotNull {
-                    (it as? kotlinx.serialization.json.JsonPrimitive)?.content
-                }?.filter { it.isNotEmpty() }
-            } ?: d
-            fun intList(k: String, d: List<String>) = obj[k]?.let { arr ->
-                (arr as? kotlinx.serialization.json.JsonArray)?.mapNotNull {
-                    (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()?.toString()
-                }?.distinct() ?: d
-            } ?: d
-            enabled = boolOf("enabled", true)
-            maxRetries = intOf("maxRetries", 3).coerceIn(0, 10)
-            initialDelayMs = intOf("initialDelayMs", 1000).coerceAtLeast(0)
-            multiplier = clampMultiplier(dblOf("multiplier", 2.0))
-            maxDelayMs = intOf("maxDelayMs", 30000).coerceAtLeast(0)
-            jitter = boolOf("jitter", true)
-            retryOnNetworkError = boolOf("retryOnNetworkError", true)
-            retryStatusCodes = intList("retryStatusCodes", defaultRetryStatusCodes).sorted()
-            retryKeywords = strList("retryKeywords", defaultRetryKeywords)
-            stopKeywords = strList("stopKeywords", defaultStopKeywords)
-            maxRetriesText = maxRetries.toString()
-            initialDelayText = initialDelayMs.toString()
-            multiplierText = formatMultiplier(multiplier)
-            maxDelayText = maxDelayMs.toString()
+        // LaunchedEffect 体默认跑在组合线程上，里面的 readJson 是真会打 SQLite 的
+        withContext(Dispatchers.IO) {
+            val raw = container.preferenceRepository.readJson("auto_retry_options")
+            if (raw.isNullOrEmpty()) return@withContext
+            runCatching {
+                val parsed = Json.parseToJsonElement(raw)
+                val obj = parsed as? kotlinx.serialization.json.JsonObject ?: return@withContext
+                fun boolOf(k: String, d: Boolean) = obj[k]?.let {
+                    (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
+                } ?: d
+                fun intOf(k: String, d: Int) = obj[k]?.let {
+                    (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()
+                } ?: d
+                fun dblOf(k: String, d: Double) = obj[k]?.let {
+                    (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                } ?: d
+                fun strList(k: String, d: List<String>) = obj[k]?.let { arr ->
+                    (arr as? kotlinx.serialization.json.JsonArray)?.mapNotNull {
+                        (it as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    }?.filter { it.isNotEmpty() }
+                } ?: d
+                fun intList(k: String, d: List<String>) = obj[k]?.let { arr ->
+                    (arr as? kotlinx.serialization.json.JsonArray)?.mapNotNull {
+                        (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()?.toString()
+                    }?.distinct() ?: d
+                } ?: d
+                enabled = boolOf("enabled", true)
+                maxRetries = intOf("maxRetries", 3).coerceIn(0, 10)
+                initialDelayMs = intOf("initialDelayMs", 1000).coerceAtLeast(0)
+                multiplier = clampMultiplier(dblOf("multiplier", 2.0))
+                maxDelayMs = intOf("maxDelayMs", 30000).coerceAtLeast(0)
+                jitter = boolOf("jitter", true)
+                retryOnNetworkError = boolOf("retryOnNetworkError", true)
+                retryStatusCodes = intList("retryStatusCodes", defaultRetryStatusCodes).sorted()
+                retryKeywords = strList("retryKeywords", defaultRetryKeywords)
+                stopKeywords = strList("stopKeywords", defaultStopKeywords)
+                maxRetriesText = maxRetries.toString()
+                initialDelayText = initialDelayMs.toString()
+                multiplierText = formatMultiplier(multiplier)
+                maxDelayText = maxDelayMs.toString()
+            }
         }
-    }
+}
 
     fun save() {
         // buildJsonObject guarantees valid JSON — no string concatenation.
