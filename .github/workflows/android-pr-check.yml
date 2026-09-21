@@ -36,10 +36,16 @@ jobs:
         run: ./gradlew --console=plain --continue lintDebug
 
       - name: Unit tests (all modules)
-        run: ./gradlew --console=plain --continue testDebugUnitTest
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew --console=plain --continue testDebugUnitTest 2>&1 | tee /tmp/unit-tests.log
+
       - name: Surface failed tests as annotations
         if: failure()
-        run: python3 tools/ci_test_failures.py .
+        run: |
+          python3 tools/ci_test_failures.py .
+          python3 tools/ci_log_exceptions.py /tmp/unit-tests.log
 
       - name: Assemble debug APK
         run: ./gradlew --console=plain :app:assembleDebug
