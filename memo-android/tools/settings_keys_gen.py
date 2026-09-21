@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import argparse
 import os
+from upstream_root import upstream_root
 import re
 import sys
 
@@ -36,7 +37,7 @@ def extract_string_set(text, name):
 def main():
     ap = argparse.ArgumentParser()
     here = os.path.dirname(os.path.abspath(__file__))
-    repo = os.path.normpath(os.path.join(here, '..', '..'))
+    repo = upstream_root(here)
     ap.add_argument('--router', default=os.path.join(
         repo, 'lib', 'core', 'database', 'business_settings_router.dart'))
     ap.add_argument('--entities', default=os.path.join(

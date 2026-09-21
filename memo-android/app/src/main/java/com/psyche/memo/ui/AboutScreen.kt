@@ -48,14 +48,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Code
-import com.composables.icons.lucide.Earth
-import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.FolderOpen
-import com.composables.icons.lucide.Github
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Phone
 import com.composables.icons.lucide.Sparkles
@@ -198,57 +194,6 @@ fun AboutScreen(
                         detail = stringResource(UiR.string.about_page_platform_android),
                         showChevron = false,
                         onTap = null,
-                    )
-                }
-            }
-            item { Spacer(Modifier.height(12.dp)) }
-            item { SectionHeader(stringResource(UiR.string.about_page_section_community)) }
-            item {
-                SectionCard {
-                    // L505-553: website/github/license/community links.
-                    AboutNavRow(
-                        icon = Lucide.Earth,
-                        label = stringResource(UiR.string.about_page_website),
-                        detail = "",
-                        showChevron = true,
-                        onTap = {
-                            context.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    "https://kelivo.psycheas.top/".toUri(),
-                                ),
-                            )
-                        },
-                    )
-                    DividerRow()
-                    AboutNavRow(
-                        icon = Lucide.Github,
-                        label = stringResource(UiR.string.about_page_github),
-                        detail = "",
-                        showChevron = true,
-                        onTap = {
-                            context.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    "https://github.com/Chevey339/kelivo".toUri(),
-                                ),
-                            )
-                        },
-                    )
-                    DividerRow()
-                    AboutNavRow(
-                        icon = Lucide.FileText,
-                        label = stringResource(UiR.string.about_page_license),
-                        detail = "",
-                        showChevron = true,
-                        onTap = {
-                            context.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    "https://github.com/Chevey339/kelivo/blob/master/LICENSE".toUri(),
-                                ),
-                            )
-                        },
                     )
                 }
             }

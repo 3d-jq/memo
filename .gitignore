@@ -76,8 +76,8 @@ memo-android/keystore.properties
 memo-android/keystore/
 memo-android/**/*.apk
 
-# workbuddy 运行时数据（并行模型工作区，不入库）
-.workbuddy/*.db
-.workbuddy/*.db-journal
-.workbuddy/*.png
-.workbuddy/shots/
+# 开源准备（2026-09-21）：AI 会话笔记与门禁临时输出一律不入库，只留本机
+/.workbuddy/
+memo-android/tools/qg15_errors*.txt
+/android/build/
+memo-android/**/.cxx/

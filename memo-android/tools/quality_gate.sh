@@ -12,16 +12,18 @@
 #   5. generated resources match their generators (arb/settings-keys/palettes/drift schema)
 #
 # Env notes: system JAVA_HOME points at jdk-13 (breaks AGP) and the default
-# GRADLE_USER_HOME sits under a Chinese username (`C:\Users\邓嘉权\.gradle`),
+# GRADLE_USER_HOME may sit under a non-ASCII user home (e.g. `C:\Users\<你的名字>\.gradle`),
 # which makes Gradle's `@argfile` worker classpath unreadable on CP936 JVMs.
 # This script pins both.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# Pinned regardless of the inherited (broken jdk-13) environment value.
-export JAVA_HOME="/c/Program Files/Java/jdk-21.0.10"
-export GRADLE_USER_HOME="${GRADLE_USER_HOME:-D:/DevCache/.gradle}"
+# Machine-specific pins (a JDK 21 path, a Gradle cache outside the home dir) live in
+# tools/quality_gate.local.sh, which is git-ignored. Without it the inherited
+# environment is used as-is — CI and other machines provide their own.
+here="$(cd "$(dirname "$0")" && pwd)"
+[ -f "$here/quality_gate.local.sh" ] && . "$here/quality_gate.local.sh"
 
 echo "==> Memo quality gate"
 echo "    JAVA_HOME=$JAVA_HOME"

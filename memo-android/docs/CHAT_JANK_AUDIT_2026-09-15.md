@@ -4,7 +4,7 @@
 
 **对比对象**
 - **原版（Flutter）**：仓库内 `lib/`（`features/home/widgets/message_list_view.dart`、`features/chat/widgets/chat_message_widget.dart`、`features/home/controllers/scroll_controller.dart`）
-- **RikkaHub**：`D:\program\.rikkahub-ref`（`ui/pages/chat/ChatList.kt`、`ui/pages/chat/ChatPage.kt`、`ui/components/message/ChatMessage.kt`、`ui/components/richtext/Markdown.kt`）
+- **RikkaHub**：`<RikkaHub 本地克隆>`（`ui/pages/chat/ChatList.kt`、`ui/pages/chat/ChatPage.kt`、`ui/components/message/ChatMessage.kt`、`ui/components/richtext/Markdown.kt`）
 - **我们（Memo/memo-android）**：`app/src/main/java/com/psyche/memo/...`
 
 ---

@@ -1,13 +1,13 @@
 # Memo Android 移植规格文档（PORTING.md）
 
 > **本文件是移植工程的唯一事实索引。每轮开发开工先读、收工必须更新（进度表 + 新坑）。**
-> 目标：Flutter 原项目（`D:\program\memo`，lib/）→ Android 原生（`D:\program\memo\memo-android`，Kotlin + Jetpack Compose），**严格 1:1**，禁止自创 UI/文案/图标/布局。
+> 目标：Flutter 原项目（`<本仓库>`，lib/）→ Android 原生（`memo-android/`，Kotlin + Jetpack Compose），**严格 1:1**，禁止自创 UI/文案/图标/布局。
 
 ## 0. 构建与门禁（全部命令行，无 Android Studio）
 
 ```bash
 cd /d/program/memo/memo-android
-JAVA_HOME="C:/Program Files/Java/jdk-21.0.10" GRADLE_USER_HOME="D:/DevCache/.gradle" ./gradlew :app:compileDebugKotlin   # 快速编译
+JAVA_HOME="<JDK 21 路径>" GRADLE_USER_HOME="<Gradle 缓存路径>" ./gradlew :app:compileDebugKotlin   # 快速编译
 ... ./gradlew :app:assembleDebug        # 出包（装机必须！只 compile 装的还是旧包）
 ... ./gradlew :core:data:testDebugUnitTest --tests "..."  # 单测
 bash tools/quality_gate.sh              # 全量门禁（compile+test+lint），提交前必跑
@@ -19,8 +19,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # 装机（包名 com
 `core/workspace/build.gradle.kts` 的 `ndkVersion`，CI 里由 `sdkmanager` 装同版本）。
 AGP 按默认版本（27.0.12077973）找不到会报 `[CXX1101] NDK at … did not have a
 source.properties file` —— 报这个就是 NDK 缺失/装坏，不是代码问题。
-本机可用 NDK 在 `D:\android_sdk\ndk\28.2.13676358`（`D:\Android\Sdk\ndk\27.*` 是只留了
-`.installer` 的空壳目录），已用目录联接挂到 `D:\Android\Sdk\ndk\28.2.13676358`。
+本机 SDK 里 `ndk/27.*` 那批是只留了 `.installer` 的空壳目录，可用的 28.2.13676358 在另一个
+SDK 根下，已用目录联接（junction）挂到 AGP 期望的位置。
 
 ## 1. 架构映射
 
@@ -327,7 +327,7 @@ source.properties file` —— 报这个就是 NDK 缺失/装坏，不是代码�
 - **剩余子块**（编号照 §5.10.4 表，**只剩两块**）：
   7. **前向兼容闸门（完整版）**（`minimumReadableFormatVersion` / `minimumReadableSchemaVersion` + 同意对话框；最小版已随子块 1 落地）
   8. **Cherry Studio / Chatbox 导入**（纯 importer；设置里那两行现在是壳）
-- **依赖 RikkaHub 参考**：`D:\program\.rikkahub-ref` 的 `data-sync` 模块（WebDAV/S3/备份语义）+ `app` 侧调度，按工作约定"功能/逻辑直接搬 RikkaHub"。
+- **依赖 RikkaHub 参考**：`<RikkaHub 本地克隆>` 的 `data-sync` 模块（WebDAV/S3/备份语义）+ `app` 侧调度，按工作约定"功能/逻辑直接搬 RikkaHub"。
 
 ### P1 — 小项（各 < 200 行，可一并做）
 - **保持屏幕常亮**：**不移植**（2026-09-09 用户明确"这个我不要"，已否决）。Flutter `core/services/screen_wakelock.dart`（引用计数 + 10s 延迟释放 + `reassert()` 恢复重开；设置键 `display_keep_screen_on_during_generation_v1`）→ Android 不做，设置页也不加行。若日后要恢复，落地方式为 `ChatViewModel` 生成起/止 acquire/release + `Activity.addFlags(FLAG_KEEP_SCREEN_ON)`。
@@ -598,7 +598,7 @@ Flutter `BusinessRestoreService.exportSettings()` → `BusinessSettingsRouter.ex
 
 ### 已知品牌残留（**用户 2026-09-11 决定：他自己后续替换，暂不处理**）
 
-- `AboutScreen.kt` 的「社区与链接」三行仍指向上游：`https://kelivo.psycheas.top/`、`https://github.com/Chevey339/kelivo`、`.../blob/master/LICENSE`。与 AGENTS.md「不得携带 kelivo 链接/端点」冲突；**用户明确「这个我后面会改成自己的，现在先不着急」** ⇒ 不要代改、也不要再当作待办追问，等他给新 URL（或明确说删行）再动。
+- ~~`AboutScreen.kt` 的「社区与链接」三行指向上游~~ **已于 2026-09-21 开源准备时整组删除**（用户决定「应用内链接换掉」，且当时还没有 Memo 自己的仓库地址）。上游署名改由公开仓的 `README.md` + `NOTICE.md` 承担；要恢复一行「源码仓库」需要用户给 URL。见 §5.36。
 - 内部标识符 `KelivoOptions`（搜索服务编辑器里的上游 type key，非用户可见）——低优先清理，改动会牵到多文件与测试。
 
 ### ⏸ `docs/UI_AUDIT_2026-09-12.md` 是**用户自己**的 UI/UX 统一审计报告（先不做）
@@ -1213,7 +1213,7 @@ SVG 既是图也是文档 —— 能塞脚本、外部引用、`<foreignObject>`
 
 ## 5.26 圆角与组件风格采纳 Apple 参考系（2026-09-19）
 
-用户指定：圆角与组件设计风格采自 `D:\program\Apple Copy`（Pinguo/Pinguo Design System，Apple HIG 风），
+用户指定：圆角与组件设计风格采自 `<设计系统参考副本>`（Pinguo/Pinguo Design System，Apple HIG 风），
 **配色不变**（仍走 Memo 主题语义色）。
 
 - **圆角 token `ui/MemoRadius.kt`**：CARD=20dp（全局圆角 19.2px ≈ 20dp：卡片/sheet/对话框/输入框）、
@@ -1616,7 +1616,7 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
   **空参数对象**、描述用上游 `_currentLocationDefinition` 那段英文、**不进
   `requiresUserApproval`**（上游也没有）。图标 `Lucide.MapPin`、三语标题/副标题都是原样
   已经在的，缺的只是 `isAvailableOnThisPlatform` 开闸 + `localDefinition` 一支 + 执行器。
-- 运行时策略照用户真机用过的参考实现（`D:\program\personal_agent_app` 的 `LocationTool`）：
+- 运行时策略照用户真机用过的参考实现（`<本地参考实现>` 的 `LocationTool`）：
   权限 → 定位服务开关 → **10 分钟内的 last-known 秒回** → 否则实时定位 10 秒超时 →
   超时回退过期缓存 → 全拿不到才报错；逆地理用平台 `Geocoder`（零 API key、零网络），
   **拿不到地址只给坐标不判失败**（国产 ROM 无 Google 服务时常空）。输出键照上游口径：
@@ -1649,3 +1649,22 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 （可用⇒必递、递了⇒必有执行器与真定义），并**已证伪**：把 `CURRENT_LOCATION` 从递给模型的
 名单里摘掉，两条断言立刻变红。教训与 §5.29 那条同类 —— 「接线」不是改一个开关就完，
 要顺着请求字节走到底：这次该在装机前自己问一句「tools 数组里到底有没有它」。
+
+## 5.36 开源准备：公开仓只放 memo-android，生成器改为可读仓内 upstream（2026-09-21，用户「我可能要开源 把准备工作做好吧」）
+
+决定：公开仓 = 本目录（`memo-android/`）单独成仓，干净初始提交，不带 Flutter 上游源码与 442 条历史。
+
+- **许可证**：根 `LICENSE` 是上游 kelivo 的 AGPL-3.0 正文，衍生作品只能沿用 ⇒ 公开仓补 `LICENSE` +
+  `NOTICE.md`（点名 kelivo 与 RikkaHub 两个上游及其许可证）。应用内不再挂上游链接（见上）。
+- **生成器的输入布局**：四个生成器原先一律读 `../../lib/…`、`../../drift_schemas/…`，本目录单独成仓后
+  这些路径在仓外 ⇒ 门禁第 5 步必崩。改成 `tools/upstream_root.py` 统一解析：**仓内有 `upstream/` 就用它，
+  否则回退外层仓**。公开仓把被读的那几个 Dart/JSON 输入原样放进 `upstream/`（AGPL 再分发，署名在 NOTICE），
+  开发仓行为不变。注意：SQL 头注释会按布局写成 `upstream/...` 或 `../drift_schemas/...`，两边各自自洽。
+- **机器相关路径出库**：`tools/quality_gate.sh` 原先硬钉本机 `JAVA_HOME` 与 `GRADLE_USER_HOME`（含中文
+  用户名与本机 Gradle 缓存目录）。改成 source 不入库的 `tools/quality_gate.local.sh`，本机行为不变、仓里干净。
+- **出库的私密/临时内容**：`.workbuddy/memory/*.md`（AI 会话笔记，含本机路径）与 `tools/qg15_errors*.txt`、
+  被误跟踪的 `android/build/reports/problems/problems-report.html` 全部 `git rm --cached` + 写进 `.gitignore`；
+  文档里指向上游 RikkaHub 本地克隆、设计系统参考副本、本地参考实现等的**本机绝对路径**一律改成
+  中性占位符。
+- **门禁不放宽**：没有为了独立成仓而跳过任何一步；CI 只带 `android-pr-check.yml`，并把 `memo-android/`
+  前缀去掉（新仓它就是根）。

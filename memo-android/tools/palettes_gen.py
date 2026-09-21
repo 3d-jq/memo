@@ -20,11 +20,12 @@ Usage: python tools/palettes_gen.py
 from __future__ import print_function
 
 import os
+from upstream_root import upstream_root
 import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PALETTES_DART = os.path.normpath(os.path.join(HERE, '..', '..', 'lib', 'theme', 'palettes.dart'))
+PALETTES_DART = os.path.join(upstream_root(HERE), 'lib', 'theme', 'palettes.dart')
 OUT_KT = os.path.normpath(os.path.join(HERE, '..', 'core', 'ui', 'src', 'main', 'java',
                                         'com', 'psyche', 'memo', 'ui', 'theme', 'Palettes.kt'))
 

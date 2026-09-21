@@ -19,3 +19,12 @@ keystore/
 .idea/
 *.iml
 .DS_Store
+
+# 本机门禁环境（JDK / Gradle 缓存路径），不入库
+tools/quality_gate.local.sh
+
+# 本地跑批产物
+*.log
+hs_err_pid*
+__pycache__/
+tools/qg*_errors*.txt

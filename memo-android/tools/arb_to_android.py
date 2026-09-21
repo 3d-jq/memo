@@ -30,11 +30,12 @@ from __future__ import print_function
 
 import json
 import os
+from upstream_root import upstream_root
 import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-L10N = os.path.normpath(os.path.join(HERE, '..', '..', 'lib', 'l10n'))
+L10N = os.path.join(upstream_root(HERE), 'lib', 'l10n')
 RES = os.path.normpath(os.path.join(HERE, '..', 'core', 'ui', 'src', 'main', 'res'))
 
 LOCALES = [
