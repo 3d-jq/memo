@@ -1668,3 +1668,26 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
   中性占位符。
 - **门禁不放宽**：没有为了独立成仓而跳过任何一步；CI 只带 `android-pr-check.yml`，并把 `memo-android/`
   前缀去掉（新仓它就是根）。
+
+## 5.37 应用更新：端点换 GitHub Releases，位置从抽屉挪进关于页（2026-09-21，用户「更新样式和位置和原项目要不一样，原项目是在侧边栏显示，这个一点都不好」）
+
+上游 `update_provider.dart:85` 拉 `https://kelivo.psycheas.top/update.json`，横幅画在抽屉的
+会话列表里（`side_drawer.dart:4005` 的 `includeUpdateBanner`，三个调用点 2714/2732/2749）。
+两处都不沿用：
+
+- **端点**：`UpdateService.RELEASE_URL` = 本项目自己的 `api.github.com/repos/3d-jq/memo/releases/latest`。
+  上游那条 URL 是上游端点，按品牌红线不能进包；GitHub Releases 也不需要我们自己架服务器，
+  发版打 tag 即生效。字段映射：`tag_name`（去 `v` 前缀）→ 版本、`body` → 说明、
+  `published_at` → 时间、`.apk` 资产 → 直链，没有资产就退回 release 页面。
+  上游的 `build` 与 `mandatory` 在 GitHub 上没有对应概念，**去掉**（`UpdateInfo` 少两个字段）。
+- **比对语义照上游**：`UpdateFeed.isRemoteNewer` 只比前三段数字、缺段按 0 补、忽略 build
+  （`UpdateFeedTest` 钉住，含 `"1.0.0"` 对 `"1"` 相等这条反直觉的）。
+- **位置**：抽屉里一颗都不放。改成关于页「版本」卡片里的三行 —— 状态行（发现新版本／已是最新／
+  检查中／失败原因）、发现新版时才出现的「去下载」行（跳浏览器）、常驻的「检查更新」手动重查行。
+- **时机也照上游不同**：上游在启动时查一次（`main.dart:775`），我们**进关于页才查**，
+  不做任何主动提示。`display_show_app_updates_v1` 因此改成「关于页要不要出现这几行」的开关
+  （缺省仍为开，`readJson(...) != "0"`）。这是刻意的：后台流量不该在启动路径上，
+  而用户要求的就是"别主动烦我"。
+- 新增 5 条 ARB 文案（`aboutPageUpdate*`，en/zh/zh_Hant 三份），复用上游现成的
+  `sideDrawerUpdateTitle` 与 `sideDrawerLinkCopied` 语义（后者暂未用到，留着）。
+
