@@ -15,8 +15,8 @@ android {
         applicationId = "com.psyche.memo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2073
-        versionName = "1.2.5"
+        versionCode = 1
+        versionName = "1.0.0"
 
         ndk {
             // 只有这两个 ABI 有 proot 二进制，工作区才有意义；顺带把 termux AAR 里

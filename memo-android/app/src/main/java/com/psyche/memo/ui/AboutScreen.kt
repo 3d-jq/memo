@@ -48,10 +48,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.FolderOpen
+import com.composables.icons.lucide.Github
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Phone
 import com.composables.icons.lucide.Sparkles
@@ -194,6 +196,28 @@ fun AboutScreen(
                         detail = stringResource(UiR.string.about_page_platform_android),
                         showChevron = false,
                         onTap = null,
+                    )
+                }
+            }
+            item { Spacer(Modifier.height(12.dp)) }
+            item { SectionHeader(stringResource(UiR.string.about_page_section_community)) }
+            item {
+                SectionCard {
+                    // Memo 自己的源码仓。上游 kelivo / RikkaHub 的署名放在仓库的 README 与
+                    // NOTICE 里，不占应用内入口。
+                    AboutNavRow(
+                        icon = Lucide.Github,
+                        label = stringResource(UiR.string.about_page_github),
+                        detail = "3d-jq/memo",
+                        showChevron = true,
+                        onTap = {
+                            context.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    "https://github.com/3d-jq/memo".toUri(),
+                                ),
+                            )
+                        },
                     )
                 }
             }

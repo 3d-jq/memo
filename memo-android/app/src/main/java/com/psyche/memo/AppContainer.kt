@@ -434,7 +434,7 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         }
     }
 
-    /** `"1.2.5+2073"` — versionName + versionCode, matching Flutter's appVersion. */
+    /** `"1.0.0+1"` — versionName + versionCode, matching Flutter's appVersion. */
     private fun appVersionString(): String = runCatching {
         val info = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
         val versionName = info.versionName ?: "0"
