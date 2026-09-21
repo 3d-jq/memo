@@ -1779,11 +1779,12 @@ class ChatViewModel(
                     model = selectedModelId.value,
                 )
                 // 提供给模型的工具集（offeredTools）：本地工具里 Android 有执行器的
-                // 那一组（时间/剪贴板/TTS/计算/屏幕时间/日历读写 + 自研 render_visual、
+                // 那一组（时间/剪贴板/TTS/计算/屏幕时间/日历读写/定位 + 自研 render_visual、
                 // render_mermaid）、ask_user 走交互服务、search_web 走已移植搜索引擎，
                 // 再加记忆 / 技能 / 工作区 / 生成图片·视频 / 已连接 MCP 服务器的工具。
-                // 与上游的差集只有平台性的：iOS-only 本地工具（定位/天气/健康/提醒）
-                // 按 isAvailableOnThisPlatform 剔除，STDIO MCP 是桌面专属。
+                // 与上游的差集只有平台性的：iOS-only 本地工具（天气/健康/提醒）按
+                // isAvailableOnThisPlatform 剔除（定位是本工程自写的安卓执行器，已开闸），
+                // STDIO MCP 是桌面专属。名单见 BuiltInToolCatalog.offeredLocalToolNames。
                 // （tools 在压缩阈值估算前就已组装，见上。）
                 runGenerationLoop(
                     assistantId = assistantId,
@@ -2486,20 +2487,8 @@ class ChatViewModel(
      */
     private fun offeredTools(): List<LlmToolSpec> {
         val assistant = container.currentAssistant() ?: return emptyList()
-        val names = com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames
-        val offered = setOf(
-            names.TIME_INFO,
-            names.ASK_USER,
-            names.CALENDAR_CREATE,
-            names.CALENDAR_QUERY,
-            names.CLIPBOARD,
-            names.TEXT_TO_SPEECH,
-            names.CALCULATE,
-            names.SCREEN_TIME,
-            // 可视化绘图 + Mermaid 图（自研）：同样是「本地工具」，按助手的 localToolIds 开关。
-            names.RENDER_VISUAL,
-            names.RENDER_MERMAID,
-        )
+        // 从执行器清单推导，不再手抄第二份名单（漏一次就静默失效，见 offeredLocalToolNames 注释）。
+        val offered = com.psyche.memo.ui.BuiltInToolCatalog.offeredLocalToolNames()
         val out = mutableListOf<LlmToolSpec>()
         // Web search tool (tool_handler_service.dart L241-245): offered
         // whenever the assistant's search switch is on.

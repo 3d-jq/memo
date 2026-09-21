@@ -1638,3 +1638,14 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 - 单测：`LocationToolTest`（新鲜度 10 分钟边界、provider 取舍顺序、结果/错误 JSON 形状、
   地址片段拼装与空段）、`LocationPermissionServiceTest`（pending 发布/结清、超时按未授权、
   resolve 只结当前等待者、无等待者时忽略）。真定位与 Geocoder 只能真机验。
+**装机后返修（同日，用户「为什么大模型说没有呀 你接线了没有呀」）—— 我确实漏接了一道闸**：
+本地工具有**三道各自独立维护的闸**，我第一次只开了两道：
+① `BuiltInToolCatalog.isAvailableOnThisPlatform`（平台能力）、② `LocalToolExecutors.EXECUTABLE`
+（有没有人执行）、③ `ChatViewModel.offeredTools()` 里**手抄的** `setOf(...)`（递不递给模型）。
+漏了 ③ ⇒ 工具定义压根没进 `tools` 数组，模型答「我没有这个工具」，而编译、门禁、单测全绿
+（没有任何测试断言过"开了平台闸的工具必须递给模型"）。修法是消灭第三份名单：
+`BuiltInToolCatalog.offeredLocalToolNames()` 从 `EXECUTABLE` 推导（+ `TIME_INFO`/`ASK_USER`
+两个在 ToolHandler 里自理的），`offeredTools()` 用它。守卫 `LocalToolOfferingTest` 双向钉
+（可用⇒必递、递了⇒必有执行器与真定义），并**已证伪**：把 `CURRENT_LOCATION` 从递给模型的
+名单里摘掉，两条断言立刻变红。教训与 §5.29 那条同类 —— 「接线」不是改一个开关就完，
+要顺着请求字节走到底：这次该在装机前自己问一句「tools 数组里到底有没有它」。

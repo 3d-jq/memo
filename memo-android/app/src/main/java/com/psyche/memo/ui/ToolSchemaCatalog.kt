@@ -110,6 +110,22 @@ object BuiltInToolCatalog {
         else -> true
     }
 
+    /**
+     * 递给模型的本地工具名 —— **只有安卓侧真有执行器的那批**（`TIME_INFO` 与 `ASK_USER`
+     * 在 ToolHandler 里各自特殊处理，没有通用执行器）。
+     *
+     * 为什么从 [com.psyche.memo.provider.LocalToolExecutors.EXECUTABLE] 推导而不是另抄一份
+     * 名单：`ChatViewModel.offeredTools()` 以前自己写了一个 `setOf(...)`，和
+     * [isAvailableOnThisPlatform]、`EXECUTABLE` 是三份手维护的清单 —— 加定位工具时我只开了
+     * 后两道，第一道没改，工具就被静默滤掉、模型答「我没有这个工具」（`LocalToolOfferingTest`
+     * 现在钉住三者的一致性）。
+     */
+    fun offeredLocalToolNames(): Set<String> =
+        com.psyche.memo.provider.LocalToolExecutors.EXECUTABLE + setOf(
+            LocalToolNames.TIME_INFO,
+            LocalToolNames.ASK_USER,
+        )
+
     /** built_in_tool_catalog.dart entries(lang) — the legacy-memory variant is not ported. */
     fun entries(lang: MemoryPromptLang): List<BuiltInToolCatalogEntry> {
         val out = mutableListOf<BuiltInToolCatalogEntry>()
