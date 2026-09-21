@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  必须覆盖整个私有目录，不能只列子目录：Memo 写出来的文件散落在 upload/、images/、
+  videos/、tool_images/、logs/、workspaces/ 等一堆目录里，逐个声明漏一个，就会在分享或
+  打开文件时由 FileProvider.getUriForFile 抛
+  `IllegalArgumentException: Failed to find configured root that contains …` 并直接崩溃
+  （2026-09-21 对话里点生成的视频就是这么崩的）。
+  provider 是 exported=false + grantUriPermissions=true，URI 只对显式授权的接收方有效，
+  所以声明范围放宽不存在对外暴露。FileProviderPathsTest 钉住这两条。
+-->
 <paths>
-    <files-path name="upload" path="upload/" />
-    <files-path name="images" path="images/" />
+    <files-path name="files" path="." />
     <cache-path name="cache" path="." />
 </paths>

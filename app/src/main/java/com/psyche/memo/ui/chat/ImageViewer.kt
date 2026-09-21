@@ -143,7 +143,11 @@ fun MessageAttachmentPreview(
                 } else {
                     ImageAttachmentTile(part = part, viewable = viewable, onOpenViewer = onOpenViewer)
                 }
-                is FilePart -> MessageDocCard(part)
+                is FilePart -> if (part.mime?.startsWith("video/") == true) {
+                    MessageVideoCard(part)
+                } else {
+                    MessageDocCard(part)
+                }
                 else -> Unit
             }
         }
