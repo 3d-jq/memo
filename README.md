@@ -118,12 +118,6 @@ CI（`.github/workflows/android-pr-check.yml`）执行同样的检查，不放�
 
 `upstream/` 只是生成器的输入，仓库里没有任何东西由 Dart 编译。
 
-## 移植文档
-
-[`docs/PORTING.md`](docs/PORTING.md) 是这个项目的事实索引：逐屏记录 Kotlin 侧的实现
-对应哪个 Dart 文件哪几行，以及**每一处有意偏离上游的决定**（含为什么偏离、被用户实测
-否掉过几版、怎么防再犯）。想接手或 fork，先读它。
-
 ## 许可证
 
 AGPL-3.0，见 [`LICENSE`](LICENSE)。衍生作品必须同样以 AGPL-3.0 开源并提供源码。
