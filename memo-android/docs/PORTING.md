@@ -1707,3 +1707,32 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 - **关于页更新行合并**（用户 2026-09-21「为什么做两个」）：状态行 + 「去下载」行合成一行 —— 没新版时点它检查、有新版时点它下载，状态写右侧 detail，删除独立的「检查更新」行。
 
 验证：`:core:llm:testDebugUnitTest`（187 例）+ `:app:testDebugUnitTest`（1390 例）全绿；中途踩一次 Windows 文件锁（`binary/output.bin` 被 gradle daemon 占用 → `gradlew --stop` 后重跑即过）。
+
+## 5.39 视频产物卡 + 删掉工作区「常用环境」+ FileProvider 路径声明（2026-09-21，用户「这个生成的视频点击 app 会直接闪退，还有这个视频在对话里面的显示不好看」「工作区常用环境这个可以去掉了」）
+
+**① 点击视频闪退 —— FileProvider 没声明那个目录。** 崩溃栈：
+`IllegalArgumentException: Failed to find configured root that contains
+/data/data/com.psyche.memo/files/videos/vid_….mp4`，由 `FileProvider.getUriForFile` 抛出，
+而且抛在触摸分发链上（`ViewGroup.dispatchTouchEvent` → … → `FileProvider.d`），所以是崩溃不是提示。
+当时 `res/xml/file_paths.xml` 只声明了 `upload/`、`images/`、`cache/` —— 而 Memo 自己写出来的
+文件散落在 `videos/`、`tool_images/`、`logs/`、`workspaces/` 等一堆目录里，**逐个声明的写法注定漏**。
+改成 `files-path path="."` + `cache-path path="."`（覆盖整个私有目录）；provider 是
+`exported=false` + `grantUriPermissions=true`，URI 只对显式授权的接收方有效，不存在对外暴露。
+守卫 `FileProviderPathsTest`（先证伪：改回窄写法它会红）。上游 Flutter 侧没有 FileProvider
+（没有 file_paths.xml、代码里也不用），所以这条没有 1:1 参照，是安卓侧自定的。
+
+**② 视频改按视频的形状渲染**（`ui/chat/MessageVideoCard.kt`）：原先 `mime` 为 `video/*` 的
+`FilePart` 也走 `MessageDocCard`（文件图标 + 文件名），生成出来的东西看着像附件不像作品
+（用户原话「显示不好看」）。现在：首帧缩略图（`MediaMetadataRetriever`，走 `rememberLoaded`
+在 IO 线程解码 —— 组合期不碰文件是硬规则，`CompositionThreadingTest` 守着）+ 中间半透明播放
+角标 + 右下角时长（`formatVideoDuration`，`VideoDurationFormatTest` 四条）+ 按真实分辨率的
+宽高比（钳在 0.6–2.2）。**点击行为不变**：仍交给系统播放器（就是 ① 修好的那条路）。
+当时给用户的三个选项是「缩略图+应用内播放 / 缩略图+系统播放器 / 引 media3」，用户选了缩略图卡。
+
+**③ 工作区「常用环境」整块删除**（用户「让大模型自己按需下载就行了，我们不用提供这个接口」）：
+删掉详情页的三条 apt 预设卡与软件源选择器、`provider/workspace/WorkspaceEnvironments.kt`
+（命令拼装 + `dpkg-query` 探测）、`WorkspaceEnvironmentsTest`、以及 27×3 条 ARB 文案
+（三份语言，字符串数 2955 → 2928）。**这是删掉本工程 2026-09-14 自己加的东西**（当时用户
+问「这个沙箱可以让用户选择下载 node gitbash 这些常用的环境吗？」），现在改主意了：模型要什么
+自己在交互式终端里 `apt-get`。**别按 §5.11 那条旧记录把它加回来。**
+
