@@ -1,7 +1,6 @@
 package com.psyche.memo.ui
 
 import androidx.compose.runtime.rememberCoroutineScope
-import com.composables.icons.lucide.BadgeInfo
 import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.RefreshCw
 import com.psyche.memo.update.UpdateService
@@ -235,47 +234,38 @@ fun AboutScreen(
                         val outcome = updateOutcome
                         val release = (outcome as? UpdateService.Outcome.Available)?.info
                         DividerRow()
+                        // 只留一行（用户 2026-09-21「为什么做两个」）：没新版时点它检查，
+                        // 有新版时点它去下载，状态写在右侧 detail 上。
                         AboutNavRow(
-                            icon = Lucide.BadgeInfo,
-                            label = when {
-                                updateChecking && release == null ->
-                                    stringResource(UiR.string.about_page_update_checking)
-                                release != null ->
-                                    stringResource(UiR.string.side_drawer_update_title, release.version)
+                            icon = if (release != null) Lucide.Download else Lucide.RefreshCw,
+                            label = if (release != null) {
+                                stringResource(UiR.string.about_page_update_download) + " " + release.version
+                            } else {
+                                stringResource(UiR.string.about_page_update_check)
+                            },
+                            detail = when {
+                                updateChecking -> stringResource(UiR.string.about_page_update_checking)
+                                release != null -> release.notes.trim()
+                                    .lineSequence().filter { it.isNotBlank() }.joinToString(" ").take(60)
                                 outcome is UpdateService.Outcome.UpToDate ->
                                     stringResource(UiR.string.about_page_update_up_to_date)
                                 outcome is UpdateService.Outcome.Failed ->
-                                    stringResource(UiR.string.about_page_update_failed) + "：" + outcome.message
-                                else -> stringResource(UiR.string.about_page_update_check)
+                                    stringResource(UiR.string.about_page_update_failed) +
+                                        "：" + outcome.message.take(40)
+                                else -> "v" + version
                             },
-                            detail = release?.notes?.trim()?.replace('\r', '\n')
-                                ?.lineSequence()?.filter { it.isNotBlank() }?.joinToString(" ")?.take(160).orEmpty(),
-                            showChevron = false,
-                            onTap = null,
-                        )
-                        if (release != null) {
-                            DividerRow()
-                            AboutNavRow(
-                                icon = Lucide.Download,
-                                label = stringResource(UiR.string.about_page_update_download),
-                                detail = "",
-                                showChevron = true,
-                                onTap = {
+                            showChevron = true,
+                            onTap = {
+                                if (release != null) {
                                     runCatching {
                                         context.startActivity(
                                             Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)),
                                         )
                                     }
-                                },
-                            )
-                        }
-                        DividerRow()
-                        AboutNavRow(
-                            icon = Lucide.RefreshCw,
-                            label = stringResource(UiR.string.about_page_update_check),
-                            detail = if (updateChecking) stringResource(UiR.string.about_page_update_checking) else "",
-                            showChevron = false,
-                            onTap = { checkForUpdate() },
+                                } else {
+                                    checkForUpdate()
+                                }
+                            },
                         )
                     }
                 }

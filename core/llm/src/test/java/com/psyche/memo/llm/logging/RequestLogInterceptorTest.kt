@@ -58,8 +58,9 @@ class RequestLogInterceptorTest {
         client.newCall(req).execute().use { it.body?.string() }
         waitForFlush()
         val text = readLog()
-        assertTrue("Expected REQ line, got: $text",
-            Regex("""\[REQ \d+] POST http://127\.0\.0\.1:\d+/v1/chat/completions""").containsMatchIn(text))
+        // 不写死 host：MockWebServer 的 url() 用的是本机反查主机名，Windows 给
+        // 127.0.0.1、CI 给 localhost、有的机器给别的名字（见 CI run #6）。
+        assertTrue("Expected REQ line, got: $text", text.contains("] POST ${req.url}"))
     }
 
     @Test

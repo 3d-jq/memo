@@ -22,8 +22,9 @@ def main(root_dir: str) -> int:
         suite = tree.get("name") or os.path.relpath(path, root_dir)
         for case in tree.iter("testcase"):
             for failure in list(case.findall("failure")) + list(case.findall("error")):
-                message = (failure.get("message") or failure.text or "").strip()
-                message = " ".join(message.split())[:300]
+                # 断言消息常常不含根因，堆栈里才有；annotation 有长度上限，取前 1500 字。
+                message = (failure.get("message") or "") + "\n" + (failure.text or "")
+                message = " ".join(message.split())[:1500]
                 print("::error::%s › %s: %s" % (suite, case.get("name"), message))
                 count += 1
     if count == 0:

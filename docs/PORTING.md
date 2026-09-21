@@ -1695,3 +1695,15 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 - 新增 5 条 ARB 文案（`aboutPageUpdate*`，en/zh/zh_Hant 三份），复用上游现成的
   `sideDrawerUpdateTitle` 与 `sideDrawerLinkCopied` 语义（后者暂未用到，留着）。
 
+
+## 5.38 开源落地：公开仓已上线，CI 修复回填（2026-09-21，用户「我开源了」）
+
+公开仓 `github.com/3d-jq/memo`（public，AGPL-3.0）已上线，含 6 笔提交：1.0.0 初始 + §5.37 应用更新 + 三条 CI 修复（gradlew 可执行位、去本机 JDK 路径、失败用例 annotation）。本地这批未提交改动正是公开仓 `876546a`（CI annotation）那一代的本地副本，回填：
+
+- **CI 失败用例 annotation**：`tools/ci_test_failures.py` 把 `build/test-results/**/*.xml` 的 failure/error 逐条输出成 `::error::`（CI 完整日志要 token 才能看，只靠 exit 1 定位不了是哪个用例）；workflow 里 `testDebugUnitTest` 后挂 `if: failure()` 一步。**经验**：Linux runner 上单测挂但本地全绿时，日志端点鉴权挡掉 → annotation 是唯一公开可见的定位途径。
+- **KeyRoulette 时钟注入**（`core:llm`）：LRU 用 `System.currentTimeMillis()` 排序，同一毫秒两次使用并列 → `minByOrNull` 又选中刚用过那把（Linux 上 IO 快、CI run #6 复现）。`lru(cacheFile, clock)` 可注入单调时钟，测试用 `tickingRoulette` 每取用推进一秒。**教训**：时间戳排序的同毫秒竞争在 Windows 本地测不出、Linux CI 必炸。
+- **RequestLogInterceptorTest host 不写死**：`MockWebServer.url()` 用本机反查主机名，Windows 给 `127.0.0.1`、CI 给 `localhost`、有的机器给别的名字（CI run #6）。断言从正则硬编码 host 改成 `text.contains("] POST ${req.url}")`。
+- **签名条件化**（`app/build.gradle.kts`）：release 只在 `keystore.properties` 存在时配 `signingConfig`（本机密钥不入库），CI 和别人克隆后 release 产出未签名包但构建照常。PDFBox JPXFilter 悬空引用加 `-dontwarn com.gemalto.jp2.**`（文档抽取不走 JPX 编码的 PDF）。
+- **关于页更新行合并**（用户 2026-09-21「为什么做两个」）：状态行 + 「去下载」行合成一行 —— 没新版时点它检查、有新版时点它下载，状态写右侧 detail，删除独立的「检查更新」行。
+
+验证：`:core:llm:testDebugUnitTest`（187 例）+ `:app:testDebugUnitTest`（1390 例）全绿；中途踩一次 Windows 文件锁（`binary/output.bin` 被 gradle daemon 占用 → `gradlew --stop` 后重跑即过）。

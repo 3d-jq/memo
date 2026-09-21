@@ -8,6 +8,12 @@ import java.nio.file.Files
 
 class KeyRouletteTest {
 
+    /** 每次取用都推进一秒，保证 LRU 的时间戳严格有序、不落在同一毫秒。 */
+    private fun tickingRoulette(file: File): KeyRoulette {
+        var tick = 1_000L
+        return KeyRoulette.lru(file) { tick += 1_000L; tick }
+    }
+
     @Test
     fun picksNeverUsedKeyFirst() {
         val roulette = KeyRoulette.lru(testFile())
@@ -18,7 +24,7 @@ class KeyRouletteTest {
 
     @Test
     fun leastRecentlyUsedWinsAfterAllUsed() {
-        val roulette = KeyRoulette.lru(testFile())
+        val roulette = tickingRoulette(testFile())
         roulette.next(listOf("a", "b"), "p")
         roulette.next(listOf("a", "b"), "p")
         // "a" was used first => least recently used => next pick is "a"
@@ -37,9 +43,9 @@ class KeyRouletteTest {
     @Test
     fun persistsAcrossInstances() {
         val file = testFile()
-        val first = KeyRoulette.lru(file)
+        val first = tickingRoulette(file)
         assertEquals("k1", first.next(listOf("k1", "k2"), "openai"))
-        val second = KeyRoulette.lru(file)
+        val second = tickingRoulette(file)
         // k1 was used; LRU picks k2 next — persistence works.
         assertEquals("k2", second.next(listOf("k1", "k2"), "openai"))
     }
