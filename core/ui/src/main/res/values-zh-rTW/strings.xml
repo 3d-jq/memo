@@ -27,6 +27,11 @@
     <string name="about_page_section_version">應用資訊</string>
     <string name="about_page_system">系統</string>
     <string name="about_page_unknown_placeholder">-</string>
+    <string name="about_page_update_check">檢查更新</string>
+    <string name="about_page_update_checking">檢查中…</string>
+    <string name="about_page_update_download">去下載</string>
+    <string name="about_page_update_failed">檢查更新失敗</string>
+    <string name="about_page_update_up_to_date">已是最新版本</string>
     <string name="about_page_version">版本</string>
     <string name="about_page_version_detail">%1$s / %2$s</string>
     <string name="about_page_website">官網</string>

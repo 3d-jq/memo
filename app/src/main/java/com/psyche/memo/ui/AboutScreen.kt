@@ -1,5 +1,12 @@
 package com.psyche.memo.ui
 
+import androidx.compose.runtime.rememberCoroutineScope
+import com.composables.icons.lucide.BadgeInfo
+import com.composables.icons.lucide.Download
+import com.composables.icons.lucide.RefreshCw
+import com.psyche.memo.update.UpdateService
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.psyche.memo.ui.theme.MemoRadius
 import android.content.Intent
 import android.net.Uri
@@ -103,6 +110,33 @@ fun AboutScreen(
         }
     }
 
+    // 应用更新：上游 update_provider.dart 的对应物，但两处不一样 —— 端点换成本项目
+    // 自己的 GitHub Releases，显示位置从抽屉横幅挪到关于页（见 PORTING §5.37）。
+    val uiScope = rememberCoroutineScope()
+    var updateEnabled by remember { mutableStateOf(false) }
+    var updateChecking by remember { mutableStateOf(false) }
+    var updateOutcome by remember { mutableStateOf<UpdateService.Outcome?>(null) }
+
+    fun checkForUpdate() {
+        uiScope.launch {
+            if (updateChecking) return@launch
+            updateChecking = true
+            updateOutcome = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                UpdateService.check(container.httpClient, version.ifEmpty { "0" })
+            }
+            updateChecking = false
+        }
+    }
+
+    LaunchedEffect(version) {
+        if (version.isEmpty()) return@LaunchedEffect
+        // display_show_app_updates_v1 缺省为开（照上游默认值）。
+        updateEnabled = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            container.preferenceRepository.readJson("display_show_app_updates_v1") != "0"
+        }
+        if (updateEnabled) checkForUpdate()
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         MemoTopBar(
             title = stringResource(UiR.string.settings_page_about),
@@ -197,6 +231,53 @@ fun AboutScreen(
                         showChevron = false,
                         onTap = null,
                     )
+                    if (updateEnabled) {
+                        val outcome = updateOutcome
+                        val release = (outcome as? UpdateService.Outcome.Available)?.info
+                        DividerRow()
+                        AboutNavRow(
+                            icon = Lucide.BadgeInfo,
+                            label = when {
+                                updateChecking && release == null ->
+                                    stringResource(UiR.string.about_page_update_checking)
+                                release != null ->
+                                    stringResource(UiR.string.side_drawer_update_title, release.version)
+                                outcome is UpdateService.Outcome.UpToDate ->
+                                    stringResource(UiR.string.about_page_update_up_to_date)
+                                outcome is UpdateService.Outcome.Failed ->
+                                    stringResource(UiR.string.about_page_update_failed) + "：" + outcome.message
+                                else -> stringResource(UiR.string.about_page_update_check)
+                            },
+                            detail = release?.notes?.trim()?.replace('\r', '\n')
+                                ?.lineSequence()?.filter { it.isNotBlank() }?.joinToString(" ")?.take(160).orEmpty(),
+                            showChevron = false,
+                            onTap = null,
+                        )
+                        if (release != null) {
+                            DividerRow()
+                            AboutNavRow(
+                                icon = Lucide.Download,
+                                label = stringResource(UiR.string.about_page_update_download),
+                                detail = "",
+                                showChevron = true,
+                                onTap = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)),
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                        DividerRow()
+                        AboutNavRow(
+                            icon = Lucide.RefreshCw,
+                            label = stringResource(UiR.string.about_page_update_check),
+                            detail = if (updateChecking) stringResource(UiR.string.about_page_update_checking) else "",
+                            showChevron = false,
+                            onTap = { checkForUpdate() },
+                        )
+                    }
                 }
             }
             item { Spacer(Modifier.height(12.dp)) }
