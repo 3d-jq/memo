@@ -1606,7 +1606,35 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 **下一步取证**：`adb shell dumpsys gfxinfo com.psyche.memo.dev reset` → 用户点进统计页 →
 `dumpsys gfxinfo … framestats`，用五段耗时（MeasureLayout/Draw/Sync/CommandIssue/Swap）判定
 是组合成本还是等 DB，再决定动 1/2/3 的哪一条。
+## 5.35 位置本地工具（2026-09-21，用户「加一个位置获取的本地工具吧」+「他这个项目我用过是没有问题的」）
 
+**超出上游的平台能力**：上游 `DeviceLocalTools.locationSupported` 是 iOS-only（
+`locationSupported => iosDeviceToolsSupported`），`local_tools_service.dart:484` 那条
+`getCurrentLocation` 通道在安卓上根本走不到。这次照上游的**接口**在安卓侧自写了实现：
 
-
-
+- 接口一字不动：名字 `get_current_location`（`LocalToolNames.CURRENT_LOCATION` 早就在）、
+  **空参数对象**、描述用上游 `_currentLocationDefinition` 那段英文、**不进
+  `requiresUserApproval`**（上游也没有）。图标 `Lucide.MapPin`、三语标题/副标题都是原样
+  已经在的，缺的只是 `isAvailableOnThisPlatform` 开闸 + `localDefinition` 一支 + 执行器。
+- 运行时策略照用户真机用过的参考实现（`D:\program\personal_agent_app` 的 `LocationTool`）：
+  权限 → 定位服务开关 → **10 分钟内的 last-known 秒回** → 否则实时定位 10 秒超时 →
+  超时回退过期缓存 → 全拿不到才报错；逆地理用平台 `Geocoder`（零 API key、零网络），
+  **拿不到地址只给坐标不判失败**（国产 ROM 无 Google 服务时常空）。输出键照上游口径：
+  `latitude/longitude/accuracy/altitude/timestamp/provider` + 可选 `address/city/region/country`。
+- 工程没有 Play Services ⇒ 用 `LocationManager`（GPS > 网络 > passive），不引新依赖。
+- 权限两处申请，都照上游形状：① 助手「本地工具」里**打开这一行时**就申请
+  （上游 `assistant_settings_edit_local_tools_tab.dart:106-118` 同义），没同意就不落开关；
+  ② 模型真的调用时若没授权，走新增的 `LocationPermissionService` —— 形状照
+  `ToolApprovalService`/`AskUserInteractionService`（执行器挂起等 deferred，ChatContent 观察到
+  pending 就弹系统框回填），**但必须带 90 秒超时**：后台生成时没有 ChatContent，没人回答
+  不能把那条生成挂死。这是与那两个服务唯一刻意的差别。
+- 三条错误（`permission_denied` / `location_service_disabled` / `timeout`）走
+  `{error, message}`，message 是给用户看的中文，新增 3 个 ARB 键
+  （`locationToolError*`）。**没做** `permission_permanently_denied`：安卓侧区分「首次拒绝」和
+  「不再询问」不可靠（`shouldShowRequestPermissionRationale` 两种情况都是 false），参考实现
+  靠插件能分，我们分不了，就不假装有把握。
+- manifest 只加前台 `ACCESS_COARSE_LOCATION`/`ACCESS_FINE_LOCATION`（+ 两条 required=false 的
+  uses-feature 免得被商店过滤），**不申请后台定位**。
+- 单测：`LocationToolTest`（新鲜度 10 分钟边界、provider 取舍顺序、结果/错误 JSON 形状、
+  地址片段拼装与空段）、`LocationPermissionServiceTest`（pending 发布/结清、超时按未授权、
+  resolve 只结当前等待者、无等待者时忽略）。真定位与 Geocoder 只能真机验。

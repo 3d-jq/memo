@@ -454,6 +454,10 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val askUserInteractionService: com.psyche.memo.ui.chat.AskUserInteractionService by lazy {
         com.psyche.memo.ui.chat.AskUserInteractionService()
     }
+    /** 定位工具执行期的「挂起等系统权限弹窗结果」通道（本工程新增，上游 iOS 走原生申请）。 */
+    val locationPermissionService: com.psyche.memo.ui.chat.LocationPermissionService by lazy {
+        com.psyche.memo.ui.chat.LocationPermissionService()
+    }
 
     /**
      * 「冷启动那一次窗口加载」是否还没结束 —— 原版 `home_page_controller.dart:311`

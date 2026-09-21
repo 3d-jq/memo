@@ -29,8 +29,9 @@ import java.time.format.DateTimeFormatter
 /**
  * Android 本地工具的执行器。上游分布在 `local_tools_service.dart`（剪贴板 / 计算 /
  * 语音播放 / 日历 / 屏幕时间）与自研的 `render_visual`、`render_mermaid` 两件套。
- * 本机确实没有执行器的（iOS-only 定位/天气/健康/提醒）由 ToolHandler 兜底成
- * execution_error，不会伪装成功。
+ * `get_current_location` 是**超出上游的安卓侧加法**（上游 `locationSupported` 是
+ * iOS-only），本体在 [LocationTool]。本机确实没有执行器的（天气/健康/提醒）由
+ * ToolHandler 兜底成 execution_error，不会伪装成功。
  */
 object LocalToolExecutors {
 
@@ -41,6 +42,7 @@ object LocalToolExecutors {
     const val SCREEN_TIME = "get_screen_time"
     const val CALENDAR_QUERY = "calendar_query"
     const val CALENDAR_CREATE = "calendar_create"
+    const val CURRENT_LOCATION = LocationTool.TOOL_NAME
 
     /** 可视化绘图（自研，一个工具 10 种图 + 手写 SVG）：名字以工具本体为准。 */
     const val RENDER_VISUAL = com.psyche.memo.provider.chart.VisualTools.TOOL_NAME
@@ -51,18 +53,22 @@ object LocalToolExecutors {
     /** Names this object can execute; the rest fall through. */
     val EXECUTABLE = setOf(
         CLIPBOARD, TEXT_TO_SPEECH, CALCULATE, SCREEN_TIME, CALENDAR_QUERY, CALENDAR_CREATE,
-        RENDER_VISUAL, RENDER_MERMAID,
+        CURRENT_LOCATION, RENDER_VISUAL, RENDER_MERMAID,
     )
 
     /**
      * @param chartPalette 图表工具的配色（外壳跟主题）；调用方拿不到当前主题时给 null，
      *   工具会退回浅色主题的配色。
+     * @param locationPermission 定位工具要运行时权限时用：只有界面手里有
+     *   ActivityResultRegistry，所以由调用方注入「挂起等系统弹窗结果」的那根通道。
+     *   给 null 等于问不到人 ⇒ 工具按「未授权」返回错误。
      */
     suspend fun execute(
         context: Context,
         name: String,
         args: JsonObject,
         chartPalette: com.psyche.memo.provider.chart.ChartPalette? = null,
+        locationPermission: (suspend () -> Boolean)? = null,
     ): String? = when (name) {
         CLIPBOARD -> clipboard(context, args)
         TEXT_TO_SPEECH -> textToSpeech(context, args)
@@ -70,6 +76,7 @@ object LocalToolExecutors {
         SCREEN_TIME -> screenTime(context, args)
         CALENDAR_QUERY -> queryCalendar(context, args)
         CALENDAR_CREATE -> createCalendarEvent(context, args)
+        CURRENT_LOCATION -> LocationTool.execute(context, locationPermission ?: { false })
         RENDER_VISUAL -> com.psyche.memo.provider.chart.VisualTools.execute(
             context = context,
             args = args,

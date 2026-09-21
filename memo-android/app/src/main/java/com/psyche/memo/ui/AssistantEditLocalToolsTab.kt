@@ -36,6 +36,7 @@ import com.composables.icons.lucide.Clipboard
 import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageCircleQuestion
+import com.composables.icons.lucide.MapPin
 import com.composables.icons.lucide.Smartphone
 import com.composables.icons.lucide.Shapes
 import com.composables.icons.lucide.Workflow
@@ -68,6 +69,7 @@ fun AssistantEditLocalToolsTab(
     val screenTime = names.SCREEN_TIME
     val calendarQuery = names.CALENDAR_QUERY
     val calendarCreate = names.CALENDAR_CREATE
+    val currentLocation = names.CURRENT_LOCATION
     val renderVisual = names.RENDER_VISUAL
     val renderMermaid = names.RENDER_MERMAID
 
@@ -95,6 +97,14 @@ fun AssistantEditLocalToolsTab(
         }
     }
 
+    // 上游同样在「打开这一行」时就申请（assistant_settings_edit_local_tools_tab.dart
+    // :106-118）：没同意就不把工具开进来。同意了就只授权、不落开关，等用户再点一次。
+    val locationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) updateTool(currentLocation, true)
+    }
+
     fun toggleTool(toolId: String, value: Boolean) {
         if (!value) {
             updateTool(toolId, false)
@@ -110,6 +120,13 @@ fun AssistantEditLocalToolsTab(
                 }
                 // Still enable even if Usage Access is not granted yet.
                 updateTool(toolId, true)
+            }
+            currentLocation -> {
+                if (com.psyche.memo.provider.LocationTool.hasPermission(context)) {
+                    updateTool(toolId, true)
+                } else {
+                    locationLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                }
             }
             calendarQuery, calendarCreate -> {
                 if (hasCalendarPermission()) {
@@ -195,6 +212,15 @@ fun AssistantEditLocalToolsTab(
                 subtitleRes = R.string.assistant_edit_local_tool_calendar_create_subtitle,
                 enabled = calendarCreate in assistant.localToolIds,
                 onChanged = { toggleTool(calendarCreate, it) },
+            )
+            // 当前位置（上游 iOS-only，安卓侧执行器见 LocationTool；开这一行时就要权限）。
+            SettingsIosDivider()
+            LocalToolRow(
+                icon = Lucide.MapPin,
+                titleRes = R.string.assistant_edit_local_tool_location_title,
+                subtitleRes = R.string.assistant_edit_local_tool_location_subtitle,
+                enabled = currentLocation in assistant.localToolIds,
+                onChanged = { toggleTool(currentLocation, it) },
             )
             // 可视化绘图（自研，上游没有这一行）：一个工具、一个 kind 枚举 —— 数据图由
             // 我们画（跟主题），kind="svg" 时模型直接写 SVG（流程图/时间轴/仪表盘等）。

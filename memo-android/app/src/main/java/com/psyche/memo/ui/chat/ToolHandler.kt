@@ -278,6 +278,9 @@ class ToolHandler(
                         args = args,
                         // 图表工具要跟主题取色（外壳跟主题、系列色固定）。
                         chartPalette = com.psyche.memo.provider.chart.VisualTools.paletteFor(container),
+                        // 定位工具要有运行时权限，而只有界面手里有 ActivityResultRegistry
+                        // ⇒ 借容器那根「挂起等弹窗结果」的通道（见 LocationPermissionService）。
+                        locationPermission = { container.locationPermissionService.awaitGrant() },
                     )
                     ?.let { return it }
             }

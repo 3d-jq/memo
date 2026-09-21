@@ -1321,6 +1321,9 @@ Updating Memo first is the safer choice.</string>
     <string name="local_snapshot_take_failed">Could not save a copy: %1$s</string>
     <string name="local_snapshot_take_now">Save a copy now</string>
     <string name="local_snapshot_usage" formatted="false">{count, plural, =0{No copies} =1{1 copy} other{{count} copies}} · {size}</string>
+    <string name="location_tool_error_permission">The location permission is not granted, so this tool cannot read a position. Ask the user to allow location access (or enable it in system settings), then retry.</string>
+    <string name="location_tool_error_service">The location service on this device (GPS or network positioning) is turned off. Ask the user to enable location in system settings, then retry.</string>
+    <string name="location_tool_error_timeout">No position fix arrived within the time limit and no cached location was available. Ask the user to move to an open area or enable GPS, then retry.</string>
     <string name="log_settings_auto_delete">Auto-delete</string>
     <string name="log_settings_auto_delete_days">%1$s days</string>
     <string name="log_settings_auto_delete_disabled">Disabled</string>

@@ -490,6 +490,20 @@ fun ChatContent(
     var showMiniMap by remember { mutableStateOf(false) }
     val timelineListState = androidx.compose.foundation.lazy.rememberLazyListState()
 
+    // 定位工具（get_current_location）要运行时权限，而只有界面手里有
+    // ActivityResultRegistry ⇒ 执行器挂起等 LocationPermissionService，这里看到 pending
+    // 就去弹系统框、结果回填。工具侧带超时，没人回答也不会把生成挂死。
+    val locationPermissionService = container.locationPermissionService
+    val locationPermissionPending by locationPermissionService.pending.collectAsState()
+    val locationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted -> locationPermissionService.resolve(granted) }
+    androidx.compose.runtime.LaunchedEffect(locationPermissionPending) {
+        if (locationPermissionPending) {
+            locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
     // ---- 消息操作批次状态（more sheet / 编辑 / regenerate 确认） ----
     var moreFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
     var editFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }

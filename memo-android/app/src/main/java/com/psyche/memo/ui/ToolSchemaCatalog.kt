@@ -100,8 +100,10 @@ object BuiltInToolCatalog {
 
     /** Local tool availability — Android side of DeviceLocalTools (L57-82). */
     fun isAvailableOnThisPlatform(name: String): Boolean = when (name) {
-        LocalToolNames.SCREEN_TIME, LocalToolNames.CALENDAR_QUERY, LocalToolNames.CALENDAR_CREATE -> true
-        LocalToolNames.CURRENT_LOCATION, LocalToolNames.WEATHER,
+        LocalToolNames.SCREEN_TIME, LocalToolNames.CALENDAR_QUERY, LocalToolNames.CALENDAR_CREATE,
+        // 上游 locationSupported 是 iOS-only；安卓侧的执行器是本工程加的（见 LocationTool）。
+        LocalToolNames.CURRENT_LOCATION -> true
+        LocalToolNames.WEATHER,
         LocalToolNames.HEALTH_SUMMARY, LocalToolNames.REMINDERS_QUERY,
         LocalToolNames.REMINDERS_CREATE, LocalToolNames.REMINDERS_COMPLETE,
         -> false // iOS-only (iosDeviceToolsSupported)
@@ -497,6 +499,13 @@ object BuiltInToolCatalog {
         // 用 param() 那几个 helper 表达不了）。
         LocalToolNames.RENDER_VISUAL -> com.psyche.memo.provider.chart.VisualTools.DEFINITION
         LocalToolNames.RENDER_MERMAID -> com.psyche.memo.provider.chart.MermaidTools.DEFINITION
+        // 上游 `_currentLocationDefinition`：空参数 + 那句「只在用户要位置或查天气时用」。
+        LocalToolNames.CURRENT_LOCATION -> definition(
+            name = LocalToolNames.CURRENT_LOCATION,
+            description = com.psyche.memo.provider.LocationTool.DESCRIPTION,
+            properties = emptyList(),
+            required = null,
+        )
         LocalToolNames.TIME_INFO -> definition(
             name = LocalToolNames.TIME_INFO,
             description = "Get the current local date and time info from the device. Returns year, month, day, weekday, ISO date and time strings, timezone, UTC offset, and timestamp.",

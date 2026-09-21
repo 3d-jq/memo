@@ -1323,6 +1323,9 @@
     <string name="local_snapshot_take_failed">儲存副本失敗：%1$s</string>
     <string name="local_snapshot_take_now">立即備份一份</string>
     <string name="local_snapshot_usage" formatted="false">{count, plural, =0{暫無副本} other{{count} 份}} · {size}</string>
+    <string name="location_tool_error_permission">未授予定位權限，工具拿不到位置。請讓使用者允許「位置」權限（或在系統設定裡打開定位）後重試。</string>
+    <string name="location_tool_error_service">本機的定位服務（GPS 或網路定位）沒有打開。請讓使用者在系統設定裡打開定位後重試。</string>
+    <string name="location_tool_error_timeout">等了即時定位的时限也沒拿到結果，本機也沒有可用的快取位置。請讓使用者到開闊處或打開 GPS 後重試。</string>
     <string name="log_settings_auto_delete">自動刪除</string>
     <string name="log_settings_auto_delete_days">%1$s 天</string>
     <string name="log_settings_auto_delete_disabled">不啟用</string>
