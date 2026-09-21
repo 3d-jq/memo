@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Memo">
+</p>
+
 # Memo
 
 一个**完全跑在你自己手机上的**大模型聊天客户端：Kotlin + Jetpack Compose 原生实现，
