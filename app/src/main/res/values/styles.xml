@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors Rikkahub's minimal window theme: a modern platform theme,
+         no windowBackground/statusBarColor overrides. -->
+    <style name="Theme.Memo" parent="@android:style/Theme.Material.Light.NoActionBar" />
+</resources>

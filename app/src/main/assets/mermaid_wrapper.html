@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>mermaid</title>
+  <script src="mermaid.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; }
+    #out svg { display: block; height: auto; }
+  </style>
+</head>
+<body>
+<div id="out"></div>
+<script>
+  // Mermaid 文本 → PNG（dataURL）。
+  //
+  // 流程：mermaid.render() 得到 SVG → 量出尺寸 → 用 Image + canvas 栅格化成 PNG → 回传 Kotlin。
+  // 为什么不在 Kotlin 侧用 AndroidSVG 画：mermaid 的 SVG 靠 <style> 里的 CSS 类上色/排版，
+  // AndroidSVG 的 CSS 支持不全，画出来会缺色少线；WebView 里栅格化则是它自己渲染的结果，100% 一致。
+  window.renderMermaid = async function (code, themeJson, targetWidth) {
+    try {
+      var theme = JSON.parse(themeJson);
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'base',
+        fontFamily: 'sans-serif',
+        flowchart: { htmlLabels: false, useMaxWidth: false, curve: 'basis' },
+        themeVariables: theme
+      });
+      var result = await mermaid.render('memo-mermaid-' + Date.now(), code);
+      var host = document.getElementById('out');
+      host.innerHTML = result.svg;
+      var svg = host.querySelector('svg');
+      if (!svg) { MemoBridge.onError('mermaid 没有输出图形'); return; }
+      // 由我们控制尺寸：限宽 + 高度自适应（去掉 mermaid 写死的宽高）
+      svg.removeAttribute('width');
+      svg.removeAttribute('height');
+      svg.style.maxWidth = targetWidth + 'px';
+      svg.style.width = targetWidth + 'px';
+      svg.style.height = 'auto';
+      await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
+      var rect = svg.getBoundingClientRect();
+      var cssWidth = Math.max(1, Math.round(rect.width));
+      var cssHeight = Math.max(1, Math.round(rect.height));
+      // 兜底：离屏 WebView 偶尔量不到（宽高为 0）→ 用 viewBox 的比例自己算
+      if (cssWidth < 8 || cssHeight < 8) {
+        var vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/);
+        var ratio = (vb.length === 4 && parseFloat(vb[2]) > 0 && parseFloat(vb[3]) > 0)
+          ? parseFloat(vb[2]) / parseFloat(vb[3]) : 1.6;
+        cssWidth = targetWidth;
+        cssHeight = Math.max(120, Math.round(targetWidth / ratio));
+      }
+      var scale = Math.min(3, Math.max(1, targetWidth / cssWidth)) * (window.devicePixelRatio || 1);
+      scale = Math.min(scale, 3);
+      var pixelWidth = Math.round(cssWidth * scale);
+      var pixelHeight = Math.round(cssHeight * scale);
+
+      var xml = new XMLSerializer().serializeToString(svg);
+      var dataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+      var image = new Image();
+      await new Promise(function (resolve, reject) {
+        image.onload = function () { resolve(); };
+        image.onerror = function () { reject(new Error('SVG 栅格化失败')); };
+        image.src = dataUrl;
+      });
+      var canvas = document.createElement('canvas');
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = theme.background || '#FFFFFF';
+      ctx.fillRect(0, 0, pixelWidth, pixelHeight);
+      ctx.drawImage(image, 0, 0, pixelWidth, pixelHeight);
+      MemoBridge.onDone(canvas.toDataURL('image/png'), pixelWidth, pixelHeight);
+    } catch (e) {
+      MemoBridge.onError(String(e && e.message ? e.message : e));
+    }
+  };
+</script>
+</body>
+</html>

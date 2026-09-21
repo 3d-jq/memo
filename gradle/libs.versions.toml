@@ -1,0 +1,85 @@
+[versions]
+agp = "8.11.1"
+kotlin = "2.2.20"
+androidxCoreKtx = "1.16.0"
+androidxActivityCompose = "1.10.1"
+androidxLifecycle = "2.9.1"
+androidxNavigationCompose = "2.9.1"
+androidxWork = "2.10.2"
+composeBom = "2025.06.01"
+composeIconsExtended = "1.7.8"
+lucideIcons = "1.1.0"
+reorderable = "3.1.0"
+zxing = "3.5.3"
+quickie = "1.11.0"
+okhttp = "4.12.0"
+jsoup = "1.18.1"
+pdfboxAndroid = "2.0.27.0"
+exp4j = "0.4.8"
+kotlinxSerializationJson = "1.9.0"
+kotlinxCoroutines = "1.10.2"
+commonmark = "0.26.0"
+jlatexmath = "1.5"
+xz = "1.12"
+snakeyaml = "2.6"
+# 交互式终端页用（JitPack）：termux 的终端模拟器 + TerminalView。
+# 原生 libtermux.so 由 core:workspace 的 termux_pty.cpp 提供，AAR 里的同名库靠 pickFirsts 去重。
+termux = "0.118.0"
+junit = "4.13.2"
+
+[libraries]
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidxCoreKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "androidxActivityCompose" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "androidxLifecycle" }
+androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "androidxLifecycle" }
+androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "androidxLifecycle" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "androidxNavigationCompose" }
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "androidxWork" }
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+coil = { group = "io.coil-kt", name = "coil-compose", version = "2.6.0" }
+coilSvg = { group = "io.coil-kt", name = "coil-svg", version = "2.6.0" }
+# coil-svg 的传递依赖，显式声明以便直接用它的解析器做校验（版本与其保持一致）
+androidsvg = { group = "com.caverock", name = "androidsvg-aar", version = "1.4" }
+accompanistDrawablePainter = { group = "com.google.accompanist", name = "accompanist-drawablepainter", version = "0.34.0" }
+androidx-test-core = { group = "androidx.test", name = "core", version = "1.6.1" }
+robolectric = { group = "org.robolectric", name = "robolectric", version = "4.13" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "composeIconsExtended" }
+lucide-icons = { group = "com.composables", name = "icons-lucide", version.ref = "lucideIcons" }
+reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
+quickie-bundled = { group = "io.github.g00fy2.quickie", name = "quickie-bundled", version.ref = "quickie" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+# Agent Skills 的 SKILL.md frontmatter 是 YAML（照 RikkaHub，不手撸解析器）。
+snakeyaml = { group = "org.yaml", name = "snakeyaml", version.ref = "snakeyaml" }
+pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
+xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }
+exp4j = { group = "net.objecthunter", name = "exp4j", version.ref = "exp4j" }
+okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+okhttp-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+commonmark = { group = "org.commonmark", name = "commonmark", version.ref = "commonmark" }
+commonmark-gfm-tables = { group = "org.commonmark", name = "commonmark-ext-gfm-tables", version.ref = "commonmark" }
+commonmark-gfm-strikethrough = { group = "org.commonmark", name = "commonmark-ext-gfm-strikethrough", version.ref = "commonmark" }
+# RikkaHub 的 jlatexmath-android fork（JitPack）：原版 flutter_math_fork 的 Android 等价物。
+jlatexmath = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath", version.ref = "jlatexmath" }
+jlatexmath-font-greek = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath-font-greek", version.ref = "jlatexmath" }
+jlatexmath-font-cyrillic = { group = "com.github.rikkahub.jlatexmath-android", name = "jlatexmath-font-cyrillic", version.ref = "jlatexmath" }
+termux-terminal-view = { module = "com.termux.termux-app:terminal-view", version.ref = "termux" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

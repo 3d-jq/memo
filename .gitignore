@@ -1,0 +1,30 @@
+# Build outputs
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+
+# NDK / CMake 中间产物（core:workspace 的 termux_pty.cpp 会生成）
+.cxx/
+
+# Local config
+local.properties
+keystore.properties
+
+# Signing keystore (generated, never commit)
+keystore/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# 本机门禁环境（JDK / Gradle 缓存路径），不入库
+tools/quality_gate.local.sh
+
+# 本地跑批产物
+*.log
+hs_err_pid*
+__pycache__/
+tools/qg*_errors*.txt

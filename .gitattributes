@@ -1,0 +1,9 @@
+# This repo is developed on Windows with core.autocrlf=true, so text is checked
+# out as CRLF while the committed blobs are LF. Byte-level comparisons of
+# generated files then report phantom drift (memo-android/tools/quality_gate.sh
+# gate 5). Pin text to LF in the worktree as well so the two agree.
+* text=auto eol=lf
+
+# cmd.exe parses these more reliably with CRLF (memo-android/gradlew.bat).
+*.bat text eol=crlf
+*.cmd text eol=crlf

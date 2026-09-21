@@ -1,0 +1,432 @@
+package com.psyche.memo.ui.chat
+
+import com.psyche.memo.data.model.Assistant
+import com.psyche.memo.ui.BuiltInToolCatalog
+import com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.time.DayOfWeek
+import java.time.ZonedDateTime
+
+/**
+ * tool_handler_service.dart buildToolCallHandler 的 Native 分派，顺序一致：审批门 →
+ * 本地工具（[com.psyche.memo.provider.LocalToolExecutors]）→ ask_user 交互服务 →
+ * MCP 透传（[com.psyche.memo.provider.mcp]）→ 兜底 execution_error。
+ * 到这里没被接住的只有两种情况：模型编出不存在的工具名，或该工具在本机没有执行器
+ * （iOS-only 的定位/天气/健康/提醒，以及未移植的 STDIO MCP）——如实回 execution_error
+ * 让模型自行处置。
+ */
+class ToolHandler(
+    private val approvalService: ToolApprovalService?,
+    private val askUserService: AskUserInteractionService?,
+    private val conversationId: String?,
+    private val assistant: Assistant?,
+    private val searchEngine: com.psyche.memo.provider.search.SearchEngine? = null,
+    private val searchService: com.psyche.memo.data.model.SearchServiceOptions? = null,
+    private val searchCommonOptions: com.psyche.memo.data.model.SearchCommonOptions =
+        com.psyche.memo.data.model.SearchCommonOptions(),
+    private val container: com.psyche.memo.AppContainerImpl? = null,
+    private val isTemporary: Boolean = false,
+) {
+
+    /**
+     * 处理一个工具调用，返回写回模型的内容（tool_error 为 JSON 字符串）。
+     *
+     * [onImage] 收集工具结果附带的图片 —— 上游 RikkaHub 的工具结果本身就是
+     * Text/Image 混排的 part 列表，Memo 的 `handle` 只回字符串，所以图片用回调
+     * 交给调用方（它负责把图片挂进工具 part 的 payload）。
+     */
+    suspend fun handle(
+        name: String,
+        args: JsonObject,
+        toolCallId: String?,
+        onImage: (com.psyche.memo.data.model.ToolImage) -> Unit = {},
+    ): String {
+        return try {
+            // Search tool (tool_handler_service.dart L435-439).
+            if (name == com.psyche.memo.provider.search.SearchToolService.TOOL_NAME &&
+                assistant?.searchEnabled == true
+            ) {
+                val query = (args["query"] as? JsonPrimitive)?.contentOrNull ?: ""
+                val engine = searchEngine
+                    ?: return toolError(
+                        error = "search_unavailable",
+                        message = "Search engine is unavailable.",
+                        tool = name,
+                    )
+                return com.psyche.memo.provider.search.SearchToolService.executeSearch(
+                    query = query,
+                    engine = engine,
+                    service = searchService,
+                    common = searchCommonOptions,
+                )
+            }
+            // 沙箱工作区（WorkspaceTools）：助手绑定了工作区才生效。默认只有
+            // workspace_shell 要审批（上游 DEFAULT_APPROVALS）；写到 /workspace、
+            // /tmp 之外也会升级为需要审批（上游 pathOutsideWritableRoots）。
+            if (container != null && assistant != null &&
+                name in com.psyche.memo.provider.workspace.WorkspaceTools.ALL_TOOL_NAMES
+            ) {
+                val workspaceId = assistant.workspaceId
+                if (!workspaceId.isNullOrBlank()) {
+                    val tools = com.psyche.memo.provider.workspace.WorkspaceTools
+                    val overrides = container.workspaceRepository
+                        .get(workspaceId)?.toolApprovalOverrides().orEmpty()
+                    val outsideRoots = (name == tools.WRITE_FILE || name == tools.EDIT_FILE) &&
+                        tools.pathOutsideWritableRoots(args, "path") == true
+                    if ((tools.resolveApproval(name, overrides) || outsideRoots) && approvalService != null) {
+                        val approval = approvalService.requestApproval(
+                            toolCallId = approvalIdFor(name, toolCallId),
+                            toolName = name,
+                            arguments = args,
+                            conversationId = conversationId,
+                        ).await()
+                        if (!approval.approved) {
+                            return toolError(
+                                error = "approval_denied",
+                                message = approval.denyReason ?: "User denied the tool call",
+                                tool = name,
+                            )
+                        }
+                    }
+                    return when (
+                        val outcome = tools.execute(
+                            repo = container.workspaceRepository,
+                            workspaceId = workspaceId,
+                            cwd = assistant.workspaceCwd,
+                            name = name,
+                            args = args,
+                        )
+                    ) {
+                        is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Success -> {
+                            // 读图片：字节落盘成一个文件，再作为工具结果的图片交给调用方
+                            // （上游把字节交给 FilesManager 出 Image part，等价物就是这里）。
+                            outcome.image?.let { bytes -> persistToolImage(bytes)?.let(onImage) }
+                            outcome.json
+                        }
+                        is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Failure ->
+                            toolError(outcome.error, outcome.message, name)
+                    }
+                }
+            }
+
+            // 生成图片 / 生成视频（GenerationTools，自研功能）：助手在「生成图片 /
+            // 生成视频」tab 里选了服务才提供。图片结果作为工具附带的图片挂进工具 part；
+            // 视频是异步长任务，这里一直等到终态（或超时）再返回，产物是一个 mp4 路径。
+            if (container != null && assistant != null &&
+                name in com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES
+            ) {
+                val tools = com.psyche.memo.provider.generation.GenerationTools
+                val isImage = name == tools.GENERATE_IMAGE
+                val binding = if (isImage) assistant.imageGeneration else assistant.videoGeneration
+                val service = tools.serviceFor(container.generationServices, binding)
+                    ?: return toolError(
+                        error = "generation_unavailable",
+                        message = "No $name service is configured for this assistant. " +
+                            "Ask the user to pick one in the assistant's generation tab.",
+                        tool = name,
+                    )
+                return try {
+                    val result = tools.execute(
+                        service = service,
+                        binding = binding,
+                        name = name,
+                        args = args,
+                        clients = com.psyche.memo.provider.generation.GenerationTools.Clients(
+                            images = com.psyche.memo.provider.generation.ImageGenerationClient(
+                                container.httpClient,
+                                container.generatedMediaStore,
+                            ),
+                            videos = com.psyche.memo.provider.generation.VideoGenerationClient(
+                                container.httpClient,
+                                container.generatedMediaStore,
+                            ),
+                        ),
+                    )
+                    // 产物不挂工具 part：由调用方（ChatViewModel）把生成结果作为一条
+                    // 消息插进对话（与 ➕ 面板同一条路径），避免同一张图出现两次。
+                    result.json
+                } catch (e: Exception) {
+                    toolError(
+                        error = "generation_failed",
+                        message = e.message ?: e.toString(),
+                        tool = name,
+                        instruction = "Image/video generation failed. Tell the user what went wrong.",
+                    )
+                }
+            }
+
+            // Creating calendar events or changing reminders modifies user data,
+            // so those tools always require explicit user approval first.
+            if (LocalToolNames.requiresUserApproval.contains(name) &&
+                assistant != null &&
+                assistant.localToolIds.contains(name) &&
+                approvalService != null
+            ) {
+                val approval = approvalService.requestApproval(
+                    toolCallId = approvalIdFor(name, toolCallId),
+                    toolName = name,
+                    arguments = args,
+                    conversationId = conversationId,
+                ).await()
+                if (!approval.approved) {
+                    return toolError(
+                        error = "approval_denied",
+                        message = approval.denyReason ?: "User denied the tool call",
+                        tool = name,
+                    )
+                }
+            }
+
+            // MCP tools: the assistant's bound servers, tool names not reserved
+            // by built-ins. Approval-gated tools ask the user first.
+            if (container != null && assistant != null && name !in com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all) {
+                val serverId = assistant.mcpServerIds.firstOrNull { id ->
+                    container.mcpConnections.isConnected(id) &&
+                        container.mcpConnections.toolsFor(id).any { it.name == name }
+                }
+                if (serverId != null) {
+                    val config = container.mcpRepository.server(serverId)
+                    val needsApproval = config?.toolByName(name)?.needsApproval == true
+                    if (needsApproval && approvalService != null) {
+                        val approval = approvalService.requestApproval(
+                            toolCallId = approvalIdFor(name, toolCallId),
+                            toolName = name,
+                            arguments = args,
+                            conversationId = conversationId,
+                        ).await()
+                        if (!approval.approved) {
+                            return toolError(
+                                error = "approval_denied",
+                                message = approval.denyReason ?: "User denied the tool call",
+                                tool = name,
+                            )
+                        }
+                    }
+                    return try {
+                        container.mcpConnections.callTool(serverId, name, args)
+                    } catch (e: Exception) {
+                        toolError(
+                            error = "execution_error",
+                            message = e.toString(),
+                            tool = name,
+                            instruction = "The tool execution failed unexpectedly. You may try again with different parameters or inform the user about the issue.",
+                        )
+                    }
+                }
+            }
+
+            // Memory tools (memory_tools.dart handle)：enableMemory 才生效。
+            container?.let { c ->
+                com.psyche.memo.provider.MemoryTools.handle(
+                    container = c,
+                    assistant = assistant,
+                    conversationId = conversationId,
+                    isTemporary = isTemporary,
+                    name = name,
+                    args = args,
+                )?.let { return it }
+            }
+
+            // Agent Skills（SkillsTools.execute）：只有助手启用、且磁盘上存在的技能
+            // 才允许加载；模型编出来的名字或目录外路径都如实报错让它自己纠正。
+            if (name == com.psyche.memo.provider.SkillTools.USE_SKILL &&
+                container != null &&
+                assistant != null
+            ) {
+                val skillName = (args["name"] as? JsonPrimitive)?.contentOrNull
+                    ?: return toolError("invalid_use_skill_request", "name is required", name)
+                val available = com.psyche.memo.provider.SkillTools.availableSkills(
+                    enabledSkills = assistant.enabledSkills,
+                    allSkills = container.skillStore.listSkills(),
+                )
+                val skill = available.firstOrNull { it.name == skillName }
+                    ?: return toolError(
+                        error = "skill_not_available",
+                        message = "Skill '$skillName' is not available. " +
+                            "Available skills: ${available.joinToString { it.name }}",
+                        tool = name,
+                    )
+                val path = (args["path"] as? JsonPrimitive)?.contentOrNull
+                return when (val outcome = com.psyche.memo.provider.SkillTools.execute(skill, path)) {
+                    is com.psyche.memo.provider.SkillTools.Outcome.Success -> outcome.content
+                    is com.psyche.memo.provider.SkillTools.Outcome.Failure ->
+                        toolError(outcome.error, outcome.message, name)
+                }
+            }
+
+            // Local tools (local_tools_service.dart tryHandleToolCall 451-529):
+            // time_info + the executor subset in LocalToolExecutors.
+            if (name == LocalToolNames.TIME_INFO &&
+                assistant != null &&
+                assistant.localToolIds.contains(name)
+            ) {
+                return timeInfoJson()
+            }
+            if (assistant != null &&
+                assistant.localToolIds.contains(name) &&
+                name in com.psyche.memo.provider.LocalToolExecutors.EXECUTABLE &&
+                container != null
+            ) {
+                com.psyche.memo.provider.LocalToolExecutors
+                    .execute(
+                        context = container.appContext,
+                        name = name,
+                        args = args,
+                        // 图表工具要跟主题取色（外壳跟主题、系列色固定）。
+                        chartPalette = com.psyche.memo.provider.chart.VisualTools.paletteFor(container),
+                        // 定位工具要有运行时权限，而只有界面手里有 ActivityResultRegistry
+                        // ⇒ 借容器那根「挂起等弹窗结果」的通道（见 LocationPermissionService）。
+                        locationPermission = { container.locationPermissionService.awaitGrant() },
+                    )
+                    ?.let { return it }
+            }
+
+            if (name == AskUserToolNames.ASK_USER &&
+                assistant != null &&
+                assistant.localToolIds.contains(AskUserToolNames.ASK_USER)
+            ) {
+                if (askUserService == null) {
+                    return toolError(
+                        error = "ask_user_unavailable",
+                        message = "Ask user interaction service is unavailable.",
+                        tool = name,
+                    )
+                }
+                return try {
+                    askUserService.requestAnswer(
+                        toolCallId = toolCallId?.trim()?.takeIf { it.isNotEmpty() }
+                            ?: "${name}_${System.currentTimeMillis() * 1000}",
+                        arguments = args,
+                        conversationId = conversationId,
+                    ).await().jsonString
+                } catch (e: AskUserInvalidRequestException) {
+                    toolError(
+                        error = "invalid_ask_user_request",
+                        message = e.message ?: "",
+                        tool = name,
+                    )
+                }
+            }
+
+            // Dart falls through to the MCP call here; the native executor set
+            // is unported, so an offered-but-unexecutable tool reports honestly.
+            toolError(
+                error = "execution_error",
+                message = "Tool '$name' has no executor on this platform.",
+                tool = name,
+                instruction = "The tool execution failed unexpectedly. You may try again with different parameters or inform the user about the issue.",
+            )
+        } catch (e: Exception) {
+            toolError(
+                error = "execution_error",
+                message = e.toString(),
+                tool = name,
+                instruction = "The tool execution failed unexpectedly. You may try again with different parameters or inform the user about the issue.",
+            )
+        }
+    }
+
+    /** tool_handler_service.dart approvalIdFor 382-386 — 空 toolCallId 落到 name_µs。 */
+    fun approvalIdFor(name: String, toolCallId: String?): String {
+        val trimmed = toolCallId?.trim()
+        if (!trimmed.isNullOrEmpty()) return trimmed
+        return "${name}_${System.currentTimeMillis() * 1000}"
+    }
+
+    /** tool_handler_service.dart _toolError 179-192。 */
+    private fun toolError(
+        error: String,
+        message: String,
+        tool: String,
+        instruction: String? = null,
+    ): String = buildJsonObject {
+        put("type", "tool_error")
+        put("error", error)
+        put("message", message)
+        put("tool", tool)
+        instruction?.let { put("instruction", it) }
+    }.toString()
+
+    /** local_tools_service.dart 460-461 — get_time_info 返回 `jsonEncode(_buildTimeInfoPayload(...))`。 */
+    private fun timeInfoJson(): String =
+        buildTimeInfoPayload(ZonedDateTime.now()).toString()
+
+    /** local_tools_service.dart `_buildTimeInfoPayload` 1048-1077 的 java.time 移植。 */
+    internal fun buildTimeInfoPayload(now: ZonedDateTime): JsonObject {
+        val totalSeconds = now.offset.totalSeconds
+        val sign = if (totalSeconds < 0) "-" else "+"
+        val absSeconds = kotlin.math.abs(totalSeconds)
+        val offsetHours = (absSeconds / 3600).toString().padStart(2, '0')
+        val offsetMinutes = ((absSeconds % 3600) / 60).toString().padStart(2, '0')
+
+        val year = now.year.toString().padStart(4, '0')
+        val month = now.monthValue.toString().padStart(2, '0')
+        val day = now.dayOfMonth.toString().padStart(2, '0')
+        val hour = now.hour.toString().padStart(2, '0')
+        val minute = now.minute.toString().padStart(2, '0')
+        val second = now.second.toString().padStart(2, '0')
+        val weekdayEn = englishWeekdayName(now.dayOfWeek)
+
+        return buildJsonObject {
+            put("year", now.year)
+            put("month", now.monthValue)
+            put("day", now.dayOfMonth)
+            put("weekday", weekdayEn)
+            put("weekday_en", weekdayEn)
+            put("weekday_index", now.dayOfWeek.value)
+            put("date", "$year-$month-$day")
+            put("time", "$hour:$minute:$second")
+            // DateTime.toIso8601String() — local, always 6-digit microseconds.
+            put("datetime", isoLocalDateTime(now))
+            // Dart timeZoneName (local name); native exposes the zone id instead.
+            put("timezone", now.zone.id)
+            put("utc_offset", "$sign$offsetHours:$offsetMinutes")
+            put("timestamp_ms", now.toInstant().toEpochMilli())
+        }
+    }
+
+    private fun isoLocalDateTime(now: ZonedDateTime): String {
+        val dt = now.toLocalDateTime()
+        return String.format(
+            "%04d-%02d-%02dT%02d:%02d:%02d.%06d",
+            dt.year, dt.monthValue, dt.dayOfMonth,
+            dt.hour, dt.minute, dt.second, dt.nano / 1000,
+        )
+    }
+
+    private fun englishWeekdayName(dayOfWeek: DayOfWeek): String = when (dayOfWeek) {
+        DayOfWeek.MONDAY -> "Monday"
+        DayOfWeek.TUESDAY -> "Tuesday"
+        DayOfWeek.WEDNESDAY -> "Wednesday"
+        DayOfWeek.THURSDAY -> "Thursday"
+        DayOfWeek.FRIDAY -> "Friday"
+        DayOfWeek.SATURDAY -> "Saturday"
+        DayOfWeek.SUNDAY -> "Sunday"
+    }
+
+    /**
+     * 把工具读到的图片字节落成文件 —— 图片要随工具结果持久化（重开对话还在），
+     * 所以放 `filesDir` 而不是 cacheDir；目录独立于 upload/，不污染上传管理器列表。
+     */
+    private fun persistToolImage(
+        image: com.psyche.memo.provider.workspace.WorkspaceTools.ToolImageBytes,
+    ): com.psyche.memo.data.model.ToolImage? {
+        val context = container?.appContext ?: return null
+        return runCatching {
+            val dir = java.io.File(context.filesDir, TOOL_IMAGES_DIR).apply { mkdirs() }
+            val file = java.io.File(dir, "${System.currentTimeMillis()}_${image.name}")
+            file.writeBytes(image.bytes)
+            com.psyche.memo.data.model.ToolImage(uri = file.absolutePath, mime = null)
+        }.onFailure { error ->
+            android.util.Log.w("ToolHandler", "Failed to persist tool image", error)
+        }.getOrNull()
+    }
+
+    private companion object {
+        const val TOOL_IMAGES_DIR = "tool_images"
+    }
+}

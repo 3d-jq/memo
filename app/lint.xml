@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Lint noise suppressions (documented engineering decisions, not debt):
+
+  - Version-drift advisories (NewerVersionAvailable / AndroidGradlePluginVersion /
+    GradleDependency / OldTargetApi): the toolchain and dependency pins are
+    deliberate (AGP 8.11.1 / Gradle 8.14 / Kotlin 2.2.20 / targetSdk 35 are the
+    validated build env per AGENTS.md). Upgrades are tracked separately.
+  - IconLauncherShape: the Memo launcher icon is a full-bleed square by design.
+-->
+<lint>
+    <issue id="NewerVersionAvailable" severity="ignore" />
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="OldTargetApi" severity="ignore" />
+    <issue id="IconLauncherShape" severity="ignore" />
+</lint>
