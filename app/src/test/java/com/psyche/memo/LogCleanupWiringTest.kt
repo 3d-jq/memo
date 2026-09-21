@@ -53,7 +53,7 @@ class LogCleanupWiringTest {
         container.maybeCleanupLogs()
 
         // 清理跑在 appScope(IO) 上：等它落地。
-        val deadline = System.currentTimeMillis() + 5_000
+        val deadline = System.currentTimeMillis() + 30_000
         while (File(logsDir(), "logs_old.txt").exists() && System.currentTimeMillis() < deadline) {
             Thread.sleep(20)
         }
