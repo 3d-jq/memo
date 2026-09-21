@@ -15,7 +15,13 @@ interface KeyRoulette {
     fun next(keys: List<String>, providerId: String): String
 
     companion object {
-        fun lru(cacheFile: File): KeyRoulette = LruKeyRoulette(cacheFile)
+        /**
+         * [clock] 可注入：LRU 靠时间戳排序，用 `System.currentTimeMillis()` 时同一毫秒内的
+         * 两次使用会并列，`minByOrNull` 于是又选中刚用过的那把 —— 单测在 IO 更快的 Linux 上
+         * 就是这么翻车的（CI run #6）。生产用默认时钟。
+         */
+        fun lru(cacheFile: File, clock: () -> Long = System::currentTimeMillis): KeyRoulette =
+            LruKeyRoulette(cacheFile, clock)
     }
 }
 
@@ -26,7 +32,7 @@ private data class LruCacheMap(
 
 private const val EXPIRE_DURATION_MS = 24 * 60 * 60 * 1000L
 
-private class LruKeyRoulette(private val cacheFile: File) : KeyRoulette {
+private class LruKeyRoulette(private val cacheFile: File, private val clock: () -> Long) : KeyRoulette {
 
     private val lock = Any()
 
@@ -34,7 +40,7 @@ private class LruKeyRoulette(private val cacheFile: File) : KeyRoulette {
         val keyList = keys.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (keyList.isEmpty()) return ""
         synchronized(lock) {
-            val now = System.currentTimeMillis()
+            val now = clock()
             val allCache = loadCache().toMutableMap()
 
             val providerCache = (allCache[providerId] ?: emptyMap())

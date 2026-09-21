@@ -44,6 +44,10 @@ jobs:
         working-directory: memo-android
         run: ./gradlew --console=plain --continue testDebugUnitTest
 
+      - name: Surface failed tests as annotations
+        if: failure()
+        run: python3 memo-android/tools/ci_test_failures.py memo-android
+
       - name: Assemble debug APK
         working-directory: memo-android
         run: ./gradlew --console=plain :app:assembleDebug
