@@ -37,6 +37,9 @@ jobs:
 
       - name: Unit tests (all modules)
         run: ./gradlew --console=plain --continue testDebugUnitTest
+      - name: Surface failed tests as annotations
+        if: failure()
+        run: python3 tools/ci_test_failures.py .
 
       - name: Assemble debug APK
         run: ./gradlew --console=plain :app:assembleDebug
