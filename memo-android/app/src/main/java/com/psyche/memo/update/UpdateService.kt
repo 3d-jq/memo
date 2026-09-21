@@ -31,21 +31,26 @@ object UpdateService {
             .build()
         return try {
             http.newCall(request).execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (response.code < 200 || response.code >= 300) {
-                    return@use Outcome.Failed("HTTP ${response.code}")
-                }
-                val info = UpdateFeed.parseRelease(body)
-                if (info == null) {
-                    Outcome.Failed("Unrecognised release payload")
-                } else if (UpdateFeed.isRemoteNewer(info.version, currentVersion)) {
-                    Outcome.Available(info)
-                } else {
-                    Outcome.UpToDate
-                }
+                outcomeFor(response.code, response.body?.string().orEmpty(), currentVersion)
             }
         } catch (e: Exception) {
             Outcome.Failed(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    /**
+     * 一次响应 → 结论。**404 按「已是最新版本」处理**：GitHub 在仓库还没发过任何 release
+     * 时就是 404，报红只会难看（用户 2026-09-21）；副作用是私有仓或写错的仓库地址也会被
+     * 当成已最新。
+     */
+    internal fun outcomeFor(code: Int, body: String, currentVersion: String): Outcome {
+        if (code == 404) return Outcome.UpToDate
+        if (code < 200 || code >= 300) return Outcome.Failed("HTTP $code")
+        val info = UpdateFeed.parseRelease(body) ?: return Outcome.Failed("Unrecognised release payload")
+        return if (UpdateFeed.isRemoteNewer(info.version, currentVersion)) {
+            Outcome.Available(info)
+        } else {
+            Outcome.UpToDate
         }
     }
 }

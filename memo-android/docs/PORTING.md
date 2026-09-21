@@ -1688,6 +1688,10 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
   不做任何主动提示。`display_show_app_updates_v1` 因此改成「关于页要不要出现这几行」的开关
   （缺省仍为开，`readJson(...) != "0"`）。这是刻意的：后台流量不该在启动路径上，
   而用户要求的就是"别主动烦我"。
+- **404 当「已是最新版本」**：`UpdateService.outcomeFor` 把 GitHub 的 404（仓库还没发过任何
+  release）判成 `UpToDate`，不显示红色失败（用户 2026-09-21「这个也太难看了」）。已知副作用：
+  私有仓或写错的仓库地址同样是 404，那种情况会被当成已最新。判定抽成纯函数，`UpdateServiceTest`
+  覆盖 404／更新／已最新／500／脏负载五条。
 - 新增 5 条 ARB 文案（`aboutPageUpdate*`，en/zh/zh_Hant 三份），复用上游现成的
   `sideDrawerUpdateTitle` 与 `sideDrawerLinkCopied` 语义（后者暂未用到，留着）。
 
