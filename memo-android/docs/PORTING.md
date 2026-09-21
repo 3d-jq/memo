@@ -389,7 +389,7 @@ SDK 根下，已用目录联接（junction）挂到 AGP 期望的位置。
 | `minimumReadableFormatVersion` | `2` | 老版本据此判断能否降级读取 |
 | `payloadKind` | `"sqlite"` \| `"settings-only"` | 由 includeChats 决定 |
 | `createdAtUtc` | ISO8601 UTC | `DateTime.now().toUtc().toIso8601String()` |
-| `appVersion` | `"1.0.0+1"` | version+buildNumber |
+| `appVersion` | `"1.0.1+2"` | version+buildNumber |
 | `includeChats` / `includeFiles` / `secretsIncluded` | bool | secretsIncluded 恒 true |
 | `businessEntityRowIds` | `Map<String, List<String>>` | model 模式下实体 id 投影，用于 merge 时保持 DB 身份 |
 | `database` | 对象（仅 includeChats） | `{entry:"database/kelivo.db", schemaVersion:3, minimumReadableSchemaVersion:<n>, conversationCount, messageCount}` |

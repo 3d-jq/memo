@@ -49,7 +49,7 @@ class ChatPresetInjectionTest {
     }
 
     /** init 里的注入是异步的（viewModelScope + Dispatchers.IO），等它落库。 */
-    private fun awaitMessages(conversationId: String, count: Int, timeoutMs: Long = 5_000): List<Pair<String, String>> {
+    private fun awaitMessages(conversationId: String, count: Int, timeoutMs: Long = 30_000): List<Pair<String, String>> {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             shadowOf(Looper.getMainLooper()).idle()

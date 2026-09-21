@@ -72,7 +72,10 @@ class ChatTimelineWindowTest {
     /** `init` → `reloadTail` 是异步的（viewModelScope + Dispatchers.IO）。 */
     private fun open(conversationId: String): ChatViewModel {
         val vm = ChatViewModel(container, conversationId)
-        val deadline = System.currentTimeMillis() + 5_000
+        // 30 秒不是随手加的：这是真实时钟轮询，GitHub 免费 runner 冷启动时（Robolectric 解
+        // sqlite4java 原生库 + JIT 预热）5 秒等不完，CI 每轮挂的都是不同用例（run #6/#7）。
+        // 断言本身没放宽 —— 加载没完成照样红。
+        val deadline = System.currentTimeMillis() + 30_000
         while (System.currentTimeMillis() < deadline && !vm.sendEnabled.value) {
             shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(20)
@@ -158,7 +161,7 @@ class ChatTimelineWindowTest {
         assertFalse(vm.isBusy)
 
         vm.ensureLoaded()
-        val deadline = System.currentTimeMillis() + 5_000
+        val deadline = System.currentTimeMillis() + 30_000
         while (System.currentTimeMillis() < deadline && vm.messages.value.isEmpty()) {
             shadowOf(Looper.getMainLooper()).idle()
             Thread.sleep(20)
