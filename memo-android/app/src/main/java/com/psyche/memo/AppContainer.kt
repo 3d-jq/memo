@@ -330,6 +330,22 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val backupReminder: BackupReminder by lazy { BackupReminder(preferenceRepository) }
 
     /**
+     * 应用更新：启动时静默查一次，结果放这里给 UI 用（HomeScreen 弹对话框、关于页读同一份）。
+     * 受 `display_show_app_updates_v1` 控制（缺省开，照上游默认值）；`releases/latest` 的 404
+     * 在 [com.psyche.memo.update.UpdateService] 里已按"已是最新"处理。
+     */
+    val updateOutcome = kotlinx.coroutines.flow.MutableStateFlow<com.psyche.memo.update.UpdateService.Outcome?>(null)
+
+    /** 启动钩子：不阻塞启动，失败只是不提示。 */
+    fun checkForAppUpdatesOnStartup() {
+        appScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            if (preferenceRepository.readJson("display_show_app_updates_v1") == "0") return@launch
+            val current = appVersionString().substringBefore('+')
+            updateOutcome.value = com.psyche.memo.update.UpdateService.check(httpClient, current)
+        }
+    }
+
+    /**
      * Launch + resume hook: takes a copy when the schedule says one is due.
      * Cheap to call — the counters and the change fingerprint decide — and it
      * never blocks the caller.
@@ -434,7 +450,7 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         }
     }
 
-    /** `"1.0.3+4"` — versionName + versionCode, matching Flutter's appVersion. */
+    /** `"1.0.4+5"` — versionName + versionCode, matching Flutter's appVersion. */
     private fun appVersionString(): String = runCatching {
         val info = appContext.packageManager.getPackageInfo(appContext.packageName, 0)
         val versionName = info.versionName ?: "0"

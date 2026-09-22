@@ -389,7 +389,7 @@ SDK 根下，已用目录联接（junction）挂到 AGP 期望的位置。
 | `minimumReadableFormatVersion` | `2` | 老版本据此判断能否降级读取 |
 | `payloadKind` | `"sqlite"` \| `"settings-only"` | 由 includeChats 决定 |
 | `createdAtUtc` | ISO8601 UTC | `DateTime.now().toUtc().toIso8601String()` |
-| `appVersion` | `"1.0.3+4"` | version+buildNumber |
+| `appVersion` | `"1.0.4+5"` | version+buildNumber |
 | `includeChats` / `includeFiles` / `secretsIncluded` | bool | secretsIncluded 恒 true |
 | `businessEntityRowIds` | `Map<String, List<String>>` | model 模式下实体 id 投影，用于 merge 时保持 DB 身份 |
 | `database` | 对象（仅 includeChats） | `{entry:"database/kelivo.db", schemaVersion:3, minimumReadableSchemaVersion:<n>, conversationCount, messageCount}` |
@@ -1799,4 +1799,20 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 `while(true)` 里（每轮一个 try/finally），读清楚之前不动 —— 那是聊天主链路，改错比不做更糟。做的时候
 单开一个提交：循环内命中 → 压缩 → `continue` 重发（每轮 request 在循环体开头重建，天然支持重发），
 并加一次性开关防止压缩后仍然超长时反复重试。
+
+## 5.42 应用更新改成"启动时弹对话框"（2026-09-22，用户「为什么有新版本不是弹窗，显示呀」）
+
+§5.37 定为"只在关于页那一行显示、不主动弹任何东西"，用户这次改口要弹窗，于是补上缺的那半 ——
+**启动时也查一次**（原来只在进关于页时查）：
+
+- 容器新增 `updateOutcome`（共享结果）+ `checkForAppUpdatesOnStartup()`（`appScope` + IO，
+  受 `display_show_app_updates_v1` 控制，关掉就完全不查）；`MemoApplication.onCreate` 里调一次。
+- `HomeScreen` 收 `updateOutcome`：有新版本且**没被跳过**时弹 `AlertDialog`（标题复用
+  `sideDrawerUpdateTitle`、正文是 release notes 前 600 字、按钮「去下载」复用
+  `aboutPageUpdateDownload`）。
+  - 「跳过此版本」→ 写偏好 `update_skipped_version_v1`（本工程新增键，Literal，不经 settings 注册表），
+    同版本之后不再弹；
+  - 点「稍后」/返回键 → 只是本次不弹（下次启动还会提示）。
+- 关于页那一行不动（两个入口读同一份结果），`releases/latest` 的 404 仍按"已是最新"处理（§5.37）。
+- 新增 1 条 ARB 文案 `aboutPageUpdateSkipVersion`（跳过此版本，三份语言）。
 

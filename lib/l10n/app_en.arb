@@ -1495,6 +1495,7 @@
   "aboutPageLicense": "License",
   "aboutPageLoadingPlaceholder": "...",
   "aboutPageNoQQGroup": "No QQ group yet",
+  "aboutPageUpdateSkipVersion": "Skip this version",
   "aboutPageUpdateCheck": "Check for updates",
   "aboutPageUpdateChecking": "Checking…",
   "aboutPageUpdateUpToDate": "You’re using the latest version",
