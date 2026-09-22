@@ -389,7 +389,7 @@ SDK 根下，已用目录联接（junction）挂到 AGP 期望的位置。
 | `minimumReadableFormatVersion` | `2` | 老版本据此判断能否降级读取 |
 | `payloadKind` | `"sqlite"` \| `"settings-only"` | 由 includeChats 决定 |
 | `createdAtUtc` | ISO8601 UTC | `DateTime.now().toUtc().toIso8601String()` |
-| `appVersion` | `"1.0.1+2"` | version+buildNumber |
+| `appVersion` | `"1.0.3+4"` | version+buildNumber |
 | `includeChats` / `includeFiles` / `secretsIncluded` | bool | secretsIncluded 恒 true |
 | `businessEntityRowIds` | `Map<String, List<String>>` | model 模式下实体 id 投影，用于 merge 时保持 DB 身份 |
 | `database` | 对象（仅 includeChats） | `{entry:"database/kelivo.db", schemaVersion:3, minimumReadableSchemaVersion:<n>, conversationCount, messageCount}` |
@@ -1769,4 +1769,34 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 **约定（也写进 AGENTS.md）**：Robolectric 测试里**不许**用「真时钟轮询 + 手动泵 Looper」等异步，
 要用 `MainDispatcherRule` + 等信号；`ComposeUiTest` 那类测试自己接管 Main 调度器，**不要**挂这条规则
 （两边同时设置会打架）。CI 上跳过的那 3 个类**仍然在本地门禁里跑**，所以覆盖没丢。
+
+## 5.41 数据库开 WAL + timestamp 索引；统计页改 LazyColumn；上下文超长的判据（2026-09-21，用户「这个可以开了」）
+
+**① SQLite 开 WAL —— 试了，**撤回**。** 数据安全那半审过没问题：快照走 `VACUUM INTO`、回退分支先
+`PRAGMA wal_checkpoint(TRUNCATE)` 把 WAL 折回主文件、恢复显式删 `-journal/-wal/-shm`
+（`BackupSnapshotBuilder.snapshotDatabase` / `BackupRestorer.replaceDatabase`），`core:data` 全模块在 WAL 下
+也全绿。**但变更判据那半不行**：本机副本的 `DatabaseChangeFingerprint` 同时看主文件与 `-wal` 的
+大小/时间，而 checkpoint / 连接关闭会让 `-wal` 侧车出现或消失 → 判据认为"变了" → 每次启动可能白存一份
+副本。`LocalSnapshotServiceTest` 的 `runIfDue takes a copy once due and then skips the unchanged database`
+就是这么红的（期望 `Skipped(UNCHANGED)`，实际 `Created`）。**重开的正确顺序**：先把指纹换成 WAL 稳定的
+规则（主文件 + `-wal` 的**合计**字节数，或语义计数器），补一条"跨 checkpoint 仍判未变"的测试，再开
+`setWriteAheadLoggingEnabled(true)`。代码里留了注释说明，别直接把它加回来。
+
+**② `message_rows(timestamp)` 索引**（`MemoSchema.INDEX_MESSAGE_TIMESTAMP`，运行时
+`CREATE INDEX IF NOT EXISTS`，`onCreate` 与 `onOpen` 各一次）。**不能改 schema 生成物**：DDL 由 drift
+导出、门禁校验零 diff，改它等于谎报"与上游一致"。`SchemaVerifier` 的计数把它排除掉（那个校验的含义是
+"与 drift v3 一致"）—— 顺带确认 `SchemaVerifier` 在本工程里**没有调用点**（Kotlin 侧死代码，Dart 那几处
+引用是上游自己的测试），真正的完整性检查是恢复时的 `PRAGMA integrity_check`。守卫：`RuntimeIndexTest`。
+
+**③ 统计页 `Column + verticalScroll` → `LazyColumn`**（每块一个 item：区间选择器 / 概览头 / 三张卡 /
+排行榜头 / 三张排行榜）。原来进页面把热力图、指标网格、趋势图、三张排行榜**一次性组合**（2026-09-15
+卡顿审计里记着）。注意两处 Kotlin 影响：`return@Column` 要改成 `return@LazyColumn`；`sections.forEachIndexed`
+在 LazyListScope 里不能直接发组合（本轮把排行榜整块留在一个 item 里，没拆成 itemsIndexed）。
+
+**④ 上下文超长的判据已落地，自动重试的接线未做**：`core/common/.../ContextOverflowError.kt` 的
+`isContextLengthError()`（12 条正则，覆盖 OpenAI/Anthropic/Gemini 与国内厂商文案，`ContextOverflowErrorTest`
+含"普通 400 不能误判"的反例）。**但"压缩后自动重试"这一半没接**：要接的位置在 `runGenerationLoop` 的
+`while(true)` 里（每轮一个 try/finally），读清楚之前不动 —— 那是聊天主链路，改错比不做更糟。做的时候
+单开一个提交：循环内命中 → 压缩 → `continue` 重发（每轮 request 在循环体开头重建，天然支持重发），
+并加一次性开关防止压缩后仍然超长时反复重试。
 

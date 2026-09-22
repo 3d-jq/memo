@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -210,39 +212,39 @@ fun StatsScreen(
             title = stringResource(UiR.string.stats_page_title),
             onBack = onBack,
         )
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 24.dp),
         ) {
             // _RangeSelector — L68.
-            RangeSelector(
-                selected = range,
-                onChanged = { preset ->
-                    val now = LocalDate.now()
-                    range = when (preset) {
-                        StatsDateRangePreset.ALL_TIME -> StatsDateRange.allTime()
-                        StatsDateRangePreset.LAST_30_DAYS -> StatsDateRange.last30Days(now)
-                        StatsDateRangePreset.PREVIOUS_MONTH -> StatsDateRange.previousMonth(now)
-                        StatsDateRangePreset.PREVIOUS_QUARTER -> StatsDateRange.previousQuarter(now)
-                        StatsDateRangePreset.CUSTOM -> range
-                    }
-                },
-                onCustom = { customRangeSheet = true },
-            )
-            Spacer(Modifier.height(8.dp))
-            // L74-82 — 2px loading bar.
-            if (loading) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(2.dp),
+            item {
+                RangeSelector(
+                    selected = range,
+                    onChanged = { preset ->
+                        val now = LocalDate.now()
+                        range = when (preset) {
+                            StatsDateRangePreset.ALL_TIME -> StatsDateRange.allTime()
+                            StatsDateRangePreset.LAST_30_DAYS -> StatsDateRange.last30Days(now)
+                            StatsDateRangePreset.PREVIOUS_MONTH -> StatsDateRange.previousMonth(now)
+                            StatsDateRangePreset.PREVIOUS_QUARTER -> StatsDateRange.previousQuarter(now)
+                            StatsDateRangePreset.CUSTOM -> range
+                        }
+                    },
+                    onCustom = { customRangeSheet = true },
                 )
-            } else {
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(8.dp))
+                // L74-82 — 2px loading bar.
+                if (loading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp),
+                    )
+                } else {
+                    Spacer(Modifier.height(2.dp))
+                }
+                Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(10.dp))
             val active = snapshot
             if (active == null) {
                 // 加载期间**不渲染内容**、只画加载态（照 RikkaHub `StatsPage.kt:73-81`）。
@@ -252,68 +254,82 @@ fun StatsScreen(
                 // LaunchedEffect 里已经在 IO 上算过 —— 算两遍、其中一遍卡主线程，用户
                 // 2026-09-15「点击统计界面会卡一下」就是它。加载态本身是上方那条 2px
                 // 进度条（`loading` 为真），所以这里只补一个居中指示器、不再兜底渲染。
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 48.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(28.dp),
-                        color = cs.primary,
-                    )
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            color = cs.primary,
+                        )
+                    }
                 }
-                return@Column
+                return@LazyColumn
             }
             // Categorized sections (user request): overview group for the raw
             // data cards, ranking group for the three rank cards — matching
             // the SectionHeader + card form of the settings home.
-            SectionHeader(stringResource(UiR.string.stats_page_section_overview), first = true)
-            StatsSectionCard(title = stringResource(UiR.string.stats_page_heatmap_title)) {
-                StatsHeatmapPanel(days = active.heatmap)
+            //
+            // 分区即 item：原先这里是 `Column + verticalScroll`，进页面把热力图、指标网格、
+            // 趋势图、三张排行榜**一次性组合**（2026-09-15 卡顿审计里记着）；改成 LazyColumn
+            // 后每块各占一个 item，滚到才组合。
+            item { SectionHeader(stringResource(UiR.string.stats_page_section_overview), first = true) }
+            item {
+                StatsSectionCard(title = stringResource(UiR.string.stats_page_heatmap_title)) {
+                    StatsHeatmapPanel(days = active.heatmap)
+                }
+                Spacer(Modifier.height(12.dp))
             }
-            Spacer(Modifier.height(12.dp))
-            StatsSectionCard(title = stringResource(UiR.string.stats_page_summary_title)) {
-                StatsMetricGridPanel(summary = active.summary)
+            item {
+                StatsSectionCard(title = stringResource(UiR.string.stats_page_summary_title)) {
+                    StatsMetricGridPanel(summary = active.summary)
+                }
+                Spacer(Modifier.height(12.dp))
             }
-            Spacer(Modifier.height(12.dp))
-            StatsSectionCard(title = stringResource(UiR.string.stats_page_usage_trend_title)) {
-                StatsUsageChartPanel(days = active.trend)
+            item {
+                StatsSectionCard(title = stringResource(UiR.string.stats_page_usage_trend_title)) {
+                    StatsUsageChartPanel(days = active.trend)
+                }
+                Spacer(Modifier.height(12.dp))
             }
-            Spacer(Modifier.height(12.dp))
             // L99-156 — three rank sections stacked on phones (<820).
-            SectionHeader(stringResource(UiR.string.stats_page_section_ranking))
-            Column {
-                val sections = listOf(
-                    RankSpec(
-                        title = stringResource(UiR.string.stats_page_model_usage_title),
-                        leftHeader = stringResource(UiR.string.stats_page_model_column),
-                        rightHeader = stringResource(UiR.string.stats_page_messages_column),
-                        items = active.modelRank,
-                        leading = LeadingKind.MODEL,
-                    ),
-                    RankSpec(
-                        title = stringResource(UiR.string.stats_page_assistant_usage_title),
-                        leftHeader = stringResource(UiR.string.stats_page_assistant_column),
-                        rightHeader = stringResource(UiR.string.stats_page_topics_column),
-                        items = active.assistantRank,
-                        leading = LeadingKind.ASSISTANT,
-                    ),
-                    RankSpec(
-                        title = stringResource(UiR.string.stats_page_topic_volume_title),
-                        leftHeader = stringResource(UiR.string.stats_page_topic_column),
-                        rightHeader = stringResource(UiR.string.stats_page_messages_column),
-                        items = active.topicRank,
-                        leading = LeadingKind.ICON,
-                    ),
-                )
-                sections.forEachIndexed { index, spec ->
-                    StatsRankCard(
-                        spec = spec,
-                        assistantById = assistantsById,
-                        onShowAll = { fullRank = spec },
+            item { SectionHeader(stringResource(UiR.string.stats_page_section_ranking)) }
+            item {
+                Column {
+                    val sections = listOf(
+                        RankSpec(
+                            title = stringResource(UiR.string.stats_page_model_usage_title),
+                            leftHeader = stringResource(UiR.string.stats_page_model_column),
+                            rightHeader = stringResource(UiR.string.stats_page_messages_column),
+                            items = active.modelRank,
+                            leading = LeadingKind.MODEL,
+                        ),
+                        RankSpec(
+                            title = stringResource(UiR.string.stats_page_assistant_usage_title),
+                            leftHeader = stringResource(UiR.string.stats_page_assistant_column),
+                            rightHeader = stringResource(UiR.string.stats_page_topics_column),
+                            items = active.assistantRank,
+                            leading = LeadingKind.ASSISTANT,
+                        ),
+                        RankSpec(
+                            title = stringResource(UiR.string.stats_page_topic_volume_title),
+                            leftHeader = stringResource(UiR.string.stats_page_topic_column),
+                            rightHeader = stringResource(UiR.string.stats_page_messages_column),
+                            items = active.topicRank,
+                            leading = LeadingKind.ICON,
+                        ),
                     )
-                    if (index != sections.size - 1) Spacer(Modifier.height(12.dp))
+                    sections.forEachIndexed { index, spec ->
+                        StatsRankCard(
+                            spec = spec,
+                            assistantById = assistantsById,
+                            onShowAll = { fullRank = spec },
+                        )
+                        if (index != sections.size - 1) Spacer(Modifier.height(12.dp))
+                    }
                 }
             }
         }
