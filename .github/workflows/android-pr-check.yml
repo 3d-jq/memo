@@ -39,7 +39,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./gradlew --console=plain --continue testDebugUnitTest 2>&1 | tee /tmp/unit-tests.log
+          # -PciSkipFlakyTests：跳过只在 CI 上会卡的 3 个类（本地门禁仍跑全量），见 PORTING §5.40
+          ./gradlew --console=plain --continue testDebugUnitTest -PciSkipFlakyTests 2>&1 | tee /tmp/unit-tests.log
 
       - name: Surface failed tests as annotations
         if: failure()
