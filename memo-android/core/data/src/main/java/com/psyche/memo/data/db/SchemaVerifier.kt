@@ -15,9 +15,12 @@ object SchemaVerifier {
 
         var tables = -1
         var indexes = -1
+        // 自建索引（MemoDatabase.createRuntimeIndexes）不算 drift 对齐的一部分 —— 这个校验的
+        // 含义是"库结构与 drift v3 导出一致"，把本工程额外加的东西算进来就说不通了。
         db.rawQuery(
             "SELECT type, COUNT(*) FROM sqlite_master WHERE type IN ('table','index')" +
-                " AND name NOT LIKE 'sqlite_%' AND name != 'android_metadata' GROUP BY type",
+                " AND name NOT LIKE 'sqlite_%' AND name != 'android_metadata'" +
+                " AND name != '${MemoSchema.INDEX_MESSAGE_TIMESTAMP}' GROUP BY type",
             null,
         ).use { cursor ->
             while (cursor.moveToNext()) {

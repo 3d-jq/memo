@@ -9,7 +9,18 @@ object MemoSchema {
     const val DB_VERSION = 3
     const val SCHEMA_ASSET = "memo_schema_v3.sql"
     const val EXPECTED_TABLES = 29
+
+    /** drift 导出里的索引数（`memo_schema_v3.sql`，与上游逐字一致）。 */
     const val EXPECTED_INDEXES = 17
+
+    /**
+     * 本工程**运行时自建**的索引（不在 drift 导出里，所以上面那个计数不含它）。
+     *
+     * 为什么自建而不是改 schema：DDL 是生成物且门禁校验零 diff，改生成物等于谎报"与上游一致"。
+     * `message_rows(timestamp)` 是全表按时间排序/取尾窗要用的，上游没有这条。
+     * 见 PORTING §5.41。
+     */
+    const val INDEX_MESSAGE_TIMESTAMP = "idx_message_rows_timestamp"
 }
 
 /**
@@ -21,6 +32,13 @@ class MemoDatabase(context: Context) :
     SQLiteOpenHelper(context, MemoSchema.DB_NAME, null, MemoSchema.DB_VERSION) {
 
     private val appContext: Context = context.applicationContext
+
+    // WAL 暂不开：数据安全那半已经审过没问题（快照走 `VACUUM INTO`、回退分支先
+    // `wal_checkpoint(TRUNCATE)`、恢复显式删 `-journal/-wal/-shm`），但**变更判据**那半不行 ——
+    // 本机副本的 `DatabaseChangeFingerprint` 同时看主文件与 `-wal` 的大小/时间，而 checkpoint /
+    // 连接关闭会让 `-wal` 侧车出现或消失，判据于是认为"变了"，每次启动可能白存一份副本
+    // （2026-09-21 由 `LocalSnapshotServiceTest` 的 UNCHANGED 用例抓到）。
+    // 要开先把指纹换成 WAL 稳定的规则（合计字节数或语义计数器）并补测试，见 PORTING §5.41。
 
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
@@ -34,10 +52,27 @@ class MemoDatabase(context: Context) :
                 db.execSQL(statement)
             }
             db.version = MemoSchema.DB_VERSION
+            createRuntimeIndexes(db)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * 老库（本版本之前建的）在每次打开时补一次；`IF NOT EXISTS` 让它在建好之后只是一个空操作。
+     * 不放进 `onUpgrade`：那会把 DB_VERSION 顶上去，而 schema 本身没变。
+     */
+    override fun onOpen(db: SQLiteDatabase) {
+        super.onOpen(db)
+        if (!db.isReadOnly) createRuntimeIndexes(db)
+    }
+
+    private fun createRuntimeIndexes(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS ${MemoSchema.INDEX_MESSAGE_TIMESTAMP}" +
+                " ON message_rows(timestamp)",
+        )
     }
 
     /**
