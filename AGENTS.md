@@ -158,6 +158,9 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
   `app/src/test/.../MainDispatcherRule.kt`（`Dispatchers.setMain(UnconfinedTestDispatcher())`）+ 等真实信号
   （`withTimeout(30_000) { vm.tailLoaded.first { it } }`）。**Compose UI 测试（`ComposeUiTest`）例外**：
   它自己接管 Main 调度器，挂这条规则会打架。
+  另外 **CI 上跳过 3 个"只在 CI 会卡"的类**（`ChatTimelineWindowTest` / `ChatHeaderAssistantTest` /
+  `DrawerAndChatUiTest`，见根 `build.gradle.kts` 的 `ciSkippedTests` + `-PciSkipFlakyTests`）——
+  它们**仍然在本地门禁里跑**；名单由 `CiSkipListTest` 守着，不要往里面加"只是偶尔红一次"的类。
 - Generated resources are committed and must stay in sync: ARB→strings via
   `tools/arb_to_android.py` (brandifies `Kelivo`/`kelivo`→`Memo`/`memo`), drift
   schema→SQL via `tools/drift_schema_to_sql.py`, palettes via
