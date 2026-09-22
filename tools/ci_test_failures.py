@@ -31,11 +31,15 @@ def main(root_dir: str) -> int:
                 has_failure = True
         # 后台线程/协程抛的异常不会进 Gradle 的 stdout，而是被收在用例报告的 system-err 里
         # —— CI 第一版诊断只看 stdout，所以什么也没找到（2026-09-21 run #11）。
+        # 截**头部**：异常类型与消息在栈顶，尾部只有 JUnit/Robolectric 的框架帧，
+        # 截尾等于什么都没说（run #13 的教训）。
         if has_failure:
-            for tag, limit in (("system-err", 1200), ("system-out", 600)):
+            for tag in ("system-err", "system-out"):
                 text = " ".join((tree.findtext(tag) or "").split())
                 if text:
-                    print("::error::%s [%s] %s" % (suite, tag, text[-limit:]))
+                    print("::error::%s [%s 头] %s" % (suite, tag, text[:1500]))
+                    if len(text) > 1600:
+                        print("::error::%s [%s 尾] %s" % (suite, tag, text[-500:]))
                     count += 1
     if count == 0:
         print("no failed tests found in %s" % root_dir)
