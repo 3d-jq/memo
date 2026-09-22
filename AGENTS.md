@@ -152,6 +152,12 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
   decodes provider_rows/assistant_rows on IO at startup — so composition-time
   `providerConfig(key)` / `assistantStore.get(id)` / `readJson(key)` are memory
   lookups. **Do not** add new `remember { <db/file call> }` sites.
+- **Robolectric 测试不许用「真时钟轮询 + 手动泵 Looper」等异步**（2026-09-21，PORTING §5.40）：
+  `Thread.sleep(20)` 循环配 `shadowOf(Looper.getMainLooper()).idle()` 等 `viewModelScope` 的协程，在
+  GitHub 的 2 核 runner 上会偶发卡到超时（本地多核复现不了，曾连续六轮 CI 红）。改用
+  `app/src/test/.../MainDispatcherRule.kt`（`Dispatchers.setMain(UnconfinedTestDispatcher())`）+ 等真实信号
+  （`withTimeout(30_000) { vm.tailLoaded.first { it } }`）。**Compose UI 测试（`ComposeUiTest`）例外**：
+  它自己接管 Main 调度器，挂这条规则会打架。
 - Generated resources are committed and must stay in sync: ARB→strings via
   `tools/arb_to_android.py` (brandifies `Kelivo`/`kelivo`→`Memo`/`memo`), drift
   schema→SQL via `tools/drift_schema_to_sql.py`, palettes via

@@ -1736,3 +1736,28 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 问「这个沙箱可以让用户选择下载 node gitbash 这些常用的环境吗？」），现在改主意了：模型要什么
 自己在交互式终端里 `apt-get`。**别按 §5.11 那条旧记录把它加回来。**
 
+## 5.40 CI 长期偶发红：Robolectric 测试靠「真时钟轮询 + 手动泵 Looper」（2026-09-21，用户「怎么每次这个都要出问题呀」）
+
+**现象**：公开仓 CI 的「单元测试」步骤反复偶发红（run #6/#7/#9/#11/#13/#14），**每轮挂的用例还不一样**
+（同一份代码一轮挂 4 个、下一轮挂 1 个），全部集中在 Robolectric 类，其中 `ChatTimelineWindowTest`
+最多；本机（多核 Windows）几十轮门禁全绿、复现不了。诊断本身也返工三次：① 先猜"冷 runner 慢"，
+把超时 5s→30s（**无效**，30 秒照挂）；② 抓 Gradle stdout 找异常（**空** —— 挂起不抛异常，或异常在
+别处）；③ 抓用例 XML 的 `system-err`（先截了尾部，只有 JUnit/Robolectric 框架帧，改截头部才有用）。
+
+**根因**：那两个测试等异步的方式是「`Thread.sleep(20)` 循环 + `shadowOf(Looper.getMainLooper()).idle()`」，
+赌"后台协程会在超时前被主线程推进"。Robolectric 下 `Dispatchers.Main` 走**被暂停的 Looper**，
+`viewModelScope` 每跨一次 `withContext(Dispatchers.IO)` 都要回主线程排队 —— 在 GitHub 的 2 核 runner
+上，泵 Looper 与后台线程抢 CPU，谁慢一步就判失败；本机核多，永远撞不上。
+
+**修法**：新增 `app/src/test/java/com/psyche/memo/MainDispatcherRule.kt`
+（`Dispatchers.setMain(UnconfinedTestDispatcher())`），挂在 `ChatTimelineWindowTest` 与
+`ChatPresetInjectionTest` 上；等待改成**等真实信号**（`withTimeout(30_000) { vm.tailLoaded.first { it } }`、
+`vm.messages.first { it.isNotEmpty() }`），不再泵 Looper —— 协程不再依赖 Looper 调度，
+`withContext(IO)` 完成后在 IO 线程原地继续。**证伪过**：把规则注释掉，7 个用例全红（各等到 30 秒超时），
+恢复即绿。
+
+**约定（也写进 AGENTS.md）**：Robolectric 测试里**不许**用「真时钟轮询 + 手动泵 Looper」等异步，
+要用 `MainDispatcherRule` + 等信号；`ComposeUiTest` 那类测试自己接管 Main 调度器，**不要**挂这条规则
+（两边同时设置会打架）。用户当时给的选项里还有"把这批用例移出 CI"，他后来改口要根治，所以 CI 仍然
+跑全量测试。
+

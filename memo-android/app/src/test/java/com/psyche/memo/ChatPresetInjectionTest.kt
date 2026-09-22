@@ -9,6 +9,7 @@ import com.psyche.memo.data.model.PresetMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -26,6 +27,9 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ChatPresetInjectionTest {
+
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
 
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private lateinit var container: AppContainerImpl
@@ -48,11 +52,14 @@ class ChatPresetInjectionTest {
         return assistant
     }
 
-    /** init 里的注入是异步的（viewModelScope + Dispatchers.IO），等它落库。 */
+    /**
+     * init 里的注入是异步的（viewModelScope + Dispatchers.IO），等它落库。
+     * 靠 [MainDispatcherRule] 把 Main 换成 unconfined 调度器，所以**不需要**再手动泵
+     * Looper（老写法在 CI 的 2 核 runner 上会偶发等不到，见 [MainDispatcherRule]）。
+     */
     private fun awaitMessages(conversationId: String, count: Int, timeoutMs: Long = 30_000): List<Pair<String, String>> {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            shadowOf(Looper.getMainLooper()).idle()
             val rows = container.messageDao.getAllForConversation(conversationId)
             if (rows.size >= count) return rows.map { it.role to it.content }
             Thread.sleep(20)

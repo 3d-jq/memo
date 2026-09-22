@@ -1,21 +1,22 @@
 package com.psyche.memo
 
-import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.data.model.MessagePart
 import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.ui.chat.newActionToggleable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
@@ -69,17 +70,21 @@ class ChatTimelineWindowTest {
         )
     }
 
-    /** `init` → `reloadTail` 是异步的（viewModelScope + Dispatchers.IO）。 */
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+
+    /**
+     * `init` → `reloadTail` 是异步的（viewModelScope + Dispatchers.IO）：**等完成信号**，
+     * 不再用「真时钟轮询 + 手动泵 Looper」那套（那是 CI 上偶发红的根源，见 [MainDispatcherRule]）。
+     * 超时仍然是红的，不放宽断言。
+     */
+    private fun awaitTailLoaded(vm: ChatViewModel) {
+        runBlocking { withTimeout(30_000) { vm.tailLoaded.first { it } } }
+    }
+
     private fun open(conversationId: String): ChatViewModel {
         val vm = ChatViewModel(container, conversationId)
-        // 30 秒不是随手加的：这是真实时钟轮询，GitHub 免费 runner 冷启动时（Robolectric 解
-        // sqlite4java 原生库 + JIT 预热）5 秒等不完，CI 每轮挂的都是不同用例（run #6/#7）。
-        // 断言本身没放宽 —— 加载没完成照样红。
-        val deadline = System.currentTimeMillis() + 30_000
-        while (System.currentTimeMillis() < deadline && !vm.sendEnabled.value) {
-            shadowOf(Looper.getMainLooper()).idle()
-            Thread.sleep(20)
-        }
+        awaitTailLoaded(vm)
         assertTrue("refreshTail 没跑完（sendEnabled 仍为 false）", vm.sendEnabled.value)
         return vm
     }
@@ -161,11 +166,7 @@ class ChatTimelineWindowTest {
         assertFalse(vm.isBusy)
 
         vm.ensureLoaded()
-        val deadline = System.currentTimeMillis() + 30_000
-        while (System.currentTimeMillis() < deadline && vm.messages.value.isEmpty()) {
-            shadowOf(Looper.getMainLooper()).idle()
-            Thread.sleep(20)
-        }
+        runBlocking { withTimeout(30_000) { vm.messages.first { it.isNotEmpty() } } }
         assertEquals("切回来必须把首屏读回来", 5, vm.messages.value.size)
     }
 
