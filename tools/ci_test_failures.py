@@ -20,6 +20,7 @@ def main(root_dir: str) -> int:
         except Exception:
             continue
         suite = tree.get("name") or os.path.relpath(path, root_dir)
+        has_failure = False
         for case in tree.iter("testcase"):
             for failure in list(case.findall("failure")) + list(case.findall("error")):
                 # 断言消息常常不含根因，堆栈里才有；annotation 有长度上限，取前 1500 字。
@@ -27,6 +28,15 @@ def main(root_dir: str) -> int:
                 message = " ".join(message.split())[:1500]
                 print("::error::%s › %s: %s" % (suite, case.get("name"), message))
                 count += 1
+                has_failure = True
+        # 后台线程/协程抛的异常不会进 Gradle 的 stdout，而是被收在用例报告的 system-err 里
+        # —— CI 第一版诊断只看 stdout，所以什么也没找到（2026-09-21 run #11）。
+        if has_failure:
+            for tag, limit in (("system-err", 1200), ("system-out", 600)):
+                text = " ".join((tree.findtext(tag) or "").split())
+                if text:
+                    print("::error::%s [%s] %s" % (suite, tag, text[-limit:]))
+                    count += 1
     if count == 0:
         print("no failed tests found in %s" % root_dir)
     else:
