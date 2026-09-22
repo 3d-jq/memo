@@ -93,6 +93,8 @@ class MemoApplication : Application(), ImageLoaderFactory {
         // `_initSearchConnectivityTests`）。结果进容器级共享表，列表页行右侧的
         // 「已连接 / 失败」胶囊直接读它。
         container.appScope.launch { container.maybeRunSearchConnectivityTests() }
+        // 应用更新：启动时静默查一次（开关关掉就不查），有新版本由 HomeScreen 弹对话框。
+        container.checkForAppUpdatesOnStartup()
         // 本机副本：启动时按调度决定要不要存一份（不阻塞启动，指纹/计数自己判定）。
         container.maybeRunLocalSnapshot()
         // 备份提醒：读五键调度 + 启动分钟计时（到期驱动抽屉横幅）。

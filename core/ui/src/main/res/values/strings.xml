@@ -31,6 +31,7 @@
     <string name="about_page_update_checking">Checking…</string>
     <string name="about_page_update_download">Download</string>
     <string name="about_page_update_failed">Update check failed</string>
+    <string name="about_page_update_skip_version">Skip this version</string>
     <string name="about_page_update_up_to_date">You’re using the latest version</string>
     <string name="about_page_version">Version</string>
     <string name="about_page_version_detail">%1$s / %2$s</string>

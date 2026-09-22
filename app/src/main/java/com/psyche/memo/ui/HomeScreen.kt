@@ -98,7 +98,10 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Text
+import com.psyche.memo.ui.theme.MemoRadius
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberDrawerState
@@ -388,6 +391,59 @@ fun HomeScreen(
                 com.psyche.memo.PerfProbe.mark("drawer-closed")
             }
         }
+    }
+
+    // 应用更新提示（用户 2026-09-22「为什么有新版本不是弹窗」）：容器启动时已静默查过一次
+    // （`checkForAppUpdatesOnStartup`，受 display_show_app_updates_v1 控制），这里只管"有新版本
+    // 且没被跳过"时弹一个对话框。「跳过此版本」写进偏好、同版本之后不再弹；点「稍后」/返回键
+    // 只是本次不弹（下次启动还会提示）。
+    val updateOutcome by container.updateOutcome.collectAsState()
+    var updateDismissedThisSession by remember { mutableStateOf<String?>(null) }
+    val skippedUpdateVersion = container.preferenceRepository.readJson("update_skipped_version_v1")
+    val availableUpdate =
+        (updateOutcome as? com.psyche.memo.update.UpdateService.Outcome.Available)?.info
+    if (availableUpdate != null &&
+        availableUpdate.version != skippedUpdateVersion &&
+        availableUpdate.version != updateDismissedThisSession
+    ) {
+        val updateContext = androidx.compose.ui.platform.LocalContext.current
+        AlertDialog(
+            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
+            onDismissRequest = { updateDismissedThisSession = availableUpdate.version },
+            title = {
+                Text(stringResource(UiR.string.side_drawer_update_title, availableUpdate.version))
+            },
+            text = {
+                Text(
+                    text = availableUpdate.notes.trim().lineSequence()
+                        .filter { it.isNotBlank() }.joinToString(" ").take(600),
+                    style = TextStyle(fontSize = 13.sp),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    updateDismissedThisSession = availableUpdate.version
+                    runCatching {
+                        updateContext.startActivity(
+                            android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(availableUpdate.downloadUrl),
+                            ),
+                        )
+                    }
+                }) { Text(stringResource(UiR.string.about_page_update_download)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    container.preferenceRepository.writeJson(
+                        "update_skipped_version_v1",
+                        availableUpdate.version,
+                    )
+                    updateDismissedThisSession = availableUpdate.version
+                }) { Text(stringResource(UiR.string.about_page_update_skip_version)) }
+            },
+        )
     }
 
     // 抽屉触觉：home_page_controller.dart L2364-2382 `onDrawerValueChanged` ——

@@ -717,6 +717,7 @@
   "aboutPageLicense": "许可证",
   "aboutPageLoadingPlaceholder": "...",
   "aboutPageNoQQGroup": "暂无QQ群",
+  "aboutPageUpdateSkipVersion": "跳过此版本",
   "aboutPageUpdateCheck": "检查更新",
   "aboutPageUpdateChecking": "检查中…",
   "aboutPageUpdateUpToDate": "已是最新版本",

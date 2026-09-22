@@ -31,6 +31,7 @@
     <string name="about_page_update_checking">检查中…</string>
     <string name="about_page_update_download">去下载</string>
     <string name="about_page_update_failed">检查更新失败</string>
+    <string name="about_page_update_skip_version">跳过此版本</string>
     <string name="about_page_update_up_to_date">已是最新版本</string>
     <string name="about_page_version">版本</string>
     <string name="about_page_version_detail">%1$s / %2$s</string>
