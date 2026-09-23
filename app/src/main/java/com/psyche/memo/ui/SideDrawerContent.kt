@@ -215,7 +215,9 @@ fun SideDrawerContent(
     // display_show_chat_list_date_v1（默认关）：会话列表是否显示日期分组头。
     // 走 DisplayPrefs 的唯一入口 —— 原先这里只认 `"1"`，而旧键是裸布尔 `true`，
     // 于是开关写进去也读不出来（用户 2026-09-23「侧边栏怎么没有对话时间显示了」）。
-    val showChatListDate = remember { DisplayPrefs.showChatListDate(container) }
+    val showChatListDate = remember(DisplayPrefs.revision) {
+        DisplayPrefs.showChatListDate(container)
+    }
 
     fun switchAssistant(a: Assistant) {
         container.setCurrentAssistant(a.id)

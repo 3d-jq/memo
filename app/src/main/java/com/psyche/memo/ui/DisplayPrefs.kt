@@ -14,6 +14,21 @@ import com.psyche.memo.AppContainerImpl
  */
 object DisplayPrefs {
 
+    /**
+     * 显示类偏好的**版本号**（Compose 状态）。
+     *
+     * 为什么需要：聊天页 / 抽屉这些消费者把设置 `remember` 起来缓存，而「显示设置」的子页是
+     * **同屏叠层**（不是导航目的地）——关掉时宿主不会重组，缓存的设置就一直是旧值，
+     * 表现为「开关点了没反应」（用户 2026-09-23「显示助手头像点击根本没有反应」）。
+     * 写入时 `+1`，消费者把它当 `remember` 的 key 即可立刻跟上。
+     */
+    private val revisionState = androidx.compose.runtime.mutableStateOf(0)
+    var revision: Int
+        get() = revisionState.value
+        private set(value) {
+            revisionState.value = value
+        }
+
     /** 会话列表是否显示日期分组头（今天/昨天/…）。上游同名键，默认关。 */
     const val SHOW_CHAT_LIST_DATE = "display_show_chat_list_date_v1"
 
@@ -36,6 +51,7 @@ object DisplayPrefs {
 
     fun writeBool(container: AppContainerImpl, key: String, value: Boolean) {
         container.preferenceRepository.writeJson(key, if (value) "1" else "0")
+        revision += 1
     }
 
     fun showChatListDate(container: AppContainerImpl): Boolean =

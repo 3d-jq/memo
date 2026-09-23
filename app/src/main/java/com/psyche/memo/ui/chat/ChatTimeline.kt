@@ -161,8 +161,9 @@ data class ChatTimelineSettings(
 ) {
     companion object {
         fun fromPrefs(read: (key: String) -> String?): ChatTimelineSettings {
+            // 唯一解码（"1"/"0" 与裸 true/false 都认）：只认一种会把老键读成恒 false。
             fun bool(key: String, default: Boolean): Boolean =
-                read(key)?.let { it == "1" } ?: default
+                com.psyche.memo.ui.DisplayPrefs.decodeBool(read(key), default)
             // 数值键存的是 JSON 数字（settings 页写的是纯数字文本）。
             fun int(key: String, default: Int): Int =
                 read(key)?.trim()?.trim('"')?.toIntOrNull() ?: default
