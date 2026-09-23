@@ -52,6 +52,21 @@ UI 只读 `PromptVariableCatalog`，两边一致性由 `PromptVariableCatalogTes
 
 ---
 
+## §2.5 模型可见 ⟺ 可重建（日志必须等于请求）
+
+**原则**：dsh ——「anything that reaches a model request must be reconstructable from the
+session log」。光「都记下来了」不够，**日志里的那份必须与实际发出去的一字不差**。
+
+**实测漂移（2026-09-23）**：请求侧已改成 `assembleSystemPrompt`（按带位排序 + 去空白），
+而 `ContextLogAssembler` 还是老的 `parts.joinToString("\n\n")` —— 于是**日志里看到的顺序
+与真实请求不同**，排查请求问题时会被误导。
+
+**落点**：日志的拼接与标签长度都改走 `provider/prompt/PromptAssembly` 的**同一份规范化**
+（`orderedPromptParts`）；由 `PromptRenderPathInvariantTest` 守三条：
+① `joinSystemParts(parts) == assembleSystemPrompt(parts)`；
+② 按标签切片（摘掉段首 `\n\n`）== 渲染用的每一段，且段数/来源标签一一对应、总长覆盖全串；
+③ 追加到已有系统消息时，追加部分的带位顺序不变。
+
 ## §3 证据要匹配被改的面，不要默认跑全量
 
 **原则**：dsh ——「Match evidence to the surface」：行为改动跑聚焦测试、模型/用户可见输出跑快照、

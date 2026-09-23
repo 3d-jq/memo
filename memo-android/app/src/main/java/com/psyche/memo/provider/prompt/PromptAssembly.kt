@@ -58,17 +58,26 @@ fun promptOrderOf(source: ContextSource): Int = when (source) {
 }
 
 /**
- * **系统提示词的唯一渲染路径**：按带位稳定排序 → 去空段 → `\n\n` 拼接。
+ * 渲染前的规范化：**校验 → 去空段 → 按带位稳定排序 → 去首尾空白**。
  *
- * 稳定排序保证同带位内保持调用方加入顺序（可预期、可断言）。
+ * 请求渲染（[assembleSystemPrompt]）与上下文日志（`ContextLogAssembler` 的拼接与标签长度）
+ * **必须共用这一份** —— 否则「日志里看到的」与「实际发出去的」会漂移（dsh：model-visible ⟺
+ * logged）。2026-09-23 实测就是漂的：请求按带位排序，日志还是老的 `joinToString("\n\n")`。
+ *
+ * 显式校验放在最前面：**不能只靠排序时顺手发现** —— Kotlin 对「集合且 size ≤ 1」的序列会
+ * 跳过排序，那时选择器根本不跑，校验就静默失效了（这个坑是测试逮到的）。
  */
-fun assembleSystemPrompt(parts: List<Pair<ContextSource, String>>): String {
-    // 显式校验：未登记的 source 一律大声失败。
-    // **不能只靠排序时顺手发现** —— Kotlin 对「集合且 size ≤ 1」的序列会跳过排序，
-    // 那时比较器/选择器根本不跑，校验就静默失效了（这个坑是测试帮我逮到的）。
+fun orderedPromptParts(
+    parts: List<Pair<ContextSource, String>>,
+): List<Pair<ContextSource, String>> {
     parts.forEach { promptOrderOf(it.first) }
     return parts.asSequence()
         .filter { it.second.isNotBlank() }
         .sortedBy { promptOrderOf(it.first) }
-        .joinToString("\n\n") { it.second.trim() }
+        .map { it.first to it.second.trim() }
+        .toList()
 }
+
+/** **系统提示词的唯一渲染路径**：规范化后按 `\n\n` 拼接（同带位保持加入顺序）。 */
+fun assembleSystemPrompt(parts: List<Pair<ContextSource, String>>): String =
+    orderedPromptParts(parts).joinToString("\n\n") { it.second }

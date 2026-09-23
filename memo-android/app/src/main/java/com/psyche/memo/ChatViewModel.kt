@@ -2699,6 +2699,17 @@ class ChatViewModel(
     ): String? {
         val prompt = assistant?.systemPrompt ?: return null
         if (!prompt.contains('{')) return prompt
+        // 手滑的变量名不许静默：原样保留（与上游一致），但记一条告警让它能被发现。
+        val unknownVariables = com.psyche.memo.llm.prompt.PromptTransformer.unknownPlaceholders(
+            prompt,
+            com.psyche.memo.llm.prompt.PromptTransformer.supportedKeys(),
+        )
+        if (unknownVariables.isNotEmpty()) {
+            android.util.Log.w(
+                "MemoPrompt",
+                "系统提示词里有不认识的变量（会原样发给模型）：$unknownVariables",
+            )
+        }
         val context = container.appContext
         val nickname = DefaultModelPrefs.decodeStoredString(
             container.preferenceRepository.readJson("user_name"),

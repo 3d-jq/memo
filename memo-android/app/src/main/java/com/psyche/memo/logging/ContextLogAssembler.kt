@@ -108,7 +108,8 @@ object ContextLogAssembler {
 
     /** The content a fresh system message gets: every part joined with a blank line. */
     fun joinSystemParts(parts: List<Pair<ContextSource, String>>): String =
-        parts.joinToString("\n\n") { it.second }
+        // 与真实请求**同一条渲染路径**（provider/prompt/PromptAssembly）—— 两条路径必然漂移。
+        com.psyche.memo.provider.prompt.assembleSystemPrompt(parts)
 
     /**
      * Tags for [joinSystemParts]: the first part starts at offset 0, every later
@@ -117,9 +118,11 @@ object ContextLogAssembler {
      * parts exactly.
      */
     fun systemMessageTags(parts: List<Pair<ContextSource, String>>): List<ContextTag> =
-        parts.mapIndexed { index, (source, text) ->
-            ContextTag(source, if (index == 0) text.length else 2 + text.length)
-        }
+        // 标签长度必须按**渲染后的**顺序与文本算，否则按标签切出来的段落对不上真实提示词。
+        com.psyche.memo.provider.prompt.orderedPromptParts(parts)
+            .mapIndexed { index, (source, text) ->
+                ContextTag(source, if (index == 0) text.length else 2 + text.length)
+            }
 
     /**
      * Tags when [parts] are appended to a system message that already exists:
@@ -140,8 +143,10 @@ object ContextLogAssembler {
 
     /** The content of a system message with [parts] appended to [existing]. */
     fun joinedAppending(existing: String?, parts: List<Pair<ContextSource, String>>): String =
-        (listOf(existing) + parts.map { it.second })
-            .filterNotNull().filter { it.isNotEmpty() }.joinToString("\n\n")
+        (
+            listOf(existing) +
+                com.psyche.memo.provider.prompt.orderedPromptParts(parts).map { it.second }
+            ).filterNotNull().filter { it.isNotEmpty() }.joinToString("\n\n")
 
     private fun segment(
         source: ContextSource,

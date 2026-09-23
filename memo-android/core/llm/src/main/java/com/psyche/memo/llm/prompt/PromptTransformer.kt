@@ -75,6 +75,23 @@ object PromptTransformer {
         )
     }
 
+    /** 系统提示词里的 `{name}` 占位符；`{{...}}`（消息模板）与 JSON 花括号都不算。 */
+    private val SINGLE_BRACE_PLACEHOLDER = Regex("""(?<!\{)\{(\w+)\}(?!\})""")
+
+    /**
+     * 提示词里出现、但**不认识**的占位符。
+     *
+     * dsh 的严格渲染是「未知变量直接抛」；我们这套是 `{...}` 写法（与 JSON 花括号同形），
+     * 抛会误伤合法提示词，所以退一步做到 **不静默**：调用方拿到清单后记一条告警 ——
+     * 否则 `{cur_dtae}` 这种手滑会**原样发给模型**（上游行为）而没人知道
+     *（`docs/ENGINEERING_HARNESS.md` §2 fail loud 的柔性版）。
+     */
+    fun unknownPlaceholders(text: String, known: Set<String>): List<String> {
+        if (text.isEmpty()) return emptyList()
+        val found = SINGLE_BRACE_PLACEHOLDER.findAll(text).map { it.value }.toSet()
+        return (found - known).sorted()
+    }
+
     /**
      * 支持的占位符键（**唯一来源**：就是 [buildPlaceholders] 的 map 键）。
      *
