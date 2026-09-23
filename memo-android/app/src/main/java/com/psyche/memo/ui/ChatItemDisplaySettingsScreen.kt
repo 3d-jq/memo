@@ -159,7 +159,10 @@ fun ChatItemDisplaySettingsScreen(
         // LaunchedEffect 体默认跑在组合线程上，里面的 readJson 是真会打 SQLite 的
         withContext(Dispatchers.IO) {
             values = switchRows.associate {
-                it.prefsKey to (container.preferenceRepository.readJson(it.prefsKey)?.let { v -> v == "1" } ?: it.default)
+                it.prefsKey to com.psyche.memo.ui.DisplayPrefs.decodeBool(
+                    container.preferenceRepository.readJson(it.prefsKey),
+                    it.default,
+                )
             }
         }
 }
