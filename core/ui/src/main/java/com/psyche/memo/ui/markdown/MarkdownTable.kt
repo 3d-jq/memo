@@ -101,9 +101,6 @@ private const val TABLE_CARD_ALPHA_LIGHT = 0.018
 private const val TABLE_FILL_ALPHA = 0.72f
 private const val TABLE_BORDER_ALPHA_DARK = 0.22f
 private const val TABLE_BORDER_ALPHA_LIGHT = 0.30f
-internal const val TABLE_MIN_COLUMN_DP = 112f
-private const val TABLE_MAX_COLUMN_DP = 178f
-private const val TABLE_SCROLL_COLUMN_THRESHOLD = 4
 
 /** `_MarkdownTableToolbar` L3843-3930: 38dp label bar above the table body. */
 private val TABLE_TOOLBAR_HEIGHT = 38.dp
@@ -132,8 +129,6 @@ private const val TABLE_ROW_PAGE_SIZE = 100
  */
 private const val TABLE_COLUMN_SLACK = 1.12f
 
-/** The original reserves 16dp of horizontal slack when sizing columns. */
-private val TABLE_INSET_H_TOTAL = 16.dp
 
 /**
  * A parsed GFM table: the header row plus the body rows.
@@ -292,29 +287,25 @@ internal fun cellText(cell: Node): String = buildString {
 }
 
 /**
- * 横向滚动时的固定列宽 —— 上游 `_compactColumnWidth`（L3522-3529）：
- * `((safeMax - 16) / visibleColumns).clamp(112, 178)`，`visibleColumns` 在列数 >= 4 时
- * 取 2.45（"一屏露出两列半"），否则就是列数。
+ * 到底要不要横向滚动 —— **宁可滚动也不换行**（用户 2026-09-23「改成宁可滚动也别换行吧」）。
  *
- * [viewportDp] 必须是**有限**的视口宽（滚动容器外面量到的），传 Infinity 会被
- * `coerceIn` 一路顶到 178 —— 那正是宽屏上"右边空着、单元格还在换行"的来源。
+ * 上游的判据是「列数 >= 4 且真的溢出」：1~3 列放不下时宁可把列压窄、单元格逐行折行。
+ * 用户看到的就是那个「挤在一起」，他明确要求反过来：**只要按内容宽排下来放不下，就横向
+ * 滚动**，让每个单元格保持它需要的宽度。内容本来放得下时一律不滚动（交给
+ * `FlexColumnWidth` 语义铺满，这一条是上一版修的"右边空一大块"）。
  */
-internal fun compactColumnWidth(viewportDp: Float, columnCount: Int): Float {
-    if (columnCount <= 0 || !viewportDp.isFinite()) return TABLE_MAX_COLUMN_DP
-    val visibleColumns = if (columnCount >= TABLE_SCROLL_COLUMN_THRESHOLD) 2.45f else columnCount.toFloat()
-    return ((viewportDp - TABLE_INSET_H_TOTAL.value) / visibleColumns)
-        .coerceIn(TABLE_MIN_COLUMN_DP, TABLE_MAX_COLUMN_DP)
+internal fun tableNeedsHorizontalScroll(viewportDp: Float, naturalTotalDp: Float): Boolean {
+    if (!viewportDp.isFinite() || !naturalTotalDp.isFinite()) return true
+    return naturalTotalDp > viewportDp
 }
 
 /**
- * 到底要不要横向滚动 —— 上游 L3507-3519 的溢出判据：**列多（>= 4）且固定列宽排下来
- * 真的超出视口**才滚。放得下就交给 `FlexColumnWidth` 铺满（列宽自适应），否则宽屏上
- * 会出现一条永远用不到的横向滚动条 + 右侧空白。
+ * 滚动时的列宽：**按内容自然宽**（这样单元格基本不折行），但单列最多占满一屏 ——
+ * 一个几百字的单元格要是放任它撑开，整张表会宽到没法用；封顶后它自己折行，其余列不受影响。
  */
-internal fun tableNeedsHorizontalScroll(viewportDp: Float, columnCount: Int, compactDp: Float): Boolean {
-    if (columnCount < TABLE_SCROLL_COLUMN_THRESHOLD) return false
-    if (!viewportDp.isFinite() || !compactDp.isFinite()) return true
-    return compactDp * columnCount > viewportDp
+internal fun scrollColumnWidths(naturalPx: List<Float>, availPx: Float): List<Float> {
+    if (!availPx.isFinite() || availPx <= 0f) return naturalPx
+    return naturalPx.map { it.coerceAtMost(availPx) }
 }
 
 @Composable
@@ -424,31 +415,35 @@ internal fun MarkdownTableView(
                 )
             }
             // 视口宽度必须在**滚动容器之外**量。`Modifier.horizontalScroll` 交给子项的
-            // 是无界约束，所以量在里面的 `maxWidth` 会是 Infinity，于是
-            // `(available / 2.45).coerceIn(112, 178)` 恒等于 178dp —— 4 列以上的表被
-            // 钉死在 712dp：宽屏上右边空一大块、单元格却仍在 158dp 的可视宽里换行
-            // （用户 2026-09-23「明明有空间，还是会让他换行，挤在一起」）。
+            // 是无界约束，所以量在里面的 `maxWidth` 会是 Infinity —— 上一版因此把列宽
+            // 算成了常数（宽屏上右边空一大块、单元格还在换行，用户 2026-09-23 实测）。
             // 上游 `_MarkdownTableBlock` 的 LayoutBuilder 就在滚动视图**外面**
-            // （`markdown_with_highlight.dart:3276-3291`），列宽才跟着视口走。
+            // （`markdown_with_highlight.dart:3276-3291`）。
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val viewportDp = maxWidth.value
-                val compactDp = compactColumnWidth(viewportDp, model.columnCount)
-                val scrollable = tableNeedsHorizontalScroll(viewportDp, model.columnCount, compactDp)
-                // 列宽（Flutter Table 的语义）：
-                // - 真的放不下、且列多（>= 4）时：固定列宽 `_compactColumnWidth`（L3522），
-                //   往右溢出、横向滚动；
-                // - 否则：每列先拿到「最小可读宽」（最长不可断片段，等价
-                //   minIntrinsicWidth），剩余空间再按自然宽比例分配 —— 这正是
-                //   Flutter 用 FlexColumnWidth 时不会把"时间"列压成每行两三个字
-                //   的原因。**放得下就绝不滚动**（上游 L3507-3519 的溢出判据）。
+                val availPx = with(density) { maxWidth.toPx() }
                 val cellPadPx = with(density) { (TABLE_CELL_PADDING_H * 2).toPx() }
+                val naturals = measureColumnWidths(measurer, model, measureStyle)
+                val mins = measureColumnMinWidths(measurer, model, measureStyle)
+                // 按内容排下来需要多宽（下限是最长不可断片段，等价 minIntrinsicWidth）。
+                val naturalPx = List(model.columnCount) { i ->
+                    (naturals.getOrElse(i) { 0f } * TABLE_COLUMN_SLACK + cellPadPx)
+                        .coerceAtLeast(mins.getOrElse(i) { 0f } + cellPadPx)
+                }
+                val scrollable = tableNeedsHorizontalScroll(
+                    viewportDp = maxWidth.value,
+                    naturalTotalDp = with(density) { naturalPx.sum().toDp().value },
+                )
+                // 列宽（Flutter Table 的语义）：
+                // - 放不下：**横向滚动**，每列按内容自然宽（最多一屏）—— 宁可滚动也不换行；
+                // - 放得下：每列先拿到「最小可读宽」，剩余空间按自然宽比例分配，铺满整宽
+                //   （Flutter FlexColumnWidth 的行为）。
                 val widths: List<androidx.compose.ui.unit.Dp> = if (scrollable) {
-                    List(model.columnCount) { compactDp.dp }
+                    scrollColumnWidths(naturalPx, availPx).map { px -> with(density) { px.toDp() } }
                 } else {
                     columnWidths(
-                        naturals = measureColumnWidths(measurer, model, measureStyle),
-                        mins = measureColumnMinWidths(measurer, model, measureStyle),
-                        availPx = with(density) { maxWidth.toPx() },
+                        naturals = naturals,
+                        mins = mins,
+                        availPx = availPx,
                         padPx = cellPadPx,
                         slack = TABLE_COLUMN_SLACK,
                     ).map { px -> with(density) { px.toDp() } }

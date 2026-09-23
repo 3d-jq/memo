@@ -1959,3 +1959,30 @@ ArrowUp（prompt，带缓存）/ ArrowDown（completion）/ **Zap（tok/s）** /
 `toolIconFor`：两个界面列的是同一批工具，图标必须一致；`ToolIconCoverageTest` 新增一条断言把
 「两边一致且都不落 Wrench」钉住。绘图工具统一用设置页原有的 `Shapes`（聊天卡那侧的
 `ChartBar` 是我上一轮临时挑的，已改回 `Shapes`）。
+
+## 5.47 记忆图标按动作分开；表格改成「宁可滚动也不换行」（2026-09-23，用户两条实测）
+
+### ① 记忆工具全族共用一个图标 → 一个动作一个图标
+
+用户：「记忆工具里的图标也改一下吧，很多也一样呀」。上游 `toolSchemaIconFor`/工具卡的映射把
+`memory_read`/`memory_update`/`memory_search_profile`/`memory_edit`/`update_user_profile`
+（外加遗留名 `create_memory`/`edit_memory`）**全画成 `bookHeart`**，只有删除是 `bookDashed`。
+现在按动作分开：read=`BookOpen` / update+create=`BookPlus` / search_profile=`UserSearch` /
+edit=`NotebookPen` / delete=`BookDashed` / update_user_profile=`UserPen`。
+**这是有意偏离上游的映射**（`ToolIconCoverageTest.theMemoryFamilyHasOneIconPerAction` 钉住
+「六个动作六个图标」+ 遗留名跟随现代名 + 两界面同源）。
+
+顺带把「两份表」的结构问题一次解决：`ui/ToolSchemaSettingsScreen.kt` 的 `toolSchemaIconFor`
+（上游 L15-63 的 1:1 移植）现在是 `ui/chat/ToolCallCard.kt` 里 `toolIconFor` 的**别名**。
+抄两份的代价这一轮付了两次（工作区全族漏配、记忆全族同图标），留着只会再犯。
+
+### ② 表格：宁可滚动也不换行
+
+用户拍板：「改成宁可滚动也别换行吧」。原来的判据是上游的「列数 >= 4 且固定列宽溢出才滚」，
+1~3 列放不下时宁可把列压窄、逐行折行 —— 就是他说的"挤在一起"。
+
+现在：按内容自然宽（测量值 ×1.12 slack，下限是最长不可断片段）算总宽，
+**放得下就不滚**（flex 铺满，§5.46 修的那半），**放不下就滚**（任意列数都滚），滚动时每列
+按内容宽、单列最多一屏（一个几百字的单元格放任撑开会宽到没法用，封顶后它自己折行、其余列
+不受影响）。判据做成纯函数 `tableNeedsHorizontalScroll()` / `scrollColumnWidths()`，
+各自的边界都有单测；上游那两个常数（`TABLE_MIN/MAX_COLUMN_DP`、列数阈值、16dp inset）随之删除。

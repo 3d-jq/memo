@@ -67,7 +67,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.BookDashed
-import com.composables.icons.lucide.BookHeart
+import com.composables.icons.lucide.BookOpen
+import com.composables.icons.lucide.BookPlus
 import com.composables.icons.lucide.Calculator
 import com.composables.icons.lucide.Calendar
 import com.composables.icons.lucide.CalendarPlus
@@ -90,11 +91,14 @@ import com.composables.icons.lucide.Link
 import com.composables.icons.lucide.ListPlus
 import com.composables.icons.lucide.ListTodo
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.NotebookPen
 import com.composables.icons.lucide.FilePlus
 import com.composables.icons.lucide.FilePen
 import com.composables.icons.lucide.FileSearch
 import com.composables.icons.lucide.List
 import com.composables.icons.lucide.TextSearch
+import com.composables.icons.lucide.UserPen
+import com.composables.icons.lucide.UserSearch
 import com.composables.icons.lucide.Shapes
 import com.composables.icons.lucide.Workflow
 import com.composables.icons.lucide.FileText
@@ -218,10 +222,18 @@ fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
         // 加载技能：与设置→技能页同一个 Puzzle 图标（RikkaHub 用 MagicWand01，
         // icons-lucide 1.1.0 没有那个图标；技能域内保持同一个图标更重要）。
         com.psyche.memo.provider.SkillTools.USE_SKILL -> Lucide.Puzzle
-        "memory_read", "memory_update", "memory_search_profile", "memory_edit",
-        "update_user_profile", "create_memory", "edit_memory",
-        -> Lucide.BookHeart
+        // 记忆工具（上游全族共用一个 BookHeart —— 用户 2026-09-23「记忆工具里的图标也改
+        // 一下吧，很多也一样呀」）：按动作各给一个图标，和本地工具那种"一个动作一个图标"
+        // 的强度对齐。**这是有意偏离上游的映射**，两个界面共用这一份（设置页的
+        // `toolSchemaIconFor` 就调这里）。
+        // 遗留名（create_memory / edit_memory / delete_memory）跟随各自的现代同名工具：
+        // 老会话里的工具卡还要能正确显示。
+        "memory_read" -> Lucide.BookOpen
+        "memory_update", "create_memory" -> Lucide.BookPlus
+        "memory_search_profile" -> Lucide.UserSearch
+        "memory_edit", "edit_memory" -> Lucide.NotebookPen
         "memory_delete", "delete_memory" -> Lucide.BookDashed
+        "update_user_profile" -> Lucide.UserPen
         "chat_search", "builtin_search" -> Lucide.Search
         "search_web" -> Lucide.Earth
         // 生成工具（自研功能）：与设置里两个入口同一个图标语言。
