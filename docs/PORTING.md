@@ -1906,3 +1906,56 @@ JSON 回给模型**，都默认**免审批**（只读，和 `workspace_read_file
 **速度口径＝completion tokens ÷ 总耗时**（`formatTokensPerSecond`，<0.5s 或 ≤0 不显示 —— 缓存命中/极短回复
 除出来的数字会离谱）。**用户想要的是"首字之后的时间"那个更准的口径**，但那要给消息模型加一个 `firstTokenMs`
 字段（跨 payload 持久化、写进 `MessagePart` 的时间线），单开一轮再做 —— 这一轮先用现成的 `durationMs`。
+
+## 5.46 更新日志弹窗 / 表格列宽 / token 明细图标 / 工具描述图标（2026-09-23，用户四条实测）
+
+### ① 「检查更新」那一行只报状态，日志进弹窗并渲染 markdown
+
+用户：「这个弹窗里面 markdown 没有渲染，还有这个更新日志不要在检查更新那里显示呀，用弹窗呀…点击出现弹窗呀」。
+GitHub release 的 `body` 是 **markdown**，而两处都把它拍平成一坨 `Text`（关于页那行取前 60 字、启动弹窗取前 600 字）：
+
+- 新增 `ui/UpdateNotesBody.kt`（`MarkdownText` + 限高 420dp 滚动），**启动弹窗与关于页弹窗共用**；
+- 关于页那一行：`label` 固定「检查更新」、`detail` 只报状态（`发现新版本：x.y.z` / 已是最新版本 /
+  检查中… / 检查失败），**不再塞日志**；点它 → `MemoAlertDialog`（正文 markdown，按钮
+  去下载 / 关闭）。没新版时点它仍然是「重新检查」。
+- 「关闭」复用 `chat_interruption_close`（不为一个按钮新造 key）。
+
+### ② markdown 表格：宽屏上"右边空着、单元格还在换行"
+
+用户：「表格渲染问题，经常是明明有空间，还是会让他换行，挤在一起」。根因是**列宽算错**，两处：
+
+1. `BoxWithConstraints` 原来在 `Modifier.horizontalScroll` **里面** —— 滚动容器交给子项的是无界
+   约束，`maxWidth` = Infinity，于是 `(available / 2.45).coerceIn(112, 178)` **恒等于 178dp**，
+   4 列以上的表被钉死在 712dp：比 712dp 宽的容器右边空一大块，单元格却仍在 158dp 的可视宽里换行。
+   修法是把量宽挪到滚动容器**外面**（上游 `markdown_with_highlight.dart:3276-3291` 的 LayoutBuilder
+   本来就在外面）。
+2. 滚动判据丢了：原实现是「列数 >= 4 就滚」，上游是 `columnCount >= 4 && columnWidth * count >
+   视口宽`（L3507-3519）。现在两个判据都做成纯函数 `compactColumnWidth()` /
+   `tableNeedsHorizontalScroll()` 并各有单测 —— 宽屏放得下就交给 `FlexColumnWidth` 语义铺满，
+   **放得下绝不滚动**。
+3. 顺带修测量/复制的口径：`cellText` 只收 `Text` 节点，`` `npm run build` `` 这种行内代码测量宽
+   是 0（列只拿到最小宽 ⇒ 明明放得下也换行），而且工具栏「复制 Markdown / 导出 CSV」会把它整段
+   丢掉。`cellText` 现在也收 `Code.literal`，并改成 `internal` 由 `MarkdownTableTest` 直接验。
+
+### ③ token 明细：图标与 tok/s 在**弹窗里**，折叠标签是纯文本（上一轮我改错了地方）
+
+用户 2026-09-22 说「token 显示里面没有对应图标，也没有 token 速度」，我照着**折叠态那行**加了
+`#` 图标与 tok/s —— **改错了地方**。上游 `token_display_widget.dart:261-271` 折叠态就是一行
+纯文本 `123 tokens`，带图标的是**点开的明细气泡**：`token_detail_popup.dart:33-84` 四行
+ArrowUp（prompt，带缓存）/ ArrowDown（completion）/ **Zap（tok/s）** / Timer（耗时），每行
+12dp 图标 + 6dp 间距 + 12sp 文本，气泡 `maxWidth 280` + `overlaySurface` + 圆角 10。
+
+现在 1:1 对齐：折叠标签回纯文本（没有明细数据时**不可点**，上游 `_hasDetailData`），气泡补
+图标与 tok/s 行。速度口径照上游（`completion / (ms/1000)`，只要求 `> 0`，**没有**我上一版加的
+「< 0.5s 不显示」门槛）；`formatTokensPerSecond` / `formatSeconds` 共用定点用 `.` 的
+`Locale.US`（Dart `toStringAsFixed` 恒用 `.`，Kotlin `"%.1f".format` 在中文系统上会给 `12,3`）。
+我上一轮自造的 `tokenDetailSpeedLabel` 键已从三份 ARB 删除。
+
+### ④ 「设置 → 工具描述」的图标是**另一个**函数
+
+用户：「工具描述里面的图标怎么没有变呀」。聊天工具卡走 `ui/chat/ToolCallCard.kt` 的
+`toolIconFor`，设置那份列表走 `ui/ToolSchemaSettingsScreen.kt` 的 `toolSchemaIconFor`（上游
+`tool_schema_ui.dart` L15-63 的 1:1 移植）—— 上一轮只改了前者。现在后者的 `else` 兜底直接调
+`toolIconFor`：两个界面列的是同一批工具，图标必须一致；`ToolIconCoverageTest` 新增一条断言把
+「两边一致且都不落 Wrench」钉住。绘图工具统一用设置页原有的 `Shapes`（聊天卡那侧的
+`ChartBar` 是我上一轮临时挑的，已改回 `Shapes`）。

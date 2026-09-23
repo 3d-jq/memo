@@ -45,8 +45,6 @@ import com.composables.icons.lucide.Calculator
 import com.composables.icons.lucide.Calendar
 import com.composables.icons.lucide.CalendarPlus
 import com.composables.icons.lucide.CircleCheck
-import com.composables.icons.lucide.Shapes
-import com.composables.icons.lucide.Workflow
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Clipboard
 import com.composables.icons.lucide.Clock
@@ -62,7 +60,6 @@ import com.composables.icons.lucide.RotateCcw
 import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.Smartphone
 import com.composables.icons.lucide.Volume2
-import com.composables.icons.lucide.Wrench
 import com.composables.icons.lucide.X
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.R as UiR
@@ -76,7 +73,15 @@ import kotlinx.serialization.json.jsonPrimitive
  * badge and the settings-style tool row.
  */
 
-/** toolSchemaIconFor L15-63. */
+/**
+ * toolSchemaIconFor L15-63。
+ *
+ * 上游只有它自己那批工具（记忆/搜索/本地工具），我们长出来的工具（工作区、技能、生成、
+ * 绘图）**不在上游的 when 里**，所以整批落到 `Wrench` —— 用户 2026-09-23「工具描述里面的
+ * 图标怎么没有变呀」就是这个（我只改了聊天工具卡的映射，漏了这一处）。修法是让兜底走
+ * 聊天工具卡那套 [toolIconFor]：两个界面列的是同一批工具，图标必须一致
+ * （`ToolIconCoverageTest` 钉住这条）。
+ */
 fun toolSchemaIconFor(name: String): androidx.compose.ui.graphics.vector.ImageVector = when (name) {
     "search_web" -> Lucide.Earth
     "memory_read", "memory_update", "memory_search_profile", "memory_edit",
@@ -98,11 +103,7 @@ fun toolSchemaIconFor(name: String): androidx.compose.ui.graphics.vector.ImageVe
     "reminders_query" -> Lucide.ListTodo
     "reminders_create" -> Lucide.ListPlus
     "reminders_complete" -> Lucide.CircleCheck
-    // 自研：可视化绘图（render_visual，10 种图 + 手写 SVG 一个入口）。
-    com.psyche.memo.provider.chart.VisualTools.TOOL_NAME -> Lucide.Shapes
-    // 自研：Mermaid 图。
-    com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME -> Lucide.Workflow
-    else -> Lucide.Wrench
+    else -> com.psyche.memo.ui.chat.toolIconFor(name)
 }
 /** toolSchemaFirstLine L65-69. */
 fun toolSchemaFirstLine(text: String): String {

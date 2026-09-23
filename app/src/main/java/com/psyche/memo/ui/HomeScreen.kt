@@ -6,7 +6,6 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.pointer.pointerInput
@@ -132,7 +131,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalView
 import com.psyche.memo.AppContainerImpl
@@ -415,11 +413,10 @@ fun HomeScreen(
                 Text(stringResource(UiR.string.side_drawer_update_title, availableUpdate.version))
             },
             text = {
-                Text(
-                    text = availableUpdate.notes.trim().lineSequence()
-                        .filter { it.isNotBlank() }.joinToString(" ").take(600),
-                    style = TextStyle(fontSize = 13.sp),
-                )
+                // GitHub release 的 body 是 markdown（标题/列表/`code`）——以前拍平成一行
+                // 塞进 Text，用户 2026-09-23「弹窗里面 markdown 没有渲染」。关于页那个
+                // 更新日志弹窗共用同一份正文。
+                UpdateNotesBody(availableUpdate.notes)
             },
             confirmButton = {
                 TextButton(onClick = {

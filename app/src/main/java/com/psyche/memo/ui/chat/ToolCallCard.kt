@@ -95,7 +95,7 @@ import com.composables.icons.lucide.FilePen
 import com.composables.icons.lucide.FileSearch
 import com.composables.icons.lucide.List
 import com.composables.icons.lucide.TextSearch
-import com.composables.icons.lucide.ChartBar
+import com.composables.icons.lucide.Shapes
 import com.composables.icons.lucide.Workflow
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Puzzle
@@ -236,8 +236,10 @@ fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
         com.psyche.memo.provider.workspace.WorkspaceTools.GLOB -> Lucide.FileSearch
         com.psyche.memo.provider.workspace.WorkspaceTools.GREP -> Lucide.TextSearch
         com.psyche.memo.provider.workspace.WorkspaceTools.SHELL -> Lucide.Terminal
-        // 自研绘图工具：与生成工具同一套图标语言。
-        com.psyche.memo.provider.chart.VisualTools.TOOL_NAME -> Lucide.ChartBar
+        // 自研绘图工具：`Shapes`/`Workflow` 与「设置 → 工具描述」里那份映射一致 ——
+        // 两个界面列的是同一批工具，图标不一样会很奇怪（`toolSchemaIconFor` 的兜底
+        // 就是这个函数，改这里要一起想）。
+        com.psyche.memo.provider.chart.VisualTools.TOOL_NAME -> Lucide.Shapes
         com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME -> Lucide.Workflow
         // Provider 内置服务端工具（chat_message_widget.dart:444-453）。
         "web_fetch" -> Lucide.Link

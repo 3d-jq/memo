@@ -5,12 +5,13 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * token 行的生成速度（`TokenDisplay` 里那个 `<n> tok/s`）。
+ * token 明细气泡里的两行数字：`<n> tok/s` 与 `<n>s`。
  *
- * 口径是**completion tokens ÷ 总耗时**（PORTING §5.45②）。两条护栏：数据不足时**不显示**
- * （返回 null）—— 缓存命中的回复 completion 是 0、极短回复的耗时会除出几十上百的假数字，
- * 那种数字比不显示更糟；正常值保留一位小数、定点用 `.`（`Locale.US`，中文/欧洲系统上
- * `String.format` 默认会用逗号）。
+ * 口径 1:1 上游 `token_detail_popup.dart`：速度 = completion tokens ÷ 总耗时（秒）
+ * （`:59-72`），耗时 = 毫秒 ÷ 1000（`:76`），都只保留一位小数、条件只有「> 0」——
+ * **不要**加「太短就不显示」那类上游没有的门槛。两条护栏：`%` 定点必须用 `.`
+ * （中文系统上 `"%.1f".format` 会给出 `12,3`，读起来像千位分隔），以及没有数据时
+ * 返回 null（那一行整个不画，见 `TokenPopupRow`）。
  */
 class TokenSpeedFormatTest {
 
@@ -19,16 +20,25 @@ class TokenSpeedFormatTest {
         assertEquals("50.0", formatTokensPerSecond(completionTokens = 500, durationMs = 10_000))
         assertEquals("12.3", formatTokensPerSecond(completionTokens = 123, durationMs = 10_000))
         assertEquals("1.0", formatTokensPerSecond(completionTokens = 1, durationMs = 1_000))
+        // 上游只要求 > 0：短回复也照算（0.499s 也要出数）。
+        assertEquals("100.2", formatTokensPerSecond(completionTokens = 50, durationMs = 499))
     }
 
     @Test
     fun hidesTheNumberWhenTheDataIsNotUsable() {
         assertNull("没有 completion 数就不显示", formatTokensPerSecond(null, 10_000))
         assertNull("没有耗时就不显示", formatTokensPerSecond(500, null))
-        assertNull("缓存命中（0 token）不显示", formatTokensPerSecond(0, 10_000))
+        assertNull("0 token 不显示", formatTokensPerSecond(0, 10_000))
         assertNull("负数不显示", formatTokensPerSecond(-3, 10_000))
-        assertNull("瞬时回复（<0.5s）不显示", formatTokensPerSecond(50, 499))
-        assertEquals("0.5s 就够显示了", "100.0", formatTokensPerSecond(50, 500))
+        assertNull("耗时为 0 不显示（上游 `durationMs > 0`）", formatTokensPerSecond(500, 0))
+    }
+
+    @Test
+    fun formatsDurationSecondsWithOneDecimal() {
+        assertEquals("1.0", formatSeconds(1_000))
+        assertEquals("1.5", formatSeconds(1_500))
+        assertEquals("0.4", formatSeconds(399))
+        assertEquals("123.5", formatSeconds(123_456))
     }
 
     @Test
@@ -38,6 +48,7 @@ class TokenSpeedFormatTest {
         try {
             java.util.Locale.setDefault(java.util.Locale.GERMANY)
             assertEquals("12.3", formatTokensPerSecond(123, 10_000))
+            assertEquals("1.5", formatSeconds(1_500))
         } finally {
             java.util.Locale.setDefault(previous)
         }

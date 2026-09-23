@@ -268,17 +268,53 @@ internal fun columnWidths(
     }
 }
 
-/** Plain text of a cell, flattened through nested inline nodes. */
-private fun cellText(cell: Node): String = buildString {
+/**
+ * Plain text of a cell, flattened through nested inline nodes.
+ *
+ * **行内代码（`Code`）也要算进去**：它渲染时是一段等宽文字，但第一版只收 `Text`
+ * 节点，于是 `` `npm run build` `` 这种单元格的测量宽是 0 —— 列只拿到最小宽、
+ * 明明有空间也在换行（用户 2026-09-23「明明有空间还是换行」的次要来源），
+ * 而且工具栏「复制 Markdown / 导出 CSV」会**把行内代码整段丢掉**。
+ */
+internal fun cellText(cell: Node): String = buildString {
     fun walk(node: Node) {
         var child = node.firstChild
         while (child != null) {
-            if (child is org.commonmark.node.Text) append(child.literal ?: "")
-            else walk(child)
+            when (child) {
+                is org.commonmark.node.Text -> append(child.literal ?: "")
+                is org.commonmark.node.Code -> append(child.literal ?: "")
+                else -> walk(child)
+            }
             child = child.next
         }
     }
     walk(cell)
+}
+
+/**
+ * 横向滚动时的固定列宽 —— 上游 `_compactColumnWidth`（L3522-3529）：
+ * `((safeMax - 16) / visibleColumns).clamp(112, 178)`，`visibleColumns` 在列数 >= 4 时
+ * 取 2.45（"一屏露出两列半"），否则就是列数。
+ *
+ * [viewportDp] 必须是**有限**的视口宽（滚动容器外面量到的），传 Infinity 会被
+ * `coerceIn` 一路顶到 178 —— 那正是宽屏上"右边空着、单元格还在换行"的来源。
+ */
+internal fun compactColumnWidth(viewportDp: Float, columnCount: Int): Float {
+    if (columnCount <= 0 || !viewportDp.isFinite()) return TABLE_MAX_COLUMN_DP
+    val visibleColumns = if (columnCount >= TABLE_SCROLL_COLUMN_THRESHOLD) 2.45f else columnCount.toFloat()
+    return ((viewportDp - TABLE_INSET_H_TOTAL.value) / visibleColumns)
+        .coerceIn(TABLE_MIN_COLUMN_DP, TABLE_MAX_COLUMN_DP)
+}
+
+/**
+ * 到底要不要横向滚动 —— 上游 L3507-3519 的溢出判据：**列多（>= 4）且固定列宽排下来
+ * 真的超出视口**才滚。放得下就交给 `FlexColumnWidth` 铺满（列宽自适应），否则宽屏上
+ * 会出现一条永远用不到的横向滚动条 + 右侧空白。
+ */
+internal fun tableNeedsHorizontalScroll(viewportDp: Float, columnCount: Int, compactDp: Float): Boolean {
+    if (columnCount < TABLE_SCROLL_COLUMN_THRESHOLD) return false
+    if (!viewportDp.isFinite() || !compactDp.isFinite()) return true
+    return compactDp * columnCount > viewportDp
 }
 
 @Composable
@@ -328,7 +364,6 @@ internal fun MarkdownTableView(
         fgAlpha = if (isDark) TABLE_CARD_ALPHA_DARK else TABLE_CARD_ALPHA_LIGHT,
         bg = cs.surface,
     ).copy(alpha = if (capturing) 1f else TABLE_FILL_ALPHA)
-    val scrollable = model.columnCount >= TABLE_SCROLL_COLUMN_THRESHOLD
     val scrollState = rememberScrollState()
 
     // Row pager (_initialRows 40, then +100 per tap), like _buildRowPager.
@@ -388,34 +423,41 @@ internal fun MarkdownTableView(
                     capture = captureForExport,
                 )
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
-            ) {
-                BoxWithConstraints {
-                    // 列宽（Flutter Table 的语义）：
-                    // - 能横向滚动时（列多）：固定列宽 _compactColumnWidth（L3522），
-                    //   让 >= 4 列的表格往右溢出；
-                    // - 否则：每列先拿到「最小可读宽」（最长不可断片段，等价
-                    //   minIntrinsicWidth），剩余空间再按自然宽比例分配 —— 这正是
-                    //   Flutter 用 FlexColumnWidth 时不会把"时间"列压成每行两三个字
-                    //   的原因。
-                    val cellPadPx = with(density) { (TABLE_CELL_PADDING_H * 2).toPx() }
-                    val widths: List<androidx.compose.ui.unit.Dp> = if (scrollable) {
-                        val available = maxWidth - TABLE_INSET_H_TOTAL
-                        val compact = (available / 2.45f)
-                            .coerceIn(TABLE_MIN_COLUMN_DP.dp, TABLE_MAX_COLUMN_DP.dp)
-                        List(model.columnCount) { compact }
-                    } else {
-                        columnWidths(
-                            naturals = measureColumnWidths(measurer, model, measureStyle),
-                            mins = measureColumnMinWidths(measurer, model, measureStyle),
-                            availPx = with(density) { maxWidth.toPx() },
-                            padPx = cellPadPx,
-                            slack = TABLE_COLUMN_SLACK,
-                        ).map { px -> with(density) { px.toDp() } }
-                    }
+            // 视口宽度必须在**滚动容器之外**量。`Modifier.horizontalScroll` 交给子项的
+            // 是无界约束，所以量在里面的 `maxWidth` 会是 Infinity，于是
+            // `(available / 2.45).coerceIn(112, 178)` 恒等于 178dp —— 4 列以上的表被
+            // 钉死在 712dp：宽屏上右边空一大块、单元格却仍在 158dp 的可视宽里换行
+            // （用户 2026-09-23「明明有空间，还是会让他换行，挤在一起」）。
+            // 上游 `_MarkdownTableBlock` 的 LayoutBuilder 就在滚动视图**外面**
+            // （`markdown_with_highlight.dart:3276-3291`），列宽才跟着视口走。
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val viewportDp = maxWidth.value
+                val compactDp = compactColumnWidth(viewportDp, model.columnCount)
+                val scrollable = tableNeedsHorizontalScroll(viewportDp, model.columnCount, compactDp)
+                // 列宽（Flutter Table 的语义）：
+                // - 真的放不下、且列多（>= 4）时：固定列宽 `_compactColumnWidth`（L3522），
+                //   往右溢出、横向滚动；
+                // - 否则：每列先拿到「最小可读宽」（最长不可断片段，等价
+                //   minIntrinsicWidth），剩余空间再按自然宽比例分配 —— 这正是
+                //   Flutter 用 FlexColumnWidth 时不会把"时间"列压成每行两三个字
+                //   的原因。**放得下就绝不滚动**（上游 L3507-3519 的溢出判据）。
+                val cellPadPx = with(density) { (TABLE_CELL_PADDING_H * 2).toPx() }
+                val widths: List<androidx.compose.ui.unit.Dp> = if (scrollable) {
+                    List(model.columnCount) { compactDp.dp }
+                } else {
+                    columnWidths(
+                        naturals = measureColumnWidths(measurer, model, measureStyle),
+                        mins = measureColumnMinWidths(measurer, model, measureStyle),
+                        availPx = with(density) { maxWidth.toPx() },
+                        padPx = cellPadPx,
+                        slack = TABLE_COLUMN_SLACK,
+                    ).map { px -> with(density) { px.toDp() } }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
+                ) {
                     Column(
                         modifier = Modifier
                             .width(widths.fold(0.dp) { acc, w -> acc + w })

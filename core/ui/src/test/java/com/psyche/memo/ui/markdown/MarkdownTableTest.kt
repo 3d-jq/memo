@@ -4,6 +4,7 @@ import org.commonmark.ext.gfm.tables.TableBlock
 import org.commonmark.ext.gfm.tables.TableCell
 import org.commonmark.node.Node
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,18 +28,7 @@ class MarkdownTableTest {
         throw AssertionError("no TableBlock parsed from:\n$markdown")
     }
 
-    private fun cellText(cell: TableCell): String = buildString {
-        fun walk(node: Node) {
-            var child = node.firstChild
-            while (child != null) {
-                if (child is org.commonmark.node.Text) append(child.literal ?: "")
-                else walk(child)
-                child = child.next
-            }
-        }
-        walk(cell)
-    }
-
+    private fun cellText(cell: TableCell): String = cellText(cell as Node)
     @Test
     fun parsesHeaderAndBodyRows() {
         // NB: leading indentation would make commonmark treat the table as an
@@ -199,6 +189,56 @@ class MarkdownTableTest {
             slack = 1f,
         )
         assertEquals(widths[0], widths[1], 1e-3f)
+    }
+
+    // -----------------------------------------------------------------------
+    // 横向滚动的两个判据（上游 `_compactColumnWidth` L3522 + 溢出判据 L3507）
+    //
+    // 用户 2026-09-23「明明有空间，还是会让他换行，挤在一起」的根因就是这两个：
+    // 视口宽是在**滚动容器里面**量的（无界 ⇒ 恒等于 178dp），而且列数 >= 4 就无条件
+    // 滚动。宽屏上的后果是"右边空一大块、单元格还在 158dp 里换行"。
+    // -----------------------------------------------------------------------
+
+    /** 手机 360dp：4 列时 `(360-16)/2.45 ≈ 140`，一屏露出两列半。 */
+    @Test
+    fun compactColumnWidthScalesWithTheViewport() {
+        assertEquals(140.4f, compactColumnWidth(viewportDp = 360f, columnCount = 4), 0.1f)
+        // 宽屏（平板/横屏/分屏）：仍然封顶 178，由「是否滚动」那条判据决定不滚动。
+        assertEquals(178f, compactColumnWidth(viewportDp = 900f, columnCount = 4), 0.001f)
+        // 很窄的容器：不低于 112（再窄就没法读了）。
+        assertEquals(112f, compactColumnWidth(viewportDp = 200f, columnCount = 4), 0.001f)
+        // 列数不足 4 时 visibleColumns 就是列数本身。
+        assertEquals(114.7f, compactColumnWidth(viewportDp = 360f, columnCount = 3), 0.1f)
+    }
+
+    /** 量到无界宽（旧实现传给这里的值）时不能算出 Infinity 当列宽。 */
+    @Test
+    fun compactColumnWidthSurvivesAnUnboundedViewport() {
+        assertEquals(178f, compactColumnWidth(viewportDp = Float.POSITIVE_INFINITY, columnCount = 4), 0.001f)
+        assertEquals(178f, compactColumnWidth(viewportDp = 360f, columnCount = 0), 0.001f)
+    }
+
+    @Test
+    fun onlyColourfulTablesScroll() {
+        // 4 列手机：140.4 × 4 = 561.6 > 360 → 滚动。
+        assertTrue(tableNeedsHorizontalScroll(360f, 4, compactColumnWidth(360f, 4)))
+        // 4 列宽屏：178 × 4 = 712 < 900 → **不滚动**，交给 FlexColumnWidth 铺满
+        // （这就是"有空间"那一半的修复）。
+        assertFalse(tableNeedsHorizontalScroll(900f, 4, compactColumnWidth(900f, 4)))
+        // 3 列永远不滚动（上游 threshold >= 4）；宁可换行也不横滚。
+        assertFalse(tableNeedsHorizontalScroll(360f, 3, compactColumnWidth(360f, 3)))
+        assertFalse(tableNeedsHorizontalScroll(120f, 2, compactColumnWidth(120f, 2)))
+        // 无界视口（理论上量不到）当放不下处理，避免把表压扁。
+        assertTrue(tableNeedsHorizontalScroll(Float.POSITIVE_INFINITY, 5, 178f))
+    }
+
+    /** 行内代码要算进单元格文本（测量宽 + 复制 Markdown/CSV 都靠它）。 */
+    @Test
+    fun inlineCodeIsPartOfTheCellText() {
+        val table = firstTable("| cmd | note |\n| --- | --- |\n| `npm run build` | plain |")
+        val row = parseTable(table).body.single()
+        assertEquals("npm run build", cellText(row[0]))
+        assertEquals("plain", cellText(row[1]))
     }
 
 }

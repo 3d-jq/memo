@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -63,20 +64,23 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import com.composables.icons.lucide.ArrowDown
+import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronsDown
 import com.composables.icons.lucide.ChevronsUp
 import com.composables.icons.lucide.ChevronLeft
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ChevronUp
+import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Zap
-import com.composables.icons.lucide.Hash
 import com.composables.icons.lucide.Loader
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Trash2
 import com.psyche.memo.ui.ChatStyleSpec
+import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.R as UiR
 import kotlin.math.roundToInt
 
@@ -207,10 +211,16 @@ private fun UserMenuItem(
 }
 
 /**
- * Compact token display — 1:1 port of token_display_widget.dart (mobile
- * path): "123 tokens" 11sp α0.5 label; tap toggles a detail popup anchored
- * above/below the label showing prompt (with cached), completion and
- * duration. Desktop hover behavior is not ported (mobile-only surface).
+ * Compact token display — 1:1 port of token_display_widget.dart +
+ * token_detail_popup.dart (mobile path).
+ *
+ * 折叠态就是一行 `123 tokens`（11sp、α0.5 的**纯文本**，没有图标也没有速度 ——
+ * `token_display_widget.dart:261-271`）；点开才出明细气泡，四行各自带图标：
+ * ArrowUp prompt（有缓存则带 cached）/ ArrowDown completion / **Zap tok/s** /
+ * Timer duration（`token_detail_popup.dart:33-84`）。
+ *
+ * 没有明细数据时**标签不可点**（上游 `_hasDetailData`），所以不会点出一个空气泡。
+ * Desktop 的 hover 行为不移植（手机端没有 hover）。
  */
 @Composable
 fun TokenDisplay(
@@ -222,48 +232,25 @@ fun TokenDisplay(
 ) {
     val cs = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
-    // 速度：completionTokens / 总耗时。**总耗时口径**（durationMs 现成）；「首字之后」那个更准的
-    // 口径要给消息模型加一个 firstTokenMs 字段（跨 payload 持久化），单开一轮再做。
-    val speed = formatTokensPerSecond(completionTokens, durationMs)
+    val label: @Composable () -> Unit = {
+        Text(
+            text = androidx.compose.ui.res.stringResource(
+                UiR.string.token_detail_total_tokens,
+                formatTokenCount(totalTokens),
+            ),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 11.sp,
+                color = cs.onSurface.copy(alpha = 0.5f),
+            ),
+        )
+    }
+    val hasDetailData = (promptTokens ?: 0) > 0 || (completionTokens ?: 0) > 0 || (durationMs ?: 0) > 0
+    if (!hasDetailData) {
+        label()
+        return
+    }
     Box {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.clickable { expanded = !expanded },
-        ) {
-            // 用户 2026-09-22「对话显示里的那个 token 显示里面没有对应图标，也没有 token 速度」
-            Icon(
-                Lucide.Hash,
-                contentDescription = null,
-                tint = cs.onSurface.copy(alpha = 0.5f),
-                modifier = Modifier.size(12.dp),
-            )
-            Text(
-                text = androidx.compose.ui.res.stringResource(
-                    UiR.string.token_detail_total_tokens,
-                    formatTokenCount(totalTokens),
-                ),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 11.sp,
-                    color = cs.onSurface.copy(alpha = 0.5f),
-                ),
-            )
-            if (speed != null) {
-                Icon(
-                    Lucide.Zap,
-                    contentDescription = null,
-                    tint = cs.onSurface.copy(alpha = 0.5f),
-                    modifier = Modifier.size(12.dp),
-                )
-                Text(
-                    text = speed + " " + androidx.compose.ui.res.stringResource(UiR.string.token_detail_speed_label),
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.sp,
-                        color = cs.onSurface.copy(alpha = 0.5f),
-                    ),
-                )
-            }
-        }
+        Box(modifier = Modifier.clickable { expanded = !expanded }) { label() }
         if (expanded) {
             Popup(
                 alignment = Alignment.BottomEnd,
@@ -273,26 +260,33 @@ fun TokenDisplay(
                 Column(
                     modifier = Modifier
                         .padding(bottom = 8.dp)
-                        .background(cs.surfaceContainerHigh, RoundedCornerShape(MemoRadius.INNER_DP.dp))
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        // 上游 `ConstrainedBox(maxWidth: 280)` + `overlaySurface` + 圆角 10。
+                        .widthIn(max = 280.dp)
+                        .background(cs.overlaySurfaceColor(), RoundedCornerShape(MemoRadius.SMALL_DP.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     TokenPopupRow(
-                        text = if (cachedTokens != null && cachedTokens > 0 && promptTokens != null) {
-                            androidx.compose.ui.res.stringResource(
-                                UiR.string.token_detail_prompt_tokens_with_cache,
-                                formatTokenCount(promptTokens),
-                                formatTokenCount(cachedTokens),
-                            )
-                        } else if (promptTokens != null) {
-                            androidx.compose.ui.res.stringResource(
-                                UiR.string.token_detail_prompt_tokens,
-                                formatTokenCount(promptTokens),
-                            )
-                        } else null,
+                        icon = Lucide.ArrowUp,
+                        text = promptTokens?.takeIf { it > 0 }?.let { prompt ->
+                            val cached = (cachedTokens ?: 0).takeIf { it > 0 }
+                            if (cached != null) {
+                                androidx.compose.ui.res.stringResource(
+                                    UiR.string.token_detail_prompt_tokens_with_cache,
+                                    formatTokenCount(prompt),
+                                    formatTokenCount(cached),
+                                )
+                            } else {
+                                androidx.compose.ui.res.stringResource(
+                                    UiR.string.token_detail_prompt_tokens,
+                                    formatTokenCount(prompt),
+                                )
+                            }
+                        },
                     )
                     TokenPopupRow(
-                        text = completionTokens?.let {
+                        icon = Lucide.ArrowDown,
+                        text = completionTokens?.takeIf { it > 0 }?.let {
                             androidx.compose.ui.res.stringResource(
                                 UiR.string.token_detail_completion_tokens,
                                 formatTokenCount(it),
@@ -300,10 +294,17 @@ fun TokenDisplay(
                         },
                     )
                     TokenPopupRow(
+                        icon = Lucide.Zap,
+                        text = formatTokensPerSecond(completionTokens, durationMs)?.let {
+                            androidx.compose.ui.res.stringResource(UiR.string.token_detail_speed, it)
+                        },
+                    )
+                    TokenPopupRow(
+                        icon = Lucide.Clock,
                         text = durationMs?.takeIf { it > 0 }?.let {
                             androidx.compose.ui.res.stringResource(
                                 UiR.string.token_detail_duration,
-                                "%.1f".format(it / 1000.0),
+                                formatSeconds(it),
                             )
                         },
                     )
@@ -313,17 +314,27 @@ fun TokenDisplay(
     }
 }
 
+/** 明细气泡的一行：12dp 图标 + 6dp 间距 + 12sp α0.8 文本（上游 `_buildRow`）。 */
 @Composable
-private fun TokenPopupRow(text: String?) {
+private fun TokenPopupRow(icon: ImageVector, text: String?) {
     if (text.isNullOrEmpty()) return
     val cs = MaterialTheme.colorScheme
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall.copy(
-            fontSize = 12.sp,
-            color = cs.onSurface.copy(alpha = 0.8f),
-        ),
-    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = cs.onSurface.copy(alpha = 0.5f),
+            modifier = Modifier.size(12.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                color = cs.onSurface.copy(alpha = 0.8f),
+            ),
+        )
+    }
 }
 
 private fun formatTokenCount(value: Int): String = java.text.DecimalFormat.getIntegerInstance().format(value)
@@ -716,13 +727,22 @@ fun VoiceTranscribingIndicator(
 
 
 /**
- * 生成速度：completion tokens ÷ 总耗时（秒），保留一位小数；数据不足时返回 null（不显示）。
- * `durationMs` 太小（<0.5s）不显示 —— 那多半是缓存命中/极短回复，除出来的数字会离谱。
+ * 生成速度：completion tokens ÷ 总耗时（秒），一位小数 —— 1:1 上游
+ * `token_detail_popup.dart:59-72`（`completionTokens / (durationMs / 1000.0)` 再
+ * `toStringAsFixed(1)`）。上游的条件只有「都 > 0」，**没有**「太短就不显示」那类额外判断。
  */
 internal fun formatTokensPerSecond(completionTokens: Int?, durationMs: Long?): String? {
     val tokens = completionTokens ?: return null
     val ms = durationMs ?: return null
-    if (tokens <= 0 || ms < 500L) return null
-    val perSecond = tokens * 1000.0 / ms
-    return java.util.Locale.US.let { String.format(it, "%.1f", perSecond) }
+    if (tokens <= 0 || ms <= 0) return null
+    return formatOneDecimal(tokens / (ms / 1000.0))
 }
+
+/** 耗时秒数，一位小数（上游 `token_detail_popup.dart:76` 的 `toStringAsFixed(1)`）。 */
+internal fun formatSeconds(durationMs: Long): String = formatOneDecimal(durationMs / 1000.0)
+
+/**
+ * Dart 的 `toStringAsFixed(1)` 定点用 `.`；Kotlin 的 `"%.1f".format` 跟随系统区域，
+ * 中文/德语系统上会得到 `12,3` —— 那个逗号在界面上会被读成千位分隔，所以钉死 US。
+ */
+private fun formatOneDecimal(value: Double): String = String.format(java.util.Locale.US, "%.1f", value)
