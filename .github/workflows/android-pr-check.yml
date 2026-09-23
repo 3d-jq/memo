@@ -24,6 +24,18 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Robolectric 在**跑测试时**才去 Maven 拉 `android-all-instrumented`（放在 ~/.m2，
+      # setup-gradle 只缓存 Gradle 自己的依赖，不会覆盖这里）。不缓存的话每个 run 都要
+      # 现场下载一次，Maven 抖一下就整批用例一起挂 —— 2026-09-23 run 35823802499 就是
+      # 这样红的：那个 job 里**每一个** Robolectric 用例都
+      # `AssertionError at MavenArtifactFetcher.java:129`，与代码无关。
+      - name: Cache Robolectric android-all jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: robolectric-${{ runner.os }}-
+
       # core:workspace 的交互式终端 PTY（src/main/cpp/termux_pty.cpp）需要 NDK + CMake。
       # runner 自带的 Android SDK 不含这两样，且版本必须与 core/workspace/build.gradle.kts
       # 里的 ndkVersion 一致。
