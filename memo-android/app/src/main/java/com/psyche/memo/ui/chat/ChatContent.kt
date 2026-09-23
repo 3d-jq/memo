@@ -10,6 +10,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -59,6 +60,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -1380,25 +1382,46 @@ fun ChatContent(
                     val streamingMessage = messages.lastOrNull { it.isStreaming }
                     if (streamingMessage != null) {
                         item(key = STREAMING_INDICATOR_ITEM_KEY) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Spacer(Modifier.height(6.dp))
-                                // 自动重试等待中：换成「N 秒后重试 (2/3)」倒计时（下一次
-                                // 尝试开始后 retryStatus=null 自动切回扫光文字）。
-                                val retry = streamingMessage.retryStatus
-                                if (retry != null &&
-                                    com.psyche.memo.ui.chat.shouldShowRetryCountdown(retry, true)
+                            // 1:1 照 RikkaHub `ChatList.kt:381-402` 的那一项：
+                            // 28dp 的自家 app 图标（会动）+ 可选状态文字，横向一行、无底板。
+                            // 用户 2026-09-23「人家一直是那样的，直接一比一改成他那样」。
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    // 左边仍与助手气泡对齐（`ASSISTANT_MESSAGE_HORIZONTAL_DP`），
+                                    // 这是用户同一天单独提过的要求。
+                                    .padding(
+                                        start = ChatStyleSpec.ASSISTANT_MESSAGE_HORIZONTAL_DP.dp,
+                                        end = ChatStyleSpec.ASSISTANT_MESSAGE_HORIZONTAL_DP.dp,
+                                        top = 6.dp,
+                                        bottom = 6.dp,
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (timelineSettings.thinkingIndicator.style ==
+                                    com.psyche.memo.ui.chat.ThinkingIndicatorStyle.SHIMMER
                                 ) {
-                                    com.psyche.memo.ui.chat.RetryCountdownHint(
-                                        status = retry,
-                                        modifier = Modifier.padding(start = 2.dp),
-                                    )
-                                } else {
+                                    // 文字扫光（用户 2026-09-12 点名那版；样式/字号/颜色/提示词
+                                    // 由「显示设置 → 渲染 → 流式等待提示」决定）。
                                     com.psyche.memo.ui.chat.ThinkingShimmerText(
-                                        modifier = Modifier.padding(start = 2.dp),
                                         phrases = timelineSettings.thinkingIndicator.phrases,
                                         fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
                                         colorArgb = timelineSettings.thinkingIndicator.colorArgb,
                                     )
+                                } else {
+                                    // 出厂形态：28dp 自家 app 图标（照 RikkaHub）。
+                                    com.psyche.memo.ui.chat.MemoLoadingIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                    )
+                                }
+                                // RikkaHub 那行文字只在 processingStatus 非空时出现；我们对应的
+                                // 是自动重试倒计时（原版 kelivo 的等待气泡也是「指示器 + 倒计时」）。
+                                val retry = streamingMessage.retryStatus
+                                if (retry != null &&
+                                    com.psyche.memo.ui.chat.shouldShowRetryCountdown(retry, true)
+                                ) {
+                                    com.psyche.memo.ui.chat.RetryCountdownHint(status = retry)
                                 }
                             }
                         }

@@ -29,9 +29,17 @@ object SkillTools {
     val ALL_TOOL_NAMES = setOf(USE_SKILL)
 
     /** 与上游逐字一致。 */
+    /**
+     * 调用引导 —— RikkaHub 原文只有一句（"Call this tool when the user's request matches
+     * one of the available skills."），实测模型（DeepSeek）经常**不加载技能就直接自己编**，
+     * 用户 2026-09-23「每次让他安装 skill，他都不会按照这个 create skill 的方法走」。
+     * 这里按 deepseek-harness 的 skill 目录文案（`packages/skill/tool-skill/src/index.ts`
+     * 渲染 `<available_skills>` 那段）补上：**动手前**先加载、命中多个全加载、
+     * 只有摘要时别照着猜。
+     */
     private val DESCRIPTION = """
         Load and apply a skill to get specialized instructions or capabilities.
-        Call this tool when the user's request matches one of the available skills.
+        Call this tool when the user's request matches one of the available skills, or when the user names a skill, before doing the task work.
     """.trimIndent()
 
     /** 助手启用 ∩ 磁盘存在 —— 顺序跟磁盘列表走，保证给模型的清单稳定。 */
@@ -67,9 +75,18 @@ object SkillTools {
         if (available.isEmpty()) return null
         return buildString {
             appendLine("**Skills**")
+            // 三句硬要求照 deepseek-harness（`tool-skill/src/index.ts` 渲染目录那段的收尾语）：
+            // 「动手前先加载」「命中的全加载」「只有摘要、没加载就别照着猜」。
+            // 原来只有一句 "when the user's request matches"，模型（DeepSeek）基本不触发 ——
+            // 用户 2026-09-23「每次让他安装 skill，他都不会按照这个 create skill 的方法走」。
             appendLine(
-                "You have access to the following skills. Use the `use_skill` tool to load " +
-                    "a skill's instructions when the user's request matches.",
+                "If the user names a skill, or the task clearly matches a skill's description, " +
+                    "call the `use_skill` tool with the exact skill name **before taking task actions**. " +
+                    "Load all applicable skills, then follow their full instructions.",
+            )
+            appendLine(
+                "This catalog contains summaries only: do not infer or follow a skill's instructions " +
+                    "until it has been loaded.",
             )
             appendLine("<available_skills>")
             available.forEach { skill ->

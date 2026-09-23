@@ -60,6 +60,25 @@ class SkillToolsTest {
         assertFalse(block.contains("ghost"))
     }
 
+    /**
+     * 调用引导必须是**硬要求**，不能只是"匹配时可以用"。
+     *
+     * 用户 2026-09-23「每次让他安装 skill，他都不会按照这个 create skill 的方法走」——
+     * 原来的文案（RikkaHub 原文，一句 "when the user's request matches"）实测不触发，
+     * 模型会自己编一套做法。现在照 deepseek-harness 的 skill 目录收尾语补了三句：
+     * 动手前先加载 / 命中的全加载 / 没加载过就别照着猜。
+     */
+    @Test
+    fun skillCallGuidanceIsImperativeAndForbidsGuessing() {
+        val block = SkillTools.systemPromptBlock(listOf("a"), listOf(skill("a")))!!
+        assertTrue("动手前调用", block.contains("before taking task actions"))
+        assertTrue("命中的全加载", block.contains("Load all applicable skills"))
+        assertTrue("没加载就别猜", block.contains("do not infer or follow a skill's instructions"))
+        // 工具描述同样要点出"动手前"。
+        val description = SkillTools.catalogDefinitions().single().description
+        assertTrue(description.contains("before doing the task work"))
+    }
+
     @Test
     fun executeWithoutPathReturnsTheBodyNotTheFrontmatter() {
         val a = skill("a", body = "# Heading\ntext")

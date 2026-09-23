@@ -1530,6 +1530,7 @@ private fun contextSourceColor(source: ContextSource): Color {
         ContextSource.systemPrompt -> cs.primary
         ContextSource.memoryRules, ContextSource.memorySnapshot -> cs.tertiary
         ContextSource.worldBook -> semantic.success
+        ContextSource.toolRules -> cs.secondary
         ContextSource.instructionInjection -> semantic.warning
         ContextSource.searchPrompt -> cs.secondary
         ContextSource.skillPrompt -> cs.primary
@@ -1547,6 +1548,7 @@ private fun contextSourceLabelRes(source: ContextSource): Int = when (source) {
     ContextSource.skillPrompt -> UiR.string.context_log_source_skill_prompt
     ContextSource.workspace -> UiR.string.context_log_source_workspace
     ContextSource.worldBook -> UiR.string.context_log_source_world_book
+    ContextSource.toolRules -> UiR.string.context_log_source_tool_rules
     ContextSource.memorySnapshot -> UiR.string.context_log_source_memory_snapshot
     ContextSource.chatHistory -> UiR.string.context_log_source_chat_history
     ContextSource.toolCall -> UiR.string.context_log_source_tool_call

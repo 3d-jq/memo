@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonObject
 
 enum class ContextSource {
     systemPrompt, memoryRules, searchPrompt, instructionInjection, skillPrompt, workspace,
-    worldBook, memorySnapshot, chatHistory, toolCall, toolResult;
+    worldBook, memorySnapshot, toolRules, chatHistory, toolCall, toolResult;
 
     companion object {
         fun fromWire(raw: String?): ContextSource =

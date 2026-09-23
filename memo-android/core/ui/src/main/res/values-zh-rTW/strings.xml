@@ -734,6 +734,7 @@
     <string name="context_log_source_system_prompt">系統提示詞</string>
     <string name="context_log_source_tool_call">工具呼叫</string>
     <string name="context_log_source_tool_result">工具結果</string>
+    <string name="context_log_source_tool_rules">工具紀律</string>
     <string name="context_log_source_workspace">工作區</string>
     <string name="context_log_source_world_book">世界書</string>
     <string name="context_log_tokens_estimate_hint">tokens 僅為預估值，請以模型實際消耗為準。</string>
@@ -949,6 +950,8 @@
     <string name="display_settings_page_show_model_name_timestamp_subtitle">是否在聊天訊息中顯示模型名稱及時間戳</string>
     <string name="display_settings_page_show_model_name_timestamp_title">顯示模型名稱與時間戳</string>
     <string name="display_settings_page_show_model_name_title">顯示模型名稱</string>
+    <string name="display_settings_page_show_assistant_avatar_title">顯示助手頭像</string>
+    <string name="display_settings_page_show_assistant_avatar_subtitle">在助手的回覆旁顯示助手頭像。</string>
     <string name="display_settings_page_show_model_timestamp_title">顯示模型時間戳</string>
     <string name="display_settings_page_show_provider_in_chat_message_subtitle">在聊天訊息的模型名稱後面顯示供應商名稱（如 模型 | 供應商）</string>
     <string name="display_settings_page_show_provider_in_chat_message_title">模型名稱後顯示供應商</string>
@@ -979,6 +982,9 @@
     <string name="display_settings_page_thinking_indicator_phrases_hint">每行一句</string>
     <string name="display_settings_page_thinking_indicator_phrases_reset">恢復預設</string>
     <string name="display_settings_page_thinking_indicator_phrases_title">提示詞</string>
+    <string name="display_settings_page_thinking_indicator_style_icon">應用圖標</string>
+    <string name="display_settings_page_thinking_indicator_style_shimmer">文字掃光</string>
+    <string name="display_settings_page_thinking_indicator_style_title">提示樣式</string>
     <string name="display_settings_page_tray_minimize_on_close_title">關閉視窗時最小化到系統匣</string>
     <string name="display_settings_page_tray_show_tray_title">顯示系統匣圖示</string>
     <string name="display_settings_page_tray_title">系統匣</string>

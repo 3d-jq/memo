@@ -16,6 +16,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -580,6 +584,37 @@ fun ThinkingShimmerText(
 
 /** VoiceWaveform 的布局断言锚点（波形槽位高度回归测试用）。 */
 const val VOICE_WAVEFORM_TAG = "voice_waveform"
+
+/**
+ * 生成中的指示器 —— 1:1 照 RikkaHub `RabbitLoadingIndicator`
+ * （`.rikkahub-ref/ui/components/ui/RabbitLoading.kt:16-43`）：那边放的是**自家 app 图标**
+ * 的 AnimatedVectorDrawable（兔子会眨眼），28dp，当"正在跑"的标记用。
+ *
+ * 我们的是 PNG（`ic_launcher_foreground`：便签 + 那点蓝光），没有现成动图，就用
+ * **呼吸式缩放**让它活起来。用户 2026-09-23「人家一直是那样的，直接一比一改成他那样」——
+ * 之前那版是文字扫光 + 底板，形态上和 RikkaHub 不是一回事。
+ */
+@Composable
+fun MemoLoadingIndicator(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "memoLoadingIndicator")
+    val scale by transition.animateFloat(
+        initialValue = 0.82f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 720, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "memoLoadingIndicatorScale",
+    )
+    Image(
+        painter = androidx.compose.ui.res.painterResource(com.psyche.memo.R.drawable.ic_launcher_foreground),
+        contentDescription = null,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        },
+    )
+}
 
 /**
  * 气泡内自动重试倒计时（1:1 移植 `_RetryCountdownHint`，chat_message_widget.dart
