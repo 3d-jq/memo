@@ -802,33 +802,48 @@ fun ChatContent(
     // 就会被顶起一行、下个 chunk 又贴回来** —— 那就是抖动（根因见
     // `.stepcode/plans/session-01a0ce17-*.md`）。改成布局驱动后，长高自己触发贴底，
     // 漂移活不过一帧。判据（谁把门）在 PinnedFollow，纯函数、有契约测试。
-    androidx.compose.runtime.LaunchedEffect(
-        timelineListState,
-        autoScrollEnabled,
-        scrollDensity,
-        streaming,
-        following,
-        followGrace,
-        pointerDown,
-    ) {
-        snapshotFlow { tailBottomGapPx() }
-            .distinctUntilChanged()
-            .collect { gap ->
-                val pin = com.psyche.memo.ui.chat.PinnedFollow.shouldPinToBottom(
-                    hasMessages = messages.isNotEmpty(),
-                    following = following,
-                    autoScrollEnabled = autoScrollEnabled,
-                    pointerDown = pointerDown,
-                    isScrollInProgress = timelineListState.isScrollInProgress,
-                    streaming = streaming,
-                    graceActive = followGrace,
-                    gapPx = gap,
-                    tolerancePx = with(scrollDensity) {
-                        com.psyche.memo.ui.chat.PinnedFollow.STICK_TOLERANCE_DP.dp.toPx()
-                    },
-                )
-                if (pin) scrollTimelineToBottom()
+    // **指数收敛跟随**（取自 Agora `StreamingTailIndicator.kt` 的 coalescedScrollStep）：
+    // 每帧按「距底误差 × (1 − exp(−dt/τ))」走一步，并对单帧步长设上限。
+    // 为什么不是硬贴底：`requestScrollToItem` 会让位置在「贴到底 → 下一帧内容长高 → 再贴」
+    // 之间反复归零，肉眼就是来回跳（这就是抖动的根因）；指数收敛连续吃掉增长、永不回弹。
+    androidx.compose.runtime.LaunchedEffect(streaming, followGrace) {
+        if (!streaming && !followGrace) return@LaunchedEffect
+        var lastNanos = 0L
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { it }   // 每帧一次（取消随 effect 一起）
+            val gap = tailBottomGapPx()
+            val attached = com.psyche.memo.ui.chat.PinnedFollow.shouldPinToBottom(
+                hasMessages = messages.isNotEmpty(),
+                following = following,
+                autoScrollEnabled = autoScrollEnabled,
+                pointerDown = pointerDown,
+                isScrollInProgress = timelineListState.isScrollInProgress,
+                streaming = streaming,
+                graceActive = followGrace,
+                gapPx = gap,
+                tolerancePx = with(scrollDensity) {
+                    com.psyche.memo.ui.chat.PinnedFollow.STICK_TOLERANCE_DP.dp.toPx()
+                },
+            )
+            val now = System.nanoTime()
+            val dt = if (lastNanos == 0L) 0f else (now - lastNanos) / 1_000_000_000f
+            lastNanos = now
+            if (!attached) continue
+            if (dt <= 0f) continue
+            val step = com.psyche.memo.ui.chat.PinnedFollow.coalescedScrollStep(
+                errorPx = gap,
+                elapsedSeconds = dt,
+                timeConstantSeconds = com.psyche.memo.ui.chat.PinnedFollow
+                    .FOLLOW_TIME_CONSTANT_SECONDS,
+                maximumVelocityPxPerSecond = com.psyche.memo.ui.chat.PinnedFollow
+                    .FOLLOW_MAX_VELOCITY_PX_PER_SECOND,
+                minimumStepPx = com.psyche.memo.ui.chat.PinnedFollow.FOLLOW_MIN_STEP_PX,
+            )
+            if (step != 0f) {
+                // dispatchRawDelta 同步应用（requestScrollToItem 要等下一个 measure，会晚一帧）
+                timelineListState.dispatchRawDelta(step)
             }
+        }
     }
     // scroll_controller.dart:518-564 stickToBottomAfterGeneration：生成结束那一刻尾部
     // 还会长高（操作行/Token 统计出现、思考卡收起），跟随条件里的 streaming 已经翻假，
@@ -1422,22 +1437,10 @@ fun ChatContent(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                if (timelineSettings.thinkingIndicator.style ==
-                                    com.psyche.memo.ui.chat.ThinkingIndicatorStyle.SHIMMER
-                                ) {
-                                    // 文字扫光（用户 2026-09-12 点名那版；样式/字号/颜色/提示词
-                                    // 由「显示设置 → 渲染 → 流式等待提示」决定）。
-                                    com.psyche.memo.ui.chat.ThinkingShimmerText(
-                                        phrases = timelineSettings.thinkingIndicator.phrases,
-                                        fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
-                                        colorArgb = timelineSettings.thinkingIndicator.colorArgb,
-                                    )
-                                } else {
-                                    // 出厂形态：28dp 自家 app 图标（照 RikkaHub）。
-                                    com.psyche.memo.ui.chat.MemoLoadingIndicator(
-                                        modifier = Modifier.size(28.dp),
-                                    )
-                                }
+                                // **呼吸圆点**（11dp、颜色跟随主题；移植 Agora `GenerationActivityDot`）。
+                                // 用户 2026-09-23「只要这个呼吸圆点了，不要改的入口了」——
+                                // 形态开关已移除，这里不再有 扫光/图标 分支。
+                                com.psyche.memo.ui.chat.MemoLoadingIndicator()
                                 // RikkaHub 那行文字只在 processingStatus 非空时出现；我们对应的
                                 // 是自动重试倒计时（原版 kelivo 的等待气泡也是「指示器 + 倒计时」）。
                                 val retry = streamingMessage.retryStatus

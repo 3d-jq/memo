@@ -420,12 +420,10 @@ internal fun MessageRow(
                 // （助手头像四态），否则 showModelIcon 时显示该消息的模型品牌
                 // 图标；两者都不显示时头部只有名字。
                 val headerAssistant = assistant
-                // display_show_assistant_avatar_v1（Memo 新增）：打开就**强制**显示助手头像；
-                // 关闭时完全维持上游行为（助手设了头像用助手头像，否则按 showModelIcon 显示模型图标）。
+                // display_show_assistant_avatar_v1（Memo 新增，**默认开**）：就是**显示/隐藏**助手头像。
+                // 打开 ⇒ 一定显示助手头像（助手没设头像时 AssistantListAvatar 自带首字母圆牌回退）；
+                // 关闭 ⇒ 不画头像，回落到上游的「模型图标」开关（showModelIcon）。
                 if (timelineSettings.showAssistantAvatar && headerAssistant != null) {
-                    AssistantListAvatar(headerAssistant, 32.dp)
-                    Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
-                } else if (headerAssistant != null && headerAssistant.useAssistantAvatar) {
                     AssistantListAvatar(headerAssistant, 32.dp)
                     Spacer(Modifier.width(ChatStyleSpec.ASSISTANT_AVATAR_NAME_GAP_DP.dp))
                 } else if (showModelIcon) {

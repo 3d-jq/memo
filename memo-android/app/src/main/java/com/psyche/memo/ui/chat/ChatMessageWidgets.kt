@@ -596,24 +596,11 @@ const val VOICE_WAVEFORM_TAG = "voice_waveform"
  */
 @Composable
 fun MemoLoadingIndicator(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "memoLoadingIndicator")
-    val scale by transition.animateFloat(
-        initialValue = 0.82f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 720, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "memoLoadingIndicatorScale",
-    )
-    Image(
-        painter = androidx.compose.ui.res.painterResource(com.psyche.memo.R.drawable.ic_launcher_foreground),
-        contentDescription = null,
-        modifier = modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        },
-    )
+    // 观感换成**呼吸圆点**（移植 Agora `GenerationActivityDot`）：11dp、颜色跟随主题
+    // （`onSurface`）、scale 0.55⇄1.30 @1s Reverse。用户 2026-09-23「用它这个吧，
+    // 颜色跟着主题走，他这个又好看又没有任何问题」——取代此前 28dp 的 app 图标。
+    // 尺寸由圆点自身固定（调用方不要再传 size，否则会把圆点放大）。
+    GenerationActivityDot(modifier = modifier)
 }
 
 /**

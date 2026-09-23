@@ -32,7 +32,14 @@ object DisplayPrefs {
     /** 会话列表是否显示日期分组头（今天/昨天/…）。上游同名键，默认关。 */
     const val SHOW_CHAT_LIST_DATE = "display_show_chat_list_date_v1"
 
-    /** 消息列表里是否显示助手头像（**Memo 新增，上游没有**；默认关）。 */
+    /**
+     * 消息列表里是否显示助手头像（**Memo 新增，上游没有**；**默认开**）。
+     *
+     * 语义就是**显示/隐藏**：关掉时助手消息头部不出现头像（回落到上游的「模型图标」开关）；
+     * 打开时一定显示助手头像（助手没设头像则用首字母圆牌回退）。
+     * 旧实现是「打开=强制、关闭=维持上游」——默认关时仍会显示头像，与「关闭就该不显示」不符
+     *（用户 2026-09-23 实测指出）。
+     */
     const val SHOW_ASSISTANT_AVATAR = "display_show_assistant_avatar_v1"
 
     /**
@@ -58,5 +65,5 @@ object DisplayPrefs {
         readBool(container, SHOW_CHAT_LIST_DATE, default = false)
 
     fun showAssistantAvatar(container: AppContainerImpl): Boolean =
-        readBool(container, SHOW_ASSISTANT_AVATAR, default = false)
+        readBool(container, SHOW_ASSISTANT_AVATAR, default = true)
 }
