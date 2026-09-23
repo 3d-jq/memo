@@ -421,14 +421,12 @@ fun HomeScreen(
             confirmButton = {
                 TextButton(onClick = {
                     updateDismissedThisSession = availableUpdate.version
-                    runCatching {
-                        updateContext.startActivity(
-                            android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse(availableUpdate.downloadUrl),
-                            ),
-                        )
-                    }
+                    // 应用内下载（通知栏实时进度），照 RikkaHub；起不来才开浏览器。
+                    com.psyche.memo.update.UpdateDownloader.start(
+                        context = updateContext,
+                        release = availableUpdate,
+                        description = updateContext.getString(UiR.string.about_page_update_downloading),
+                    )
                 }) { Text(stringResource(UiR.string.about_page_update_download)) }
             },
             dismissButton = {

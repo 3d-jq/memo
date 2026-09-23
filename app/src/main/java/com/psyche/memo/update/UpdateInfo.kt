@@ -16,6 +16,11 @@ data class UpdateInfo(
     val releasedAt: String?,
     val notes: String,
     val downloadUrl: String,
+    /**
+     * 有 `.apk` 资产时是那个资产的文件名（应用内下载要用它给文件命名、也就是通知栏标题）；
+     * 只有 release 页面时是 null —— 那种情况下载不动，调用方直接开浏览器。
+     */
+    val downloadName: String? = null,
 )
 
 object UpdateFeed {
@@ -54,14 +59,15 @@ object UpdateFeed {
             val asset = element as? JsonObject ?: return@firstNotNullOfOrNull null
             val url = asset.string("browser_download_url")
             val name = asset.string("name").ifEmpty { url.substringAfterLast('/') }
-            if (url.isNotEmpty() && name.endsWith(".apk", ignoreCase = true)) url else null
+            if (url.isNotEmpty() && name.endsWith(".apk", ignoreCase = true)) url to name else null
         }
         val page = obj.string("html_url")
         return UpdateInfo(
             version = tag.removePrefix("v"),
             releasedAt = obj["published_at"]?.let { (it as? JsonPrimitive)?.contentOrNull },
             notes = obj.string("body"),
-            downloadUrl = apk?.takeIf { it.isNotEmpty() } ?: page,
+            downloadUrl = apk?.first?.takeIf { it.isNotEmpty() } ?: page,
+            downloadName = apk?.second,
         )
     }
 

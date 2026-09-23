@@ -1369,6 +1369,40 @@ fun ChatContent(
                             com.psyche.memo.ui.chat.CompactionDivider(inProgress = true)
                         }
                     }
+                    // 流式等待提示（扫光文字）：**列表末尾独立一项**，整个生成期间都在。
+                    //
+                    // 结构照 RikkaHub `ChatList.kt:381-402` 的 `item(LoadingIndicatorKey)`
+                    // （那边是 28dp 动画图标 + 可选状态文字，我们按用户点名用文字扫光）。
+                    // 用户 2026-09-23「你看看 rikkhub…在工具调用这个有点跳动」：这行原来渲染在
+                    // **助手消息内部**，消息 parts 一变它就得跟着整条消息的块布局重排 —— 工具卡
+                    // 是一次性长出/换态的，那一行看起来就是在跳。挪成独立 item 之后，它不参与
+                    // 消息内部的布局，位置只由「消息列表有多长」决定。
+                    val streamingMessage = messages.lastOrNull { it.isStreaming }
+                    if (streamingMessage != null) {
+                        item(key = STREAMING_INDICATOR_ITEM_KEY) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Spacer(Modifier.height(6.dp))
+                                // 自动重试等待中：换成「N 秒后重试 (2/3)」倒计时（下一次
+                                // 尝试开始后 retryStatus=null 自动切回扫光文字）。
+                                val retry = streamingMessage.retryStatus
+                                if (retry != null &&
+                                    com.psyche.memo.ui.chat.shouldShowRetryCountdown(retry, true)
+                                ) {
+                                    com.psyche.memo.ui.chat.RetryCountdownHint(
+                                        status = retry,
+                                        modifier = Modifier.padding(start = 2.dp),
+                                    )
+                                } else {
+                                    com.psyche.memo.ui.chat.ThinkingShimmerText(
+                                        modifier = Modifier.padding(start = 2.dp),
+                                        phrases = timelineSettings.thinkingIndicator.phrases,
+                                        fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
+                                        colorArgb = timelineSettings.thinkingIndicator.colorArgb,
+                                    )
+                                }
+                            }
+                        }
+                    }
                     // RikkaHub `ChatList.kt:374 ScrollBottomKey` —— 末尾哨兵项：让「到底」
                     // 有一个**合法下标**可以滚（`bottomAnchorIndex`），位置恰好是
                     // maxScrollExtent。高度 1dp 只为让 LazyColumn 收下它。

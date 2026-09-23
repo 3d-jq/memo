@@ -671,44 +671,10 @@ internal fun MessageRow(
                         }
                     }
                 }
-                // **用户 2026-09-12 点名**：原版三点脉动（CMW:2885-2925 /
-                // 3011-3020）换成「扫光文字」，并且挪成列表末尾**单独一行靠左**。
-                // 收起必须和下方操作行的展开同为 220ms——条件渲染瞬间移除会让
-                // 「扫光行 -30dp 跳变 + 操作行 220ms 展开」叠成可见抖动（用户 2026-09-14）。
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = !isUser && msg.isStreaming,
-                    exit = androidx.compose.animation.shrinkVertically(
-                        animationSpec = androidx.compose.animation.core.tween(220),
-                    ) + androidx.compose.animation.fadeOut(
-                        animationSpec = androidx.compose.animation.core.tween(220),
-                    ),
-                ) {
-                    Column {
-                        Spacer(Modifier.height(6.dp))
-                        // 自动重试等待中（Dart CMW:2885-2925 RetryStatus 分支）：
-                        // 扫光文字换成「N 秒后重试 (2/3)」倒计时（1s 步进、到 0 显示
-                        // 0），下一次尝试开始（RetryAttemptStart）后 retryStatus=null
-                        // 自动切回扫光文字。
-                        // 另外要求 `isStreaming`：消息已结束/被停止/已失败时**绝不**再显示
-                        // 倒计时（终止路径都会清 retryStatus，这里是第二道保险）。
-                        val retry = msg.retryStatus
-                        if (retry != null &&
-                            com.psyche.memo.ui.chat.shouldShowRetryCountdown(retry, msg.isStreaming)
-                        ) {
-                            com.psyche.memo.ui.chat.RetryCountdownHint(
-                                status = retry,
-                                modifier = Modifier.padding(start = 2.dp),
-                            )
-                        } else {
-                            com.psyche.memo.ui.chat.ThinkingShimmerText(
-                                modifier = Modifier.padding(start = 2.dp),
-                                phrases = timelineSettings.thinkingIndicator.phrases,
-                                fontSize = timelineSettings.thinkingIndicator.fontSizeSp.sp,
-                                colorArgb = timelineSettings.thinkingIndicator.colorArgb,
-                            )
-                        }
-                    }
-                }
+                // 流式等待提示（扫光文字）**不在这里**：它已经挪到列表末尾的独立项
+                // （`ChatContent.kt` 的 `STREAMING_INDICATOR_ITEM_KEY`）。原来渲染在消息
+                // 内部，消息 parts 一变这一行就跟着重排 —— 工具卡一次性换态时看起来就是
+                // 在跳（用户 2026-09-23）。结构上照 RikkaHub `ChatList.kt:381-402`。
                 if (msg.failed) {
                     Text(
                         stringResource(UiR.string.generation_interrupted),

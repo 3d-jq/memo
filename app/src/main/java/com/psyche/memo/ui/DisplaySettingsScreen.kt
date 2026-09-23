@@ -3,6 +3,7 @@ package com.psyche.memo.ui
 import com.psyche.memo.ui.theme.MemoRadius
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -159,6 +160,18 @@ fun DisplaySettingsScreen(
     LaunchedEffect(Unit) { reloadAll() }
 
     val context = LocalContext.current
+    // 通知权限（Android 13+）：打开通知类开关时顺手申请一次。
+    // RikkaHub 也是这么做的（`SettingPreferencesNotificationPage:126-130`，打开总开关时
+    // `permissionState.requestPermissions()`）；不申请的话 `NotificationUtil.notify` 一律
+    // 返回 false，功能看起来就是"没做"（用户 2026-09-23「实时更新通知功能那没有做好」）。
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { }
+    fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (com.psyche.memo.service.NotificationUtil.hasNotificationPermission(context)) return
+        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
     val fontPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri: Uri? ->
@@ -377,6 +390,7 @@ fun DisplaySettingsScreen(
                         value = liveUpdateEnabled,
                         onToggle = { v ->
                             liveUpdateEnabled = v
+                            if (v) ensureNotificationPermission()
                             container.preferenceRepository.writeJson(
                                 "enable_live_update_notification_v1",
                                 if (v) "1" else "0",
@@ -410,6 +424,8 @@ fun DisplaySettingsScreen(
             ),
             onSelect = { value ->
                 backgroundChatMode = value
+                // 「开启并在生成完时发送消息」这一档要发通知 —— 顺手把权限要了。
+                if (value == "on_notify") ensureNotificationPermission()
                 container.preferenceRepository.writeJson("android_background_chat_mode_v1", value)
                 backgroundChatSheetVisible = false
             },
