@@ -210,9 +210,17 @@ class LocalSnapshotServiceTest {
 
         assertTrue(container.localSnapshots.runIfDue(now) is LocalSnapshotRunResult.Created)
 
-        // Any write moves the -wal sidecar, which is exactly the signal the
-        // schedule is supposed to notice.
-        container.preferenceRepository.writeJson("snapshot_test_marker_v1", "\"changed\"")
+        // 写一条**够大**的记录，让数据库文件确定地长大。
+        //
+        // DELETE 日志模式下没有 `-wal` 可以动（WAL 那版已撤回，见 PORTING §5.41），
+        // `DatabaseChangeFingerprint` 只剩「文件大小 + mtime」两个信号：一次几字节的
+        // 写入若与上一条语句落在同一毫秒，**两个信号都不变**，用例就被判成 UNCHANGED
+        // （2026-09-23 CI run 35821887628 偶发红、本地与另外两次 CI 都是绿的）。
+        // 用 7KB 的写入让"变了"只依赖文件大小 —— 那是确定性信号，与时钟精度无关。
+        container.preferenceRepository.writeJson(
+            "snapshot_test_marker_v1",
+            "\"" + "changed".repeat(1024) + "\"",
+        )
 
         assertTrue(
             container.localSnapshots.runIfDue(now.plus(Duration.ofDays(2))) is LocalSnapshotRunResult.Created,
