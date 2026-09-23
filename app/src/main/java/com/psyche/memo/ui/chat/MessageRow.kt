@@ -674,10 +674,14 @@ internal fun MessageRow(
                         }
                     }
                 }
-                // 流式等待提示（扫光文字）**不在这里**：它已经挪到列表末尾的独立项
-                // （`ChatContent.kt` 的 `STREAMING_INDICATOR_ITEM_KEY`）。原来渲染在消息
-                // 内部，消息 parts 一变这一行就跟着重排 —— 工具卡一次性换态时看起来就是
-                // 在跳（用户 2026-09-23）。结构上照 RikkaHub `ChatList.kt:381-402`。
+                // 生成中的**呼吸圆点就在这里 —— 助手消息的尾部**（照 Agora
+                // `AssistantMessageContent.kt:768` `if (answerTailVisible) GenerationActivityDot()`）。
+                // 它跟着回复走，而不是列表末尾被贴底钉在输入栏上方（用户 2026-09-23
+                // 「这个呼吸球在输出没有每次在输入框上面呀」）。槽位恒定 24dp、只做绘制态，
+                // 出现/消失都不推动会话布局。
+                if (!isUser && msg.isStreaming) {
+                    com.psyche.memo.ui.chat.StreamingTailDot()
+                }
                 if (msg.failed) {
                     Text(
                         stringResource(UiR.string.generation_interrupted),

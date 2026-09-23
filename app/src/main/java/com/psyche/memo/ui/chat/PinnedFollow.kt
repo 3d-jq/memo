@@ -22,24 +22,26 @@ object PinnedFollow {
     const val FINISH_GRACE_MS = 450L
 
     /**
-     * 这一次布局变化要不要把列表贴到底。
+     * 这一帧要不要继续把列表往底部追。
      *
      * 判据（缺一不可，顺序即优先级）：
      * 1. 有内容；
-     * 2. **读者还贴着底**（[following]）—— 用户往上滑走之后绝不把他拽回来；
+     * 2. **读者还贴着底**（[following]）—— 用户滑走之后绝不把他拽回来；
      * 3. 自动滚动开着（[autoScrollEnabled]）；
      * 4. 手指不在屏上（[pointerDown]，§4.42 硬规则）；
-     * 5. 此刻没在滚动（[isScrollInProgress]）；
-     * 6. 生成中**或**在结束后的宽限窗口内（[streaming] / [graceActive]）；
-     * 7. 尾部确实离开底部超过容差（[gapPx] > [tolerancePx]）—— 已经在底部就不必再滚，
-     *    否则会自激（滚一次 → 又触发一次 → …）。
+     * 5. 生成中**或**在结束后的宽限窗口内（[streaming] / [graceActive]）；
+     * 6. 尾部确实离开底部超过容差（[gapPx] > [tolerancePx]）—— 已经在底部就不必再滚。
+     *
+     * **注意：这里不能用 `isScrollInProgress` 当门** —— 跟随循环自己写的 `dispatchRawDelta`
+     * 会把 `LazyListState.isScrollInProgress` 置真，下一帧就会把自己关掉（自锁），
+     * 表现为「输出时圆点被顶到输入栏下面、结束也没到底、底下还有空间」（用户 2026-09-23 实测）。
+     * 用户的滑动/惯性由 [following] / [pointerDown] 把门（用户一动就 DETACHED）。
      */
     fun shouldPinToBottom(
         hasMessages: Boolean,
         following: Boolean,
         autoScrollEnabled: Boolean,
         pointerDown: Boolean,
-        isScrollInProgress: Boolean,
         streaming: Boolean,
         graceActive: Boolean,
         gapPx: Float,
@@ -48,7 +50,6 @@ object PinnedFollow {
         following &&
         autoScrollEnabled &&
         !pointerDown &&
-        !isScrollInProgress &&
         (streaming || graceActive) &&
         gapPx != Float.MAX_VALUE &&
         gapPx > tolerancePx
@@ -83,14 +84,14 @@ object PinnedFollow {
         return (errorPx * fraction).coerceIn(-maximumStep, maximumStep)
     }
 
-    /** 跟随的时间常数（秒）：0.12s ≈ 8 帧收敛到位。 */
-    const val FOLLOW_TIME_CONSTANT_SECONDS = 0.12f
+    /** 跟随的时间常数（秒）—— 取 Agora `MessageListTailEffects` 的值（0.055s，更跟手）。 */
+    const val FOLLOW_TIME_CONSTANT_SECONDS = 0.055f
 
-    /** 单帧速度上限（px/s）：长内容一帧最多走这么多，避免「突进」。 */
-    const val FOLLOW_MAX_VELOCITY_PX_PER_SECOND = 9_000f
+    /** 单帧速度上限（px/s）—— Agora 用 2800。 */
+    const val FOLLOW_MAX_VELOCITY_PX_PER_SECOND = 2_800f
 
-    /** 最小步长（px）：小于它不动。 */
-    const val FOLLOW_MIN_STEP_PX = 0.5f
+    /** 最小步长（px）—— Agora 用 2dp。 */
+    const val FOLLOW_MIN_STEP_PX = 2f
 
     /**
      * 列表末尾**哨兵项**的下标 = 消息数 + 额外项数。

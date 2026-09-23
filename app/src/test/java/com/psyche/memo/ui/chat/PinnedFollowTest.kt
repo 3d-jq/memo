@@ -20,7 +20,6 @@ class PinnedFollowTest {
         following: Boolean = true,
         autoScrollEnabled: Boolean = true,
         pointerDown: Boolean = false,
-        isScrollInProgress: Boolean = false,
         streaming: Boolean = true,
         graceActive: Boolean = false,
         gapPx: Float = 60f,
@@ -30,7 +29,6 @@ class PinnedFollowTest {
         following = following,
         autoScrollEnabled = autoScrollEnabled,
         pointerDown = pointerDown,
-        isScrollInProgress = isScrollInProgress,
         streaming = streaming,
         graceActive = graceActive,
         gapPx = gapPx,
@@ -62,9 +60,16 @@ class PinnedFollowTest {
     }
 
     @Test
+    fun `a detached reader is never dragged back`() {
+        assertFalse(pin(following = false))
+    }
+
+    @Test
     fun `the usual gates still hold`() {
         assertFalse("手指在屏上绝不程序化滚动", pin(pointerDown = true))
-        assertFalse("正在惯性滚动时不抢", pin(isScrollInProgress = true))
+        // 惯性滚动**不是**跟随循环的门（自己的 dispatchRawDelta 会把它置真 ⇒ 会自锁）；
+        // 用户在滑动/惯性时由 following=false 把关（见函数的注释与下面的断言）。
+        assertTrue("程序化滚动期间继续追底（否则追不到底）", pin())
         assertFalse("自动回到底部关掉后不跟随", pin(autoScrollEnabled = false))
         assertFalse("没有消息不动", pin(hasMessages = false))
     }

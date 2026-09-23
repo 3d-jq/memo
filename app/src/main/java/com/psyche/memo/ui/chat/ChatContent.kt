@@ -712,7 +712,8 @@ fun ChatContent(
     val bottomAnchorIndex = com.psyche.memo.ui.chat.PinnedFollow.bottomAnchorIndexFor(
         messagesCount = messages.size,
         compactionProgress = compacting && streamingMessageId == null,
-        streamingIndicator = messages.lastOrNull { it.isStreaming } != null,
+        // 流式提示项已移除（圆点改长在助手消息尾部），末尾额外项只剩压缩进度行。
+        streamingIndicator = false,
     )
 
     fun scrollTimelineToBottom() {
@@ -812,12 +813,13 @@ fun ChatContent(
         while (true) {
             androidx.compose.runtime.withFrameNanos { it }   // 每帧一次（取消随 effect 一起）
             val gap = tailBottomGapPx()
+            // 不再传 isScrollInProgress（见 PinnedFollow.shouldPinToBottom 的说明：
+            // 我们自己写的滚动会把它置真 ⇒ 自锁，追不到底）。
             val attached = com.psyche.memo.ui.chat.PinnedFollow.shouldPinToBottom(
                 hasMessages = messages.isNotEmpty(),
                 following = following,
                 autoScrollEnabled = autoScrollEnabled,
                 pointerDown = pointerDown,
-                isScrollInProgress = timelineListState.isScrollInProgress,
                 streaming = streaming,
                 graceActive = followGrace,
                 gapPx = gap,
@@ -857,6 +859,11 @@ fun ChatContent(
         if (justFinished) {
             followGrace = true
             kotlinx.coroutines.delay(com.psyche.memo.ui.chat.PinnedFollow.FINISH_GRACE_MS)
+            // 宽限窗口收尾：明确到底一次（结束后尾部还会长高——操作行/Token 统计/思考卡收起，
+            // 平滑跟随可能还差一点；这里补一次真到底，保证「输出完也贴住底部」）。
+            if (following && !pointerDown && autoScrollEnabled && messages.isNotEmpty()) {
+                scrollTimelineToBottom()
+            }
             followGrace = false
         }
     }
@@ -1417,41 +1424,6 @@ fun ChatContent(
                     // **助手消息内部**，消息 parts 一变它就得跟着整条消息的块布局重排 —— 工具卡
                     // 是一次性长出/换态的，那一行看起来就是在跳。挪成独立 item 之后，它不参与
                     // 消息内部的布局，位置只由「消息列表有多长」决定。
-                    val streamingMessage = messages.lastOrNull { it.isStreaming }
-                    if (streamingMessage != null) {
-                        item(key = STREAMING_INDICATOR_ITEM_KEY) {
-                            // 1:1 照 RikkaHub `ChatList.kt:381-402` 的那一项：
-                            // 28dp 的自家 app 图标（会动）+ 可选状态文字，横向一行、无底板。
-                            // 用户 2026-09-23「人家一直是那样的，直接一比一改成他那样」。
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    // 左边仍与助手气泡对齐（`ASSISTANT_MESSAGE_HORIZONTAL_DP`），
-                                    // 这是用户同一天单独提过的要求。
-                                    .padding(
-                                        start = ChatStyleSpec.ASSISTANT_MESSAGE_HORIZONTAL_DP.dp,
-                                        end = ChatStyleSpec.ASSISTANT_MESSAGE_HORIZONTAL_DP.dp,
-                                        top = 6.dp,
-                                        bottom = 6.dp,
-                                    ),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                // **呼吸圆点**（11dp、颜色跟随主题；移植 Agora `GenerationActivityDot`）。
-                                // 用户 2026-09-23「只要这个呼吸圆点了，不要改的入口了」——
-                                // 形态开关已移除，这里不再有 扫光/图标 分支。
-                                com.psyche.memo.ui.chat.MemoLoadingIndicator()
-                                // RikkaHub 那行文字只在 processingStatus 非空时出现；我们对应的
-                                // 是自动重试倒计时（原版 kelivo 的等待气泡也是「指示器 + 倒计时」）。
-                                val retry = streamingMessage.retryStatus
-                                if (retry != null &&
-                                    com.psyche.memo.ui.chat.shouldShowRetryCountdown(retry, true)
-                                ) {
-                                    com.psyche.memo.ui.chat.RetryCountdownHint(status = retry)
-                                }
-                            }
-                        }
-                    }
                     // RikkaHub `ChatList.kt:374 ScrollBottomKey` —— 末尾哨兵项：让「到底」
                     // 有一个**合法下标**可以滚（`bottomAnchorIndex`），位置恰好是
                     // maxScrollExtent。高度 1dp 只为让 LazyColumn 收下它。
