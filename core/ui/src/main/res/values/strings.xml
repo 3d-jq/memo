@@ -2688,6 +2688,7 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="token_detail_prompt_tokens">%1$s tokens</string>
     <string name="token_detail_prompt_tokens_with_cache">%1$s tokens (%2$s cached)</string>
     <string name="token_detail_speed">%1$s tok/s</string>
+    <string name="token_detail_speed_label">tok/s</string>
     <string name="token_detail_total_tokens">%1$s tokens</string>
     <string name="tool_approval_approve">Approve</string>
     <string name="tool_approval_denied_message">Tool call \"%1$s\" was denied by user. Reason: %2$s</string>
@@ -2897,6 +2898,9 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="workspace_tool_approvals">Tool approvals</string>
     <string name="workspace_tool_approvals_desc">Tools listed below ask for confirmation before touching the workspace.</string>
     <string name="workspace_tool_edit_file">Edit file</string>
+    <string name="workspace_tool_glob">Find files</string>
+    <string name="workspace_tool_grep">Search contents</string>
+    <string name="workspace_tool_list">List directory</string>
     <string name="workspace_tool_read_file">Read file</string>
     <string name="workspace_tool_shell">Run shell command</string>
     <string name="workspace_tool_write_file">Write file</string>

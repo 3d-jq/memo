@@ -1829,3 +1829,80 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
 直接调阻塞 IO（网络、文件、DB）的地方都要有 `withContext(IO)` —— 用户点出来的是第一个入口，
 第二个入口是顺着同一个函数找出来的，一起修的。
 
+
+## 5.44 工作区：补三个只读搜索工具 + 点文件打不开（2026-09-22，用户「在工作区加上工具，list，glob，grep 工具」+「点文件没有反应」）
+
+### ① `workspace_list` / `workspace_glob` / `workspace_grep` —— **本工程新增，不是 RikkaHub 移植**
+
+用户先说要「照 RikkaHub 的定义逐字移植」，随即自己纠正「**RikkaHub 没有这个工具哦**」——查过参考仓，
+上游 `WorkspaceTools.kt` 确实只有 read/write/edit/shell 四个。所以这三个是 Memo 自己的加法，描述文案按本
+工程口径写（英文、与既有四条同样的句式），行为与既有四个走同一条通道：**proot 里跑 shell 命令 + 结构化
+JSON 回给模型**，都默认**免审批**（只读，和 `workspace_read_file` 同级）：
+
+| 工具 | 入参 | 实现 | 返回 |
+|---|---|---|---|
+| `workspace_list` | `path?`（缺省 `/workspace`） | `find <dir> -mindepth 1 -maxdepth 1 -printf '%y\0%s\0%T@\0%p\0'` | `{path, entries[], count, truncated?}` |
+| `workspace_glob` | `pattern`（必填）、`path?` | `find <root> -path '<root>/<pattern>' -printf …` | `{root, pattern, matches[], count, truncated?}` |
+| `workspace_grep` | `pattern`（必填）、`path?`、`glob?`、`ignore_case?` | `grep -rInEZi? --include='…' -- <正则> <root> \| head -n 201` | `{root, pattern, matches[{path,line,text}], count, truncated?}` |
+
+几条不能丢的判据：
+
+- **路径一律 rootfs 内的绝对路径**（复用 `absolutePath` 的形状校验），缺省才是 `/workspace` —— 三个工具都
+  不许拿相对路径去猜。
+- **`-Z`（文件名后是 NUL）不是为了好看**：`grep -rn` 默认 `path:line:text`，文件名里带冒号就会拆错；
+  `-Z` 下是 `<path>\0<line>:<text>`，按第一个 NUL 和第一个冒号拆就稳（`parseGrepMatches` 有带冒号文件名的用例）。
+- **`%T@` 带小数**（秒.纳秒），`parsePrintfEntries` 只取整数秒，与 `parseRootfsEntries` 的 `updatedAt` 口径一致；
+  输出被 runner 按字节截断时末尾会留半条记录，凑不满四元组的尾巴直接丢。
+- **截断不再整次失败**：`runRootfsCommand` 加了 `failOnTruncated` 参数，只有这三个工具传 `false`
+  （结果集少一点好过整个调用报错）；写文件/编辑仍是原来的严格口径。上限 `entries ≤ 500`、`matches ≤ 200`、
+  单行 ≤ 500 字符 —— 一行几十万字符的日志会撑爆上下文。
+- **grep 的报错只看 stderr**：没匹配是退出码 1 + 空 stdout（正常结果），正则非法才是错误；所以那边不
+  `set -e`，也不把退出码当失败。
+- 接线是**自动的**：`ALL_TOOL_NAMES` / `DEFAULT_APPROVALS` / `catalogDefinitions()` 三处一起长，
+  `ChatViewModel`（递给模型）、`ToolHandler`（审批与执行）、设置→工具描述目录、详情页审批行都按这份清单走。
+  `WorkspaceToolsTest.everyToolNameIsCoveredByApprovalsAndDefinitions` 与提示词块用例（遍历 `ALL_TOOL_NAMES`）
+  是守卫 —— 位置工具当初就是漏了"递给模型"那一道闸（§5.35）。
+
+**详情页工具审批从四行变七行**（读 → 列出 → 查找 → 搜索 → 写 → 改 → 执行），新增 3 条 ARB
+（`workspaceToolList` / `workspaceToolGlob` / `workspaceToolGrep`）。
+
+### ② 对话里「+ → 工作区 → 文件」点不开（两处独立故障，一起修）
+
+用户：「生成的 PPT、word、md 文档在对话界面的加号里面的工作区里面的文件，点击没有反应，但是在设置里面
+就有反应」。对照 `WorkspaceDetailScreen` 的同名分支，是**两个**原因叠在一起：
+
+1. **非文本文件（PPT/Word/PDF…）**：`WorkspaceFilesSheet` 的 `onOpen` `when` **没有 `else`** —— 目录进目录、
+   文本进预览，其余落到 `Unit`，点了什么也不发生。详情页那一支走的是「导出到 `cacheDir/workspace` →
+   `FileProvider` → `ACTION_VIEW` + `createChooser`」，这里照抄（mime 认不出给 `*/*`，起不了 Activity 时
+   弹 `workspace_open_failed`）。
+2. **文本文件（md/txt…）**：`.md` 在 `detectFileType()` 里是 `TEXT`，走的是 `FileEditorSheet` —— 而本 sheet
+   已经叠在 `WorkspaceSelectorSheet` 之上，**再套一层 `ModalBottomSheet` 就是三层窗口嵌套，预览根本不显示**
+   （看起来就是"点了没反应"）。修法不是换组件：把 `FileEditorSheet` 的内容体抽成 `FileEditorBody`，
+   本 sheet 里**就地换掉文件列表**（`return@Column`），窗口层数不变；详情页仍用 `FileEditorSheet` 包一层
+   （那边是整页 + 一层 sheet，正常）。
+
+**别再把这个预览改回嵌套 sheet** —— 窗口层级不是风格问题，是"能不能显示"的问题。
+
+## 5.45 工具名→图标集中映射 / token 行补图标与速度（2026-09-22，用户「工具加上对应图标吧，现在图标都用一样的，体验不好」+「token 显示里面没有对应图标，也没有 token 速度」）
+
+### ① 工具图标：`toolIconFor` 补上工作区全族与两个自研绘图工具
+
+原来只有从 Flutter `chat_message_widget.dart` 直接搬过来的那几条映射（记忆/搜索/生成/内置服务端工具），
+**Memo 自己长出来的工具全都没有映射 → 一律落到兜底的 `Lucide.Wrench`**：工作区 7 个、`render_chart`、
+`render_mermaid` 都是同一个扳手，用户看到的"图标都用一样的"就是它。现在：
+
+- 工作区：`read_file`=FileText / `write_file`=FilePlus / `edit_file`=FilePen / `list`=List /
+  `glob`=FileSearch / `grep`=TextSearch / `shell`=Terminal；
+- 绘图：`VisualTools.TOOL_NAME`=ChartBar、`MermaidTools.TOOL_NAME`=Workflow（与生成工具同一套图标语言）；
+- `ToolIconCoverageTest` 守着两件事：自研工具**不许**落到 `Wrench`，且工作区整族的图标**两两不同**。
+  清单直接取自 `WorkspaceTools.ALL_TOOL_NAMES`，**再加工作区工具时不用改测试，但必须补图标**（否则红）。
+
+### ② token 行：加 `#` 图标 + 生成速度
+
+`TokenDisplay` 原来只有一行 `123 tokens` 文字（1:1 上游 `token_display_widget.dart`），用户要求"图标 +
+速度"。加的是 `Lucide.Hash` + 原文字 + `Lucide.Zap` + `"<n> tok/s"`（新 ARB 键 `tokenDetailSpeedLabel`，
+三份语言），点击展开详情弹窗的行为不变。
+
+**速度口径＝completion tokens ÷ 总耗时**（`formatTokensPerSecond`，<0.5s 或 ≤0 不显示 —— 缓存命中/极短回复
+除出来的数字会离谱）。**用户想要的是"首字之后的时间"那个更准的口径**，但那要给消息模型加一个 `firstTokenMs`
+字段（跨 payload 持久化、写进 `MessagePart` 的时间线），单开一轮再做 —— 这一轮先用现成的 `durationMs`。

@@ -3,6 +3,7 @@ package com.psyche.memo.provider.workspace
 import com.psyche.memo.llm.client.LlmToolSpec
 import com.psyche.memo.workspace.WorkspaceFileEntry
 import com.psyche.memo.workspace.WorkspaceManager
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -28,21 +29,38 @@ import java.io.ByteArrayOutputStream
  * 与上游的唯一缺口：`workspace_read_file` 读**图片**那条分支没移植（上游把字节交给
  * `FilesManager` 生成图片 part；Memo 的工具结果要接进它自己的图片通道，见 PORTING）。
  * 文本读取、写入、编辑、执行四件事都是完整的。
+ *
+ * **本工程新增三个只读工具**（[LIST] / [GLOB] / [GREP]，用户 2026-09-22
+ * 「在工作区加上工具，list，glob，grep 工具」）：上游没有这三个（RikkaHub 的工作区工具
+ * 面只有上面四个），所以描述文案是按本工程口径自己写的，不是移植。它们和
+ * `workspace_read_file` 同一条通道 —— 都是 proot 里的 shell 命令 + 结构化 JSON 回给模型，
+ * 都默认免审批。
  */
 object WorkspaceTools {
 
     const val READ_FILE = "workspace_read_file"
     const val WRITE_FILE = "workspace_write_file"
     const val EDIT_FILE = "workspace_edit_file"
+    const val LIST = "workspace_list"
+    const val GLOB = "workspace_glob"
+    const val GREP = "workspace_grep"
     const val SHELL = "workspace_shell"
 
-    val ALL_TOOL_NAMES = setOf(READ_FILE, WRITE_FILE, EDIT_FILE, SHELL)
+    val ALL_TOOL_NAMES = setOf(READ_FILE, WRITE_FILE, EDIT_FILE, LIST, GLOB, GREP, SHELL)
 
-    /** 上游 `WorkspaceToolDefaultApprovals`：只有 shell 默认要审批。 */
+    /**
+     * 上游 `WorkspaceToolDefaultApprovals`：只有 shell 默认要审批。
+     *
+     * [LIST]/[GLOB]/[GREP] 是**本工程新增**的三个只读工具（上游没有，用户 2026-09-22
+     * 点名要），默认免审批 —— 它们和 `workspace_read_file` 一样只看不改。
+     */
     val DEFAULT_APPROVALS: Map<String, Boolean> = mapOf(
         READ_FILE to false,
         WRITE_FILE to false,
         EDIT_FILE to false,
+        LIST to false,
+        GLOB to false,
+        GREP to false,
         SHELL to true,
     )
 
@@ -55,6 +73,16 @@ object WorkspaceTools {
 
     private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
     private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
+
+    /** 新增三个只读工具的搜索根默认值（模型不传 `path` 时用）。 */
+    const val DEFAULT_SEARCH_ROOT = "/workspace"
+
+    /** 一次最多回给模型多少条（后面还有就截断并标 `truncated`）。 */
+    private const val MAX_LIST_ENTRIES = 500
+    private const val MAX_GREP_MATCHES = 200
+
+    /** 单行 grep 结果最多留多少字符（一行几十万字符的压缩包日志会撑爆上下文）。 */
+    private const val MAX_GREP_LINE_CHARS = 500
 
     // ---------------------------------------------------------------- 定义
 
@@ -74,6 +102,9 @@ object WorkspaceTools {
             LlmToolSpec(READ_FILE, READ_DESCRIPTION, readParametersJson()),
             LlmToolSpec(WRITE_FILE, WRITE_DESCRIPTION, writeParametersJson()),
             LlmToolSpec(EDIT_FILE, EDIT_DESCRIPTION, editParametersJson()),
+            LlmToolSpec(LIST, LIST_DESCRIPTION, listParametersJson()),
+            LlmToolSpec(GLOB, GLOB_DESCRIPTION, globParametersJson()),
+            LlmToolSpec(GREP, GREP_DESCRIPTION, grepParametersJson()),
             LlmToolSpec(SHELL, shellDescription(defaultCwd), shellParametersJson(defaultCwd)),
         )
     }
@@ -94,6 +125,25 @@ object WorkspaceTools {
         Use /workspace for the workspace files area.
         Provide old_text and new_text. By default old_text must occur exactly once; set replace_all=true to replace every occurrence.
         If no exact match is found, whitespace-tolerant line matching is attempted automatically.
+    """.trimIndent().replace("\n", " ")
+
+    private val LIST_DESCRIPTION = """
+        List the entries of one directory in the assistant's bound workspace Rootfs (not recursive).
+        Paths must be absolute inside Rootfs. Use /workspace for the workspace files area; it is the default.
+        Returns name, absolute path, whether it is a directory, size in bytes and modification time for each entry.
+    """.trimIndent().replace("\n", " ")
+
+    private val GLOB_DESCRIPTION = """
+        Find files by path pattern in the assistant's bound workspace Rootfs.
+        The pattern is shell-style globbing matched against absolute paths, and * also crosses directory separators, so '*.md' finds nested files too.
+        Paths must be absolute inside Rootfs. Use /workspace for the workspace files area; it is the search root by default.
+        Use this instead of shell find when you only need matching paths.
+    """.trimIndent().replace("\n", " ")
+
+    private val GREP_DESCRIPTION = """
+        Search file contents by regular expression (POSIX extended) in the assistant's bound workspace Rootfs.
+        Paths must be absolute inside Rootfs. Use /workspace for the workspace files area; it is the search root by default.
+        Binary files are skipped. Returns the matching path, line number and line text.
     """.trimIndent().replace("\n", " ")
 
     private fun shellDescription(defaultCwd: String?): String = buildString {
@@ -163,6 +213,53 @@ object WorkspaceTools {
         })
     }.toString()
 
+    /** 三个只读工具共用的 `path` 属性：可选、缺省即搜索根。 */
+    private fun searchPathProperty() = buildJsonObject {
+        put("type", "string")
+        put(
+            "description",
+            "Optional absolute path inside Rootfs. Use /workspace for the workspace files area. " +
+                "Defaults to $DEFAULT_SEARCH_ROOT.",
+        )
+    }
+
+    fun listParametersJson(): String = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject { put("path", searchPathProperty()) })
+    }.toString()
+
+    fun globParametersJson(): String = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("pattern", buildJsonObject {
+                put("type", "string")
+                put("description", "Shell-style glob pattern, for example '*.md' or 'src/**/*.kt'")
+            })
+            put("path", searchPathProperty())
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("pattern")) })
+    }.toString()
+
+    fun grepParametersJson(): String = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("pattern", buildJsonObject {
+                put("type", "string")
+                put("description", "POSIX extended regular expression to search for")
+            })
+            put("path", searchPathProperty())
+            put("glob", buildJsonObject {
+                put("type", "string")
+                put("description", "Optional file name filter, for example '*.kt'")
+            })
+            put("ignore_case", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Whether matching is case-insensitive. Defaults to false.")
+            })
+        })
+        put("required", buildJsonArray { add(JsonPrimitive("pattern")) })
+    }.toString()
+
     fun shellParametersJson(defaultCwd: String? = null): String = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -202,6 +299,75 @@ object WorkspaceTools {
         require(path.startsWith("/")) { "$name must be an absolute path inside Rootfs" }
         require(!path.contains('\u0000')) { "$name contains invalid character" }
         return path
+    }
+
+    /**
+     * 同 [absolutePath]，但缺省/空白时回落到 [default] —— 只读的三个搜索工具用它，
+     * 模型不传 `path` 就是「搜 /workspace」。
+     */
+    fun absolutePathOrDefault(args: JsonObject, name: String, default: String): String {
+        val value = args[name]?.jsonPrimitive?.contentOrNull?.replace('\\', '/')?.trim()
+        if (value.isNullOrBlank()) return default
+        require(value.startsWith("/")) { "$name must be an absolute path inside Rootfs" }
+        require(!value.contains('\u0000')) { "$name contains invalid character" }
+        return value
+    }
+
+    /**
+     * glob 表达式 → 绝对路径模式：相对模式挂在 [root] 下，已经写了绝对路径就原样用
+     * （模型经常会照着 `/workspace/...` 抄）。
+     */
+    fun globExpression(root: String, pattern: String): String {
+        val cleaned = pattern.replace('\\', '/').trim().removePrefix("./")
+        return if (cleaned.startsWith("/")) cleaned else "${root.trimEnd('/')}/$cleaned"
+    }
+
+    /** GNU find 的记录格式：`\0` 分隔的 `type/size/mtime/path`（同 [statEntryCommand] 的四元组）。 */
+    private const val ENTRY_PRINTF = "%y\\0%s\\0%T@\\0%p\\0"
+
+    /** 列一层目录（`-mindepth 1` 去掉自己）。 */
+    fun listCommand(path: String): String = """
+        dir=${shellQuote(path)}
+        if [ ! -d "${'$'}dir" ]; then
+          printf '%s\n' ${shellQuote("Not a directory: $path")} >&2
+          exit 1
+        fi
+        find "${'$'}dir" -mindepth 1 -maxdepth 1 -printf ${shellQuote(ENTRY_PRINTF)}
+    """.trimIndent()
+
+    /** 按绝对路径 glob 找文件。 */
+    fun globCommand(root: String, pattern: String): String = """
+        root=${shellQuote(root)}
+        if [ ! -d "${'$'}root" ]; then
+          printf '%s\n' ${shellQuote("Not a directory: $root")} >&2
+          exit 1
+        fi
+        find "${'$'}root" -path ${shellQuote(globExpression(root, pattern))} -printf ${shellQuote(ENTRY_PRINTF)}
+    """.trimIndent()
+
+    /**
+     * 按内容搜（`-r` 递归、`-I` 跳过二进制、`-n` 行号、`-E` 扩展正则、`-Z` 用 NUL 隔开
+     * 文件名 —— 文件名里的冒号会把 `path:line:text` 解析带偏）。
+     *
+     * `grep` 报错（正则非法）走 stderr；没匹配是退出码 1、stdout 为空 —— 两者都不该当成
+     * 执行失败，所以这里不 `set -e`、调用方只看 stderr 判错。
+     */
+    fun grepCommand(
+        root: String,
+        pattern: String,
+        glob: String?,
+        ignoreCase: Boolean,
+    ): String = buildString {
+        appendLine("root=${shellQuote(root)}")
+        appendLine("if [ ! -e \"\$root\" ]; then")
+        appendLine("  printf '%s\\n' ${shellQuote("No such path: $root")} >&2")
+        appendLine("  exit 1")
+        appendLine("fi")
+        append("grep -rInEZ")
+        if (ignoreCase) append('i')
+        if (!glob.isNullOrBlank()) append(" --include=${shellQuote(glob.trim())}")
+        append(" -- ${shellQuote(pattern)} \"\$root\"")
+        append(" | head -n ${MAX_GREP_MATCHES + 1}")
     }
 
     /**
@@ -254,13 +420,75 @@ object WorkspaceTools {
         }
     }
 
-    fun entryJson(entry: WorkspaceFileEntry): String = buildJsonObject {
+    fun entryJson(entry: WorkspaceFileEntry): String = entryObject(entry).toString()
+
+    fun entryObject(entry: WorkspaceFileEntry): JsonObject = buildJsonObject {
         put("path", entry.path)
         put("name", entry.name)
         put("isDirectory", entry.isDirectory)
         put("sizeBytes", entry.sizeBytes)
         put("updatedAt", entry.updatedAt)
-    }.toString()
+    }
+
+    fun entryArray(entries: List<WorkspaceFileEntry>): JsonArray =
+        buildJsonArray { entries.forEach { add(entryObject(it)) } }
+
+    /**
+     * [ENTRY_PRINTF] 的输出 → 条目表。
+     *
+     * `%T@` 带小数（秒.纳秒），只取整数秒 —— 与 [parseRootfsEntries] 的 `updatedAt`
+     * 口径一致。输出被 runner 按字节截断时末尾会留半条记录，凑不满四元组的尾巴直接丢。
+     */
+    fun parsePrintfEntries(stdout: String): List<WorkspaceFileEntry> {
+        val fields = stdout.split('\u0000').dropLastWhile { it.isEmpty() }
+        val complete = fields.size - (fields.size % 4)
+        return (0 until complete step 4).map { i ->
+            WorkspaceFileEntry(
+                path = fields[i + 3],
+                name = fields[i + 3].trimEnd('/').substringAfterLast('/').ifBlank { "/" },
+                isDirectory = fields[i] == "d",
+                sizeBytes = fields[i + 1].toLongOrNull()
+                    ?: error("Invalid file size: ${fields[i + 1]}"),
+                updatedAt = (fields[i + 2].substringBefore('.').toLongOrNull()
+                    ?: error("Invalid file mtime: ${fields[i + 2]}")) * 1_000L,
+            )
+        }
+    }
+
+    data class GrepMatch(val path: String, val line: Int, val text: String)
+
+    /**
+     * `grep -rInEZ` 的输出 → 匹配表。`-Z` 让文件名后面是 NUL 而不是冒号，于是
+     * `<path>\0<line>:<text>` 能安全拆开（文件名里带冒号也不会拆错）。
+     */
+    fun parseGrepMatches(stdout: String, limit: Int = MAX_GREP_MATCHES): List<GrepMatch> =
+        stdout.lineSequence()
+            .mapNotNull { line ->
+                val sep = line.indexOf('\u0000')
+                if (sep < 0) return@mapNotNull null
+                val rest = line.substring(sep + 1)
+                val colon = rest.indexOf(':')
+                if (colon < 0) return@mapNotNull null
+                GrepMatch(
+                    path = line.substring(0, sep),
+                    line = rest.substring(0, colon).toIntOrNull() ?: return@mapNotNull null,
+                    text = rest.substring(colon + 1).take(MAX_GREP_LINE_CHARS),
+                )
+            }
+            .take(limit)
+            .toList()
+
+    fun grepMatchArray(matches: List<GrepMatch>): JsonArray = buildJsonArray {
+        matches.forEach { match ->
+            add(
+                buildJsonObject {
+                    put("path", match.path)
+                    put("line", match.line)
+                    put("text", match.text)
+                },
+            )
+        }
+    }
 
     /** shell 结果 → 模型看的 JSON（上游 `createShellTool` 的 execute 尾部）。 */
     fun commandResultJson(
@@ -340,8 +568,11 @@ object WorkspaceTools {
         appendLine("- Available tools:")
         appendLine("  - `workspace_read_file`: read file contents.")
         appendLine("  - `workspace_write_file` / `workspace_edit_file`: create files, or make precise edits to existing files.")
+        appendLine("  - `workspace_list` / `workspace_glob`: list one directory, or find files by path pattern.")
+        appendLine("  - `workspace_grep`: search file contents by regular expression (binary files are skipped).")
         appendLine("  - `workspace_shell`: run shell commands (the files area is mounted at /workspace).")
         appendLine("- Prefer `workspace_shell` for tasks that standard Unix tools handle well, and prefer `workspace_edit_file` for targeted edits over rewriting whole files.")
+        appendLine("- Prefer the dedicated `workspace_list` / `workspace_glob` / `workspace_grep` tools over `ls`, `find` and `grep` when you just need to look around: they return structured results and need no approval.")
         appendLine("- CPU and memory are shared with the host device, which is usually a phone under memory pressure: heavy runtimes (for example .NET or the JVM) often fail to start with out-of-memory errors. Prefer Python, Node, or plain shell tooling, and only install a heavy runtime when the task really requires it.")
         appendLine("- The skills directory is mounted at `/skills`. Each skill is a subdirectory `/skills/<skill-name>/` containing a `SKILL.md` (with `name` and `description` frontmatter) plus any supporting files. Read a skill's `SKILL.md` before using it, and follow its instructions.")
         appendLine("- Files the user uploaded are mounted at `/upload`. Treat `/upload` as READ-ONLY: read uploaded files from `/upload/<file-name>`, but never modify, overwrite, or delete anything there. If you need to change an uploaded file, copy it into `/workspace` first and edit the copy.")
@@ -397,6 +628,9 @@ object WorkspaceTools {
             READ_FILE -> readFile(repo, workspaceId, args)
             WRITE_FILE -> writeFile(repo, workspaceId, args)
             EDIT_FILE -> editFile(repo, workspaceId, args)
+            LIST -> list(repo, workspaceId, args)
+            GLOB -> glob(repo, workspaceId, args)
+            GREP -> grep(repo, workspaceId, args)
             SHELL -> shell(repo, workspaceId, cwd, args)
             else -> Outcome.Failure("unknown_tool", "Unknown workspace tool: $name")
         }
@@ -507,13 +741,102 @@ object WorkspaceTools {
         )
     }
 
+    /** 三个只读工具共用的执行骨架：跑命令 → 看 stderr 判错 → 交给各自的解析器。 */
+    private suspend fun readOnlyCommand(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        action: String,
+        command: String,
+    ): com.psyche.memo.workspace.WorkspaceCommandResult =
+        runRootfsCommand(
+            repo = repo,
+            workspaceId = workspaceId,
+            action = action,
+            command = command,
+            failOnTruncated = false,
+        )
+
+
+    private suspend fun list(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        args: JsonObject,
+    ): Outcome {
+        val path = absolutePathOrDefault(args, "path", DEFAULT_SEARCH_ROOT)
+        val result = readOnlyCommand(repo, workspaceId, "List directory", listCommand(path))
+        val entries = parsePrintfEntries(result.stdout)
+            .sortedWith(compareByDescending<WorkspaceFileEntry> { it.isDirectory }.thenBy { it.name })
+        val shown = entries.take(MAX_LIST_ENTRIES)
+        return Outcome.Success(
+            buildJsonObject {
+                put("path", path)
+                put("entries", entryArray(shown))
+                put("count", shown.size)
+                if (shown.size < entries.size || result.truncated) put("truncated", true)
+            }.toString(),
+        )
+    }
+
+    private suspend fun glob(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        args: JsonObject,
+    ): Outcome {
+        val pattern = stringArg(args, "pattern")?.trim()
+        require(!pattern.isNullOrBlank()) { "pattern is required" }
+        val root = absolutePathOrDefault(args, "path", DEFAULT_SEARCH_ROOT)
+        val result = readOnlyCommand(repo, workspaceId, "Glob files", globCommand(root, pattern))
+        val entries = parsePrintfEntries(result.stdout).sortedBy { it.path }
+        val shown = entries.take(MAX_LIST_ENTRIES)
+        return Outcome.Success(
+            buildJsonObject {
+                put("root", root)
+                put("pattern", globExpression(root, pattern))
+                put("matches", entryArray(shown))
+                put("count", shown.size)
+                if (shown.size < entries.size || result.truncated) put("truncated", true)
+            }.toString(),
+        )
+    }
+
+    private suspend fun grep(
+        repo: WorkspaceRepository,
+        workspaceId: String,
+        args: JsonObject,
+    ): Outcome {
+        val pattern = stringArg(args, "pattern")
+        require(!pattern.isNullOrBlank()) { "pattern is required" }
+        val root = absolutePathOrDefault(args, "path", DEFAULT_SEARCH_ROOT)
+        val glob = stringArg(args, "glob")
+        val ignoreCase = booleanArg(args, "ignore_case", default = false)
+        val result = readOnlyCommand(
+            repo = repo,
+            workspaceId = workspaceId,
+            action = "Search contents",
+            command = grepCommand(root, pattern, glob, ignoreCase),
+        )
+        // grep 的报错（正则非法、路径不对）走 stderr；没匹配是退出码 1 + 空 stdout，
+        // 那是正常结果不是失败 —— 所以只看 stderr。
+        val stderr = result.stderr.trim()
+        if (stderr.isNotEmpty()) return Outcome.Failure("grep_failed", stderr)
+        val matches = parseGrepMatches(result.stdout)
+        return Outcome.Success(
+            buildJsonObject {
+                put("root", root)
+                put("pattern", pattern)
+                put("matches", grepMatchArray(matches))
+                put("count", matches.size)
+                if (matches.size >= MAX_GREP_MATCHES || result.truncated) put("truncated", true)
+            }.toString(),
+        )
+    }
+
     private suspend fun shell(
         repo: WorkspaceRepository,
         workspaceId: String,
         cwd: String?,
         args: JsonObject,
-    ): Outcome {
-        val command = stringArg(args, "command") ?: error("command is required")
+    ): Outcome {        val command = stringArg(args, "command") ?: error("command is required")
         val effectiveCwd = shellCwd(stringArg(args, "cwd") ?: cwd).orEmpty()
         val result = repo.executeCommand(
             id = workspaceId,
@@ -539,6 +862,7 @@ object WorkspaceTools {
         action: String,
         command: String,
         stdin: ByteArray? = null,
+        failOnTruncated: Boolean = true,
     ): com.psyche.memo.workspace.WorkspaceCommandResult {
         val result = repo.executeCommand(
             id = workspaceId,
@@ -551,7 +875,9 @@ object WorkspaceTools {
             val message = result.stderr.ifBlank { result.stdout }.trim()
             error(if (message.isBlank()) "$action failed with exit code ${result.exitCode}" else message)
         }
-        if (result.truncated) error("$action output is too large")
+        // 列目录/找文件/搜内容是**结果集**，截断只是「回给你的少一点」：解析器会丢掉
+        // 半条记录、结果里带 `truncated: true`，不该整次调用失败。
+        if (failOnTruncated && result.truncated) error("$action output is too large")
         return result
     }
 }

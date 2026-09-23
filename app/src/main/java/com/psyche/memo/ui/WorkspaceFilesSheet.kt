@@ -53,6 +53,7 @@ fun WorkspaceFilesSheet(
     val cs = MaterialTheme.colorScheme
     val repo = remember { container.workspaceRepository }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     var area by remember { mutableStateOf(WorkspaceStorageArea.FILES) }
     var path by remember { mutableStateOf("") }
@@ -88,6 +89,21 @@ sheetState = rememberMemoSheetState(),
         ) {
             // 用户 2026-09-15：「文件这个 sheet 不要 title」——把手下方直接就是文件列表。
             MemoSheetHandle(trailingGap = 8.dp)
+            val shown = previewing
+            if (shown != null) {
+                // 预览**就地换掉列表**，不再套一层 sheet：本 sheet 本身已经叠在
+                // WorkspaceSelectorSheet 之上，再套一层 ModalBottomSheet 就是三层窗口，
+                // 预览不显示（用户 2026-09-22「md 点开没反应」）。
+                FileEditorBody(
+                    title = shown.name,
+                    initial = previewText,
+                    // rootfs 区只读；能编辑的那一份在详情页。
+                    editable = false,
+                    onDismiss = { previewing = null },
+                    onSave = { previewing = null },
+                )
+                return@Column
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -115,6 +131,56 @@ sheetState = rememberMemoSheetState(),
                                     }
                                 }
                             }
+                            // 其余（图片、PPT/Word/PDF…）**交给系统打开**：原来这个 when 没有 else，
+                            // 于是非文本文件点了完全没反应（用户 2026-09-22 实测：生成的 PPT/Word
+                            // 在加号里点不开，而「管理工作区」详情页里同样的文件点得开 —— 详情页
+                            // 走的就是这一支）。这里照详情页的做法：先导出到 cacheDir，再用
+                            // FileProvider 交给系统（图片走相册/看图应用，PPT/Word 走 Office/WPS）。
+                            else -> scope.launch {
+                                val outcome = runCatching {
+                                    withContext(Dispatchers.IO) {
+                                        val dir = java.io.File(context.cacheDir, "workspace").apply { mkdirs() }
+                                        val file = java.io.File(dir, entry.name)
+                                        file.outputStream().use {
+                                            repo.exportFile(workspaceId, area, entry.path, it)
+                                        }
+                                        file
+                                    }
+                                }
+                                outcome.fold(
+                                    onSuccess = { file ->
+                                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            file,
+                                        )
+                                        val mime = android.webkit.MimeTypeMap.getSingleton()
+                                            .getMimeTypeFromExtension(file.extension.lowercase()) ?: "*/*"
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                            setDataAndType(uri, mime)
+                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        runCatching {
+                                            context.startActivity(android.content.Intent.createChooser(intent, null))
+                                        }.onFailure {
+                                            com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                                                com.psyche.memo.ui.snackbar.AppNotification(
+                                                    message = context.getString(R.string.workspace_open_failed),
+                                                    type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+                                                ),
+                                            )
+                                        }
+                                    },
+                                    onFailure = { error ->
+                                        com.psyche.memo.ui.snackbar.SnackbarManager.show(
+                                            com.psyche.memo.ui.snackbar.AppNotification(
+                                                message = error.message ?: "",
+                                                type = com.psyche.memo.ui.snackbar.NotificationType.ERROR,
+                                            ),
+                                        )
+                                    },
+                                )
+                            }
                         }
                     },
                     onDelete = {},
@@ -124,17 +190,6 @@ sheetState = rememberMemoSheetState(),
                     showFileActions = false,
                 )
             }
-        }
-
-        previewing?.let { entry ->
-            FileEditorSheet(
-                title = entry.name,
-                initial = previewText,
-                // rootfs 区只读；能编辑的那一份在详情页。
-                editable = false,
-                onDismiss = { previewing = null },
-                onSave = { previewing = null },
-            )
         }
     }
 }

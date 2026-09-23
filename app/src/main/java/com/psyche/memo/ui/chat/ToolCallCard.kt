@@ -90,6 +90,14 @@ import com.composables.icons.lucide.Link
 import com.composables.icons.lucide.ListPlus
 import com.composables.icons.lucide.ListTodo
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.FilePlus
+import com.composables.icons.lucide.FilePen
+import com.composables.icons.lucide.FileSearch
+import com.composables.icons.lucide.List
+import com.composables.icons.lucide.TextSearch
+import com.composables.icons.lucide.ChartBar
+import com.composables.icons.lucide.Workflow
+import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.MapPin
 import com.composables.icons.lucide.MessageCircleQuestion
@@ -219,6 +227,18 @@ fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
         // 生成工具（自研功能）：与设置里两个入口同一个图标语言。
         com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE -> Lucide.Image
         com.psyche.memo.provider.generation.GenerationTools.GENERATE_VIDEO -> Lucide.Video
+        // 工作区工具（自研）：每个动作各一个图标 —— 原来它们没有映射、全落到 Wrench，
+        // 用户 2026-09-22「工具加上对应图标吧，现在图标都用一样的」指的就是这个。
+        com.psyche.memo.provider.workspace.WorkspaceTools.READ_FILE -> Lucide.FileText
+        com.psyche.memo.provider.workspace.WorkspaceTools.WRITE_FILE -> Lucide.FilePlus
+        com.psyche.memo.provider.workspace.WorkspaceTools.EDIT_FILE -> Lucide.FilePen
+        com.psyche.memo.provider.workspace.WorkspaceTools.LIST -> Lucide.List
+        com.psyche.memo.provider.workspace.WorkspaceTools.GLOB -> Lucide.FileSearch
+        com.psyche.memo.provider.workspace.WorkspaceTools.GREP -> Lucide.TextSearch
+        com.psyche.memo.provider.workspace.WorkspaceTools.SHELL -> Lucide.Terminal
+        // 自研绘图工具：与生成工具同一套图标语言。
+        com.psyche.memo.provider.chart.VisualTools.TOOL_NAME -> Lucide.ChartBar
+        com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME -> Lucide.Workflow
         // Provider 内置服务端工具（chat_message_widget.dart:444-453）。
         "web_fetch" -> Lucide.Link
         "code_execution", "code_interpreter", "text_editor_code_execution" -> Lucide.Code

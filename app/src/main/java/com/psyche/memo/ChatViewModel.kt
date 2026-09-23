@@ -2518,7 +2518,8 @@ class ChatViewModel(
                 allSkills = container.skillStore.listSkills(),
             ),
         )
-        // 沙箱工作区（WorkspaceTools）：助手绑定了工作区才提供那四个工具。
+        // 沙箱工作区（WorkspaceTools）：助手绑定了工作区才提供整颗工具面
+        // （读/写/改 + list/glob/grep 三个只读搜索 + shell）。
         out.addAll(
             com.psyche.memo.provider.workspace.WorkspaceTools.buildDefinitions(
                 workspaceId = assistant.workspaceId,
