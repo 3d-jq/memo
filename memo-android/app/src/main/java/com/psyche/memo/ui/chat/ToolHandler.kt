@@ -271,17 +271,25 @@ class ToolHandler(
                 name in com.psyche.memo.provider.LocalToolExecutors.EXECUTABLE &&
                 container != null
             ) {
-                com.psyche.memo.provider.LocalToolExecutors
-                    .execute(
-                        context = container.appContext,
-                        name = name,
-                        args = args,
-                        // 图表工具要跟主题取色（外壳跟主题、系列色固定）。
-                        chartPalette = com.psyche.memo.provider.chart.VisualTools.paletteFor(container),
-                        // 定位工具要有运行时权限，而只有界面手里有 ActivityResultRegistry
-                        // ⇒ 借容器那根「挂起等弹窗结果」的通道（见 LocationPermissionService）。
-                        locationPermission = { container.locationPermissionService.awaitGrant() },
-                    )
+                // 统一骨架（dsh 的 execute() 契约，见 provider/tool/ToolExecution.kt）：
+                // deadline + 异常归一 + 结果上限，都在 ToolRunner 里，不散进各工具。
+                com.psyche.memo.provider.tool.ToolRunner
+                    .run(tool = name) {
+                        com.psyche.memo.provider.LocalToolExecutors
+                            .execute(
+                                context = container.appContext,
+                                name = name,
+                                args = args,
+                                // 图表工具要跟主题取色（外壳跟主题、系列色固定）。
+                                chartPalette = com.psyche.memo.provider.chart.VisualTools
+                                    .paletteFor(container),
+                                // 定位工具要有运行时权限，而只有界面手里有 ActivityResultRegistry
+                                // ⇒ 借容器那根「挂起等弹窗结果」的通道（见 LocationPermissionService）。
+                                locationPermission = {
+                                    container.locationPermissionService.awaitGrant()
+                                },
+                            )
+                    }
                     ?.let { return it }
             }
 

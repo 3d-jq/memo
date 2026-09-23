@@ -3020,7 +3020,8 @@ class ChatViewModel(
         )
 
     private fun readBool(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
+        // 唯一入口（旧键是裸布尔、新键是 "1"/"0"，只认一种会读成恒 false）。
+        com.psyche.memo.ui.DisplayPrefs.readBool(container, key, default)
 
     /**
      * Expand/collapse one reasoning segment

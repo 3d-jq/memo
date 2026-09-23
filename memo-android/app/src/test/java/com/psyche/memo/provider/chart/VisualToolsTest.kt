@@ -178,25 +178,25 @@ class VisualToolsTest {
     }
 
     /**
-     * 结果必须**明说成功**：原来只回 paths，模型找不到成功标识就跟用户说「绘制失败」，
-     * 而图其实已经渲染出来了（用户 2026-09-18 报的就是这个）。
+     * 结果必须**带稳定的成败字段**（`status`），形状由 `ToolResults` 统一给。
+     *
+     * 行为变更说明：2026-09-18 那次「工具明明成功、模型却说没成功」当时靠一句
+     * 「图已进对话、别说失败」的散文叮嘱绕过；现在形状本身带 `status`，**叮嘱已删除**
+     * （dsh：形状先于叮嘱；见 `docs/ENGINEERING_HARNESS.md` §8）。
      */
     @Test
-    fun `results state success explicitly`() {
+    fun `results carry the canonical status shape and no prose coaching`() {
         val chart = call(bar)
         assertEquals("ok", chart["status"]?.jsonPrimitive?.content)
+        assertEquals("chart_result", chart["type"]?.jsonPrimitive?.content)
+        assertEquals(VisualTools.TOOL_NAME, chart["tool"]?.jsonPrimitive?.content)
         assertEquals(true, chart["rendered"]?.jsonPrimitive?.content?.toBoolean())
-        assertTrue(
-            chart["note"]!!.jsonPrimitive.content,
-            chart["note"]!!.jsonPrimitive.content.contains("added to the conversation"),
-        )
+        assertFalse("散文叮嘱应当退休", chart.containsKey("note"))
 
         val svg = svgCall(flowchart)
         assertEquals("ok", svg["status"]?.jsonPrimitive?.content)
-        assertTrue(
-            svg["note"]!!.jsonPrimitive.content,
-            svg["note"]!!.jsonPrimitive.content.contains("do not tell the user it failed"),
-        )
+        assertEquals("svg_result", svg["type"]?.jsonPrimitive?.content)
+        assertFalse(svg.containsKey("note"))
     }
 
     /** 图表配色走 App 主题的完整解析（含「原样表面」预设通道），不再只读预设 id + 明暗。 */

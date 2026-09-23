@@ -143,6 +143,24 @@ dsh 要求「**非平凡改动必须在同一个 PR 里附 Agent Note**」（`.a
 
 ---
 
+## §8 工具执行契约（照 dsh 的 `execute()`）
+
+**原则**：dsh ——「策略不写进工具」+「抛错 ⇒ isError」+「结果有上限」+「args 先校验后冻结」。
+落地在 `provider/tool/ToolExecution.kt`（`ToolRunner` + `ToolResults`），由 `ToolHandler` 的本地工具
+分派统一调用：
+
+| 契约 | 我们的做法 |
+|---|---|
+| 统一 deadline | `ToolRunner.timeoutFor(tool)`（策略表集中在此，默认 20s；`render_mermaid` 35s＞其内部 25s，避免双重超时） |
+| 挂住不拖死对话 | 超时回 `tool_timeout` + 可操作文案 |
+| 抛错 ⇒ isError（不吞） | 任何 `Throwable` 归一成 `tool_crashed`；**`CancellationException` 透传**（用户点停止不算工具失败） |
+| 结果有上限且标明 | `MAX_RESULT_CHARS = 24k`，超限回 `{truncated:true, originalChars, content}` —— 不许把截断当完整 |
+| 规范结果值 | 成功 `{type:<工具的>|tool_result, status:"ok", tool, …工具字段}`；失败 `{type:"tool_error", status:"error", error, message, tool, instruction?}`。**不重命名**各工具既有的 `type`（视图层在读），只统一外壳 |
+| args 校验与审批 | 已在原位（各工具的 schema/解析 + 高风险工具审批门）—— 视作 pre-execute 的位置，策略不进工具本体 |
+
+**为什么重要**：2026-09-18「工具明明成功、模型却说没成功」就是缺「规范结果值」——
+当时靠加一句「别跟用户说失败」的散文叮嘱绕过，现在形状本身带 `status`，**叮嘱已删除**。
+
 ## §7 这份文档自己也要能被改
 
 dsh 的 AGENTS.md 有一条 *Editing these instructions*：指令本身可修订，但要求「每条规则自足、

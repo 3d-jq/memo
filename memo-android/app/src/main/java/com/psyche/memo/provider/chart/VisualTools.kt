@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.provider.generation.GeneratedMediaStore
+import com.psyche.memo.provider.tool.ToolResults
 import com.psyche.memo.ui.theme.MemoTheme
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -209,16 +210,19 @@ object VisualTools {
             bytes = svg.toByteArray(Charsets.UTF_8),
             mimeType = ChartSvgRenderer.MIME,
         )
-        return buildJsonObject {
-            put("type", JsonPrimitive("chart_result"))
-            put("status", JsonPrimitive("ok"))
-            put("rendered", JsonPrimitive(true))
-            put("note", JsonPrimitive(RESULT_NOTE))
-            put("kind", JsonPrimitive(spec.kind.wireName))
-            put("points", JsonPrimitive(spec.categories.size))
-            put("series", JsonPrimitive(spec.activeSeries.size))
-            put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
-        }.toString()
+        // 规范形状：`status` 由 ToolResults 统一给，模型看 status 就知道成败 ——
+        // 不再需要「图已进对话、别说失败」这种散文叮嘱（dsh：形状先于叮嘱）。
+        return ToolResults.ok(
+            tool = TOOL_NAME,
+            type = "chart_result",
+            fields = buildJsonObject {
+                put("rendered", JsonPrimitive(true))
+                put("kind", JsonPrimitive(spec.kind.wireName))
+                put("points", JsonPrimitive(spec.categories.size))
+                put("series", JsonPrimitive(spec.activeSeries.size))
+                put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
+            },
+        )
     }
 
     // ------------------------------------------------------------------ 手写 SVG
@@ -251,29 +255,18 @@ object VisualTools {
                         .toByteArray(Charsets.UTF_8),
                     mimeType = ChartSvgRenderer.MIME,
                 )
-                buildJsonObject {
-                    put("type", JsonPrimitive("svg_result"))
-                    put("status", JsonPrimitive("ok"))
-                    put("rendered", JsonPrimitive(true))
-                    put("note", JsonPrimitive(RESULT_NOTE))
-                    put("aspect", JsonPrimitive(sanitized.aspectRatio))
-                    put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
-                }.toString()
+                ToolResults.ok(
+                    tool = TOOL_NAME,
+                    type = "svg_result",
+                    fields = buildJsonObject {
+                        put("rendered", JsonPrimitive(true))
+                        put("aspect", JsonPrimitive(sanitized.aspectRatio))
+                        put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
+                    },
+                )
             }
         }
     }
-
-    /**
-     * 结果里给模型的一句话。
-     *
-     * 为什么要有：原来只回 `{"type":"…","paths":[…]}`，**没有明确的成功标识** ——
-     * 模型看半天没找到 status/success，就直接跟用户说「绘制失败」，可图其实已经渲染出来了
-     *（用户 2026-09-18「他明明绘制出来怎么说没有绘制成功呀」；设备上同一秒落了两个文件，
-     * 证明工具两次都成功了）。
-     */
-    private const val RESULT_NOTE =
-        "Drawn successfully. The image has already been added to the conversation right below " +
-            "this tool call — describe what it shows, and do not tell the user it failed."
 
     /**
      * 工具描述 + **当前主题说明**（底色 + 配套墨迹色）—— 照 deepseek-harness 的
