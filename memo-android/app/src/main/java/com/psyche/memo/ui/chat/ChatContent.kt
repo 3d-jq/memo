@@ -256,7 +256,9 @@ fun ChatContent(
     val versionInfo by vm.versionInfo.collectAsState()
     // 思考卡 / 工具卡的 6 个显示开关（settings_provider.dart display_*）。走
     // SharedPreferences 直读，从显示设置页返回时 NavHost 重建本页即拿到新值。
-    val timelineSettings = remember {
+    // key 用 DisplayPrefs.revision：显示设置是**同屏叠层**，关掉不会重建本页，
+    // 不挂 key 就会一直用旧设置（用户 2026-09-23「点了没反应」）。
+    val timelineSettings = remember(com.psyche.memo.ui.DisplayPrefs.revision) {
         com.psyche.memo.ui.chat.ChatTimelineSettings.fromPrefs { key ->
             container.preferenceRepository.readJson(key)
         }
@@ -704,8 +706,14 @@ fun ChatContent(
      * （`size + 5`）那一招，也不用碰 `Int.MAX_VALUE`（用户 2026-09-15 报的「点到底部
      * 会闪」就是那个越界偏移造成的，见 §5.14）。
      */
-    val bottomAnchorIndex = messages.size +
-        if (compacting && streamingMessageId == null) 1 else 0
+    // 哨兵下标 = 消息数 + 额外项数，额外项的 gating 必须与下面 LazyColumn 逐条一致
+    //（压缩进度行：compacting && 非流式；流式提示项：存在流式消息）。原实现漏算后者 ⇒
+    // 「到底」少滚一行（2026-09-23 实证，见 .stepcode/plans/session-01a0ce17-*.md §附 2）。
+    val bottomAnchorIndex = com.psyche.memo.ui.chat.PinnedFollow.bottomAnchorIndexFor(
+        messagesCount = messages.size,
+        compactionProgress = compacting && streamingMessageId == null,
+        streamingIndicator = messages.lastOrNull { it.isStreaming } != null,
+    )
 
     fun scrollTimelineToBottom() {
         if (messages.isEmpty()) return
@@ -785,41 +793,56 @@ fun ChatContent(
     // 三个前提缺一不可：跟随开着（following）∧ 手指不在屏上（pointerDown）∧ 此刻没在滚动。
     // 用 requestScrollToItem 而不是 animateScrollToItem：后者每个增量都重启一次动画，
     // 会把用户正在进行的拖动/惯性顶掉。
+    // 结束后的宽限窗口状态（声明必须在下面的布局驱动 effect **之前**，它会被引用）。
+    var followGrace by remember { mutableStateOf(false) }
+    var wasStreaming by remember { mutableStateOf(false) }
+    // **布局驱动**贴底（RikkaHub `ChatList.kt:278-290`、dsh `ChatView.tsx:331-341`）：
+    // 触发源是「尾部缝隙变化」（= 内容长高），不是数据事件。流式期间 Markdown 解析在
+    // `Dispatchers.Default` 异步落地、代码块还有 animateContentSize，**长高那一帧没人贴底
+    // 就会被顶起一行、下个 chunk 又贴回来** —— 那就是抖动（根因见
+    // `.stepcode/plans/session-01a0ce17-*.md`）。改成布局驱动后，长高自己触发贴底，
+    // 漂移活不过一帧。判据（谁把门）在 PinnedFollow，纯函数、有契约测试。
     androidx.compose.runtime.LaunchedEffect(
-        messages,
+        timelineListState,
+        autoScrollEnabled,
+        scrollDensity,
         streaming,
         following,
+        followGrace,
         pointerDown,
-        autoScrollEnabled,
-        timelineListState.isScrollInProgress,
     ) {
-        if (streaming && following && !pointerDown && autoScrollEnabled &&
-            !timelineListState.isScrollInProgress && messages.isNotEmpty()
-        ) {
-            scrollTimelineToBottom()
-        }
+        snapshotFlow { tailBottomGapPx() }
+            .distinctUntilChanged()
+            .collect { gap ->
+                val pin = com.psyche.memo.ui.chat.PinnedFollow.shouldPinToBottom(
+                    hasMessages = messages.isNotEmpty(),
+                    following = following,
+                    autoScrollEnabled = autoScrollEnabled,
+                    pointerDown = pointerDown,
+                    isScrollInProgress = timelineListState.isScrollInProgress,
+                    streaming = streaming,
+                    graceActive = followGrace,
+                    gapPx = gap,
+                    tolerancePx = with(scrollDensity) {
+                        com.psyche.memo.ui.chat.PinnedFollow.STICK_TOLERANCE_DP.dp.toPx()
+                    },
+                )
+                if (pin) scrollTimelineToBottom()
+            }
     }
     // scroll_controller.dart:518-564 stickToBottomAfterGeneration：生成结束那一刻尾部
     // 还会长高（操作行/Token 统计出现、思考卡收起），跟随条件里的 streaming 已经翻假，
     // 需要在同一个窗口（450ms）里再贴一次底。用户接管过（following=false）就不抢。
-    var wasStreaming by remember { mutableStateOf(false) }
-    androidx.compose.runtime.LaunchedEffect(
-        streaming,
-        following,
-        pointerDown,
-        autoScrollEnabled,
-        messages.size,
-    ) {
+    // 结束后的宽限窗口：生成结束那一刻尾部还会长高（操作行/Token 统计/思考卡收起），
+    // 这段时间继续允许布局驱动贴底；窗口一过就交给「用户自己说了算」。原先这里是
+    // 「立刻贴一次 + delay(450) 再贴一次」的补丁式两连贴（§5.49 由来），现在折进同一机制。
+    androidx.compose.runtime.LaunchedEffect(streaming) {
         val justFinished = wasStreaming && !streaming
         wasStreaming = streaming
-        if (justFinished && following && !pointerDown && autoScrollEnabled &&
-            !timelineListState.isScrollInProgress && messages.isNotEmpty()
-        ) {
-            scrollTimelineToBottom()
-            kotlinx.coroutines.delay(450)
-            if (following && !pointerDown && !timelineListState.isScrollInProgress) {
-                scrollTimelineToBottom()
-            }
+        if (justFinished) {
+            followGrace = true
+            kotlinx.coroutines.delay(com.psyche.memo.ui.chat.PinnedFollow.FINISH_GRACE_MS)
+            followGrace = false
         }
     }
     // home_page.dart:763-771 didChangeMetrics →
