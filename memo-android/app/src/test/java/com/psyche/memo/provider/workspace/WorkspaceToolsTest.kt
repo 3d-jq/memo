@@ -40,8 +40,28 @@ class WorkspaceToolsTest {
         assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.WRITE_FILE, emptyMap()))
         assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.EDIT_FILE, emptyMap()))
         assertTrue(WorkspaceTools.resolveApproval(WorkspaceTools.SHELL, emptyMap()))
+        // 本工程新增的三个只读工具也必须免审批 —— 否则「看一眼目录」都要点一次确认。
+        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.LIST, emptyMap()))
+        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.GLOB, emptyMap()))
+        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.GREP, emptyMap()))
         // 未知工具默认不放行。
         assertFalse(WorkspaceTools.resolveApproval("nope", emptyMap()))
+    }
+
+    /**
+     * 每一处「工具名清单」都要跟着 [WorkspaceTools.ALL_TOOL_NAMES] 走：审批表、定义表、
+     * 提示词块、详情页审批行。漏一个的后果分别是「审批缺失」和「模型根本不知道有这个工具」
+     * —— 位置工具就栽在后者（用户 2026-09-21「为什么大模型说没有呀」）。
+     */
+    @Test
+    fun everyToolNameIsCoveredByApprovalsAndDefinitions() {
+        assertEquals(WorkspaceTools.ALL_TOOL_NAMES, WorkspaceTools.DEFAULT_APPROVALS.keys)
+        val definitionNames = WorkspaceTools.catalogDefinitions().map { it.name }
+        assertEquals(WorkspaceTools.ALL_TOOL_NAMES.size, definitionNames.size)
+        assertTrue(definitionNames.containsAll(WorkspaceTools.ALL_TOOL_NAMES))
+        WorkspaceTools.ALL_TOOL_NAMES.forEach {
+            assertTrue("$it 缺少参数 schema", WorkspaceTools.catalogDefinitions().any { spec -> spec.name == it })
+        }
     }
 
     @Test
@@ -113,13 +133,16 @@ class WorkspaceToolsTest {
     }
 
     @Test
-    fun boundWorkspaceExposesTheFourTools() {
+    fun boundWorkspaceExposesEveryTool() {
         val defs = WorkspaceTools.buildDefinitions("ws-1")
         assertEquals(
             listOf(
                 WorkspaceTools.READ_FILE,
                 WorkspaceTools.WRITE_FILE,
                 WorkspaceTools.EDIT_FILE,
+                WorkspaceTools.LIST,
+                WorkspaceTools.GLOB,
+                WorkspaceTools.GREP,
                 WorkspaceTools.SHELL,
             ),
             defs.map { it.name },
@@ -202,6 +225,131 @@ class WorkspaceToolsTest {
         assertEquals(5_000L, WorkspaceTools.timeoutMillis(args("timeout" to 5)))
         assertEquals(600_000L, WorkspaceTools.timeoutMillis(args("timeout" to 99_999)))
         assertEquals(1_000L, WorkspaceTools.timeoutMillis(args("timeout" to 0)))
+    }
+
+    // ---- 只读搜索工具：list / glob / grep（本工程新增，上游没有） ----
+
+    @Test
+    fun searchToolsDefaultToTheWorkspaceRoot() {
+        assertEquals(
+            WorkspaceTools.DEFAULT_SEARCH_ROOT,
+            WorkspaceTools.absolutePathOrDefault(buildJsonObject { }, "path", WorkspaceTools.DEFAULT_SEARCH_ROOT),
+        )
+        assertEquals(
+            WorkspaceTools.DEFAULT_SEARCH_ROOT,
+            WorkspaceTools.absolutePathOrDefault(args("path" to "  "), "path", WorkspaceTools.DEFAULT_SEARCH_ROOT),
+        )
+        assertEquals(
+            "/workspace/src",
+            WorkspaceTools.absolutePathOrDefault(args("path" to "/workspace/src"), "path", WorkspaceTools.DEFAULT_SEARCH_ROOT),
+        )
+        // 相对路径仍然拒绝 —— 搜索根也必须在 rootfs 内。
+        assertThrows(IllegalArgumentException::class.java) {
+            WorkspaceTools.absolutePathOrDefault(args("path" to "src"), "path", WorkspaceTools.DEFAULT_SEARCH_ROOT)
+        }
+    }
+
+    @Test
+    fun globPatternsResolveAgainstTheSearchRoot() {
+        assertEquals("/workspace/*.md", WorkspaceTools.globExpression("/workspace", "*.md"))
+        assertEquals("/workspace/src/**/*.kt", WorkspaceTools.globExpression("/workspace", "src/**/*.kt"))
+        // 已经是绝对路径就原样用（模型经常照着 /workspace/... 抄）；`./` 前缀当相对处理。
+        assertEquals("/workspace/a.md", WorkspaceTools.globExpression("/workspace", "/workspace/a.md"))
+        assertEquals("/workspace/a.md", WorkspaceTools.globExpression("/workspace", "./a.md"))
+        // 根带尾斜杠时不能拼出 `//`。
+        assertEquals("/workspace/a.md", WorkspaceTools.globExpression("/workspace/", "a.md"))
+    }
+
+    @Test
+    fun listCommandGuardsAgainstNonDirectories() {
+        val command = WorkspaceTools.listCommand("/workspace/notes")
+        assertTrue(command.startsWith("dir='/workspace/notes'"))
+        assertTrue(command.contains("[ ! -d \"\$dir\" ]"))
+        assertTrue(command.contains("-mindepth 1 -maxdepth 1"))
+        // 路径要过 shell 引号，含空格的目录名不能被拆成两个参数。
+        assertTrue(
+            WorkspaceTools.listCommand("/workspace/my notes").contains("'/workspace/my notes'"),
+        )
+    }
+
+    @Test
+    fun grepCommandCarriesTheRightFlags() {
+        val plain = WorkspaceTools.grepCommand("/workspace", "TODO", glob = null, ignoreCase = false)
+        assertTrue(plain.contains("grep -rInEZ"))
+        assertTrue(plain.contains("-- 'TODO'"))
+        assertFalse(plain.contains("--include="))
+        assertFalse(plain.contains("-rInEZi"))
+
+        val filtered = WorkspaceTools.grepCommand("/workspace", "todo", glob = "*.kt", ignoreCase = true)
+        assertTrue(filtered.contains("grep -rInEZi"))
+        assertTrue(filtered.contains("--include='*.kt'"))
+        // 正则里的引号/空格不能让 shell 拆词。
+        assertTrue(
+            WorkspaceTools.grepCommand("/workspace", "a 'b' c", glob = null, ignoreCase = false)
+                .contains("'a '\"'\"'b'\"'\"' c'"),
+        )
+    }
+
+    /**
+     * `find -printf '%y\0%s\0%T@\0%p\0'`：`%T@` 带小数（秒.纳秒）要取整，输出被 runner
+     * 按字节截断时末尾的半条记录要丢掉而不是报错。
+     */
+    @Test
+    fun parsesPrintfEntriesWithFractionalMtimeAndPartialTail() {
+        val stdout = "d\u00004096\u00001700000000.1234567890\u0000/workspace/sub\u0000" +
+            "f\u000012\u00001700000001.0000000000\u0000/workspace/a.txt\u0000"
+        val entries = WorkspaceTools.parsePrintfEntries(stdout)
+        assertEquals(2, entries.size)
+        assertEquals("/workspace/sub", entries[0].path)
+        assertEquals("sub", entries[0].name)
+        assertTrue(entries[0].isDirectory)
+        assertEquals(1_700_000_000_000L, entries[0].updatedAt)
+        assertEquals("a.txt", entries[1].name)
+        assertEquals(12L, entries[1].sizeBytes)
+
+        val truncated = WorkspaceTools.parsePrintfEntries(stdout + "f\u000012\u0000170000")
+        assertEquals(2, truncated.size)
+        assertEquals(0, WorkspaceTools.parsePrintfEntries("").size)
+    }
+
+    @Test
+    fun parsesGrepMatchesByNulAndFirstColon() {
+        // `-Z` 把文件名和 `line:text` 用 NUL 隔开 —— 文件名里有冒号也拆不错。
+        val stdout = "/workspace/a:b.kt\u000012:val x = 1\n/workspace/b.md\u00003:hello: world\n"
+        val matches = WorkspaceTools.parseGrepMatches(stdout)
+        assertEquals(2, matches.size)
+        assertEquals("/workspace/a:b.kt", matches[0].path)
+        assertEquals(12, matches[0].line)
+        assertEquals("val x = 1", matches[0].text)
+        assertEquals("hello: world", matches[1].text)
+        // 没有匹配就是空表，不是异常。
+        assertEquals(0, WorkspaceTools.parseGrepMatches("").size)
+    }
+
+    @Test
+    fun grepMatchesAreCappedAndLongLinesTrimmed() {
+        val longLine = "x".repeat(2_000)
+        val stdout = (1..400).joinToString("") { "/w/f.txt\u0000$it:$longLine\n" }
+        val matches = WorkspaceTools.parseGrepMatches(stdout)
+        assertEquals(200, matches.size)
+        assertEquals(500, matches.first().text.length)
+    }
+
+    @Test
+    fun searchToolsExposeTheirOwnSchemas() {
+        val list = Json.parseToJsonElement(WorkspaceTools.listParametersJson()).jsonObject
+        assertNull(list["required"])
+        val glob = Json.parseToJsonElement(WorkspaceTools.globParametersJson()).jsonObject
+        assertTrue(glob["required"].toString().contains("pattern"))
+        val grep = Json.parseToJsonElement(WorkspaceTools.grepParametersJson()).jsonObject
+        assertTrue(grep["required"].toString().contains("pattern"))
+        val props = grep["properties"]!!.jsonObject
+        assertTrue(props.containsKey("glob"))
+        assertTrue(props.containsKey("ignore_case"))
+        // 三个只读工具的 path 都是可选的（缺省 = /workspace）。
+        listOf(list, glob, grep).forEach {
+            assertTrue(it["properties"]!!.jsonObject.containsKey("path"))
+        }
     }
 
     // ---- 替换阶梯 ----

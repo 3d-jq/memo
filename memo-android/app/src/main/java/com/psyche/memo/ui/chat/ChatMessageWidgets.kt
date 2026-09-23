@@ -71,6 +71,8 @@ import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Copy
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Zap
+import com.composables.icons.lucide.Hash
 import com.composables.icons.lucide.Loader
 import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Trash2
@@ -220,18 +222,48 @@ fun TokenDisplay(
 ) {
     val cs = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
+    // 速度：completionTokens / 总耗时。**总耗时口径**（durationMs 现成）；「首字之后」那个更准的
+    // 口径要给消息模型加一个 firstTokenMs 字段（跨 payload 持久化），单开一轮再做。
+    val speed = formatTokensPerSecond(completionTokens, durationMs)
     Box {
-        Text(
-            text = androidx.compose.ui.res.stringResource(
-                UiR.string.token_detail_total_tokens,
-                formatTokenCount(totalTokens),
-            ),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 11.sp,
-                color = cs.onSurface.copy(alpha = 0.5f),
-            ),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.clickable { expanded = !expanded },
-        )
+        ) {
+            // 用户 2026-09-22「对话显示里的那个 token 显示里面没有对应图标，也没有 token 速度」
+            Icon(
+                Lucide.Hash,
+                contentDescription = null,
+                tint = cs.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.size(12.dp),
+            )
+            Text(
+                text = androidx.compose.ui.res.stringResource(
+                    UiR.string.token_detail_total_tokens,
+                    formatTokenCount(totalTokens),
+                ),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.sp,
+                    color = cs.onSurface.copy(alpha = 0.5f),
+                ),
+            )
+            if (speed != null) {
+                Icon(
+                    Lucide.Zap,
+                    contentDescription = null,
+                    tint = cs.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.size(12.dp),
+                )
+                Text(
+                    text = speed + " " + androidx.compose.ui.res.stringResource(UiR.string.token_detail_speed_label),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        color = cs.onSurface.copy(alpha = 0.5f),
+                    ),
+                )
+            }
+        }
         if (expanded) {
             Popup(
                 alignment = Alignment.BottomEnd,
@@ -680,4 +712,17 @@ fun VoiceTranscribingIndicator(
         Spacer(Modifier.width(7.dp))
         Text(label, style = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = color))
     }
+}
+
+
+/**
+ * 生成速度：completion tokens ÷ 总耗时（秒），保留一位小数；数据不足时返回 null（不显示）。
+ * `durationMs` 太小（<0.5s）不显示 —— 那多半是缓存命中/极短回复，除出来的数字会离谱。
+ */
+internal fun formatTokensPerSecond(completionTokens: Int?, durationMs: Long?): String? {
+    val tokens = completionTokens ?: return null
+    val ms = durationMs ?: return null
+    if (tokens <= 0 || ms < 500L) return null
+    val perSecond = tokens * 1000.0 / ms
+    return java.util.Locale.US.let { String.format(it, "%.1f", perSecond) }
 }

@@ -568,10 +568,19 @@ private fun BasicTab(
     }
 }
 
-/** 上游 `workspaceToolApprovalItems()`：固定四项、固定顺序、人类可读名 + 工具名。 */
+/**
+ * 上游 `workspaceToolApprovalItems()`：固定顺序、人类可读名 + 工具名。
+ *
+ * 上游是四项；[WorkspaceTools.LIST] / [WorkspaceTools.GLOB] / [WorkspaceTools.GREP]
+ * 三个只读工具是本工程新增（上游没有），按「读 → 找 → 搜 → 写 → 改 → 执行」的顺序插在
+ * 读文件之后，默认全免审批（见 `WorkspaceTools.DEFAULT_APPROVALS`）。
+ */
 @Composable
 private fun toolApprovalItems(): List<Pair<String, String>> = listOf(
     "workspace_read_file" to stringResource(R.string.workspace_tool_read_file),
+    "workspace_list" to stringResource(R.string.workspace_tool_list),
+    "workspace_glob" to stringResource(R.string.workspace_tool_glob),
+    "workspace_grep" to stringResource(R.string.workspace_tool_grep),
     "workspace_write_file" to stringResource(R.string.workspace_tool_write_file),
     "workspace_edit_file" to stringResource(R.string.workspace_tool_edit_file),
     "workspace_shell" to stringResource(R.string.workspace_tool_shell),
@@ -1041,8 +1050,6 @@ internal fun FileEditorSheet(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
 ) {
-    // 内容在 sheet 打开后才异步读到，所以 key 里带上 initial：读到就填进去。
-    var text by remember(title, initial) { mutableStateOf(initial) }
     ModalBottomSheet(
         containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
             shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
@@ -1050,40 +1057,65 @@ sheetState = rememberMemoSheetState(),
         onDismissRequest = onDismiss,
         dragHandle = null,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            MemoSheetHandle(trailingGap = 0.dp)
-            Text(
-                text = title,
-                style = TextStyle(
-                    fontSize = 15.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                minLines = 10,
-                maxLines = 18,
-                readOnly = !editable,
-                textStyle = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.custom_theme_cancel))
-                }
-                if (editable) {
-                    TextButton(onClick = { onSave(text) }) {
-                        Text(stringResource(R.string.custom_theme_save))
-                    }
+        FileEditorBody(
+            title = title,
+            initial = initial,
+            editable = editable,
+            onDismiss = onDismiss,
+            onSave = onSave,
+        )
+    }
+}
+
+/**
+ * [FileEditorSheet] 的内容体，单独拆出来是给**已经在 sheet 里**的调用方用的
+ * （`WorkspaceFilesSheet` 的只读预览）：在 sheet 里再套一层 `ModalBottomSheet` 是三层
+ * 窗口嵌套，预览**根本不显示** —— 用户 2026-09-22 报的「md 点了没反应」就是它
+ * （PPT/Word 不走这条路，那是 when 少了 else，同一批一起修）。窗口层级不能再加，
+ * 所以那边直接内联这个内容体。
+ */
+@Composable
+internal fun FileEditorBody(
+    title: String,
+    initial: String,
+    editable: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    // 内容在 sheet 打开后才异步读到，所以 key 里带上 initial：读到就填进去。
+    var text by remember(title, initial) { mutableStateOf(initial) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = title,
+            style = TextStyle(
+                fontSize = 15.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            minLines = 10,
+            maxLines = 18,
+            readOnly = !editable,
+            textStyle = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.custom_theme_cancel))
+            }
+            if (editable) {
+                TextButton(onClick = { onSave(text) }) {
+                    Text(stringResource(R.string.custom_theme_save))
                 }
             }
         }

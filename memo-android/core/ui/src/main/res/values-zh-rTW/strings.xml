@@ -2690,6 +2690,7 @@
     <string name="token_detail_prompt_tokens">%1$s tokens</string>
     <string name="token_detail_prompt_tokens_with_cache">%1$s tokens (%2$s cached)</string>
     <string name="token_detail_speed">%1$s tok/s</string>
+    <string name="token_detail_speed_label">tok/s</string>
     <string name="token_detail_total_tokens">%1$s tokens</string>
     <string name="tool_approval_approve">批准</string>
     <string name="tool_approval_denied_message">工具調用 \"%1$s\" 已被使用者拒絕。原因：%2$s</string>
@@ -2899,6 +2900,9 @@
     <string name="workspace_tool_approvals">工具審批</string>
     <string name="workspace_tool_approvals_desc">下面這些工具在動工作區之前需要先確認。</string>
     <string name="workspace_tool_edit_file">編輯檔案</string>
+    <string name="workspace_tool_glob">尋找檔案</string>
+    <string name="workspace_tool_grep">搜尋內容</string>
+    <string name="workspace_tool_list">列出目錄</string>
     <string name="workspace_tool_read_file">讀取檔案</string>
     <string name="workspace_tool_shell">執行 Shell 命令</string>
     <string name="workspace_tool_write_file">寫入檔案</string>
