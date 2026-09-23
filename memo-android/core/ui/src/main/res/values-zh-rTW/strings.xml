@@ -2690,7 +2690,6 @@
     <string name="token_detail_prompt_tokens">%1$s tokens</string>
     <string name="token_detail_prompt_tokens_with_cache">%1$s tokens (%2$s cached)</string>
     <string name="token_detail_speed">%1$s tok/s</string>
-    <string name="token_detail_speed_label">tok/s</string>
     <string name="token_detail_total_tokens">%1$s tokens</string>
     <string name="tool_approval_approve">批准</string>
     <string name="tool_approval_denied_message">工具調用 \"%1$s\" 已被使用者拒絕。原因：%2$s</string>

@@ -4152,7 +4152,6 @@
   "tokenDetailPromptTokensWithCache": "{count} tokens ({cached} cached)",
   "tokenDetailSpeed": "{value} tok/s",
   "tokenDetailTotalTokens": "{count} tokens",
-  "tokenDetailSpeedLabel": "tok/s",
   "toolApprovalApprove": "Approve",
   "toolApprovalDeniedMessage": "Tool call \"{toolName}\" was denied by user. Reason: {reason}",
   "toolApprovalDeny": "Deny",

@@ -3374,7 +3374,6 @@
   "tokenDetailPromptTokensWithCache": "{count} tokens ({cached} cached)",
   "tokenDetailSpeed": "{value} tok/s",
   "tokenDetailTotalTokens": "{count} tokens",
-  "tokenDetailSpeedLabel": "tok/s",
   "toolApprovalApprove": "批准",
   "toolApprovalDeniedMessage": "工具調用 \"{toolName}\" 已被使用者拒絕。原因：{reason}",
   "toolApprovalDeny": "拒絕",

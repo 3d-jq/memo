@@ -3,6 +3,7 @@ package com.psyche.memo.ui.chat
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Wrench
 import com.psyche.memo.provider.workspace.WorkspaceTools
+import com.psyche.memo.ui.toolSchemaIconFor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -44,6 +45,26 @@ class ToolIconCoverageTest {
             "工作区每个工具都应该有自己的图标，出现了重复：",
             WorkspaceTools.ALL_TOOL_NAMES.size,
             icons.toSet().size,
+        )
+    }
+
+    /**
+     * 「设置 → 工具描述」那份映射（`toolSchemaIconFor`，上游 `toolSchemaIconFor L15-63`）
+     * 是**另一个**函数 —— 只改聊天卡片会让设置里仍然全是扳手，用户 2026-09-23
+     * 「工具描述里面的图标怎么没有变呀」就是漏了它。两个界面列的是同一批工具，
+     * 这里把「图标一致 + 不落兜底」都钉住。
+     */
+    @Test
+    fun theSettingsCatalogUsesTheSameIconsAndNeverFallsBackToWrench() {
+        val missing = mustHaveOwnIcon.filter { toolSchemaIconFor(it) == Lucide.Wrench }
+        assertTrue(
+            "这些工具在「设置 → 工具描述」里还是默认的 Wrench：\n" + missing.joinToString("\n"),
+            missing.isEmpty(),
+        )
+        val mismatched = mustHaveOwnIcon.filter { toolSchemaIconFor(it) != toolIconFor(it) }
+        assertTrue(
+            "这两个界面的图标应当一致，不一致的在下面：\n" + mismatched.joinToString("\n"),
+            mismatched.isEmpty(),
         )
     }
 }

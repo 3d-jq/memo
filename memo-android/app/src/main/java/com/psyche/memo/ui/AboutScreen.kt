@@ -115,6 +115,8 @@ fun AboutScreen(
     var updateEnabled by remember { mutableStateOf(false) }
     var updateChecking by remember { mutableStateOf(false) }
     var updateOutcome by remember { mutableStateOf<UpdateService.Outcome?>(null) }
+    // 有新版时点那一行弹出的更新日志对话框（用户 2026-09-23「点击出现弹窗」）。
+    var updateNotesFor by remember { mutableStateOf<com.psyche.memo.update.UpdateInfo?>(null) }
 
     fun checkForUpdate() {
         uiScope.launch {
@@ -235,18 +237,16 @@ fun AboutScreen(
                         val release = (outcome as? UpdateService.Outcome.Available)?.info
                         DividerRow()
                         // 只留一行（用户 2026-09-21「为什么做两个」）：没新版时点它检查，
-                        // 有新版时点它去下载，状态写在右侧 detail 上。
+                        // 有新版时点它**弹更新日志**（用户 2026-09-23「更新日志不要在检查
+                        // 更新那里显示呀，用弹窗呀…点击出现弹窗」）—— 那一行只报状态，
+                        // 正文（markdown）交给弹窗，别再往 detail 里塞日志。
                         AboutNavRow(
                             icon = if (release != null) Lucide.Download else Lucide.RefreshCw,
-                            label = if (release != null) {
-                                stringResource(UiR.string.about_page_update_download) + " " + release.version
-                            } else {
-                                stringResource(UiR.string.about_page_update_check)
-                            },
+                            label = stringResource(UiR.string.about_page_update_check),
                             detail = when {
                                 updateChecking -> stringResource(UiR.string.about_page_update_checking)
-                                release != null -> release.notes.trim()
-                                    .lineSequence().filter { it.isNotBlank() }.joinToString(" ").take(60)
+                                release != null ->
+                                    stringResource(UiR.string.side_drawer_update_title, release.version)
                                 outcome is UpdateService.Outcome.UpToDate ->
                                     stringResource(UiR.string.about_page_update_up_to_date)
                                 outcome is UpdateService.Outcome.Failed ->
@@ -257,11 +257,7 @@ fun AboutScreen(
                             showChevron = true,
                             onTap = {
                                 if (release != null) {
-                                    runCatching {
-                                        context.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)),
-                                        )
-                                    }
+                                    updateNotesFor = release
                                 } else {
                                     checkForUpdate()
                                 }
@@ -294,6 +290,26 @@ fun AboutScreen(
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
+    }
+
+    // 更新日志对话框：正文走 UpdateNotesBody（markdown 渲染 + 限高滚动）。
+    updateNotesFor?.let { release ->
+        MemoAlertDialog(
+            onDismiss = { updateNotesFor = null },
+            title = stringResource(UiR.string.side_drawer_update_title, release.version),
+            content = { UpdateNotesBody(release.notes) },
+            confirmLabel = stringResource(UiR.string.about_page_update_download),
+            onConfirm = {
+                updateNotesFor = null
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)),
+                    )
+                }
+            },
+            // 「关闭」复用审批面板那颗（chat_interruption_close），不为一个按钮新造 key。
+            dismissLabel = stringResource(UiR.string.chat_interruption_close),
+        )
     }
 
     // L116-385: easter egg sheet — per-channel log toggles, each with the
