@@ -38,28 +38,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.composables.icons.lucide.ArrowLeft
-import com.composables.icons.lucide.BookDashed
-import com.composables.icons.lucide.BookHeart
-import com.composables.icons.lucide.Calculator
-import com.composables.icons.lucide.Calendar
-import com.composables.icons.lucide.CalendarPlus
-import com.composables.icons.lucide.CircleCheck
 import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.Clipboard
-import com.composables.icons.lucide.Clock
-import com.composables.icons.lucide.CloudSun
-import com.composables.icons.lucide.Earth
-import com.composables.icons.lucide.HeartPulse
-import com.composables.icons.lucide.ListPlus
-import com.composables.icons.lucide.ListTodo
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MapPin
-import com.composables.icons.lucide.MessageCircleQuestion
 import com.composables.icons.lucide.RotateCcw
-import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Smartphone
-import com.composables.icons.lucide.Volume2
 import com.composables.icons.lucide.X
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.ui.R as UiR
@@ -74,37 +55,16 @@ import kotlinx.serialization.json.jsonPrimitive
  */
 
 /**
- * toolSchemaIconFor L15-63。
+ * toolSchemaIconFor L15-63 —— **本工程把它做成 [toolIconFor] 的别名**。
  *
- * 上游只有它自己那批工具（记忆/搜索/本地工具），我们长出来的工具（工作区、技能、生成、
- * 绘图）**不在上游的 when 里**，所以整批落到 `Wrench` —— 用户 2026-09-23「工具描述里面的
- * 图标怎么没有变呀」就是这个（我只改了聊天工具卡的映射，漏了这一处）。修法是让兜底走
- * 聊天工具卡那套 [toolIconFor]：两个界面列的是同一批工具，图标必须一致
- * （`ToolIconCoverageTest` 钉住这条）。
+ * 上游在这份列表里有自己的一张 when 表；我们第一版照抄了一张，于是同一批工具在两个界面
+ * 可能长得不一样 —— 而且**真的漏过**：工作区那批工具加了图标后，这里仍然全是 `Wrench`
+ * （用户 2026-09-23「工具描述里面的图标怎么没有变呀」），接着记忆全族又共用一个图标
+ * （同日「记忆工具里的图标也改一下吧，很多也一样呀」）。两份表维护不出好处，
+ * 只留聊天工具卡那一份（含上游那批 + 我们的工具），这里直接转发。
  */
-fun toolSchemaIconFor(name: String): androidx.compose.ui.graphics.vector.ImageVector = when (name) {
-    "search_web" -> Lucide.Earth
-    "memory_read", "memory_update", "memory_search_profile", "memory_edit",
-    "update_user_profile", "create_memory", "edit_memory",
-    -> Lucide.BookHeart
-    "memory_delete", "delete_memory" -> Lucide.BookDashed
-    "chat_search" -> Lucide.Search
-    "get_time_info" -> Lucide.Clock
-    "clipboard_tool" -> Lucide.Clipboard
-    "text_to_speech" -> Lucide.Volume2
-    "ask_user_input_v0" -> Lucide.MessageCircleQuestion
-    "calculate" -> Lucide.Calculator
-    "get_screen_time" -> Lucide.Smartphone
-    "calendar_query" -> Lucide.Calendar
-    "calendar_create" -> Lucide.CalendarPlus
-    "get_current_location" -> Lucide.MapPin
-    "get_weather" -> Lucide.CloudSun
-    "get_health_summary" -> Lucide.HeartPulse
-    "reminders_query" -> Lucide.ListTodo
-    "reminders_create" -> Lucide.ListPlus
-    "reminders_complete" -> Lucide.CircleCheck
-    else -> com.psyche.memo.ui.chat.toolIconFor(name)
-}
+fun toolSchemaIconFor(name: String): androidx.compose.ui.graphics.vector.ImageVector =
+    com.psyche.memo.ui.chat.toolIconFor(name)
 /** toolSchemaFirstLine L65-69. */
 fun toolSchemaFirstLine(text: String): String {
     val trimmed = text.trim()

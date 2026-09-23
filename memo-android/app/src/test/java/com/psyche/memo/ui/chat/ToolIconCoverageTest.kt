@@ -49,10 +49,33 @@ class ToolIconCoverageTest {
     }
 
     /**
-     * 「设置 → 工具描述」那份映射（`toolSchemaIconFor`，上游 `toolSchemaIconFor L15-63`）
-     * 是**另一个**函数 —— 只改聊天卡片会让设置里仍然全是扳手，用户 2026-09-23
-     * 「工具描述里面的图标怎么没有变呀」就是漏了它。两个界面列的是同一批工具，
-     * 这里把「图标一致 + 不落兜底」都钉住。
+     * 记忆全族**不许共用一个图标**（用户 2026-09-23「记忆工具里的图标也改一下吧，很多也一样呀」）：
+     * 上游把它们都画成 `bookHeart`，所以这是一处**有意偏离上游**的映射，改在
+     * `toolIconFor` 里（设置页那份已经改成它的别名）。遗留名跟随各自的现代同名工具 ——
+     * 老会话里的工具卡还得能正确显示。
+     */
+    @Test
+    fun theMemoryFamilyHasOneIconPerAction() {
+        val modern = listOf(
+            "memory_read", "memory_update", "memory_search_profile",
+            "memory_edit", "memory_delete", "update_user_profile",
+        )
+        val icons = modern.map { toolIconFor(it) }
+        assertEquals("记忆工具应当一个动作一个图标：$modern", modern.size, icons.toSet().size)
+        // 遗留名 = 现代名的别名。
+        assertEquals(toolIconFor("memory_update"), toolIconFor("create_memory"))
+        assertEquals(toolIconFor("memory_edit"), toolIconFor("edit_memory"))
+        assertEquals(toolIconFor("memory_delete"), toolIconFor("delete_memory"))
+        // 两个界面同源。
+        modern.forEach { name ->
+            assertEquals("设置页图标应与聊天一致：$name", toolIconFor(name), toolSchemaIconFor(name))
+        }
+    }
+
+    /**
+     * 「设置 → 工具描述」那份映射（`toolSchemaIconFor`）是**另一个**函数 —— 只改聊天卡片
+     * 会让设置里仍然全是扳手，用户 2026-09-23「工具描述里面的图标怎么没有变呀」就是漏了它。
+     * 现在它是 `toolIconFor` 的别名；这条断言防止有人再抄一份表出来。
      */
     @Test
     fun theSettingsCatalogUsesTheSameIconsAndNeverFallsBackToWrench() {
