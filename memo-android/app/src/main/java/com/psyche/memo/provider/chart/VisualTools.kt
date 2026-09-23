@@ -276,6 +276,34 @@ object VisualTools {
             "this tool call — describe what it shows, and do not tell the user it failed."
 
     /**
+     * 工具描述 + **当前主题说明**（底色 + 配套墨迹色）—— 照 deepseek-harness 的
+     * 「每个事实只有一个所有者」：颜色的事实归**主题**所有，描述只引用；静态模板里写死
+     * 颜色，换主题就成了谎话（`docs/ENGINEERING_HARNESS.md` §1，门禁 `C1`）。
+     */
+    fun withThemeNote(description: String, container: AppContainerImpl): String =
+        themeNote(description, paletteFor(container))
+
+    /** [withThemeNote] 的纯函数部分（好测）。 */
+    internal fun themeNote(description: String, palette: ChartPalette): String {
+        val mode = if (isDarkColor(palette.background)) "DARK" else "LIGHT"
+        val series = palette.series.take(4).joinToString(", ") { it.hex() }
+        return description + "\n\nCurrent theme: $mode. The opaque background behind your " +
+            "drawing will be ${palette.background.hex()}. Use ${palette.text.hex()} for text " +
+            "and $series for shapes, lines and fills so everything stays readable on that " +
+            "background. Do not assume a white background."
+    }
+
+    /** 底色亮暗判定（照 `SettingsUi` 那套亮度公式）。 */
+    internal fun isDarkColor(argb: Long): Boolean {
+        val r = ((argb shr 16) and 0xFF) / 255f
+        val g = ((argb shr 8) and 0xFF) / 255f
+        val b = (argb and 0xFF) / 255f
+        return 0.2126f * r + 0.7152f * g + 0.0722f * b < 0.5f
+    }
+
+    internal fun Long.hex(): String = "#%06X".format(this and 0xFFFFFF)
+
+    /**
      * 给手写 SVG 铺一层底色 —— **用当前主题的卡色**，不是死白
      *（用户 2026-09-18「暗色模式这个 svg 怎么不跟着暗色呀」）。
      */
@@ -397,8 +425,10 @@ object VisualTools {
             "the numbers you pass (e.g. 12.3, not 12.3456789). " +
             "For kind=\"svg\": write a single <svg> root with a viewBox (e.g. " +
             "viewBox=\"0 0 800 500\"); the app paints an opaque WHITE background behind your " +
-            "drawing, so design for a light background — dark ink (#2C2C2A) for text and " +
-            "saturated fills (#185FA5, #0F6E56, #BA7517, #534AB7, #993556) for shapes. Use " +
+            "drawing, using the app's current theme colours — this tool description is " +
+            "appended at request time with the exact background plus the ink and fill colours " +
+            "that go with it (see the \"Current theme\" line), so design for THAT background " +
+            "and never assume white. Use " +
             "plain shapes, paths, lines and <text> (no scripts, no external images, no " +
             "foreignObject), keep it under 256KB, and keep labels short so they stay readable " +
             "at phone width."

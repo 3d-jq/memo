@@ -103,8 +103,8 @@ object RequestLogger {
         if (!v) {
             writeScope.launch {
                 sinkMutex.withLock {
-                    try { sink?.flush() } catch (_: Exception) {}
-                    try { sink?.close() } catch (_: Exception) {}
+                    try { sink?.flush() } catch (_: Exception) { /* flush 失败只能丢日志，不能影响调用方（sink 由持有者在写入流程末尾关闭） */ }
+                    try { sink?.close() } catch (_: Exception) { /* close 失败同理：此处是 sink 的最后一次使用，调用方已不再持有它 */ }
                     sink = null
                     sinkDate = null
                 }
@@ -162,8 +162,8 @@ object RequestLogger {
                     sink?.write(text)
                     sink?.flush()
                 } catch (_: Exception) {
-                    try { sink?.flush() } catch (_: Exception) {}
-                    try { sink?.close() } catch (_: Exception) {}
+                    try { sink?.flush() } catch (_: Exception) { /* flush 失败只能丢日志，不能影响调用方（sink 由持有者在写入流程末尾关闭） */ }
+                    try { sink?.close() } catch (_: Exception) { /* close 失败同理：此处是 sink 的最后一次使用，调用方已不再持有它 */ }
                     sink = null
                     sinkDate = null
                     if (!writeErrorReported) {
@@ -237,8 +237,8 @@ object RequestLogger {
         val today = dayOf(now)
         if (sink != null && sinkDate?.let { dayOf(it) == today } == true) return
 
-        try { sink?.flush() } catch (_: Exception) {}
-        try { sink?.close() } catch (_: Exception) {}
+        try { sink?.flush() } catch (_: Exception) { /* flush 失败只能丢日志，不能影响调用方（sink 由持有者在写入流程末尾关闭） */ }
+        try { sink?.close() } catch (_: Exception) { /* close 失败同理：此处是 sink 的最后一次使用，调用方已不再持有它 */ }
         sink = null
         sinkDate = null
 

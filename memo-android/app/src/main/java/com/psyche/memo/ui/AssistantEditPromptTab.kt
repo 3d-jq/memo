@@ -377,21 +377,10 @@ private fun SystemPromptCard(
             )
             Spacer(Modifier.height(4.dp))
             VarExplainList(
-                items = listOf(
-                    stringResource(UiR.string.assistant_edit_variable_date) to "{cur_date}",
-                    stringResource(UiR.string.assistant_edit_variable_time) to "{cur_time}",
-                    stringResource(UiR.string.assistant_edit_variable_datetime) to "{cur_datetime}",
-                    stringResource(UiR.string.assistant_edit_variable_model_id) to "{model_id}",
-                    stringResource(UiR.string.assistant_edit_variable_model_name) to "{model_name}",
-                    stringResource(UiR.string.assistant_edit_variable_locale) to "{locale}",
-                    stringResource(UiR.string.assistant_edit_variable_timezone) to "{timezone}",
-                    stringResource(UiR.string.assistant_edit_variable_system_version) to "{system_version}",
-                    stringResource(UiR.string.assistant_edit_variable_device_info) to "{device_info}",
-                    stringResource(UiR.string.assistant_edit_variable_battery_level) to "{battery_level}",
-                    stringResource(UiR.string.assistant_edit_variable_nickname) to "{nickname}",
-                    stringResource(UiR.string.assistant_edit_variable_assistant_name) to "{assistant_name}",
-                ),
-                cacheWarningVars = setOf("{cur_date}", "{cur_time}", "{cur_datetime}"),
+                items = com.psyche.memo.provider.prompt.PromptVariableCatalog.entries.map {
+                    stringResource(it.first) to it.second
+                },
+                cacheWarningVars = com.psyche.memo.provider.prompt.PromptVariableCatalog.timeSensitiveKeys,
                 cacheWarningTooltip = stringResource(UiR.string.assistant_edit_prompt_time_var_warning),
                 onTapVar = onInsertVariable,
             )

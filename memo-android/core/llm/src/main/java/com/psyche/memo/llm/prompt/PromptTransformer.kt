@@ -76,6 +76,23 @@ object PromptTransformer {
     }
 
     /**
+     * 支持的占位符键（**唯一来源**：就是 [buildPlaceholders] 的 map 键）。
+     *
+     * 助手编辑页的「可用变量」清单必须与它一致 —— 两边各写一份必然漂移
+     *（dsh「每个事实只有一个所有者」），由 `PromptVariableCatalogTest` 钉住。
+     */
+    fun supportedKeys(): Set<String> = buildPlaceholders(
+        assistantName = "",
+        userNickname = "",
+        modelId = null,
+        modelName = null,
+        locale = "",
+        timezone = "",
+        systemVersion = "",
+        deviceInfo = "",
+    ).keys
+
+    /**
      * `PromptTransformer.replacePlaceholders` L43-49：逐个 key 顺序 `replace`
      * （与 Dart 的 `replaceAll` 同语义，不做正则解释），未知变量原样留着。
      */
