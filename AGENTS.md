@@ -25,6 +25,7 @@ fills in native-side details and shared feature implementations.
 
 这些地方**故意**与原版不同（**完整清单见 `memo-android/docs/PORTING.md` §5.11**，含平台差异与踩坑）：
 - **位置本地工具是安卓侧自写的能力**（用户 2026-09-21「加一个位置获取的本地工具吧」+「他这个项目我用过是没有问题的」）：上游 `locationSupported` 是 iOS-only，安卓走不到那条通道。接口照上游（名字 `get_current_location`、**空参数**、上游那段英文描述、**不进 `requiresUserApproval`**），执行在 `provider/LocationTool.kt`：权限 → 定位服务开关 → 10 分钟内 last-known 秒回 → 实时 10 秒超时 → 回退过期缓存 → 才报错；逆地理用平台 `Geocoder`，**拿不到地址只给坐标**。运行时权限走新增的 `ui/chat/LocationPermissionService`（形状照审批/问询服务，**但带 90 秒超时**，否则后台生成会被挂死）。详见 PORTING §5.35
+- **消息列表「显示助手头像」是 Memo 新增的开关**（用户 2026-09-23「在偏好设置里面的聊天项显示加一个显示助手头像的功能吧」）：上游只有助手头像**选择器**，没有消息头像开关。键 `display_show_assistant_avatar_v1`（默认关，关闭时完全维持上游行为），落在显示设置 →「聊天项显示」，渲染在 `MessageRow` 的消息头。判定集中在 `ui/DisplayPrefs.kt`
 - **体验类修复允许超出上游**（用户 2026-09-20「按照你的改吧 我们现在在修复体验 上游也没有做好 我们要做好」）：上游没有中文错误分类、上游的 HEIC 靠 `image_picker` 插件转好、上游不管列表帧率——都不再是不修的理由。默认仍是 1:1，但**每一条超出上游的改动都要在 PORTING 里点名**（现有清单：§5.32 的中文错误分类＋带内错误提示＋HEIC 转码＋代码块高度过渡）。别再拿「上游没有」当拒绝依据，也别悄悄加
 - **旧版（V1）记忆模式不移植**（用户点名：Memo 无老数据）
 - **供应商分组整块删除**：UI（详情页分组行 / 列表分组头折叠 / 移动分组钮 / 分组管理页与路由）与数据层（`ProviderGroup`、`ProviderGroupLogic`、三个分组偏好键、备份里的 `provider_groups_v1` 实体）全删——用户 2026-09-12「把分组这个去掉吧 我感觉没有什么用」「去掉就彻底呀」。**勿按原版加回来**

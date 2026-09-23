@@ -93,9 +93,10 @@ fun BehaviorStartupSettingsScreen(
     val cs = MaterialTheme.colorScheme
 
     fun readBool(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
+        DisplayPrefs.readBool(container, key, default)
+
     fun writeBool(key: String, value: Boolean) {
-        container.preferenceRepository.writeJson(key, if (value) "1" else "0")
+        DisplayPrefs.writeBool(container, key, value)
     }
     fun readInt(key: String, default: Int): Int =
         container.preferenceRepository.readJson(key)?.toIntOrNull() ?: default

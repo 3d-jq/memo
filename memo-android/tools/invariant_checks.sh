@@ -108,6 +108,13 @@ hard_rule C5 'android\.widget\.Toast' 'app/src/main' \
   '没有系统 Toast（统一走项目自有 toast）' \
   'android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()'
 
+# C7 strings.xml 里禁止未转义的单引号（aapt2: unescaped apostrophe → 资源编译失败）
+hard_rule C7 "=[\"][^\"]*[A-Za-z]'[A-Za-z][^\"]*[\"]|>[^<]*[A-Za-z]'[A-Za-z][^<]*<" \
+  'core/ui/src/main/res' \
+  'strings.xml 里没有未转义的单引号' \
+  "<string name=\"x\">Show the assistant's avatar</string>"
+
+
 # C6 改动文件：无行尾空白、以一个换行结尾
 if [[ $SELF_TEST == 1 ]]; then
   if printf 'a = 1 \n' | grep -qE ' +$'; then pass 'C6 自检：反例被拦下'; else fail 'C6 自检失败'; fi

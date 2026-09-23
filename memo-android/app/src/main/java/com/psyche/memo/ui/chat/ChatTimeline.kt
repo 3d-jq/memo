@@ -146,6 +146,9 @@ data class ChatTimelineSettings(
      * （`Assistant.useAssistantName`）才换成助手名（CMW:2809-2813）。
      */
     val showModelName: Boolean = true,
+
+    /** display_show_assistant_avatar_v1（**Memo 新增，上游没有**）：消息里显示助手头像。 */
+    val showAssistantAvatar: Boolean = false,
     /** `display_show_model_timestamp_v1`（默认 true，:1083-1084）—— 助手消息头的时间戳。 */
     val showModelTimestamp: Boolean = true,
     /**
@@ -195,6 +198,10 @@ data class ChatTimelineSettings(
                 showUserTimestamp = bool("display_show_user_timestamp_v1", true),
                 showUserMessageActions = bool("display_show_user_message_actions_v1", true),
                 showModelName = bool("display_show_model_name_v1", true),
+                showAssistantAvatar = bool(
+                    com.psyche.memo.ui.DisplayPrefs.SHOW_ASSISTANT_AVATAR,
+                    false,
+                ),
                 showModelTimestamp = bool("display_show_model_timestamp_v1", true),
                 showProviderInChatMessage = bool("display_show_provider_in_chat_message_v1", false),
                 showTokenStats = bool("display_show_token_stats_v1", true),
