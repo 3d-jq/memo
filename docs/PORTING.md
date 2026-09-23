@@ -1986,3 +1986,21 @@ edit=`NotebookPen` / delete=`BookDashed` / update_user_profile=`UserPen`。
 按内容宽、单列最多一屏（一个几百字的单元格放任撑开会宽到没法用，封顶后它自己折行、其余列
 不受影响）。判据做成纯函数 `tableNeedsHorizontalScroll()` / `scrollColumnWidths()`，
 各自的边界都有单测；上游那两个常数（`TABLE_MIN/MAX_COLUMN_DP`、列数阈值、16dp inset）随之删除。
+
+## 5.48 CI 偶发红之二：本地副本「数据库变了就再存一份」靠毫秒级 mtime（2026-09-23）
+
+`LocalSnapshotServiceTest > a changed database is copied again` 在 b8d7b02 那次 CI 上红
+（run 35821887628，恰好在 v1.0.7 推送后，前两次同代码的 CI 是绿的），断言在
+`LocalSnapshotServiceTest.kt:211`：写一条记录后应当再存一份，实际被判成 `UNCHANGED`。
+
+根因是 §5.41 撤回 WAL 的**后遗症**：`DatabaseChangeFingerprint` 原本有四元组
+`(dbBytes, dbMtime, walBytes, walMtime)`，WAL 模式下提交落在 `-wal` 侧车、那个信号总是动；
+退回 DELETE 日志后 `-wal` 永远不存在，指纹只剩「**文件大小 + mtime**」。用例里那句
+`writeJson("snapshot_test_marker_v1", "\"changed\"")` 是**几字节**的写入：如果它与上一条语句
+落在同一毫秒、且没让文件长大，两个信号都不变 ⇒ 判成「没变」。CI 的 2 核 runner 上偶发，
+本地几乎撞不到。
+
+修法是让用例测的东西不依赖时钟精度：把 marker 写成 7KB（`"changed".repeat(1024)`），
+文件必定长大 —— 大小是确定性信号。**生产侧不动**：真实写入之间隔着秒级以上，且一条消息
+就是 KB 级，指纹在真实场景里不会漏判；"两次 stat、不查 SQL" 这个设计（见该类的 KDoc）
+比为这个理论窗口加一次内容哈希更值。
