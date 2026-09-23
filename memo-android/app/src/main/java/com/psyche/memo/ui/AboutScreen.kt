@@ -3,12 +3,11 @@ package com.psyche.memo.ui
 import androidx.compose.runtime.rememberCoroutineScope
 import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.RefreshCw
+import com.psyche.memo.update.UpdateDownloader
 import com.psyche.memo.update.UpdateService
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.psyche.memo.ui.theme.MemoRadius
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -301,11 +300,12 @@ fun AboutScreen(
             confirmLabel = stringResource(UiR.string.about_page_update_download),
             onConfirm = {
                 updateNotesFor = null
-                runCatching {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse(release.downloadUrl)),
-                    )
-                }
+                // 应用内下载（通知栏实时进度），照 RikkaHub；起不来才开浏览器。
+                UpdateDownloader.start(
+                    context = context,
+                    release = release,
+                    description = context.getString(UiR.string.about_page_update_downloading),
+                )
             },
             // 「关闭」复用审批面板那颗（chat_interruption_close），不为一个按钮新造 key。
             dismissLabel = stringResource(UiR.string.chat_interruption_close),

@@ -2004,3 +2004,51 @@ edit=`NotebookPen` / delete=`BookDashed` / update_user_profile=`UserPen`。
 文件必定长大 —— 大小是确定性信号。**生产侧不动**：真实写入之间隔着秒级以上，且一条消息
 就是 KB 级，指纹在真实场景里不会漏判；"两次 stat、不查 SQL" 这个设计（见该类的 KDoc）
 比为这个理论窗口加一次内容哈希更值。
+
+## 5.49 实时更新通知补完（权限 + Android 15 芯片）；流式等待提示挪成列表独立一项（2026-09-23 用户两条实测）
+
+### ① 「实时更新通知」缺两块：通知权限从没申请过 + Android 15 的提升性通知没做
+
+用户：「偏好设置里面那个实时更新通知功能那呀没有做好」。对照 RikkaHub 查到**两处缺口**：
+
+1. **Android 13+ 的通知权限我们从来没申请**。`NotificationUtil.notify` 第一件事就是
+   `hasNotificationPermission`，不通过直接 `return false` —— 也就是说没在系统设置里手动给过权限
+   时，**全 app 的通知都是静默失败**（实时更新、生成完成都一样）。RikkaHub 在打开通知类开关时
+   会请求（`SettingPreferencesNotificationPage:126-130`）。现在 显示设置 →「通知与后台」的
+   **实时更新通知**开关、以及后台生成三态里的「开启并在生成完时发送消息」都会顺手申请
+   （`DisplaySettingsScreen.ensureNotificationPermission`，Android 13 以下直接跳过）。
+2. **Android 15+ 的状态栏实时活动芯片没做**。RikkaHub 那条通知带
+   `requestPromotedOngoing = true` + `shortCriticalText = chipText`（`ChatNotificationManager.kt:113-126`），
+   官方叫「提升性常驻通知」——把 ongoing 通知升成状态栏上的芯片。我们第一版因为 androidx.core 停在
+   1.16（没有 `setShortCriticalText`/`setRequestPromotedOngoing`）**整块省了**，于是"效果不一样"。
+   现在：`androidx.core 1.16.0 → 1.17.0`（这两个 API 1.17.0 起有，`minCompileSdk=36`）→
+   **11 个模块的 `compileSdk` 35 → 36**（`targetSdk` 不动，运行时行为不变）、manifest 补
+   `POST_PROMOTED_NOTIFICATIONS`（普通权限、无运行时弹窗）、`NotificationConfig` 加两个字段、
+   按 RikkaHub 的三元组补 chip 文案（`notification_live_update_chip_{tool,thinking,writing}`：
+   工具 / 思考中 / 正在书写，IDLE 也用 writing 那份 —— 上游如此）。低版本系统忽略这两个属性。
+
+**没跟上游的一处**：RikkaHub 把「实时更新通知」开关**嵌在**总开关
+（`enableNotificationOnMessageGeneration`）下面、且管理器里两个都查；我们的总开关是原版的
+**后台生成三态**（off / on / on_notify），语义不完全对应，所以开关仍然独立显示、管理器只查
+实时更新那一项（更宽松）。要收紧的话是在 `ChatNotificationManager` 里加
+`ChatBackgroundController.modeOf(read) == ON_NOTIFY`。
+
+### ② 流式等待提示：从消息内部挪成**列表末尾的独立一项**
+
+用户：「你看看 rikkhub 在输出时候那个图标显示那个部分是怎么做的，我们做的流式等待提示，我们这个
+有点问题，**在工具调用这个有点跳动**，文字输出没有问题」。RikkaHub 的结构是
+
+```kotlin
+if (loading) item(LoadingIndicatorKey) { Row { RabbitLoadingIndicator(28.dp) + 状态文字 } }
+```
+（`ChatList.kt:109/381-402`）——**列表末尾的独立 item**，整个生成期间都在；图标是它们自家 app 图标
+的动画版。用户明确「不用图标，改成我们这个文字加扫光」，所以只搬结构：
+
+- `ChatContent.kt` 在末尾哨兵项**之前**插 `item(key = STREAMING_INDICATOR_ITEM_KEY)`
+  （新常量在 `ChatTimelineSupport.kt`，对标 `LoadingIndicatorKey`），内容仍是
+  `ThinkingShimmerText`／重试倒计时二选一，判据 `messages.lastOrNull { it.isStreaming }`；
+- `MessageRow.kt` 里那份（带 220ms shrink+fade 的 `AnimatedVisibility`）**整块删除**。
+  原来它在消息内部，助手消息的 parts 一变（工具卡是一整张卡一次性长出/换态），这一行就得跟着
+  消息的块布局重排 —— 那正是"跳动"。挪出来之后它不参与消息内部布局，位置只由列表长度决定。
+- `StreamingIndicatorPlacementTest` 守着这条：`MessageRow.kt` 不许再出现
+  `ThinkingShimmerText(`/`RetryCountdownHint(`，`ChatContent.kt` 必须有那个 item key。

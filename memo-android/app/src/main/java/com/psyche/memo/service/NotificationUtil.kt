@@ -28,6 +28,14 @@ class NotificationConfig {
     var contentIntent: PendingIntent? = null
     var useBigTextStyle: Boolean = false
 
+    /**
+     * Android 15+ 的**提升性常驻通知**（RikkaHub `requestPromotedOngoing`）：把这条 ongoing
+     * 通知提升成状态栏上的实时活动芯片（乘车/外卖那种），[shortCriticalText] 就是芯片上那
+     * 几个字。两个都只在 API 35+ 有效，低版本系统忽略（不会报错）。
+     */
+    var requestPromotedOngoing: Boolean = false
+    var shortCriticalText: String? = null
+
     // 默认通知效果
     var useDefaults: Boolean = false
 }
@@ -79,6 +87,9 @@ object NotificationUtil {
             config.subText?.let { setSubText(it) }
             config.category?.let { setCategory(it) }
             config.contentIntent?.let { setContentIntent(it) }
+
+            if (config.requestPromotedOngoing) setRequestPromotedOngoing(true)
+            config.shortCriticalText?.let { setShortCriticalText(it) }
 
             if (config.useBigTextStyle) {
                 setStyle(NotificationCompat.BigTextStyle().bigText(config.content))

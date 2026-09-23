@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.psyche.memo"
-    compileSdk = 35
+    compileSdk = 36
 
     // 签名只在 keystore.properties 存在时启用：那是本机密钥，CI 和别人克隆后都没有，
     // 此时 release 产出未签名包（装不上，但构建照常），debug 不受影响。
@@ -33,8 +33,8 @@ android {
         applicationId = "com.psyche.memo"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.0.8"
+        versionCode = 10
+        versionName = "1.0.9"
 
         ndk {
             // 只有这两个 ABI 有 proot 二进制，工作区才有意义；顺带把 termux AAR 里

@@ -27,7 +27,7 @@ plugins {
  */
 android {
     namespace = "com.psyche.memo.workspace"
-    compileSdk = 35
+    compileSdk = 36
     // 交互式终端的 PTY 要 NDK 编译。版本写死是为了让本机与 CI 用同一套工具链
     // （CI 的 sdkmanager 装的就是这个）；不写的话 AGP 会按默认版本去找，
     // 缺了它是 `[CXX1101] NDK at ... did not have a source.properties file`。

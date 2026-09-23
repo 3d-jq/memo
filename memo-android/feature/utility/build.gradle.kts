@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.psyche.memo.feature.utility"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         minSdk = 26
     }

@@ -53,6 +53,8 @@ class UpdateFeedTest {
         assertEquals("修了若干问题", info?.notes)
         assertEquals("2026-09-21T10:00:00Z", info?.releasedAt)
         assertEquals("https://example.com/memo.apk", info?.downloadUrl)
+        // 应用内下载要用它命名文件 / 当通知栏标题（用户 2026-09-23「实时更新通知」）。
+        assertEquals("memo-debug.apk", info?.downloadName)
     }
 
     /** 没有 apk 资产（只发了 tag）就退回 release 页面，不能没有下载地址。 */
@@ -65,6 +67,22 @@ class UpdateFeedTest {
         assertEquals("https://github.com/3d-jq/memo/releases/tag/1.2.0", info?.downloadUrl)
         assertEquals("", info?.notes)
         assertNull(info?.releasedAt)
+        // 只有页面时下载不了文件 —— UI 据此走浏览器（见 UpdateDownloader.start）。
+        assertNull("没有 apk 资产时不该有文件名", info?.downloadName)
+    }
+
+    /** 资产没写 name 时用 URL 末段兜底（GitHub 的资产名就是文件名，但别假设它一定在）。 */
+    @Test
+    fun derivesTheAssetNameFromTheUrlWhenMissing() {
+        val info = UpdateFeed.parseRelease(
+            """
+            {
+              "tag_name": "1.2.0",
+              "assets": [{"browser_download_url": "https://example.com/memo-v1.2.0.apk"}]
+            }
+            """.trimIndent()
+        )
+        assertEquals("memo-v1.2.0.apk", info?.downloadName)
     }
 
     @Test

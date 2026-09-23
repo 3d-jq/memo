@@ -30,6 +30,7 @@
     <string name="about_page_update_check">Check for updates</string>
     <string name="about_page_update_checking">Checking…</string>
     <string name="about_page_update_download">Download</string>
+    <string name="about_page_update_downloading">Downloading the update…</string>
     <string name="about_page_update_failed">Update check failed</string>
     <string name="about_page_update_skip_version">Skip this version</string>
     <string name="about_page_update_up_to_date">You’re using the latest version</string>
@@ -1966,6 +1967,9 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="notification_channel_chat_live_update">Chat Generation Progress</string>
     <string name="notification_chat_completed_body">Assistant reply has been generated</string>
     <string name="notification_chat_completed_title">Generation complete</string>
+    <string name="notification_live_update_chip_thinking">Thinking</string>
+    <string name="notification_live_update_chip_tool">Tool</string>
+    <string name="notification_live_update_chip_writing">Writing</string>
     <string name="notification_live_update_thinking">Thinking...</string>
     <string name="notification_live_update_title">Generating response...</string>
     <string name="notification_live_update_tool">Running tool: %1$s</string>

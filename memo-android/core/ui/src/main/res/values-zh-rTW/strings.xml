@@ -30,6 +30,7 @@
     <string name="about_page_update_check">檢查更新</string>
     <string name="about_page_update_checking">檢查中…</string>
     <string name="about_page_update_download">去下載</string>
+    <string name="about_page_update_downloading">正在下載更新套件…</string>
     <string name="about_page_update_failed">檢查更新失敗</string>
     <string name="about_page_update_skip_version">跳過此版本</string>
     <string name="about_page_update_up_to_date">已是最新版本</string>
@@ -1968,6 +1969,9 @@
     <string name="notification_channel_chat_live_update">聊天生成進度</string>
     <string name="notification_chat_completed_body">助手回覆已生成</string>
     <string name="notification_chat_completed_title">生成完成</string>
+    <string name="notification_live_update_chip_thinking">思考中</string>
+    <string name="notification_live_update_chip_tool">工具</string>
+    <string name="notification_live_update_chip_writing">正在書寫</string>
     <string name="notification_live_update_thinking">思考中…</string>
     <string name="notification_live_update_title">正在產生回覆…</string>
     <string name="notification_live_update_tool">正在執行工具：%1$s</string>

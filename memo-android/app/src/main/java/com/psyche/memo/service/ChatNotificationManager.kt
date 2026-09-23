@@ -74,6 +74,17 @@ object ChatNotificationManager {
         liveUpdateLastSentAt[conversationId] = now
 
         val liveContent = determineContent(parts, ReasoningSegmentCodec.decode(segmentsJson))
+        // RikkaHub `determineNotificationContent` 的三元组：chip 文案（状态栏实时活动芯片，
+        // Android 15+）/ 状态行（subText）/ 正文预览。
+        val chipText = context.getString(
+            when (liveContent.state) {
+                LiveUpdateState.TOOL -> com.psyche.memo.ui.R.string.notification_live_update_chip_tool
+                LiveUpdateState.THINKING -> com.psyche.memo.ui.R.string.notification_live_update_chip_thinking
+                LiveUpdateState.WRITING,
+                LiveUpdateState.IDLE,
+                -> com.psyche.memo.ui.R.string.notification_live_update_chip_writing
+            },
+        )
         val (statusText, contentText) = when (liveContent.state) {
             LiveUpdateState.TOOL -> context.getString(
                 com.psyche.memo.ui.R.string.notification_live_update_tool,
@@ -103,6 +114,10 @@ object ChatNotificationManager {
             category = NotificationCompat.CATEGORY_PROGRESS
             useBigTextStyle = true
             contentIntent = conversationPendingIntent(context, conversationId)
+            // Android 15+：把这条 ongoing 通知提升成状态栏上的实时活动芯片
+            // （RikkaHub `requestPromotedOngoing` / `shortCriticalText`；低版本忽略）。
+            requestPromotedOngoing = true
+            shortCriticalText = chipText
         }
     }
 

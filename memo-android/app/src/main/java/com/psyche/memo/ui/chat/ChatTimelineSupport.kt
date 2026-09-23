@@ -163,6 +163,13 @@ internal fun newActionToggleable(
 /** 列表末尾哨兵项的 key（RikkaHub `ScrollBottomKey` 同款，见 `bottomAnchorIndex`）。 */
 internal const val SCROLL_BOTTOM_ITEM_KEY = "scroll-bottom"
 
+/**
+ * 流式等待提示那一项的 key（扫光文字）—— RikkaHub `ChatList.kt:109 LoadingIndicatorKey`
+ * 同款：它是**列表末尾的一个独立 item**，不参与消息内部的块布局（用户 2026-09-23
+ * 「跟 rikkhub 效果不一样…在工具调用这个有点跳动」）。
+ */
+internal const val STREAMING_INDICATOR_ITEM_KEY = "streaming-indicator"
+
 /** `LazyColumn` 的测试标签（`ChatRowRecompositionTest` 用它做手势）。 */
 internal const val CHAT_TIMELINE_TAG = "chat_timeline"
 
