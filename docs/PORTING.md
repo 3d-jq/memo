@@ -2052,3 +2052,90 @@ if (loading) item(LoadingIndicatorKey) { Row { RabbitLoadingIndicator(28.dp) + �
   消息的块布局重排 —— 那正是"跳动"。挪出来之后它不参与消息内部布局，位置只由列表长度决定。
 - `StreamingIndicatorPlacementTest` 守着这条：`MessageRow.kt` 不许再出现
   `ThinkingShimmerText(`/`RetryCountdownHint(`，`ChatContent.kt` 必须有那个 item key。
+
+## 5.50 流式等待提示：对齐到助手气泡 + 加一块底板（2026-09-23，接 §5.49② 用户回看）
+
+§5.49② 把提示挪成列表末尾独立项之后，用户看了真机提两点：
+
+1. **太靠左**：列表本身没有水平内边距（`contentPadding` 只有 top/bottom，每条消息各带
+   `ASSISTANT_MESSAGE_HORIZONTAL_DP = 20dp`），所以挪出来的那一项比气泡靠左 20dp。现在这一项
+   自己补上同样的 20dp 左右内边距 —— 与助手气泡的左边**同一条竖线**。
+2. **「rikkhub 像一个挡板一样」**：查了参考仓，RikkaHub 那个位置放的是**自家 app 图标（rabbit）
+   的 AnimatedVectorDrawable**，28dp、`primary` 着色 —— 一块**实心图形**（关掉
+   `useAppIconStyleLoadingIndicator` 才换成 M3 的 `ContainedLoadingIndicator`，那也是带底板的
+   方块）。我们上一版是**裸文字**，所以"感觉不一样"。现在给文字加一块**浅色圆角底板**
+   （`primaryContainer` + `TIMELINE_CARD_ALPHA_*` + 圆角/内边距照思考卡）—— 保持用户点名的
+   文字扫光，但形态上是"一块"而不是飘着的一行字。
+
+判据与结构仍在 `ChatContent.kt` 的 `STREAMING_INDICATOR_ITEM_KEY`（`StreamingIndicatorPlacementTest`
+守着不许挪回消息内部）。
+
+## 5.51 生成中的指示器 1:1 照 RikkaHub（2026-09-23，用户「直接一比一改成他那样」）
+
+前三版都不对（文字扫光 → 加底板 → 对齐到气泡），用户的原话是「人家一直是那样的，直接一比一改成
+他那样」。RikkaHub 的实现（`.rikkahub-ref/ui/components/ui/RabbitLoading.kt:16-43` +
+`ui/pages/chat/ChatList.kt:381-402`）就是：
+
+```kotlin
+if (loading) item(LoadingIndicatorKey) {
+    Row(Modifier.padding(8.dp), spacedBy(8.dp)) {
+        RabbitLoadingIndicator(Modifier.size(28.dp))        // 自家 app 图标的 AnimatedVectorDrawable
+        AnimatedVisibility(status != null) { Text(status) } // 平时不显示
+    }
+}
+```
+
+**没有底板、没有文字扫光**，只有一枚 28dp 的自家图标在动。我们照做：`MemoLoadingIndicator`
+（`ChatMessageWidgets.kt`）= `ic_launcher_foreground`（便签 + 蓝光那枚 mark）28dp + **呼吸式缩放**
+（0.82↔1.0，720ms 反向循环）—— 我们的是 PNG，没有 RikkaHub 那种 AnimatedVectorDrawable，靠缩放
+让它"活着"。列表末尾那一项（§5.49/§5.50 的 `STREAMING_INDICATOR_ITEM_KEY`）保留，旁边只在
+**自动重试倒计时**时显示文字（原版 kelivo 的等待气泡也是「指示器 + 倒计时」）。
+
+左边距保留 §5.50 的 20dp（用户单独提过"跟对话左边对齐"），没有照抄 RikkaHub 的 8dp。
+**文字扫光那套设置（显示设置 → 渲染 → 流式等待提示：字号/颜色/提示词）现在不再影响聊天底部**——
+`ThinkingShimmerText` 本身还在用（上下文压缩分隔线、设置页预览），没有删。
+
+## 5.52 生成中提示加「形态开关」：图标（出厂）/ 文字扫光（2026-09-23，用户「在设置里面加上图标和提示这个可以切换」）
+
+§5.51 把底部提示 1:1 换成 RikkaHub 那枚 28dp 自家图标之后，用户 2026-09-13 点名要的**文字扫光**
+（连同它那三行设置：字号/颜色/提示词）就没有出口了。用户拍板加开关：
+
+- 新键 `display_thinking_indicator_style_v1`（本工程新增，UNKNOWN 透传），取值 `"icon"` / `"shimmer"`；
+  **缺省与坏值都是图标**（出厂形态 = 照 RikkaHub），只有明确 `shimmer` 才是文字扫光
+  （`ThinkingIndicatorSettings.parseStyle`，`ThinkingIndicatorSettingsTest` 钉住往返与坏值）。
+- 显示设置 → 渲染 →「流式等待提示」那张卡的第一行 = **提示样式**（点击出选择 sheet：应用图标 /
+  文字扫光）；选图标时下面那三行**整组隐藏**（对图标无意义），选文字扫光才出现，
+  并且在卡内直接预览扫光效果。
+- `ChatContent` 的列表末尾项按这个开关二选一：`MemoLoadingIndicator(28dp)` 或
+  `ThinkingShimmerText`；重试倒计时两种情况都在右边。
+
+## 5.53 提示词工程：技能调用引导加硬 + 新增「工具纪律」块（2026-09-23，用户两条实测 + 点名学 deepseek-harness）
+
+用户：「每次让他安装 skill，他都不会按照这个 create skill 的方法走」「还有出现大模型说做了，
+他根本没有做的问题」，并点名要学 DeepSeek 开源的 agent harness
+（本机 `D:\zcode_workspace\.zcode\workspace\default\deepseek-harness`）。两条都是**提示词太弱**，
+不是接线问题（接线早已完成：`use_skill` 工具 + `<available_skills>` 块 + 内置 skill-creator 播种）。
+
+### ① 技能调用引导：从"可以用"改成"必须先用"
+
+我们的块只有一句（RikkaHub 原文口径）：*"Use the `use_skill` tool to load a skill's instructions
+when the user's request matches."*；harness 在 `<available_skills>` 后面是三条硬要求
+（`packages/skill/tool-skill/src/index.ts` 渲染目录处）：
+
+> "If the user names a skill, or the task clearly matches a skill's description, call the `skill` tool
+> with the exact skill name **before taking task actions**. Load all applicable skills, then follow their
+> full instructions. This catalog contains summaries only; **do not infer or follow a skill's instructions
+> until it has been loaded**."
+
+已照抄语义（`SkillTools.systemPromptBlock`），`use_skill` 的工具描述也补了 "…or when the user names a
+skill, **before doing the task work**"（原描述同样来自 RikkaHub，属**有意偏离**）。
+`SkillToolsTest.skillCallGuidanceIsImperativeAndForbidsGuessing` 钉住这三句不许被改回去。
+
+### ② 新增「工具纪律」系统提示块（`provider/ToolRules.kt`）
+
+模型把**没调用工具**的动作说成做完了 —— 单靠工具结果本身治不了，得在系统提示里立规矩。
+新块 `TOOL_RULES_BLOCK` 只讲三条：**只有这一轮工具成功返回才算做了** / **失败就如实说失败、不许把
+预期结果当结果** / **工具列表里没有的能力就直说缺什么，别自己编一个结果**。
+注入条件：`buildSystemPromptParts(assistant, hasTools = tools.isNotEmpty())` —— **只有这一轮真的
+递了工具**才注入（没工具时只占上下文）。它带自己的 `ContextSource.toolRules`（上下文日志里能看到
+是哪一段），标签/颜色在 `LogViewerScreen` 的映射里补齐（ARB `contextLogSourceToolRules`，三语）。

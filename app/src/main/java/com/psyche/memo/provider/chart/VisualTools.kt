@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.provider.generation.GeneratedMediaStore
+import com.psyche.memo.provider.tool.ToolResults
 import com.psyche.memo.ui.theme.MemoTheme
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -209,16 +210,19 @@ object VisualTools {
             bytes = svg.toByteArray(Charsets.UTF_8),
             mimeType = ChartSvgRenderer.MIME,
         )
-        return buildJsonObject {
-            put("type", JsonPrimitive("chart_result"))
-            put("status", JsonPrimitive("ok"))
-            put("rendered", JsonPrimitive(true))
-            put("note", JsonPrimitive(RESULT_NOTE))
-            put("kind", JsonPrimitive(spec.kind.wireName))
-            put("points", JsonPrimitive(spec.categories.size))
-            put("series", JsonPrimitive(spec.activeSeries.size))
-            put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
-        }.toString()
+        // 规范形状：`status` 由 ToolResults 统一给，模型看 status 就知道成败 ——
+        // 不再需要「图已进对话、别说失败」这种散文叮嘱（dsh：形状先于叮嘱）。
+        return ToolResults.ok(
+            tool = TOOL_NAME,
+            type = "chart_result",
+            fields = buildJsonObject {
+                put("rendered", JsonPrimitive(true))
+                put("kind", JsonPrimitive(spec.kind.wireName))
+                put("points", JsonPrimitive(spec.categories.size))
+                put("series", JsonPrimitive(spec.activeSeries.size))
+                put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
+            },
+        )
     }
 
     // ------------------------------------------------------------------ 手写 SVG
@@ -251,29 +255,46 @@ object VisualTools {
                         .toByteArray(Charsets.UTF_8),
                     mimeType = ChartSvgRenderer.MIME,
                 )
-                buildJsonObject {
-                    put("type", JsonPrimitive("svg_result"))
-                    put("status", JsonPrimitive("ok"))
-                    put("rendered", JsonPrimitive(true))
-                    put("note", JsonPrimitive(RESULT_NOTE))
-                    put("aspect", JsonPrimitive(sanitized.aspectRatio))
-                    put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
-                }.toString()
+                ToolResults.ok(
+                    tool = TOOL_NAME,
+                    type = "svg_result",
+                    fields = buildJsonObject {
+                        put("rendered", JsonPrimitive(true))
+                        put("aspect", JsonPrimitive(sanitized.aspectRatio))
+                        put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
+                    },
+                )
             }
         }
     }
 
     /**
-     * 结果里给模型的一句话。
-     *
-     * 为什么要有：原来只回 `{"type":"…","paths":[…]}`，**没有明确的成功标识** ——
-     * 模型看半天没找到 status/success，就直接跟用户说「绘制失败」，可图其实已经渲染出来了
-     *（用户 2026-09-18「他明明绘制出来怎么说没有绘制成功呀」；设备上同一秒落了两个文件，
-     * 证明工具两次都成功了）。
+     * 工具描述 + **当前主题说明**（底色 + 配套墨迹色）—— 照 deepseek-harness 的
+     * 「每个事实只有一个所有者」：颜色的事实归**主题**所有，描述只引用；静态模板里写死
+     * 颜色，换主题就成了谎话（`docs/ENGINEERING_HARNESS.md` §1，门禁 `C1`）。
      */
-    private const val RESULT_NOTE =
-        "Drawn successfully. The image has already been added to the conversation right below " +
-            "this tool call — describe what it shows, and do not tell the user it failed."
+    fun withThemeNote(description: String, container: AppContainerImpl): String =
+        themeNote(description, paletteFor(container))
+
+    /** [withThemeNote] 的纯函数部分（好测）。 */
+    internal fun themeNote(description: String, palette: ChartPalette): String {
+        val mode = if (isDarkColor(palette.background)) "DARK" else "LIGHT"
+        val series = palette.series.take(4).joinToString(", ") { it.hex() }
+        return description + "\n\nCurrent theme: $mode. The opaque background behind your " +
+            "drawing will be ${palette.background.hex()}. Use ${palette.text.hex()} for text " +
+            "and $series for shapes, lines and fills so everything stays readable on that " +
+            "background. Do not assume a white background."
+    }
+
+    /** 底色亮暗判定（照 `SettingsUi` 那套亮度公式）。 */
+    internal fun isDarkColor(argb: Long): Boolean {
+        val r = ((argb shr 16) and 0xFF) / 255f
+        val g = ((argb shr 8) and 0xFF) / 255f
+        val b = (argb and 0xFF) / 255f
+        return 0.2126f * r + 0.7152f * g + 0.0722f * b < 0.5f
+    }
+
+    internal fun Long.hex(): String = "#%06X".format(this and 0xFFFFFF)
 
     /**
      * 给手写 SVG 铺一层底色 —— **用当前主题的卡色**，不是死白
@@ -397,8 +418,10 @@ object VisualTools {
             "the numbers you pass (e.g. 12.3, not 12.3456789). " +
             "For kind=\"svg\": write a single <svg> root with a viewBox (e.g. " +
             "viewBox=\"0 0 800 500\"); the app paints an opaque WHITE background behind your " +
-            "drawing, so design for a light background — dark ink (#2C2C2A) for text and " +
-            "saturated fills (#185FA5, #0F6E56, #BA7517, #534AB7, #993556) for shapes. Use " +
+            "drawing, using the app's current theme colours — this tool description is " +
+            "appended at request time with the exact background plus the ink and fill colours " +
+            "that go with it (see the \"Current theme\" line), so design for THAT background " +
+            "and never assume white. Use " +
             "plain shapes, paths, lines and <text> (no scripts, no external images, no " +
             "foreignObject), keep it under 256KB, and keep labels short so they stay readable " +
             "at phone width."

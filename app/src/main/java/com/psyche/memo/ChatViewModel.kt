@@ -786,9 +786,9 @@ class ChatViewModel(
                 }
             }
             val tools = offeredTools()
-            val systemParts = buildSystemPromptParts(assistant)
+            val systemParts = buildSystemPromptParts(assistant, hasTools = tools.isNotEmpty())
             val used = com.psyche.memo.common.SessionCompaction.estimateRequest(
-                system = systemParts.joinToString("\n\n") { it.second },
+                system = com.psyche.memo.provider.prompt.assembleSystemPrompt(systemParts),
                 messages = window,
                 toolsJson = toolsJsonForEstimate(tools),
             )
@@ -1580,8 +1580,8 @@ class ChatViewModel(
                     return (if (carriesMemory) memoryPrefix else "") + content
                 }
 
-                val systemParts = buildSystemPromptParts(assistant)
                 val tools = offeredTools()
+                val systemParts = buildSystemPromptParts(assistant, hasTools = tools.isNotEmpty())
 
                 // ---- 上下文压缩（opencode packages/core/src/session/compaction.ts）----
                 // 阈值：estimate(system + messages + tools) > 窗口 − max(输出预算, buffer)
@@ -1595,7 +1595,7 @@ class ChatViewModel(
                 )
                 if (compactionSettings.auto) {
                     val estimates = com.psyche.memo.common.SessionCompaction.estimateRequest(
-                        system = systemParts.joinToString("\n\n") { it.second },
+                        system = com.psyche.memo.provider.prompt.assembleSystemPrompt(systemParts),
                         messages = compactionWindow(rawMessages).mapNotNull { msg ->
                             if (msg.checkpointPart() != null) return@mapNotNull null
                             val body = assembledBody(msg, msg.id == lastUserMessageId && memoryPrefix.isNotEmpty())
@@ -2565,8 +2565,16 @@ class ChatViewModel(
             val fn = definition["function"] as? JsonObject ?: continue
             val specName = (fn["name"] as? JsonPrimitive)?.contentOrNull ?: name
             val description = (fn["description"] as? JsonPrimitive)?.contentOrNull ?: ""
+            // 会画图的工具：颜色是「主题」拥有的事实，在请求时注入进描述 —— 照
+            // deepseek-harness 的「每个事实只有一个所有者」（docs/ENGINEERING_HARNESS.md §1）。
+            val themedDescription = when (specName) {
+                com.psyche.memo.provider.chart.VisualTools.TOOL_NAME,
+                com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME,
+                -> com.psyche.memo.provider.chart.VisualTools.withThemeNote(description, container)
+                else -> description
+            }
             val parameters = fn["parameters"] as? JsonObject
-            out.add(LlmToolSpec(specName, description, parameters?.toString() ?: "{}"))
+            out.add(LlmToolSpec(specName, themedDescription, parameters?.toString() ?: "{}"))
         }
         // 「设置 → 工具描述」里改过的描述套上去（tool_handler_service.dart:284-286 的
         // `ToolSchemaOverrides.apply`）。**只作用于内置工具名** —— MCP 工具是动态的，
@@ -2604,6 +2612,11 @@ class ChatViewModel(
      */
     internal suspend fun buildSystemPromptParts(
         assistant: com.psyche.memo.data.model.Assistant?,
+        /**
+         * 这一轮**有没有递给模型任何工具**（`offeredTools().isNotEmpty()`）。有工具才注入
+         * [toolRulesBlock] —— 没工具时那几条规则只会占上下文。
+         */
+        hasTools: Boolean = false,
     ): List<Pair<ContextSource, String>> {        val parts = mutableListOf<Pair<ContextSource, String>>()
         fun add(source: ContextSource, text: String?) {
             text?.trim()?.takeIf { it.isNotEmpty() }?.let { parts.add(source to it) }
@@ -2612,6 +2625,9 @@ class ChatViewModel(
         // `{cur_date}` / `{nickname}` / `{assistant_name}` … 12 个变量在这里替换
         // （助手编辑页「可用变量」列的就是它们）。
         add(ContextSource.systemPrompt, resolveSystemPromptVariables(assistant))
+        // 工具纪律（本工程新增，照 deepseek-harness 的提示词工程思路）：
+        // 「只有工具成功返回才算做了」——用户 2026-09-23「出现大模型说做了，他根本没有做的问题」。
+        if (hasTools) add(ContextSource.toolRules, com.psyche.memo.provider.TOOL_RULES_BLOCK)
         // 记忆规则（message_builder.injectMemoryAndRecentChats L1610-1643）：
         // 长期记忆规则与过往回忆规则各自独立门控。
         if (assistant != null && (assistant.enableMemory || assistant.allowPastConversationRecall)) {
@@ -2683,6 +2699,17 @@ class ChatViewModel(
     ): String? {
         val prompt = assistant?.systemPrompt ?: return null
         if (!prompt.contains('{')) return prompt
+        // 手滑的变量名不许静默：原样保留（与上游一致），但记一条告警让它能被发现。
+        val unknownVariables = com.psyche.memo.llm.prompt.PromptTransformer.unknownPlaceholders(
+            prompt,
+            com.psyche.memo.llm.prompt.PromptTransformer.supportedKeys(),
+        )
+        if (unknownVariables.isNotEmpty()) {
+            android.util.Log.w(
+                "MemoPrompt",
+                "系统提示词里有不认识的变量（会原样发给模型）：$unknownVariables",
+            )
+        }
         val context = container.appContext
         val nickname = DefaultModelPrefs.decodeStoredString(
             container.preferenceRepository.readJson("user_name"),
@@ -2993,7 +3020,8 @@ class ChatViewModel(
         )
 
     private fun readBool(key: String, default: Boolean): Boolean =
-        container.preferenceRepository.readJson(key)?.let { it == "1" } ?: default
+        // 唯一入口（旧键是裸布尔、新键是 "1"/"0"，只认一种会读成恒 false）。
+        com.psyche.memo.ui.DisplayPrefs.readBool(container, key, default)
 
     /**
      * Expand/collapse one reasoning segment

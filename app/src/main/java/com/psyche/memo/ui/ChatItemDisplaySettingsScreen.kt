@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Clock
+import com.composables.icons.lucide.CircleUserRound
 import com.composables.icons.lucide.Ellipsis
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.CircleHelp
@@ -90,6 +91,14 @@ private val sections = listOf(
         // settings_provider.dart:4803 — _useNewAssistantAvatarUx = false.
         SwitchItem(Lucide.Bot, UiR.string.display_settings_page_use_new_assistant_avatar_ux_title, prefsKey = "display_use_new_assistant_avatar_ux_v1", default = false),
         SwitchItem(Lucide.MessageSquare, UiR.string.display_settings_page_show_model_name_title, prefsKey = "display_show_model_name_v1"),
+        // Memo 新增（上游没有这个开关）：消息里显式显示助手头像。
+        SwitchItem(
+            Lucide.CircleUserRound,
+            UiR.string.display_settings_page_show_assistant_avatar_title,
+            prefsKey = com.psyche.memo.ui.DisplayPrefs.SHOW_ASSISTANT_AVATAR,
+            default = false,
+            tipRes = UiR.string.display_settings_page_show_assistant_avatar_subtitle,
+        ),
         SwitchItem(Lucide.Clock, UiR.string.display_settings_page_show_model_timestamp_title, prefsKey = "display_show_model_timestamp_v1"),
         // settings_provider.dart:4825 — _showProviderInChatMessage = false.
         SwitchItem(Lucide.Globe, UiR.string.display_settings_page_show_provider_in_chat_message_title, prefsKey = "display_show_provider_in_chat_message_v1", default = false),

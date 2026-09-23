@@ -734,6 +734,7 @@
     <string name="context_log_source_system_prompt">系统提示词</string>
     <string name="context_log_source_tool_call">工具调用</string>
     <string name="context_log_source_tool_result">工具结果</string>
+    <string name="context_log_source_tool_rules">工具纪律</string>
     <string name="context_log_source_workspace">工作区</string>
     <string name="context_log_source_world_book">世界书</string>
     <string name="context_log_tokens_estimate_hint">tokens 仅为预估值，请以模型实际消耗为准。</string>
@@ -949,6 +950,8 @@
     <string name="display_settings_page_show_model_name_timestamp_subtitle">是否在聊天消息中显示模型名称和时间戳</string>
     <string name="display_settings_page_show_model_name_timestamp_title">显示模型名称和时间戳</string>
     <string name="display_settings_page_show_model_name_title">显示模型名称</string>
+    <string name="display_settings_page_show_assistant_avatar_title">显示助手头像</string>
+    <string name="display_settings_page_show_assistant_avatar_subtitle">在助手的回复旁显示助手头像。</string>
     <string name="display_settings_page_show_model_timestamp_title">显示模型时间戳</string>
     <string name="display_settings_page_show_provider_in_chat_message_subtitle">在聊天消息的模型名称后面显示供应商名称（如 模型 | 供应商）</string>
     <string name="display_settings_page_show_provider_in_chat_message_title">模型名称后显示供应商</string>
@@ -979,6 +982,9 @@
     <string name="display_settings_page_thinking_indicator_phrases_hint">每行一句</string>
     <string name="display_settings_page_thinking_indicator_phrases_reset">恢复默认</string>
     <string name="display_settings_page_thinking_indicator_phrases_title">提示词</string>
+    <string name="display_settings_page_thinking_indicator_style_icon">应用图标</string>
+    <string name="display_settings_page_thinking_indicator_style_shimmer">文字扫光</string>
+    <string name="display_settings_page_thinking_indicator_style_title">提示样式</string>
     <string name="display_settings_page_tray_minimize_on_close_title">关闭时最小化到托盘</string>
     <string name="display_settings_page_tray_show_tray_title">显示托盘图标</string>
     <string name="display_settings_page_tray_title">托盘</string>

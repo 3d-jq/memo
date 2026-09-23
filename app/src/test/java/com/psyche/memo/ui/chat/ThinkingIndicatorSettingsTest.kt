@@ -125,4 +125,29 @@ class ThinkingIndicatorSettingsTest {
         assertEquals(listOf("只有一句"), settings.phrases)
         assertTrue(ThinkingPhrases.ALL.size > 1)
     }
+
+    /**
+     * 形态开关（用户 2026-09-23「在设置里面加上图标和提示这个可以切换」）：
+     * **缺省/坏值一律是图标**（出厂 = 照 RikkaHub 那枚自家 app 图标），只有明确写
+     * `"shimmer"` 才是文字扫光 —— 反过来会让升级上来的用户形态突变。
+     */
+    @Test
+    fun indicatorStyleDefaultsToTheAppIconAndOnlyAcceptsShimmer() {
+        assertEquals(ThinkingIndicatorStyle.ICON, ThinkingIndicatorSettings.parseStyle(null))
+        assertEquals(ThinkingIndicatorStyle.ICON, ThinkingIndicatorSettings.parseStyle(""))
+        assertEquals(ThinkingIndicatorStyle.ICON, ThinkingIndicatorSettings.parseStyle("   "))
+        assertEquals(ThinkingIndicatorStyle.ICON, ThinkingIndicatorSettings.parseStyle("\"icon\""))
+        assertEquals(ThinkingIndicatorStyle.ICON, ThinkingIndicatorSettings.parseStyle("bogus"))
+        assertEquals(ThinkingIndicatorStyle.SHIMMER, ThinkingIndicatorSettings.parseStyle("shimmer"))
+        assertEquals(ThinkingIndicatorStyle.SHIMMER, ThinkingIndicatorSettings.parseStyle("\"shimmer\""))
+        // 往返（设置页写的就是 encodeStyle 的结果）
+        listOf(ThinkingIndicatorStyle.ICON, ThinkingIndicatorStyle.SHIMMER).forEach { style ->
+            assertEquals(style, ThinkingIndicatorSettings.parseStyle(ThinkingIndicatorSettings.encodeStyle(style)))
+        }
+        // fromPrefs 缺 STYLE_KEY 时是图标。
+        assertEquals(
+            ThinkingIndicatorStyle.ICON,
+            ThinkingIndicatorSettings.fromPrefs { null }.style,
+        )
+    }
 }

@@ -2,6 +2,7 @@ package com.psyche.memo.provider.chart
 
 import android.content.Context
 import com.psyche.memo.provider.generation.GeneratedMediaStore
+import com.psyche.memo.provider.tool.ToolResults
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -97,27 +98,19 @@ object MermaidTools {
             )
             is MermaidRenderer.Result.Ok -> {
                 val media = GeneratedMediaStore(context).saveImage(result.png, "image/png")
-                buildJsonObject {
-                    put("type", JsonPrimitive("mermaid_result"))
-                    put("status", JsonPrimitive("ok"))
-                    put("rendered", JsonPrimitive(true))
-                    put(
-                        "note",
-                        JsonPrimitive(
-                            "Drawn successfully. The image has already been added to the " +
-                                "conversation right below this tool call — describe what it " +
-                                "shows, and do not tell the user it failed.",
-                        ),
-                    )
-                    put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
-                }.toString()
+                ToolResults.ok(
+                    tool = TOOL_NAME,
+                    type = "mermaid_result",
+                    fields = buildJsonObject {
+                        put("rendered", JsonPrimitive(true))
+                        put("paths", buildJsonArray { add(JsonPrimitive(media.path)) })
+                    },
+                )
             }
         }
     }
 
-    private fun errorJson(code: String, message: String): String = buildJsonObject {
-        put("type", JsonPrimitive("tool_error"))
-        put("error", JsonPrimitive(code))
-        put("message", JsonPrimitive(message))
-    }.toString()
+    /** 错误形状统一由 [ToolResults] 给（`type=tool_error` + `status=error` + `tool`）。 */
+    private fun errorJson(code: String, message: String): String =
+        ToolResults.error(code = code, message = message, tool = TOOL_NAME)
 }
