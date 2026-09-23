@@ -108,8 +108,6 @@ fun RenderingSettingsScreen(
     var collapseLinesText by remember { mutableStateOf("2") }
     // 流式等待提示的三个自定义项（我们的新键，不来自原项目）。
     var indicatorFontSize by remember { mutableFloatStateOf(ThinkingIndicatorSettings.DEFAULT_FONT_SP) }
-    var indicatorStyle by remember { mutableStateOf(com.psyche.memo.ui.chat.ThinkingIndicatorStyle.ICON) }
-    var styleSheetVisible by remember { mutableStateOf(false) }
     var indicatorColorArgb by remember { mutableStateOf<Int?>(null) }
     var indicatorPhrases by remember {
         mutableStateOf(com.psyche.memo.ui.chat.ThinkingPhrases.ALL)
@@ -126,7 +124,6 @@ fun RenderingSettingsScreen(
             val indicator = ThinkingIndicatorSettings.fromPrefs { key ->
                 container.preferenceRepository.readJson(key)
             }
-            indicatorStyle = indicator.style
             indicatorFontSize = indicator.fontSizeSp
             indicatorColorArgb = indicator.colorArgb
             indicatorPhrases = indicator.phrases
@@ -305,21 +302,9 @@ fun RenderingSettingsScreen(
             }
             item(key = "c_thinking") {
                 SettingsSectionCard {
-                    SettingsRow(
-                        com.composables.icons.lucide.Lucide.Sparkles,
-                        stringResource(UiR.string.display_settings_page_thinking_indicator_style_title),
-                        detailText = stringResource(
-                            if (indicatorStyle == com.psyche.memo.ui.chat.ThinkingIndicatorStyle.SHIMMER) {
-                                UiR.string.display_settings_page_thinking_indicator_style_shimmer
-                            } else {
-                                UiR.string.display_settings_page_thinking_indicator_style_icon
-                            },
-                        ),
-                        onTap = { styleSheetVisible = true },
-                    )
-                    // 文字扫光那三行只在选「文字扫光」时出现（选图标时它们没有意义）。
-                    if (indicatorStyle == com.psyche.memo.ui.chat.ThinkingIndicatorStyle.SHIMMER) {
-                    SettingsIosDivider()
+                    // 形态开关已移除（用户 2026-09-23「只要这个呼吸圆点了，不要改的入口了」）：
+                    // 流式提示固定是**呼吸圆点**（移植 Agora），这里不再提供形态选择。
+                    // 下面三行（字号/颜色/提示词）仍服务于「上下文压缩中」那条扫光文字。
                     SettingsRow(
                         com.composables.icons.lucide.Lucide.CaseSensitive,
                         stringResource(UiR.string.display_settings_page_thinking_indicator_font_size_title),
@@ -343,7 +328,6 @@ fun RenderingSettingsScreen(
                             if (indicatorPhrases.size > 3) " …" else "",
                         onTap = { phrasesSheetVisible = true },
                     )
-                    }
                 }
             }
             item(key = "tail2") { Spacer(Modifier.height(12.dp)) }
@@ -505,53 +489,6 @@ sheetState = rememberMemoSheetState(),
                         },
                     ),
                 )
-            }
-        }
-    }
-
-    // ---- 提示样式（图标 / 文字扫光）----
-    if (styleSheetVisible) {
-        ModalBottomSheet(
-            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
-            sheetState = rememberMemoSheetState(),
-            onDismissRequest = { styleSheetVisible = false },
-            dragHandle = null,
-        ) {
-            MemoSheetHandle()
-            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
-                listOf(
-                    com.psyche.memo.ui.chat.ThinkingIndicatorStyle.ICON to
-                        stringResource(UiR.string.display_settings_page_thinking_indicator_style_icon),
-                    com.psyche.memo.ui.chat.ThinkingIndicatorStyle.SHIMMER to
-                        stringResource(UiR.string.display_settings_page_thinking_indicator_style_shimmer),
-                ).forEach { (style, label) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                indicatorStyle = style
-                                container.preferenceRepository.writeJson(
-                                    ThinkingIndicatorSettings.STYLE_KEY,
-                                    ThinkingIndicatorSettings.encodeStyle(style),
-                                )
-                                styleSheetVisible = false
-                            }
-                            .padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
-                        Spacer(Modifier.weight(1f))
-                        if (indicatorStyle == style) {
-                            Icon(
-                                com.composables.icons.lucide.Lucide.Check,
-                                contentDescription = null,
-                                tint = cs.primary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                }
             }
         }
     }

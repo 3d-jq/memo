@@ -54,6 +54,45 @@ object PinnedFollow {
         gapPx > tolerancePx
 
     /**
+     * 每帧该走多少像素（**指数收敛 + 速度上限**）。
+     *
+     * 取自 Agora（`ui/chat/StreamingTailIndicator.kt` 同名函数，同为 Kotlin/Compose 栈）：
+     * 跟随**不硬贴底**，而按 `1 − exp(−dt/τ)` 的比例收敛，并对单帧步长设上限。
+     *
+     * 为什么这是抖动根因的解：硬贴底（`requestScrollToItem`/`scrollToItem`）会让位置在
+     * 「贴到底 → 下一帧内容长高 → 再贴」之间**反复归零**，肉眼就是来回跳；指数收敛让位置
+     * **连续地**追着底部走 —— 内容长高多少就平滑吃掉多少，永不回弹。
+     *
+     * @param errorPx 距底部的像素（正 = 内容在视口下方）
+     * @param elapsedSeconds 距上一帧的秒数
+     * @param timeConstantSeconds 时间常数 τ（越小追得越快）
+     * @param maximumVelocityPxPerSecond 单帧速度上限（长内容一帧不突进）
+     * @param minimumStepPx 最小步长（避免收敛尾巴无限小步刷帧）
+     */
+    fun coalescedScrollStep(
+        errorPx: Float,
+        elapsedSeconds: Float,
+        timeConstantSeconds: Float,
+        maximumVelocityPxPerSecond: Float,
+        minimumStepPx: Float,
+    ): Float {
+        if (errorPx == 0f || elapsedSeconds <= 0f) return 0f
+        val fraction =
+            1f - kotlin.math.exp(-elapsedSeconds / timeConstantSeconds.coerceAtLeast(0.001f))
+        val maximumStep = maxOf(minimumStepPx, maximumVelocityPxPerSecond * elapsedSeconds)
+        return (errorPx * fraction).coerceIn(-maximumStep, maximumStep)
+    }
+
+    /** 跟随的时间常数（秒）：0.12s ≈ 8 帧收敛到位。 */
+    const val FOLLOW_TIME_CONSTANT_SECONDS = 0.12f
+
+    /** 单帧速度上限（px/s）：长内容一帧最多走这么多，避免「突进」。 */
+    const val FOLLOW_MAX_VELOCITY_PX_PER_SECOND = 9_000f
+
+    /** 最小步长（px）：小于它不动。 */
+    const val FOLLOW_MIN_STEP_PX = 0.5f
+
+    /**
      * 列表末尾**哨兵项**的下标 = 消息数 + 额外项数。
      *
      * 额外项必须与 `LazyColumn` 的 gating **逐条对齐**（照 2026-09-23 的实证）：

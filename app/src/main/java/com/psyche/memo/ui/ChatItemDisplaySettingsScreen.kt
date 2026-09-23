@@ -96,7 +96,7 @@ private val sections = listOf(
             Lucide.CircleUserRound,
             UiR.string.display_settings_page_show_assistant_avatar_title,
             prefsKey = com.psyche.memo.ui.DisplayPrefs.SHOW_ASSISTANT_AVATAR,
-            default = false,
+            default = true,
             tipRes = UiR.string.display_settings_page_show_assistant_avatar_subtitle,
         ),
         SwitchItem(Lucide.Clock, UiR.string.display_settings_page_show_model_timestamp_title, prefsKey = "display_show_model_timestamp_v1"),

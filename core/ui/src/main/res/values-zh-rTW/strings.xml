@@ -982,9 +982,6 @@
     <string name="display_settings_page_thinking_indicator_phrases_hint">每行一句</string>
     <string name="display_settings_page_thinking_indicator_phrases_reset">恢復預設</string>
     <string name="display_settings_page_thinking_indicator_phrases_title">提示詞</string>
-    <string name="display_settings_page_thinking_indicator_style_icon">應用圖標</string>
-    <string name="display_settings_page_thinking_indicator_style_shimmer">文字掃光</string>
-    <string name="display_settings_page_thinking_indicator_style_title">提示樣式</string>
     <string name="display_settings_page_tray_minimize_on_close_title">關閉視窗時最小化到系統匣</string>
     <string name="display_settings_page_tray_show_tray_title">顯示系統匣圖示</string>
     <string name="display_settings_page_tray_title">系統匣</string>

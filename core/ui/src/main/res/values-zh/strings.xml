@@ -982,9 +982,6 @@
     <string name="display_settings_page_thinking_indicator_phrases_hint">每行一句</string>
     <string name="display_settings_page_thinking_indicator_phrases_reset">恢复默认</string>
     <string name="display_settings_page_thinking_indicator_phrases_title">提示词</string>
-    <string name="display_settings_page_thinking_indicator_style_icon">应用图标</string>
-    <string name="display_settings_page_thinking_indicator_style_shimmer">文字扫光</string>
-    <string name="display_settings_page_thinking_indicator_style_title">提示样式</string>
     <string name="display_settings_page_tray_minimize_on_close_title">关闭时最小化到托盘</string>
     <string name="display_settings_page_tray_show_tray_title">显示托盘图标</string>
     <string name="display_settings_page_tray_title">托盘</string>
