@@ -110,7 +110,11 @@ fun BalanceScreen(
         balanceError = null
         scope.launch {
             try {
-                val value = ProviderBalanceService.fetchBalance(cfg, container.httpClient)
+                // 阻塞式 OkHttp：必须在 IO 上跑 —— `scope` 默认是 Main，
+                // 之前就是这里抛 NetworkOnMainThreadException（用户 2026-09-22 实测）。
+                val value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    ProviderBalanceService.fetchBalance(cfg, container.httpClient)
+                }
                 balanceValue = context.getString(R.string.provider_detail_page_balance_result, value)
                 SnackbarManager.show(
                     AppNotification(
@@ -342,7 +346,11 @@ internal fun ProviderBalanceBadge(
     if (!canFetch) return
     LaunchedEffect(cfg.id, cfg.balanceApiPath, cfg.balanceResultPath, cfg.apiKey, cfg.multiKeyEnabled, cfg.apiKeys?.size) {
         runCatching {
-            ProviderBalanceService.fetchBalance(cfg, container.httpClient)
+            // LaunchedEffect 的体跑在组合线程（主线程）上 —— 同一类崩溃的第二个入口，
+            // 一起挪到 IO（见 AGENTS「Composition must stay cheap」那条的同类问题）。
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                ProviderBalanceService.fetchBalance(cfg, container.httpClient)
+            }
         }.onSuccess {
             value = it
             error = ""

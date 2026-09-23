@@ -389,7 +389,7 @@ SDK 根下，已用目录联接（junction）挂到 AGP 期望的位置。
 | `minimumReadableFormatVersion` | `2` | 老版本据此判断能否降级读取 |
 | `payloadKind` | `"sqlite"` \| `"settings-only"` | 由 includeChats 决定 |
 | `createdAtUtc` | ISO8601 UTC | `DateTime.now().toUtc().toIso8601String()` |
-| `appVersion` | `"1.0.4+5"` | version+buildNumber |
+| `appVersion` | `"1.0.5+6"` | version+buildNumber |
 | `includeChats` / `includeFiles` / `secretsIncluded` | bool | secretsIncluded 恒 true |
 | `businessEntityRowIds` | `Map<String, List<String>>` | model 模式下实体 id 投影，用于 merge 时保持 DB 身份 |
 | `database` | 对象（仅 includeChats） | `{entry:"database/kelivo.db", schemaVersion:3, minimumReadableSchemaVersion:<n>, conversationCount, messageCount}` |
@@ -1815,4 +1815,17 @@ vercel／xiaomimimo／tokenpony／rikkahub／stepfun…）；② 新厂商要「
   - 点「稍后」/返回键 → 只是本次不弹（下次启动还会提示）。
 - 关于页那一行不动（两个入口读同一份结果），`releases/latest` 的 404 仍按"已是最新"处理（§5.37）。
 - 新增 1 条 ARB 文案 `aboutPageUpdateSkipVersion`（跳过此版本，三份语言）。
+
+## 5.43 余额查询闪退：阻塞网络落在主线程（2026-09-22，用户实测 `android.os.NetworkOnMainThreadException`）
+
+`ProviderBalanceService.fetchBalance` 是**阻塞式 OkHttp**（照上游 `provider_balance_service.dart` 语义），
+而 `BalanceScreen` 两处调用都在主线程上：
+
+1. 「查询余额」按钮：`scope.launch { fetchBalance(...) }` —— `rememberCoroutineScope()` 默认 **Main**；
+2. 供应商详情页那个余额角标：`LaunchedEffect(...) { runCatching { fetchBalance(...) } }` —— **effect 体本身
+   就跑在组合线程上**（AGENTS「Composition must stay cheap」那条讲的是同一件事，只是当时只扫了 `remember {}`）。
+
+两处都改成 `withContext(Dispatchers.IO)`。**同类自查**：任何 `scope.launch {}` / `LaunchedEffect {}` 里
+直接调阻塞 IO（网络、文件、DB）的地方都要有 `withContext(IO)` —— 用户点出来的是第一个入口，
+第二个入口是顺着同一个函数找出来的，一起修的。
 
