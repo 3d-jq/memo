@@ -1,5 +1,16 @@
 package com.psyche.memo.ui.chat
 
+import com.psyche.memo.ui.ChatStyleSpec
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -46,6 +57,16 @@ internal fun rememberGenerationActivityDotBreathingScale(): Float {
     return scale
 }
 
+/** 圆点所在的**固定高度槽位**（Agora 的 `StreamingTailAnchorHeight` 同款）。 */
+internal val StreamingTailAnchorHeight = 24.dp
+
+/**
+ * 生成中的呼吸圆点 —— **带渐显**（移植 Agora `StreamingTailIndicator.kt` 的出现过渡）。
+ *
+ * 参数照它：alpha 0→1（400ms FastOutSlowInEasing）+ 出现时 scale 0.55→1；
+ * 消失直接 `snap()`（不留残影）。槽位高度恒定 24dp 且**只走 graphicsLayer 绘制**，
+ * 所以它的出现/消失**不会推动会话布局**，也不会被视口裁切。
+ */
 @Composable
 internal fun GenerationActivityDot(modifier: Modifier = Modifier) {
     val scale = rememberGenerationActivityDotBreathingScale()
@@ -62,4 +83,35 @@ internal fun GenerationActivityDot(modifier: Modifier = Modifier) {
                 shape = CircleShape,
             ),
     )
+}
+
+@Composable
+internal fun StreamingTailDot(modifier: Modifier = Modifier) {
+    // 渐显：出现时 alpha 0→1（400ms）+ scale 0.55→1；消失按 Agora 直接 snap()（不留残影）。
+    val appear = remember {
+        androidx.compose.animation.core.Animatable(0f)
+    }
+    LaunchedEffect(Unit) {
+        appear.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        )
+    }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(StreamingTailAnchorHeight)
+            .graphicsLayer {
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+                alpha = appear.value
+                val s = 0.55f + (1f - 0.55f) * appear.value
+                scaleX = s
+                scaleY = s
+                clip = false
+            }
+            .padding(start = ChatStyleSpec.ASSISTANT_MESSAGE_HORIZONTAL_DP.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        GenerationActivityDot()
+    }
 }
