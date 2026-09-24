@@ -1,8 +1,14 @@
-# AFENTS.md
+# AGENTS.md
+
+> **2026-09-24 起项目状态：Memo（`memo-android/`）是与上游 Flutter 完全解耦的独立原生安卓项目。**
+> 上游 Kelivo 的 Flutter 源码已移出本仓（对照副本在 `D:\program\memo-upstream\`，仅用于查证
+> PORTING 文档里引用的 Dart 路径）。文案（三份 strings.xml）**直接手维**，不再由
+> `lib/l10n/*.arb` 生成（`tools/arb_to_android.py` 已随上游移出）。RikkaHub / Agora 仍是
+> 实现层面的参考仓库；下文的历史约定与 PORTING 索引继续有效。
 
 ## Project overview
 
-Kelivo is a cross-platform LLM chat client built with Flutter, targeting iOS, Android, macOS, Windows, and Linux. Package name is `Kelivo` — imports use `package:Kelivo/...`.
+Kelivo is a cross-platform LLM chat client built with Flutter, targeting iOS, Android, macOS, Windows, and Linux. Package name is `Kelivo` — imports use `package:Kelivo/...`.（历史信息：上游 Flutter 源码已于 2026-09-24 移出本仓，见顶部状态说明。）
 
 **Memo** is a standalone native Android app (Kotlin + Jetpack Compose,
 AGP 8.11.1 / Gradle 8.14 / Kotlin 2.2.20, minSdk 26 / target 35) in
@@ -17,9 +23,9 @@ same AGPL-3.0 license; its `ai` module is the closest match to `core:llm`, local
 at `D:\program\.rikkahub-ref`). Memo and RikkaHub are functionally very close (sibling
 LLM chat clients with the same provider/tool/surface model), so when implementing or
 fixing a Memo feature, **borrow or directly port from RikkaHub** as a valid source —
-don't re-derive from scratch unless RikkaHub doesn't cover the case. The Flutter
-source (`lib/`) remains the primary 1:1 source-of-truth for UI/text parity; RikkaHub
-fills in native-side details and shared feature implementations.
+don't re-derive from scratch unless RikkaHub doesn't cover the case. **2026-09-24 起
+上游 Flutter 源码不再在本仓内**：1:1 奇偶校验改为「与已发布版本/用户期望对齐」，
+新行为按用户指示（Agora/RikkaHub 参照）推进，不再以「Flutter 代码怎么写」为唯一依据。
 
 ## 有意偏离原版的地方（勿"修回"，除非用户改口）
 
