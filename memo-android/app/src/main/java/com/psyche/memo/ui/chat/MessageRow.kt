@@ -582,6 +582,13 @@ internal fun MessageRow(
                     // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs
                     // 打开时按段落再拆）。助手正文 15.7 / 行高 1.5×15.7。
                     assistantBlocks.forEachIndexed { index, block ->
+                        // 渐显（照 Agora GenerationLifecycleMotion）：每个内容块第一次出现时
+                        // alpha 0→1 + scale 0.90→1（420ms），key 稳定 ⇒ 增长不重播、不闪。
+                        val blockAppearance = com.psyche.memo.ui.chat.generationAppearanceModifier(
+                            animationKey = "msg-${msg.id}-block-$index",
+                            animate = msg.isStreaming,
+                        )
+                        Box(modifier = blockAppearance) {
                         if (index > 0) Spacer(Modifier.height(8.dp))
                         when (block) {
                             is com.psyche.memo.ui.chat.AssistantBlock.Media -> {
@@ -671,6 +678,7 @@ internal fun MessageRow(
                                     onRecoveredAnswer = onRecoveredAnswer,
                                     onToggleReasoning = onToggleReasoning,
                                 )
+                        }
                         }
                     }
                 }

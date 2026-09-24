@@ -2,6 +2,14 @@
 
 Memo（Kotlin / Jetpack Compose 原生版）的显著变更。版本号对应 `app/build.gradle.kts` 的 `versionName`。
 
+## [1.0.18] — 2026-09-24
+
+### 改进
+
+- **流式正文渐显**（照 Agora `GenerationLifecycleMotion`）：每个内容块（正文/思考卡/工具卡/媒体）
+  第一次出现时 alpha 0→1 + scale 0.90→1（420ms Linear）；块内继续增长**不重播** ⇒ 丝滑不闪。
+  动画只拥有绘制层，不改变列表项高度、不触发 Markdown 重排、不与贴底跟随抢位置。
+
 ## [1.0.17] — 2026-09-24
 
 ### 修复
