@@ -18,8 +18,11 @@ object PinnedFollow {
     /** 贴底容差：小于它认为「已经在底部」，不再动（防抖 + 防自激）。 */
     const val STICK_TOLERANCE_DP = 10
 
-    /** 流式结束后尾部还会长高（操作行/Token 统计/思考卡收起），这段窗口继续允许贴底。 */
-    const val FINISH_GRACE_MS = 450L
+    /**
+     * 流式结束后尾部还会长高（操作行/Token 统计/思考卡收起），这段窗口继续允许贴底。
+     * 800ms：覆盖操作行出现与思考卡收起的过渡（期间交给每帧指数收敛，丝滑吸收）。
+     */
+    const val FINISH_GRACE_MS = 800L
 
     /**
      * 这一帧要不要继续把列表往底部追。
