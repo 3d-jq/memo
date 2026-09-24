@@ -7,7 +7,7 @@ import androidx.compose.ui.platform.LocalContext
 import java.util.Locale
 
 /**
- * Formats one of the ICU messages `tools/arb_to_android.py` emits verbatim
+ * Formats one of the ICU messages stored verbatim in `strings.xml`
  * (plural/select entries such as `local_snapshot_keep_value`), which
  * `Context.getString` would otherwise hand back as raw `{count, plural, …}`.
  *

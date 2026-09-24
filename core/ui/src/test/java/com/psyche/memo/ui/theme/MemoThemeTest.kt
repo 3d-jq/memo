@@ -6,8 +6,7 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 /**
- * Theme resolution semantics, plus a guard on the palette values transcribed by
- * tools/palettes_gen.py from lib/theme/palettes.dart.
+ * Theme resolution semantics, plus a guard on the built-in palette values.
  */
 class MemoThemeTest {
 
