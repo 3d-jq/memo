@@ -1,2 +1,0 @@
--dontwarn com.gemalto.jp2.**
--dontwarn com.tom_roush.pdfbox.filter.JPXFilter
