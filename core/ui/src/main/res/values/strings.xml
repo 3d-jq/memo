@@ -732,7 +732,6 @@ Updating Memo first is the safer choice.</string>
     <string name="context_log_source_system_prompt">System prompt</string>
     <string name="context_log_source_tool_call">Tool call</string>
     <string name="context_log_source_tool_result">Tool result</string>
-    <string name="context_log_source_tool_rules">Tool rules</string>
     <string name="context_log_source_workspace">Workspace</string>
     <string name="context_log_source_world_book">World book</string>
     <string name="context_log_tokens_estimate_hint">Token counts are estimates only; use the model\'s actual usage as the source of truth.</string>
@@ -948,8 +947,6 @@ Updating Memo first is the safer choice.</string>
     <string name="display_settings_page_show_model_name_timestamp_subtitle">Show model name and the timestamp below it in chat messages</string>
     <string name="display_settings_page_show_model_name_timestamp_title">Show Model Name &amp; Timestamp</string>
     <string name="display_settings_page_show_model_name_title">Show Model Name</string>
-    <string name="display_settings_page_show_assistant_avatar_title">Show assistant avatar</string>
-    <string name="display_settings_page_show_assistant_avatar_subtitle">Show the assistant avatar next to its replies.</string>
     <string name="display_settings_page_show_model_timestamp_title">Show Model Timestamp</string>
     <string name="display_settings_page_show_provider_in_chat_message_subtitle">Display provider name after the model ID in chat messages (e.g. model | provider)</string>
     <string name="display_settings_page_show_provider_in_chat_message_title">Show Provider After Model Name</string>
@@ -974,6 +971,12 @@ Updating Memo first is the safer choice.</string>
     <string name="display_settings_page_show_user_timestamp_title">Show User Timestamp</string>
     <string name="display_settings_page_theme_color_title">Theme Color</string>
     <string name="display_settings_page_theme_settings_title">Theme Settings</string>
+    <string name="display_settings_page_thinking_indicator_color_follow_theme">Follow theme</string>
+    <string name="display_settings_page_thinking_indicator_color_title">Text color</string>
+    <string name="display_settings_page_thinking_indicator_font_size_title">Text size</string>
+    <string name="display_settings_page_thinking_indicator_phrases_hint">One phrase per line</string>
+    <string name="display_settings_page_thinking_indicator_phrases_reset">Reset to default</string>
+    <string name="display_settings_page_thinking_indicator_phrases_title">Phrases</string>
     <string name="display_settings_page_tray_minimize_on_close_title">Minimize to tray on close</string>
     <string name="display_settings_page_tray_show_tray_title">Show tray icon</string>
     <string name="display_settings_page_tray_title">System Tray</string>
@@ -2952,5 +2955,8 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="world_book_save">Save</string>
     <string name="world_book_title">World Book</string>
     <string name="world_book_unnamed">Unnamed World Book</string>
+    <string name="context_log_source_tool_rules">Tool rules</string>
+    <string name="display_settings_page_show_assistant_avatar_title">Show assistant avatar</string>
+    <string name="display_settings_page_show_assistant_avatar_subtitle">Show the assistant avatar next to its replies.</string>
     <string name="world_book_unnamed_entry">Unnamed Entry</string>
 </resources>
