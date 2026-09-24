@@ -15,6 +15,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /** Port coverage of search_tool_service.dart executeSearch. */
 class SearchToolServiceTest {
@@ -77,7 +79,16 @@ class SearchToolServiceTest {
     @Test
     fun `missing service reports the upstream message`() = runBlocking {
         val payload = SearchToolService.executeSearch("q", FakeEngine(), null, SearchCommonOptions())
-        assertEquals("""{"error":"No search services configured"}""", payload)
+        val obj = Json.parseToJsonElement(payload) as JsonObject
+        // 上游那句原文（Dart 是 `{"error":"No search services configured"}`）现在落在
+        // `message` 上 —— 规范形状里 `error` 是错误码。本工程给所有工具错误加了
+        // `status` + 必带 `instruction`（见 PORTING §5.54），所以钉不变量而不是钉字节。
+        assertEquals("No search services configured", obj["message"]!!.jsonPrimitive.content)
+        assertEquals("tool_error", obj["type"]!!.jsonPrimitive.content)
+        assertEquals("error", obj["status"]!!.jsonPrimitive.content)
+        assertEquals("search_unavailable", obj["error"]!!.jsonPrimitive.content)
+        assertEquals("search_web", obj["tool"]!!.jsonPrimitive.content)
+        assertTrue(obj["instruction"]!!.jsonPrimitive.content.isNotBlank())
     }
 
     @Test

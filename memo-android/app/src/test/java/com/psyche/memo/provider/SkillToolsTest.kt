@@ -25,6 +25,25 @@ class SkillToolsTest {
         return SkillMetadata(name = name, description = description, skillDir = dir)
     }
 
+    /**
+     * 墓碑（deepseek-harness `tool-skill` 的 `renderCatalogUpdate` 空清单分支）：
+     * 模型的历史里还留着上一次成功加载的技能名，清单被清空后它照样会敲 ——
+     * 没有这句，它无从知道目录已经空了。
+     */
+    @Test
+    fun emptyCatalogStandsUpATombstoneOnlyAfterTheCatalogWasUsed() {
+        val all = listOf(skill("a"))
+        // 从没给过目录 ⇒ 什么都不注入（多数助手没有技能，别白占上下文）
+        assertNull(SkillTools.systemPromptBlock(emptyList(), all, catalogWasUsed = false))
+        val tombstone = SkillTools.systemPromptBlock(emptyList(), all, catalogWasUsed = true)!!
+        assertTrue(tombstone.contains("No skills are currently available"))
+        assertTrue(tombstone.contains("Do not use names from earlier skill catalogs"))
+        // 清单非空时一切照旧，墓碑不能混进去
+        val catalog = SkillTools.systemPromptBlock(listOf("a"), all, catalogWasUsed = true)!!
+        assertTrue(catalog.contains("<available_skills>"))
+        assertTrue(!catalog.contains("No skills are currently available"))
+    }
+
     @Test
     fun noEnabledSkillsMeansNoToolAtAll() {
         val all = listOf(skill("a"), skill("b"))

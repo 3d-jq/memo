@@ -132,17 +132,25 @@ class AskUserResult private constructor(val jsonString: String) {
             return AskUserResult(payload.toString())
         }
 
-        fun error(error: String, message: String): AskUserResult {
-            val payload = JsonObject(
-                mapOf(
-                    "type" to JsonPrimitive("tool_error"),
-                    "error" to JsonPrimitive(error),
-                    "message" to JsonPrimitive(message),
-                    "tool" to JsonPrimitive("ask_user_input_v0"),
-                ),
-            )
-            return AskUserResult(payload.toString())
-        }
+        /**
+         * 取消 / 无效问询（形状只有一个生产者 [com.psyche.memo.provider.tool.ToolResults]）。
+         *
+         * 「用户没答」必须写死在补救句里 —— 模型看到光一句 `cancelled` 很容易当成已经拿到
+         * 答案，然后照自己原先的猜测往下走。
+         */
+        fun error(error: String, message: String): AskUserResult = AskUserResult(
+            com.psyche.memo.provider.tool.ToolResults.error(
+                code = error,
+                message = message,
+                tool = com.psyche.memo.ui.chat.AskUserToolNames.ASK_USER,
+                instruction = if (error == "cancelled") {
+                    "The user chose not to answer. Do not act as if an answer arrived: state the " +
+                        "assumption you are falling back to, or ask in a different way."
+                } else {
+                    com.psyche.memo.provider.tool.ToolResults.ADJUST_AND_RETRY
+                },
+            ),
+        )
     }
 }
 

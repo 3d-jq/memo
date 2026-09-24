@@ -79,7 +79,14 @@ When a statement in your answer is based on a search_web result, append a citati
         common: SearchCommonOptions,
     ): String {
         if (service == null) {
-            return buildJsonObject { put("error", "No search services configured") }.toString()
+            // 规范形状：模型看 `status` 就知道没跑成，并且拿到下一步该干什么。
+            return com.psyche.memo.provider.tool.ToolResults.error(
+                code = "search_unavailable",
+                message = "No search services configured",
+                tool = TOOL_NAME,
+                instruction = "Ask the user to configure a search service in settings; answer " +
+                    "from your own knowledge and say it may be out of date.",
+            )
         }
         return try {
             val result = engine.search(query, service, common)

@@ -110,7 +110,12 @@ object MermaidTools {
         }
     }
 
-    /** 错误形状统一由 [ToolResults] 给（`type=tool_error` + `status=error` + `tool`）。 */
+    /** 错误形状统一由 [ToolResults] 给（`type=tool_error` + `status=error` + `tool` + 补救句）。 */
     private fun errorJson(code: String, message: String): String =
-        ToolResults.error(code = code, message = message, tool = TOOL_NAME)
+        ToolResults.error(
+            code = code,
+            message = message,
+            tool = TOOL_NAME,
+            instruction = ToolResults.ADJUST_AND_RETRY,
+        )
 }

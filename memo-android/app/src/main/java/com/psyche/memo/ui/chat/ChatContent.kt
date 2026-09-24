@@ -686,6 +686,20 @@ fun ChatContent(
     }
     fun tailAtBottom(withinDp: Int): Boolean =
         tailBottomGapPx() <= with(scrollDensity) { withinDp.dp.toPx() }
+
+    /**
+     * 距**物理底部**还差多少像素（raw gap + 列表 `contentPadding.bottom`）。
+     *
+     * 跟随循环拿它当零点：raw gap 在真到底时是 −16dp（padding 那一段属于滚动范围），
+     * 直接和 10dp 比会每次都停在离 `maxScrollExtent` 还差一截的地方（用户 2026-09-24
+     * 「结束后底部还有多余空间，可以再往上滑一下」）。手动到底走哨兵下标 = 物理底部，
+     * 两者必须同源。恢复跟随 / 键盘钉底仍用宽判据 [PinnedFollow.RESUME_TOLERANCE_DP]。
+     */
+    fun distanceToTimelineBottomPx(): Float =
+        com.psyche.memo.ui.chat.PinnedFollow.distanceToBottomPx(
+            gapPx = tailBottomGapPx(),
+            bottomPaddingPx = with(scrollDensity) { ChatStyleSpec.LIST_BOTTOM_PADDING_DP.dp.toPx() },
+        )
     /**
      * 到底。**坑（2026-09-13 日志实证）**：`requestScrollToItem(index)` 是把该 item 对齐
      * 到**视口顶部**（Compose KDoc：正的 `scrollOffset` 表示 item 滚到视口上方），所以传
@@ -756,7 +770,7 @@ fun ChatContent(
             .distinctUntilChanged()
             .collect { gap ->
                 if (gap != Float.MAX_VALUE && !pointerDown &&
-                    !timelineListState.isScrollInProgress && tailAtBottom(24)
+                    !timelineListState.isScrollInProgress && tailAtBottom(PinnedFollow.RESUME_TOLERANCE_DP)
                 ) {
                     idleStickJob?.cancel()
                     if (autoScrollEnabled || following) following = true
@@ -812,7 +826,9 @@ fun ChatContent(
         var lastNanos = 0L
         while (true) {
             androidx.compose.runtime.withFrameNanos { it }   // 每帧一次（取消随 effect 一起）
-            val gap = tailBottomGapPx()
+            // 零点是**物理底部**（含 contentPadding），不是最后一条 item 的底边 —— 见
+            // distanceToTimelineBottomPx 的注释（用户 2026-09-24 的「结束后还能再滑一下」）。
+            val gap = distanceToTimelineBottomPx()
             // 不再传 isScrollInProgress（见 PinnedFollow.shouldPinToBottom 的说明：
             // 我们自己写的滚动会把它置真 ⇒ 自锁，追不到底）。
             val attached = com.psyche.memo.ui.chat.PinnedFollow.shouldPinToBottom(
@@ -824,7 +840,7 @@ fun ChatContent(
                 graceActive = followGrace,
                 gapPx = gap,
                 tolerancePx = with(scrollDensity) {
-                    com.psyche.memo.ui.chat.PinnedFollow.STICK_TOLERANCE_DP.dp.toPx()
+                    com.psyche.memo.ui.chat.PinnedFollow.SETTLE_TOLERANCE_DP.dp.toPx()
                 },
             )
             val now = System.nanoTime()
@@ -1255,7 +1271,7 @@ fun ChatContent(
                                         pointerDown = false
                                         // 抬指时已在底部（多半只是点一下）→ 立刻恢复跟随；
                                         // 否则等 autoScrollIdleSeconds 后再按 56 容差判一次。
-                                        if (tailAtBottom(24)) {
+                                        if (tailAtBottom(PinnedFollow.RESUME_TOLERANCE_DP)) {
                                             if (autoScrollEnabled || following) following = true
                                         } else {
                                             armIdleStickTimer()

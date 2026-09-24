@@ -4,6 +4,10 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import org.junit.Assert.assertTrue
 
 /**
  * ask_user_interaction_service.dart AskUserAnswerValue / AskUserResult.toJsonString
@@ -179,11 +183,34 @@ class AskUserCardLogicTest {
         )
     }
 
+    /**
+     * 取消问询的错误载荷。上游四个键逐字不许变（这是与 Dart 的契约），
+     * 本工程在其上**多加不改**：`status=error` 与必带的 `instruction`
+     * （见 PORTING §5.54）。所以按 Map 比，不按字节串比。
+     */
     @Test
     fun errorJson_matchesDartShape() {
-        assertEquals(
-            """{"type":"tool_error","error":"cancelled","message":"msg","tool":"ask_user_input_v0"}""",
-            AskUserResult.error("cancelled", "msg").jsonString,
-        )
+        val obj = Json.parseToJsonElement(AskUserResult.error("cancelled", "msg").jsonString)
+            .jsonObject
+        assertEquals("tool_error", obj["type"]!!.jsonPrimitive.content)
+        assertEquals("cancelled", obj["error"]!!.jsonPrimitive.content)
+        assertEquals("msg", obj["message"]!!.jsonPrimitive.content)
+        assertEquals("ask_user_input_v0", obj["tool"]!!.jsonPrimitive.content)
+        assertEquals("error", obj["status"]!!.jsonPrimitive.content)
+        // 「用户没答」必须写在补救句里，否则模型会当成已经拿到答案继续往下走
+        val instruction = obj["instruction"]!!.jsonPrimitive.content
+        assertTrue(instruction.contains("chose not to answer"))
+        assertTrue(instruction.contains("Do not act as if an answer arrived"))
+    }
+
+    /** 非「取消」的错误码不许套用「用户没答」那句补救 —— 那是另一回事。 */
+    @Test
+    fun otherCodesGetTheGenericRemedyNotTheDeclineOne() {
+        val obj = Json.parseToJsonElement(
+            AskUserResult.error("invalid_ask_user_request", "bad").jsonString,
+        ).jsonObject
+        val instruction = obj["instruction"]!!.jsonPrimitive.content
+        assertTrue(instruction.contains("never describe the intended result as if it happened"))
+        assertTrue(!instruction.contains("chose not to answer"))
     }
 }

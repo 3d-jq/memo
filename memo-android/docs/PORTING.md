@@ -2139,3 +2139,79 @@ skill, **before doing the task work**"（原描述同样来自 RikkaHub，属**�
 注入条件：`buildSystemPromptParts(assistant, hasTools = tools.isNotEmpty())` —— **只有这一轮真的
 递了工具**才注入（没工具时只占上下文）。它带自己的 `ContextSource.toolRules`（上下文日志里能看到
 是哪一段），标签/颜色在 `LogViewerScreen` 的映射里补齐（ARB `contextLogSourceToolRules`，三语）。
+
+
+## 5.54 工具错误只有一个形状、必带补救句，超时=结果未知（2026-09-24，用户「大模型说做了，他根本没有做」+ 点名学 deepseek-harness）
+
+上游 Dart 的工具错误是 `{"type":"tool_error","error":…,"message":…,"tool":…}`，成功侧各工具自己手搓 ——
+模型只能从散文里猜成败。这一批收成一个生产者
+（`app/…/provider/tool/ToolExecution.kt` 的 `ToolResults`）：
+
+- **`status`**：成功 `"ok"` / 截断 `"ok_truncated"` / 失败 `"error"` —— 各工具自己的 `type` 保留不动
+  （视图层与产物提取在读它），只加这层稳定外壳；
+- **`instruction` 必填**（编译器逼每个错误点交代下一步）。三条通用补救句集中在 `ToolResults`：
+  `REPORT_FAILURE` / `USER_DECLINED` / `ADJUST_AND_RETRY`；审批拒绝、搜索不可用、工作区没绑、
+  生成服务没配、`ask_user` 被取消、定位三种失败各有自己那句；
+- **超时不再说"失败"**，改成 **`outcome unknown`**：副作用可能已经发生。说成失败会让模型重试
+  （可能重复执行），说成成功就是骗它（dsh 对中断调用合成 `is_error`+"outcome unknown" 同理）；
+- `workspace_not_bound` / `search_unavailable` 这类「**没配置**」不再落到「本机没有执行器」那句 ——
+  两个原因不同，混报会让模型和用户都找错方向；
+- 大结果统一过 `ToolRunner.cap`：搜索 / MCP / 技能正文 / 工作区读取（原先只有本地工具走这条路）；
+- `get_current_location` 加 deadline 覆盖（90s 权限框 + 10s 定位 + 余量）：默认 20 秒会把
+  **还开着的系统权限框**判成工具超时，用户点允许时工具早返回了；
+- **停止时不再丢结果**（`ChatViewModel.runGenerationLoop`）：每颗工具跑完立刻把 fold 好的
+  parts 并回累计列表，原先是整轮 `map` 跑完才并 —— 中途取消就把「真的执行过」的证据整批丢掉。
+
+手搓错误形状的其余几处（`MemoryTools` / `VisualTools` / `MermaidTools` / `AskUserCard` /
+`LocationTool` / `SearchToolService`）都改为委托 `ToolResults`。**代价**：两处钉「与 Dart 逐字节同形」
+的测试（`SearchToolServiceTest`、`AskUserCardLogicTest`）改成钉不变量 —— 上游那几个键逐字仍不许变，
+新增的 `status`/`instruction` 按值钉住。
+
+## 5.55 重复调用提醒是运行时的，不是一句"别重复"（2026-09-24）
+
+`app/…/provider/tool/RepeatCallGuard.kt`（照 dsh `packages/guard/repeat-tool-reminder`）：工具**执行之后**
+计数，同名 + 参数逐字相同连着到 3/5/8 次，在该轮工具结果之后追加一条
+`<system-reminder>` 的 user 消息（3 次温和、5/8 次点名工具+次数+参数摘要并要求换路）。
+参数**深排序后**比较（模型重排 key 是常态）、摘要截断但比较用完整串、畸形 JSON 落到原始串
+（解析失败不许漏判）。只提醒不否决，实例每次生成新建 ⇒ 用户真说了话就归零。
+§5.53 的 `TOOL_RULES_BLOCK` 同期改成 `ToolRules.blockFor(offeredToolNames)`：三条纪律 +
+**按本轮真递出的工具名**门控的路由句（见 §5.56）。
+
+## 5.56 提示词只陈述运行时会执行的事（2026-09-24，接 §5.53）
+
+`ToolRules.blockFor` 里每条路由句都带 `requires` 名单，**全部**在工具列表里才拼进去
+（工作区「怎么看」那句要 `workspace_read_file`+`glob`+`grep` 三颗齐）；工具列表为空整块不注入。
+`ToolRulesTest` 钉住：没递的工具不许出现在句子里、全量递出时每条路由句都在、句子里的名字
+必须与各工具面的常量同源。
+
+技能目录加**墓碑**：清单为空**但这段对话以前调用过 `use_skill`** 时，系统提示词里递一句
+"No skills are currently available … Do not use names from earlier skill catalogs"
+（dsh `tool-skill` 的空清单分支）。判据是 `ChatViewModel.skillCatalogWasUsed()` 扫已加载消息的
+工具 part —— 我们的目录每轮重建，用户删掉技能后历史里只剩模型自己那次成功的调用，不立墓碑
+它会一直敲旧名字。`skill_not_available` 报错在清单为空时**当场把同一句再递一次**
+（常量 `SkillTools.NO_SKILLS_TOMBSTONE`，两处共用不抄第二份）。
+
+## 5.57 正文渐显 ≠ 卡片入场（2026-09-24，用户「文本渐显这个效果没有弄到位」）
+
+1.0.18（§5.52 之后那批）把 Agora `GenerationLifecycleMotion` 的 `alpha+scale 0.90/420ms`
+同时挂到了**正文块**上。Agora 里这是两个正交机制：那套只给卡片/图片/整条消息
+（调用点 5 处），**正文**用的是逐字前景色 alpha 爬升（`StreamingGlyphFade.kt:16`
+`STREAM_TAIL_ALPHA_PER_SECOND=2f`、40ms tick、只 `addStyle(SpanStyle(color=…alpha))`，
+无 scale、无 key、不改布局高度）。现在照它补齐：
+
+- 新 `core/ui/…/markdown/StreamingGlyphFade.kt`：出生表按**码点**记（代理对不许劈半），
+  只认前缀增长（老字的出生时刻不再刷新）；非前缀改写当整段新内容重播一次淡入；
+- 注入走 `LocalStreamTailFade`（不给 `MarkdownText/Body/Node` 三个函数各加参数），
+  时钟 `rememberStreamFadeClock` 只在「本文档最后一个段落 + 消息正在流式」的 leaf 里跑；
+- `MessageRow` 的 `AssistantBlock.Text` **不再**用 `generationAppearanceModifier`，
+  思考卡/工具卡/媒体保持原样。
+
+## 5.58 流式跟随的零点改成物理底部（2026-09-24，用户「结束后底部还有多余空间，可以再往上滑一下」）
+
+原判据：`tailBottomGapPx()` = 最后**可见** item 底边 − 视口底，`≤10dp` 就停手
+（`PinnedFollow.STICK_TOLERANCE_DP`）。但列表底部还有 `contentPadding.bottom = 16dp` 属于滚动范围
+⇒ 每次停在离真到底（`scrollTimelineToBottom()` 的哨兵下标 = `maxScrollExtent`）还差最多 26dp 的地方，
+那一截就是看得见的空白。现在 `PinnedFollow.distanceToBottomPx(gap, bottomPadding)` 把零点换算到
+**物理底部**，收敛容差 `SETTLE_TOLERANCE_DP = 2`（Agora 的落定判据同为 ≤2dp）；
+「恢复跟随 / 键盘钉底」仍是宽判据，提成 `RESUME_TOLERANCE_DP = 24`。
+**不加**"结束时硬跳一次"（§5.52 之后用户已否过，1.0.17 也为此删过）—— 差距交给每帧指数收敛吃掉。

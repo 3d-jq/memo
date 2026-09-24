@@ -81,6 +81,46 @@ class PinnedFollowTest {
         assertFalse("既不在流式、也不在宽限期 → 不贴", pin(streaming = false, graceActive = false))
     }
 
+    /**
+     * 跟随的**零点必须是物理底部**，不是「最后一条 item 的底边」。
+     *
+     * 用户 2026-09-24：「大模型输出结束后，底部还有多余空间，可以再往上滑一下」。根因是老
+     * 判据量 `gap = 最后可见 item 底边 − 视口底`，`gap ≤ 10dp` 就停手；可列表底部还有
+     * `contentPadding.bottom` 那 16dp 属于滚动范围 —— 于是每次停在离 `maxScrollExtent`
+     * 还差 10+16=26dp 的地方，那一截就是看得见的空白（Agora 不留：跟随目标就是物理底部的
+     * 哨兵，`MessageList` 的 `AbsoluteBottomSentinelKey` + 误差 ≤2dp 才算落定）。
+     */
+    @Test
+    fun `the follow zero point is the physical bottom, not the last item edge`() {
+        val padding = 48f // 16dp @ 3x
+        // 老停手点（gap=10dp=30px）按物理底部算还差 78px
+        assertEquals(78f, PinnedFollow.distanceToBottomPx(30f, padding), 0f)
+        // 真到底：哨兵底边 = 视口底 − padding
+        assertEquals(0f, PinnedFollow.distanceToBottomPx(-padding, padding), 0f)
+        // 量不到可见项时原样传 MAX_VALUE，不许被 padding 拉成一个看起来正常的数
+        assertEquals(Float.MAX_VALUE, PinnedFollow.distanceToBottomPx(Float.MAX_VALUE, padding), 0f)
+    }
+
+    @Test
+    fun `the old stop point still has to travel`() {
+        val padding = 48f
+        val settle = 6f // 2dp @ 3x
+        // 必须继续追：离物理底部还有 78px（老代码在这里就停手了）
+        assertTrue(pin(gapPx = PinnedFollow.distanceToBottomPx(30f, padding), tolerancePx = settle))
+        // 收手：已经在物理底部的 2dp 内
+        assertFalse(pin(gapPx = PinnedFollow.distanceToBottomPx(-45f, padding), tolerancePx = settle))
+        assertFalse(pin(gapPx = PinnedFollow.distanceToBottomPx(-48f, padding), tolerancePx = settle))
+    }
+
+    /**
+     * 收敛容差必须**严于**「恢复跟随 / 键盘钉底」的判据，否则刚到底那一刻
+     * `tailAtBottom` 与跟随循环互相拉扯（到底 → 判成不在底部 → 恢复跟随 → 又动一下）。
+     */
+    @Test
+    fun `settle tolerance is tighter than the resume gate`() {
+        assertTrue(PinnedFollow.SETTLE_TOLERANCE_DP < PinnedFollow.RESUME_TOLERANCE_DP)
+    }
+
     /** 锚点下标：额外项必须与 LazyColumn 的 gating 逐条对齐（三个组合都钉住）。 */
     @Test
     fun `sentinel index counts every extra list item`() {
