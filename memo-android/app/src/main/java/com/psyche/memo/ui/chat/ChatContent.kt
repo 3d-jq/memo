@@ -857,13 +857,11 @@ fun ChatContent(
         val justFinished = wasStreaming && !streaming
         wasStreaming = streaming
         if (justFinished) {
+            // 结束后不硬跳（用户 2026-09-24「最后那一排复制生成时不要那样一下」）：
+            // Agora 也没有这一步 —— 结束后长高的操作行/Token 统计/思考卡收起，
+            // 全部交给上面的**每帧指数收敛**连续吃掉（丝滑 ✓）。宽限窗口相应加长到 800ms。
             followGrace = true
             kotlinx.coroutines.delay(com.psyche.memo.ui.chat.PinnedFollow.FINISH_GRACE_MS)
-            // 宽限窗口收尾：明确到底一次（结束后尾部还会长高——操作行/Token 统计/思考卡收起，
-            // 平滑跟随可能还差一点；这里补一次真到底，保证「输出完也贴住底部」）。
-            if (following && !pointerDown && autoScrollEnabled && messages.isNotEmpty()) {
-                scrollTimelineToBottom()
-            }
             followGrace = false
         }
     }

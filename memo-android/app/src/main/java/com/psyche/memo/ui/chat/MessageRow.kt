@@ -674,14 +674,6 @@ internal fun MessageRow(
                         }
                     }
                 }
-                // 生成中的**呼吸圆点就在这里 —— 助手消息的尾部**（照 Agora
-                // `AssistantMessageContent.kt:768` `if (answerTailVisible) GenerationActivityDot()`）。
-                // 它跟着回复走，而不是列表末尾被贴底钉在输入栏上方（用户 2026-09-23
-                // 「这个呼吸球在输出没有每次在输入框上面呀」）。槽位恒定 24dp、只做绘制态，
-                // 出现/消失都不推动会话布局。
-                if (!isUser && msg.isStreaming) {
-                    com.psyche.memo.ui.chat.StreamingTailDot()
-                }
                 if (msg.failed) {
                     Text(
                         stringResource(UiR.string.generation_interrupted),
@@ -815,70 +807,64 @@ internal fun MessageRow(
                     MessageActionIcon(Lucide.Ellipsis, "More", onClick = onMore)
                 }
                 if (!isUser) {
-                    // CMW:3191-3209 —— 生成中整行隐藏（AnimatedSwitcher 220ms
-                    // SizeTransition+FadeTransition）。
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = !msg.isStreaming,
-                        enter = androidx.compose.animation.expandVertically(
-                            animationSpec = androidx.compose.animation.core.tween(220),
-                        ) + androidx.compose.animation.fadeIn(
-                            animationSpec = androidx.compose.animation.core.tween(220),
-                        ),
-                        exit = androidx.compose.animation.shrinkVertically(
-                            animationSpec = androidx.compose.animation.core.tween(220),
-                        ) + androidx.compose.animation.fadeOut(
-                            animationSpec = androidx.compose.animation.core.tween(220),
-                        ),
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            MessageActionIcon(Lucide.Copy, "Copy", onClick = onCopy)
-                            Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
-                            MessageActionIcon(
-                                Lucide.RefreshCw,
-                                "Regenerate",
-                                // display_show_regenerate_confirm_dialog_v1（默认开）：
-                                // 关闭时跳过确认直接重生成（CMW:1330）。
-                                onClick = {
-                                    if (skipRegenerateConfirm) onRegenerateAssistant?.invoke()
-                                    else showRegenerateConfirm = true
-                                },
-                                enabled = onRegenerateAssistant != null,
-                            )
-                            Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
-                            // Speak/Stop/Resume：只有被朗读的那条消息切图标。
-                            MessageActionIcon(
-                                when (ttsAction) {
-                                    com.psyche.memo.ui.chat.MessageTtsAction.STOP -> Lucide.CircleStop
-                                    com.psyche.memo.ui.chat.MessageTtsAction.RESUME -> Lucide.Play
-                                    else -> Lucide.Volume2
-                                },
-                                when (ttsAction) {
-                                    com.psyche.memo.ui.chat.MessageTtsAction.STOP -> "Stop"
-                                    com.psyche.memo.ui.chat.MessageTtsAction.RESUME -> "Resume"
-                                    else -> "Speak"
-                                },
-                                onClick = {
-                                    when (ttsAction) {
-                                        com.psyche.memo.ui.chat.MessageTtsAction.STOP ->
-                                            com.psyche.memo.ui.chat.TtsPlayer.stop()
-
-                                        com.psyche.memo.ui.chat.MessageTtsAction.RESUME ->
-                                            com.psyche.memo.ui.chat.TtsPlayer.togglePause()
-
-                                        com.psyche.memo.ui.chat.MessageTtsAction.SPEAK ->
-                                            com.psyche.memo.ui.chat.TtsPlayer.speakAssistantReply(context, msg.content, ownerId = msg.id)
-                                    }
-                                },
-                            )
-                            Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
-                            MessageActionIcon(
-                                Lucide.Languages,
-                                "Translate",
-                                onClick = { showLanguageSheet = true },
-                            )
-                            Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
-                            MessageActionIcon(Lucide.Ellipsis, "More", onClick = onMore)
+                    // 照 Agora（`AssistantMessageContent.kt` 尾部 Box）：这条尾行**常驻**——
+                    // 流式时放呼吸圆点、结束后放操作按钮，行本身不折叠/展开
+                    // ⇒ 结束时没有任何高度跳变（用户 2026-09-24「最后那排复制出现时不要那样一下」）。
+                    if (msg.isStreaming) {
+                        Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.CenterStart) {
+                            // 呼吸圆点（颜色跟随主题 primary；自带渐显）。
+                            com.psyche.memo.ui.chat.GenerationActivityDot()
                         }
+                    } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                MessageActionIcon(Lucide.Copy, "Copy", onClick = onCopy)
+                                Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
+                                MessageActionIcon(
+                                    Lucide.RefreshCw,
+                                    "Regenerate",
+                                    // display_show_regenerate_confirm_dialog_v1（默认开）：
+                                    // 关闭时跳过确认直接重生成（CMW:1330）。
+                                    onClick = {
+                                        if (skipRegenerateConfirm) onRegenerateAssistant?.invoke()
+                                        else showRegenerateConfirm = true
+                                    },
+                                    enabled = onRegenerateAssistant != null,
+                                )
+                                Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
+                                // Speak/Stop/Resume：只有被朗读的那条消息切图标。
+                                MessageActionIcon(
+                                    when (ttsAction) {
+                                        com.psyche.memo.ui.chat.MessageTtsAction.STOP -> Lucide.CircleStop
+                                        com.psyche.memo.ui.chat.MessageTtsAction.RESUME -> Lucide.Play
+                                        else -> Lucide.Volume2
+                                    },
+                                    when (ttsAction) {
+                                        com.psyche.memo.ui.chat.MessageTtsAction.STOP -> "Stop"
+                                        com.psyche.memo.ui.chat.MessageTtsAction.RESUME -> "Resume"
+                                        else -> "Speak"
+                                    },
+                                    onClick = {
+                                        when (ttsAction) {
+                                            com.psyche.memo.ui.chat.MessageTtsAction.STOP ->
+                                                com.psyche.memo.ui.chat.TtsPlayer.stop()
+    
+                                            com.psyche.memo.ui.chat.MessageTtsAction.RESUME ->
+                                                com.psyche.memo.ui.chat.TtsPlayer.togglePause()
+    
+                                            com.psyche.memo.ui.chat.MessageTtsAction.SPEAK ->
+                                                com.psyche.memo.ui.chat.TtsPlayer.speakAssistantReply(context, msg.content, ownerId = msg.id)
+                                        }
+                                    },
+                                )
+                                Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
+                                MessageActionIcon(
+                                    Lucide.Languages,
+                                    "Translate",
+                                    onClick = { showLanguageSheet = true },
+                                )
+                                Spacer(Modifier.width(ChatStyleSpec.ACTION_GAP_DP.dp))
+                                MessageActionIcon(Lucide.Ellipsis, "More", onClick = onMore)
+                            }
                     }
                 }
                 if (showVersionSwitcher) {
