@@ -6,27 +6,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 「流式等待提示必须是列表末尾的**独立一项**」的机器守卫。
+ * 生成中提示的位置守卫（2026-09-24 改版：**照 Agora 长在助手消息尾部**）。
  *
- * RikkaHub `ChatList.kt:381-402` 把等待提示放在 `item(LoadingIndicatorKey)`（独立项，
- * 整个生成期间都在）；我们第一版渲染在**助手消息内部**，消息 parts 一变那一行就跟着
- * 消息的块布局重排 —— 工具卡一次性换态时看起来就是在跳，用户 2026-09-23
- * 「跟 rikkhub 效果不一样…在工具调用这个有点跳动」。挪出来之后要防止有人再挪回去。
+ * 历史：第一版渲染在助手消息内部（工具卡换态时跳 ✗）→ 挪成列表末尾独立项（RikkaHub 同款）；
+ * 2026-09-24 用户「这个呼吸球在输出没有每次在输入框上面呀」→ 照 Agora
+ * `AssistantMessageContent.kt:768` 改成**长在助手消息尾部**（操作行常驻：流式放圆点、
+ * 结束放复制那排按钮，行不折叠 ⇒ 无跳变），列表末尾的独立项随之删除。
  */
 class StreamingIndicatorPlacementTest {
 
     private val chatDir = File("src/main/java/com/psyche/memo/ui/chat")
 
     @Test
-    fun theIndicatorIsAListItemNotPartOfTheMessage() {
+    fun tailDotLivesInMessageRowAndStandaloneItemIsGone() {
         val content = File(chatDir, "ChatContent.kt")
         assertTrue("找不到 ${content.path}（工作目录应当是 app 模块）", content.isFile)
-        assertTrue(
-            "等待提示应当在 ChatContent 的列表里以独立 key 出现",
+        assertFalse(
+            "列表末尾的独立指示项应当已删除（圆点已改长在助手消息尾部）",
             content.readText().contains("STREAMING_INDICATOR_ITEM_KEY"),
         )
 
         val row = File(chatDir, "MessageRow.kt").readText()
+        assertTrue(
+            "助手消息尾部应当渲染呼吸圆点（GenerationActivityDot）",
+            row.contains("GenerationActivityDot("),
+        )
         assertFalse(
             "消息行里不该再渲染扫光提示（回到消息内部就会在工具调用时跳动）",
             row.contains("ThinkingShimmerText("),
