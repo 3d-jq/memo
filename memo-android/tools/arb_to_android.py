@@ -173,6 +173,30 @@ def main():
                 converted = convert_plain(text)
                 lines.append('    <string name="%s">%s</string>'
                              % (android_key, xml_escape(converted)))
+        # —— 合并保留（2026-09-24）：既有 strings.xml 里「ARB 没有的」键是 Memo 安卓侧
+        #    新增能力的文案（如「显示助手头像」开关、上下文日志的「工具纪律」来源），
+        #    整体重写会把它们删掉、应用运行时会缺资源。这里把它们**追加到末尾**：
+        #    ARB 键照常整体生成，额外键原样保留，跑两次结果一致（幂等）。
+        #    注意：新增/删除 Memo 专属文案时，直接改 ARB 之外的这份文件即可。
+        new_names = set()
+        for _ln in lines:
+            _m = re.match(r'\s*<string name="([^"]+)"', _ln)
+            if _m:
+                new_names.add(_m.group(1))
+        existing_path = os.path.join(out_dir, 'strings.xml')
+        if os.path.exists(existing_path):
+            with open(existing_path, encoding='utf-8') as _ef:
+                _body = _ef.read()
+            _added = 0
+            for _m in re.finditer(r'<string name="([^"]+)"[^>]*>(.*?)</string>', _body, re.S):
+                if _m.group(1) not in new_names:
+                    lines.insert(len(lines) - 1,
+                                 '    <string name="%s">%s</string>'
+                                 % (_m.group(1), _m.group(2)))
+                    new_names.add(_m.group(1))
+                    _added += 1
+            if _added:
+                print('%s: preserved %d non-arb memo keys' % (folder, _added))
         lines.append('</resources>')
         with open(os.path.join(out_dir, 'strings.xml'), 'w', encoding='utf-8',
                   newline='\n') as f:
