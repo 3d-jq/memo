@@ -377,9 +377,13 @@ class ChatTimelineTest {
     }
 
     @Test
-    fun settings_nonOneValueIsFalse() {
+    fun settings_bareBooleanValueIsTrue() {
+        // 布尔偏好统一走 DisplayPrefs.decodeBool："1"/"0" 与裸 true/false 都认。
+        // 旧实现只认 "1"，早期写入的裸 true 会读成「关」（侧边栏日期分组不显示的根因）。
         val s = ChatTimelineSettings.fromPrefs { "true" }
-        assertEquals(false, s.showThinkingCards)
+        assertEquals(true, s.showThinkingCards)
+        val zero = ChatTimelineSettings.fromPrefs { "0" }
+        assertEquals(false, zero.showThinkingCards)
     }
 
     // --- 助手消息头 / 操作行的键（settings_provider.dart:1070-1119） ---
