@@ -69,7 +69,6 @@ import com.composables.icons.lucide.Palette
 import com.composables.icons.lucide.TextSelect
 import com.composables.icons.lucide.WrapText
 import com.psyche.memo.AppContainerImpl
-import com.psyche.memo.ui.chat.ThinkingIndicatorSettings
 import com.psyche.memo.ui.R as UiR
 import kotlin.math.roundToInt
 
@@ -106,27 +105,12 @@ fun RenderingSettingsScreen(
     // 已存值与草稿分离：解析失败回退当前已存值（C4）。
     var collapseLines by remember { mutableIntStateOf(2) }
     var collapseLinesText by remember { mutableStateOf("2") }
-    // 流式等待提示的三个自定义项（我们的新键，不来自原项目）。
-    var indicatorFontSize by remember { mutableFloatStateOf(ThinkingIndicatorSettings.DEFAULT_FONT_SP) }
-    var indicatorColorArgb by remember { mutableStateOf<Int?>(null) }
-    var indicatorPhrases by remember {
-        mutableStateOf(com.psyche.memo.ui.chat.ThinkingPhrases.ALL)
-    }
-    var sizeSheetVisible by remember { mutableStateOf(false) }
-    var colorSheetVisible by remember { mutableStateOf(false) }
-    var phrasesSheetVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         // LaunchedEffect 体默认跑在组合线程上，里面的 readJson 是真会打 SQLite 的
         withContext(Dispatchers.IO) {
             val stored = container.preferenceRepository.readJson("display_auto_collapse_code_block_lines_v1")
             collapseLines = (stored?.toIntOrNull() ?: 2).coerceIn(1, 999)
             collapseLinesText = collapseLines.toString()
-            val indicator = ThinkingIndicatorSettings.fromPrefs { key ->
-                container.preferenceRepository.readJson(key)
-            }
-            indicatorFontSize = indicator.fontSizeSp
-            indicatorColorArgb = indicator.colorArgb
-            indicatorPhrases = indicator.phrases
         }
 }
     // 源码 L1903-1924 —— _commit：解析失败回落当前已存值，clamp 1-999。
@@ -294,257 +278,9 @@ fun RenderingSettingsScreen(
                 }
             }
             item(key = "tail") { Spacer(Modifier.height(12.dp)) }
-            // 流式等待提示（扫光文字）—— 用户 2026-09-13「加一个设置功能，让用户可以
-            // 自定义文字大小、颜色、提示词」。这个指示器本身是有意偏离原版的（原版三点
-            // 脉动），所以这三个键在原项目里没有对应物。
-            item(key = "h_thinking") {
-                SectionHeader(stringResource(UiR.string.display_settings_page_section_thinking_indicator))
-            }
-            item(key = "c_thinking") {
-                SettingsSectionCard {
-                    // 形态开关已移除（用户 2026-09-23「只要这个呼吸圆点了，不要改的入口了」）：
-                    // 流式提示固定是**呼吸圆点**（移植 Agora），这里不再提供形态选择。
-                    // 下面三行（字号/颜色/提示词）仍服务于「上下文压缩中」那条扫光文字。
-                    SettingsRow(
-                        com.composables.icons.lucide.Lucide.CaseSensitive,
-                        stringResource(UiR.string.display_settings_page_thinking_indicator_font_size_title),
-                        detailText = "${indicatorFontSize.roundToInt()}",
-                        onTap = { sizeSheetVisible = true },
-                    )
-                    SettingsIosDivider()
-                    SettingsRow(
-                        com.composables.icons.lucide.Lucide.Palette,
-                        stringResource(UiR.string.display_settings_page_thinking_indicator_color_title),
-                        detailText = indicatorColorArgb
-                            ?.let { com.psyche.memo.ui.chat.ThinkingIndicatorSettings.toHex(it) }
-                            ?: stringResource(UiR.string.display_settings_page_thinking_indicator_color_follow_theme),
-                        onTap = { colorSheetVisible = true },
-                    )
-                    SettingsIosDivider()
-                    SettingsRow(
-                        com.composables.icons.lucide.Lucide.MessageCircle,
-                        stringResource(UiR.string.display_settings_page_thinking_indicator_phrases_title),
-                        detailText = indicatorPhrases.take(3).joinToString("、") +
-                            if (indicatorPhrases.size > 3) " …" else "",
-                        onTap = { phrasesSheetVisible = true },
-                    )
-                }
-            }
-            item(key = "tail2") { Spacer(Modifier.height(12.dp)) }
         }
     }
 
-    // ---- 文字大小 ----
-    if (sizeSheetVisible) {
-        ModalBottomSheet(
-            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
-sheetState = rememberMemoSheetState(),
-            onDismissRequest = { sizeSheetVisible = false },
-            dragHandle = null,
-        ) {
-            MemoSheetHandle()
-            var value by remember { mutableFloatStateOf(indicatorFontSize) }
-            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "${ThinkingIndicatorSettings.MIN_FONT_SP.roundToInt()}",
-                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.7f)),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    MemoSlider(
-                        value = value,
-                        onValueChange = { raw ->
-                            value = ThinkingIndicatorSettings.clampFontSize(raw.toFloat())
-                            indicatorFontSize = value
-                            container.preferenceRepository.writeJson(
-                                ThinkingIndicatorSettings.FONT_SIZE_KEY,
-                                value.toString(),
-                            )
-                        },
-                        valueRange = ThinkingIndicatorSettings.MIN_FONT_SP..ThinkingIndicatorSettings.MAX_FONT_SP,
-                        modifier = Modifier.weight(1f),
-                        valueLabel = { "${it.roundToInt()}" },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    com.psyche.memo.ui.slider.SliderValueLabel(
-                        text = "${value.roundToInt()}",
-                        // 定宽（最宽是最大字号 "28"）：数值变宽不会挤短左边的 slider。
-                        widest = "${ThinkingIndicatorSettings.MAX_FONT_SP.roundToInt()}",
-                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface),
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                // 实时预览：真的用那个组件，改完立刻看到效果。
-                com.psyche.memo.ui.chat.ThinkingShimmerText(
-                    phrases = indicatorPhrases,
-                    fontSize = value.sp,
-                    colorArgb = indicatorColorArgb,
-                )
-            }
-        }
-    }
 
-    // ---- 文字颜色 ----
-    if (colorSheetVisible) {
-        ModalBottomSheet(
-            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
-sheetState = rememberMemoSheetState(),
-            onDismissRequest = { colorSheetVisible = false },
-            dragHandle = null,
-        ) {
-            MemoSheetHandle()
-            var hex by remember {
-                mutableStateOf(indicatorColorArgb?.let { ThinkingIndicatorSettings.toHex(it) } ?: "")
-            }
-            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
-                // 跟随主题（默认）+ 常用预设色。
-                listOf<Pair<String, Int?>>(
-                    stringResource(UiR.string.display_settings_page_thinking_indicator_color_follow_theme) to null,
-                    "#6750A4" to ThinkingIndicatorSettings.parseColor("#6750A4"),
-                    "#1B6EF3" to ThinkingIndicatorSettings.parseColor("#1B6EF3"),
-                    "#00897B" to ThinkingIndicatorSettings.parseColor("#00897B"),
-                    "#E65100" to ThinkingIndicatorSettings.parseColor("#E65100"),
-                    "#C2185B" to ThinkingIndicatorSettings.parseColor("#C2185B"),
-                    "#5E35B1" to ThinkingIndicatorSettings.parseColor("#5E35B1"),
-                ).forEach { (label, argb) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                indicatorColorArgb = argb
-                                if (argb == null) {
-                                    container.preferenceRepository.remove(ThinkingIndicatorSettings.COLOR_KEY)
-                                } else {
-                                    container.preferenceRepository.writeJson(
-                                        ThinkingIndicatorSettings.COLOR_KEY,
-                                        ThinkingIndicatorSettings.toHex(argb),
-                                    )
-                                }
-                                colorSheetVisible = false
-                            }
-                            .padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (argb == null) {
-                            Icon(
-                                com.composables.icons.lucide.Lucide.Palette,
-                                contentDescription = null,
-                                tint = cs.onSurface.copy(alpha = 0.9f),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .background(Color(argb), androidx.compose.foundation.shape.RoundedCornerShape(MemoRadius.SMALL_DP.dp))
-                                    .border(
-                                        0.8.dp,
-                                        cs.outlineVariant.copy(alpha = 0.42f),
-                                        androidx.compose.foundation.shape.RoundedCornerShape(MemoRadius.SMALL_DP.dp),
-                                    ),
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Text(label, style = TextStyle(fontSize = 15.sp, color = cs.onSurface))
-                        Spacer(Modifier.weight(1f))
-                        if (indicatorColorArgb == argb) {
-                            Icon(
-                                com.composables.icons.lucide.Lucide.Check,
-                                contentDescription = null,
-                                tint = cs.primary,
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                // 自定义色：填 #RRGGBB 后回车应用（与本工程既有的颜色输入一致）。
-                OutlinedTextField(
-                    value = hex,
-                    onValueChange = { hex = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("#RRGGBB") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = cs.surfaceCardColorCompat(),
-                        unfocusedContainerColor = cs.surfaceCardColorCompat(),
-                        focusedBorderColor = cs.primary,
-                        unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.18f),
-                    ),
-                    keyboardOptions = KeyboardOptions(
-                        imeAction = ImeAction.Done,
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            ThinkingIndicatorSettings.parseColor(hex)?.let { argb ->
-                                indicatorColorArgb = argb
-                                container.preferenceRepository.writeJson(
-                                    ThinkingIndicatorSettings.COLOR_KEY,
-                                    ThinkingIndicatorSettings.toHex(argb),
-                                )
-                                colorSheetVisible = false
-                            }
-                        },
-                    ),
-                )
-            }
-        }
-    }
 
-    // ---- 提示词 ----
-    if (phrasesSheetVisible) {
-        ModalBottomSheet(
-            containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
-sheetState = rememberMemoSheetState(),
-            onDismissRequest = { phrasesSheetVisible = false },
-            dragHandle = null,
-        ) {
-            MemoSheetHandle()
-            var text by remember { mutableStateOf(indicatorPhrases.joinToString("\n")) }
-            fun save(list: List<String>) {
-                val cleaned = list.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-                val next = cleaned.ifEmpty { com.psyche.memo.ui.chat.ThinkingPhrases.ALL }
-                indicatorPhrases = next
-                container.preferenceRepository.writeJson(
-                    ThinkingIndicatorSettings.PHRASES_KEY,
-                    ThinkingIndicatorSettings.encodePhrases(next),
-                )
-                phrasesSheetVisible = false
-            }
-            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 18.dp)) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 140.dp),
-                    placeholder = { Text(stringResource(UiR.string.display_settings_page_thinking_indicator_phrases_hint)) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = cs.surfaceCardColorCompat(),
-                        unfocusedContainerColor = cs.surfaceCardColorCompat(),
-                        focusedBorderColor = cs.primary,
-                        unfocusedBorderColor = cs.outlineVariant.copy(alpha = 0.18f),
-                    ),
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = {
-                        save(com.psyche.memo.ui.chat.ThinkingPhrases.ALL)
-                    }) {
-                        Text(
-                            stringResource(UiR.string.display_settings_page_thinking_indicator_phrases_reset),
-                            color = cs.onSurface.copy(alpha = 0.7f),
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { save(text.split('\n', ',', '，', '、')) }) {
-                        Text(stringResource(UiR.string.model_detail_sheet_confirm_button), color = cs.primary)
-                    }
-                }
-            }
-        }
-    }
 }

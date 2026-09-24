@@ -976,12 +976,6 @@
     <string name="display_settings_page_show_user_timestamp_title">显示用户时间戳</string>
     <string name="display_settings_page_theme_color_title">主题颜色</string>
     <string name="display_settings_page_theme_settings_title">主题设置</string>
-    <string name="display_settings_page_thinking_indicator_color_follow_theme">跟随主题</string>
-    <string name="display_settings_page_thinking_indicator_color_title">文字颜色</string>
-    <string name="display_settings_page_thinking_indicator_font_size_title">文字大小</string>
-    <string name="display_settings_page_thinking_indicator_phrases_hint">每行一句</string>
-    <string name="display_settings_page_thinking_indicator_phrases_reset">恢复默认</string>
-    <string name="display_settings_page_thinking_indicator_phrases_title">提示词</string>
     <string name="display_settings_page_tray_minimize_on_close_title">关闭时最小化到托盘</string>
     <string name="display_settings_page_tray_show_tray_title">显示托盘图标</string>
     <string name="display_settings_page_tray_title">托盘</string>

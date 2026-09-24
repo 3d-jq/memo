@@ -974,12 +974,6 @@ Updating Memo first is the safer choice.</string>
     <string name="display_settings_page_show_user_timestamp_title">Show User Timestamp</string>
     <string name="display_settings_page_theme_color_title">Theme Color</string>
     <string name="display_settings_page_theme_settings_title">Theme Settings</string>
-    <string name="display_settings_page_thinking_indicator_color_follow_theme">Follow theme</string>
-    <string name="display_settings_page_thinking_indicator_color_title">Text color</string>
-    <string name="display_settings_page_thinking_indicator_font_size_title">Text size</string>
-    <string name="display_settings_page_thinking_indicator_phrases_hint">One phrase per line</string>
-    <string name="display_settings_page_thinking_indicator_phrases_reset">Reset to default</string>
-    <string name="display_settings_page_thinking_indicator_phrases_title">Phrases</string>
     <string name="display_settings_page_tray_minimize_on_close_title">Minimize to tray on close</string>
     <string name="display_settings_page_tray_show_tray_title">Show tray icon</string>
     <string name="display_settings_page_tray_title">System Tray</string>
