@@ -45,7 +45,27 @@ jobs:
             "ndk;28.2.13676358" "cmake;3.22.1"
 
       - name: Lint (all modules)
-        run: ./gradlew --console=plain --continue lintDebug
+        run: |
+          set -o pipefail
+          ./gradlew --console=plain --continue lintDebug 2>&1 | tee /tmp/lint.log
+
+      # CI 原始日志下载需要更高权限（普通 PAT 401）。把真正的错误打成 ::error 注解，
+      # 用 check-runs annotations 就能公开读到（.workbuddy/tools/ci_annotations.py）。
+      - name: Surface lint failure details
+        if: failure()
+        shell: bash
+        run: |
+          if [ ! -f /tmp/lint.log ]; then
+            echo "::error::lint.log 不存在（步骤可能在 tee 之前就挂了）"
+            exit 0
+          fi
+          grep -nE "Error:|e: |FAILURE:|Exception|OutOfMemory|Lint found|What went wrong" /tmp/lint.log | head -40 | while IFS= read -r line; do
+            echo "::error::${line:0:500}"
+          done
+          echo "::error::—— lint.log 最后 20 行 ——"
+          tail -20 /tmp/lint.log | while IFS= read -r line; do
+            echo "::error::${line:0:500}"
+          done
 
       - name: Unit tests (all modules)
         shell: bash
