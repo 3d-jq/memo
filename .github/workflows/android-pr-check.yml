@@ -101,15 +101,14 @@ jobs:
           done
           exit $missing
 
+      # 2026-09-24 起项目与上游 Flutter 完全解耦：strings.xml 直接手维（无生成器）。
+      # 只保留 drift_schema 的生成检查（输入 drift_schemas/ 在本仓内）。
       - name: Verify generated resources are committed
         shell: bash
         run: |
           set -euo pipefail
-          python3 tools/arb_to_android.py
-          python3 tools/settings_keys_gen.py
-          python3 tools/palettes_gen.py
           python3 tools/drift_schema_to_sql.py
-          git diff --exit-code -- core/ui/src/main core/data/src/main || {
+          git diff --exit-code -- core/data/src/main || {
             echo "::error:: Generated resources are stale. Run the generators in tools/ and commit the output."
             exit 1
           }
