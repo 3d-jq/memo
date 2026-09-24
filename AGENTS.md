@@ -139,8 +139,10 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
   ```
   which runs aggregate `lintDebug` + `testDebugUnitTest` across **all** modules,
   `:app:assembleDebug`, then two presence checks: every module with sources must
-  have at least one test, and all four generators must produce no diff.
-  CI `.github/workflows/android-pr-check.yml` enforces the same gates.
+  have at least one test, and the committed SQLite DDL must regenerate with no diff
+  (`tools/drift_schema_to_sql.py` — the **only** generator left; 文案/色板/偏好键手维).
+  CI lives in the published repo only: `memo-public/.github/workflows/android-pr-check.yml`
+  enforces the same gates (开发仓的 `.github` 已随上游移出).
 - **对话界面卡顿审计（2026-09-15，用户「点击到底部按钮对话界面会闪」+「对比原项目和 rikkhub」）**：完整报告 `memo-android/docs/CHAT_JANK_AUDIT_2026-09-15.md`，结论摘要见 PORTING §5.14。三条硬规则：① **滚动命令不许传 `Int.MAX_VALUE` 当偏移**（会被原样写进滚动位置 → 下一帧再夹一次 → 界面闪）；「到底」= 滚**末尾哨兵项** `SCROLL_BOTTOM_ITEM_KEY`（RikkaHub `ChatList.kt:374 ScrollBottomKey` 同款，`scrollTimelineToBottom()`），`ChatScrollOffsetTest` 守卫；② **消息行必须保持 skippable**（`app/compose_compiler_config.conf` 把 `UiMessage`/`ChatTimelineSettings`/`Assistant`/`MessagePart`/`Conversation`/`ProviderConfig` 声明 stable；`ChatRowRecompositionTest` + `ChatRecompositionProbe` 断言「碰列表/翻 `pointerDown`·`following`·`navVisible` 不重组合任何消息行」）；③ **组合期不许查库**（顶栏 `+` 的三态判据用 `ChatViewModel.tailLoaded + messages.isEmpty()` 的 `newActionToggleable`，别再回去调 `messageDao.count(id)`；`CompositionThreadingTest` 守卫）。刻意差异：到底按钮走瞬移不做动画（Compose 侧没有 `maxScrollExtent` 等价值）
 - **Composition must stay cheap** (2026-09-15 sweep, see PORTING.md §5.13): no
   SQLite / file / `ContentResolver` call in a `@Composable` body — including
@@ -168,10 +170,13 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
   另外 **CI 上跳过 3 个"只在 CI 会卡"的类**（`ChatTimelineWindowTest` / `ChatHeaderAssistantTest` /
   `DrawerAndChatUiTest`，见根 `build.gradle.kts` 的 `ciSkippedTests` + `-PciSkipFlakyTests`）——
   它们**仍然在本地门禁里跑**；名单由 `CiSkipListTest` 守着，不要往里面加"只是偶尔红一次"的类。
-- Generated resources are committed and must stay in sync: ARB→strings via
-  `tools/arb_to_android.py` (brandifies `Kelivo`/`kelivo`→`Memo`/`memo`), drift
-  schema→SQL via `tools/drift_schema_to_sql.py`, palettes via
-  `tools/palettes_gen.py`, settings keys via `tools/settings_keys_gen.py`.
+- Only one generated resource is left: the SQLite DDL — `tools/drift_schema_to_sql.py`
+  reads `drift_schemas/app_database/drift_schema_v3.json`（开发仓在外层、发布仓在仓根，
+  脚本两种布局都自己找）→ `core/data/src/main/assets/memo_schema_v3.sql`，头部注释写的是
+  **逻辑路径**（`drift_schemas/...`）而不是相对 `tools/` 的 `../`，否则两棵树互相报假 diff。
+  三份 `strings.xml`、`Palettes.kt`、`SettingsKeyRegistry.kt` 自 2026-09-24 解耦起**直接手维**，
+  文件头已改掉 "GENERATED … DO NOT EDIT" 的旧告示；`arb_to_android.py` / `palettes_gen.py` /
+  `settings_keys_gen.py` / `upstream_root.py` 已删，别再往门禁里加它们。
 - Modules: `app` (UI/nav/container), `core:common`, `core:ui` (theme + l10n),
   `core:data` (SQLite DAO + settings), `core:llm` (OkHttp SSE + OpenAI/Claude/
   Gemini clients), `feature:*` (assistant/chat/settings/utility — skeleton so far).

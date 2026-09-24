@@ -1,7 +1,7 @@
 NOTICE
 ======
 
-Memo — native Android client
+Memo — native Android LLM chat client
 Copyright (C) 2026 Memo contributors
 
 This program is free software licensed under the GNU Affero General Public
@@ -10,40 +10,34 @@ License, version 3.0 (see LICENSE).
 Third-party attribution
 -----------------------
 
-This repository is a **derivative work** of the Flutter application **kelivo**
-by Chevey339, licensed under the GNU Affero General Public License v3.0.
+Memo's product shape, interface language and interaction design originate from
+the Flutter application **kelivo** by Chevey339, also licensed under the GNU
+Affero General Public License v3.0.
 Source: https://github.com/Chevey339/kelivo
 
-Nearly everything in this repository was translated 1:1 from that project's
-Dart source — screens, layout metrics, string content, iconography and
-behaviour. The translation is documented per-batch in `docs/PORTING.md`, which
-names the Dart file and line range behind each Kotlin composable, and records
-every place where this port deliberately deviates from upstream.
+Memo re-implements that design as a native Kotlin / Jetpack Compose application
+for Android, and extends it with native-only behaviour. Source-level comments
+carry provenance markers naming the upstream file or component an
+implementation was derived from, so individual decisions can be traced back.
 
-Native-side implementation details (platform integrations, provider/streaming
-plumbing, theming) additionally reference **RikkaHub**, also licensed under the
-GNU Affero General Public License v3.0. Source:
-https://github.com/rikkahub/rikkahub
+Native platform integrations and several capabilities additionally reference
+**RikkaHub**, also licensed under AGPL-3.0: network TTS and ASR, theme presets,
+agent skills, the proot sandbox and its terminal, plus notifications, in-app
+updates, permission handling and file sharing.
+Source: https://github.com/rikkahub/rikkahub
 
-Generated-resource inputs
--------------------------
+Note that kelivo's own interface design was in turn inspired by RikkaHub, so
+these lines converge visually.
 
-`upstream/` holds the subset of the kelivo Dart source that this repository's
-code generators read:
-
-    upstream/lib/l10n/*.arb                        UI strings  -> res/values*/strings.xml
-    upstream/lib/theme/palettes.dart               palettes    -> core/ui/.../Palettes.kt
-    upstream/lib/core/database/business_*.dart     settings keys -> SettingsKeyRegistry.kt
-    upstream/drift_schemas/.../drift_schema_v3.json  SQLite DDL -> assets/memo_schema_v3.sql
-
-They are upstream copyright works redistributed here under AGPL-3.0 so that the
-quality gate can run from a standalone checkout. They are inputs only — nothing
-in this repository is compiled from Dart.
+The context-compaction threshold mechanism follows **opencode**.
+Source: https://github.com/sst/opencode
 
 Data compatibility
 ------------------
 
-Despite sharing a schema lineage, this app is **not** data-compatible with the
-Flutter original: the database is `memo.db` and the application id is
-`com.psyche.memo`. The SQLite DDL is generated from upstream's drift schema
-because it is a proven schema, not for interoperability.
+Memo is a standalone application: the application id is `com.psyche.memo` and
+the database is `memo.db`. It is **not** data-compatible with the Flutter
+original and backups are not interchangeable. The SQLite DDL in
+`core/data/src/main/assets/memo_schema_v3.sql` is generated from
+`drift_schemas/app_database/drift_schema_v3.json`; that schema is kept because
+it is proven, not for interoperability.

@@ -5,7 +5,7 @@ import org.junit.Test
 
 /**
  * ICU-plural evaluator tests. ARB plural messages are emitted verbatim into
- * strings.xml (arb_to_android.py) and Android's String.format cannot evaluate
+ * strings.xml as-is and Android's String.format cannot evaluate
  * `{n, plural, …}`, so IcuPlural does. These assert the exact rendering the
  * tool-card question count needs.
  */

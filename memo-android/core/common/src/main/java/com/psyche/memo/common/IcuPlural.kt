@@ -1,8 +1,8 @@
 package com.psyche.memo.common
 
 /**
- * Flutter 的 intl 复数消息在 ARB→strings.xml 生成时按原文落进 `<string>`
- * （arb_to_android.py），Android 的 `String.format` 不认 `{n, plural, …}`，
+ * Flutter 的 intl 复数消息按原文落在 strings.xml 的 `<string>` 里，
+ * Android 的 `String.format` 不认 `{n, plural, …}`，
  * 所以在这里按 ICU 子集求值：`=N` 精确匹配优先，其次英文类别 one/other，
  * 最后 other / 首个分支。分支体与命名占位符都可嵌套。
  */

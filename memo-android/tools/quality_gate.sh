@@ -9,7 +9,7 @@
 #   2. testDebugUnitTest    — JVM unit tests, every module
 #   3. :app:assembleDebug   — build
 #   4. every module with sources has at least one test file
-#   5. generated resources match their generators (arb/settings-keys/palettes/drift schema)
+#   5. the committed SQLite DDL matches drift_schemas/  — the only generator left
 #
 # Env notes: system JAVA_HOME points at jdk-13 (breaks AGP) and the default
 # GRADLE_USER_HOME may sit under a non-ASCII user home (e.g. `C:\Users\<你的名字>\.gradle`),
@@ -64,7 +64,9 @@ done
 [ "$missing" -eq 0 ] || exit 1
 
 echo "==> [5/5] Generated resources are up to date"
-GENERATED_PATHS=(core/ui/src/main core/data/src/main)
+# 只剩数据库 DDL 是生成的（输入 drift_schemas/ 就在仓内）。界面文案、色板、偏好键表
+# 自 2026-09-24 与上游解耦后直接手维 —— 那三个生成器没有输入，已随上游一起移出仓库。
+GENERATED_PATHS=(core/data/src/main)
 # core.autocrlf=true smudges checked-out text to CRLF while the committed blobs
 # are LF, so hash content with carriage returns stripped; otherwise the first
 # regeneration looks like drift.
@@ -76,9 +78,6 @@ hash_generated() {
 }
 
 before=$(hash_generated)
-python tools/arb_to_android.py
-python tools/settings_keys_gen.py
-python tools/palettes_gen.py
 python tools/drift_schema_to_sql.py
 if [ "$before" != "$(hash_generated)" ]; then
     echo "    FAIL generated resources are stale — commit the regenerated files above"
