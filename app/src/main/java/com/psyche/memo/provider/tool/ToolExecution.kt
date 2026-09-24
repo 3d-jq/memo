@@ -27,9 +27,16 @@ object ToolRunner {
      *
      * `render_mermaid` 自己内部就有 25s 超时（离屏 WebView 渲染），外面必须给得更宽，
      * 否则会出现「外面先超时、里面还在跑」的双重超时。
+     *
+     * `get_current_location` 外面这层要盖得住**里面全部**等待：权限框最多等人 90 秒
+     * （[com.psyche.memo.ui.chat.LocationPermissionService]）+ 实时定位 10 秒。
+     * 用默认 20 秒会把还开着的系统权限框判成「工具超时」—— 用户点允许时工具早返回了。
      */
     private val TIMEOUT_OVERRIDES = mapOf(
         com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME to 35_000L,
+        com.psyche.memo.provider.LocationTool.TOOL_NAME to
+            com.psyche.memo.ui.chat.LocationPermissionService.DEFAULT_TIMEOUT_MS +
+            com.psyche.memo.provider.LocationTool.FIX_TIMEOUT_MS + 15_000L,
     )
 
     /** 工具结果的字符上限（约 6k tokens 量级）：超了截断并附 `truncated` 说明。 */
@@ -62,6 +69,7 @@ object ToolRunner {
                     code = "tool_crashed",
                     message = e.message ?: (e::class.simpleName ?: "unknown error"),
                     tool = tool,
+                    instruction = ToolResults.REPORT_FAILURE,
                 ),
             )
         }
@@ -70,8 +78,14 @@ object ToolRunner {
             value == null -> cap(
                 ToolResults.error(
                     code = "tool_timeout",
-                    message = "工具在 ${timeoutMs / 1000}s 内没有返回结果；请简化参数后重试。",
+                    // 超时是**结果未知**：副作用可能已经发生了。说成「失败」会让模型重试
+                    // （可能重复执行），说成「成功」就是骗它 —— dsh 对中断的调用合成
+                    // `is_error` + "outcome unknown" 就是这个道理。
+                    message = "`$tool` did not return within ${timeoutMs / 1000}s.",
                     tool = tool,
+                    instruction = "The outcome is unknown: the tool may or may not have taken " +
+                        "effect. Do not assume it succeeded and do not repeat the same call " +
+                        "blindly — verify with a read-only call, or tell the user it timed out.",
                 ),
             )
             else -> cap(value)
@@ -113,6 +127,27 @@ object ToolRunner {
  */
 object ToolResults {
 
+    /**
+     * 通用补救句 —— **每条错误都必须带一个 `instruction`**（dsh 的 post-execute 块：
+     * 报错时把「接下来怎么办」一起递回去，否则模型只会原地再敲一次同一颗调用）。
+     *
+     * 关键约束：错误绝不能被读成成功，所以话里明说「如实回报，别把想要的结果当成已发生」。
+     */
+    const val REPORT_FAILURE =
+        "This call did not succeed. Tell the user what failed and what the error said; " +
+            "do not describe the intended result as if it had happened."
+
+    /** 用户点了拒绝 / 不答 —— 重敲同一颗调用是最常见的坏行为。 */
+    const val USER_DECLINED =
+        "The user declined this action. Do not retry the same call; ask what they would " +
+            "prefer, or offer a way that does not need this permission."
+
+    /** 兜底补救：参数错了改参数，改不了就如实说。 */
+    const val ADJUST_AND_RETRY =
+        "Read the error, then either retry with corrected arguments or tell the user what " +
+            "failed — never describe the intended result as if it happened."
+
+
     fun ok(
         tool: String,
         type: String? = null,
@@ -131,7 +166,7 @@ object ToolResults {
         code: String,
         message: String,
         tool: String,
-        instruction: String? = null,
+        instruction: String,
         type: String = "tool_error",
     ): String = buildJsonObject {
         put("type", JsonPrimitive(type))
@@ -139,6 +174,6 @@ object ToolResults {
         put("error", JsonPrimitive(code))
         put("message", JsonPrimitive(message))
         put("tool", JsonPrimitive(tool))
-        instruction?.let { put("instruction", JsonPrimitive(it)) }
+        put("instruction", JsonPrimitive(instruction))
     }.toString()
 }

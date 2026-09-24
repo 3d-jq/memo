@@ -835,14 +835,17 @@ object MemoryTools {
         instruction = "Use memory_read or memory_search_profile to obtain a valid id, or call memory_update to write a new entry instead of editing a missing one.",
     )
 
+    /**
+     * 错误形状只有一个生产者（[ToolResults]）：`type=tool_error` + `status=error` + `tool` +
+     * **必带补救句**。没有兜底句时模型拿到「失败了」却不知道下一步，就会原地重敲。
+     */
     private fun toolError(error: String, message: String, tool: String, instruction: String? = null): String =
-        buildJsonObject {
-            put("type", "tool_error")
-            put("error", error)
-            put("message", message)
-            put("tool", tool)
-            if (instruction != null) put("instruction", instruction)
-        }.toString()
+        com.psyche.memo.provider.tool.ToolResults.error(
+            code = error,
+            message = message,
+            tool = tool,
+            instruction = instruction ?: com.psyche.memo.provider.tool.ToolResults.ADJUST_AND_RETRY,
+        )
 
     /** _parseMemoryType：非法值返回 null（MemoryType.from 会回落 identity，不可用）。 */
     private fun parseType(raw: String?): MemoryType? {

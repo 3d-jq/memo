@@ -518,8 +518,23 @@ private fun MarkdownNode(
             } else {
                 val inlineContent = mutableMapOf<String, InlineTextContent>()
                 val annotated = renderInline(node, plainTexts, citation, inlineContent)
+                // 流式尾部的**逐字渐显**（Agora `StreamingGlyphFade`）：只有「本文档最后一个
+                // 节点」且消息行给了淡入作用域时才淡。时钟与出生表都只活在这一个 Text 的
+                // 组合区里 —— 上移到消息行等于每 40ms 重组合整条消息（见该文件顶部的性能契约）。
+                val fadeScope = LocalStreamTailFade.current
+                val fading = fadeScope != null && node.next == null
+                val fadeNow = rememberStreamFadeClock(active = fading)
+                val faded = if (fadeScope != null && fading) {
+                    annotated.withStreamTailFade(
+                        birthMs = fadeScope.tracker.birthTimes(annotated.text, fadeNow),
+                        nowMs = fadeNow,
+                        color = LocalContentColor.current,
+                    )
+                } else {
+                    annotated
+                }
                 Text(
-                    text = annotated,
+                    text = faded,
                     inlineContent = inlineContent,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = baseFontSize.sp,

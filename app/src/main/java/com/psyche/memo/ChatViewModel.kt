@@ -786,7 +786,10 @@ class ChatViewModel(
                 }
             }
             val tools = offeredTools()
-            val systemParts = buildSystemPromptParts(assistant, hasTools = tools.isNotEmpty())
+            val systemParts = buildSystemPromptParts(
+                assistant,
+                offeredToolNames = tools.map { it.name },
+            )
             val used = com.psyche.memo.common.SessionCompaction.estimateRequest(
                 system = com.psyche.memo.provider.prompt.assembleSystemPrompt(systemParts),
                 messages = window,
@@ -1581,7 +1584,10 @@ class ChatViewModel(
                 }
 
                 val tools = offeredTools()
-                val systemParts = buildSystemPromptParts(assistant, hasTools = tools.isNotEmpty())
+                val systemParts = buildSystemPromptParts(
+                    assistant,
+                    offeredToolNames = tools.map { it.name },
+                )
 
                 // ---- 上下文压缩（opencode packages/core/src/session/compaction.ts）----
                 // 阈值：estimate(system + messages + tools) > 窗口 − max(输出预算, buffer)
@@ -2064,6 +2070,9 @@ class ChatViewModel(
             container = container,
             isTemporary = isTemporary,
         )
+        // 连续重复调用检测（照 deepseek-harness 的 guard/repeat-tool-reminder）：
+        // **每次生成一个新实例** ⇒ 用户真发了新消息就归零，跨发言的重复不算死循环。
+        val repeatGuard = com.psyche.memo.provider.tool.RepeatCallGuard()
         val providerId = selectedProviderId.value
         val modelId = selectedModelId.value
         // chat_api_helpers.dart:137-153 effectiveModelInfo —— 名称推断**叠加**
@@ -2255,6 +2264,9 @@ class ChatViewModel(
             // 生成类工具的产物（图片 / 视频）先攒着，等工具卡 fold 完再紧跟其后并进
             // **同一条**助手消息（用户 2026-09-17「生成结果再开一个输出…好割裂呀」）。
             val generatedParts = mutableListOf<com.psyche.memo.data.model.MessagePart>()
+            val nudges = mutableListOf<String>()
+            // 本轮开始前的累计 parts（每颗工具跑完都要用它 + 本轮已 fold 的结果重拼一次）。
+            val carriedParts = allParts.toList()
             val results = calls.map { call ->
                 val images = mutableListOf<com.psyche.memo.data.model.ToolImage>()
                 val result = toolHandler.handle(
@@ -2262,13 +2274,21 @@ class ChatViewModel(
                     parseToolArguments(call.arguments),
                     call.id,
                 ) { images += it }
+                // 执行**之后**才计数（上游在 post-execute 观察）：被拒绝、被中断的调用
+                // 同样在原地打转，那正是要打断的循环。
+                repeatGuard.observe(call.name, call.arguments)?.let { nudges += it }
                 if (call.name in com.psyche.memo.provider.generation.MEDIA_TOOL_NAMES) {
                     generatedParts += com.psyche.memo.provider.generation.generatedMediaParts(result)
                 }
                 roundHandler.foldToolResult(call.id, JsonPrimitive(result), images)
+                // **每颗跑完就并一次**：用户在这之后点停止，已经执行过的工具仍留在 parts 里
+                //（界面上看得到那张卡与结果，落库也看得到）。原先是整个 map 跑完才并，
+                // 中途取消就把「真的做过」的证据整批丢掉 —— 「说了做了其实没做」的另一半根因。
+                allParts.clear()
+                allParts += carriedParts
+                allParts += roundHandler.parts
                 result to images
             }
-            allParts += roundHandler.parts
             // 产物紧跟工具卡（本轮 fold 出来的 part 之后），不再单开一条消息。
             allParts += generatedParts
             allSegments += roundHandler.reasoningSegments
@@ -2300,6 +2320,18 @@ class ChatViewModel(
                         toolImages = results[index].second.map {
                             LlmImage(uri = it.uri, mime = it.mime)
                         },
+                    ),
+                )
+            }
+            // 重复调用提醒：工具结果**之后**补一轮带框上下文（上游把它做成
+            // `source={kind:'plugin',form:'notice'}` 的 user 消息）。只提醒不否决 ——
+            // 模型照样看到那次调用的真实结果，只是多一句「你在原地打转」。
+            if (nudges.isNotEmpty()) {
+                history.add(
+                    LlmMessage(
+                        role = "user",
+                        content = "<system-reminder>\n" +
+                            nudges.joinToString("\n\n") + "\n</system-reminder>",
                     ),
                 )
             }
@@ -2613,9 +2645,11 @@ class ChatViewModel(
     internal suspend fun buildSystemPromptParts(
         assistant: com.psyche.memo.data.model.Assistant?,
         /**
-         * 这一轮**有没有递给模型任何工具**（`offeredTools().isNotEmpty()`）。有工具才注入
-         * [toolRulesBlock] —— 没工具时那几条规则只会占上下文。
+         * 这一轮**实际递给模型的工具名**（`offeredTools().map { it.name }`）。
+         * 空 = 不注入工具纪律；里面的路由句也**只写这里有的名字** —— 告诉模型一颗
+         * 列表里没有的工具，比不告诉更糟（见 [com.psyche.memo.provider.ToolRules]）。
          */
+        offeredToolNames: Collection<String> = emptyList(),
         hasTools: Boolean = false,
     ): List<Pair<ContextSource, String>> {        val parts = mutableListOf<Pair<ContextSource, String>>()
         fun add(source: ContextSource, text: String?) {
@@ -2625,9 +2659,9 @@ class ChatViewModel(
         // `{cur_date}` / `{nickname}` / `{assistant_name}` … 12 个变量在这里替换
         // （助手编辑页「可用变量」列的就是它们）。
         add(ContextSource.systemPrompt, resolveSystemPromptVariables(assistant))
-        // 工具纪律（本工程新增，照 deepseek-harness 的提示词工程思路）：
+        // 工具纪律 + 按本轮工具生成的路由句（本工程新增，照 deepseek-harness 的提示词工程思路）：
         // 「只有工具成功返回才算做了」——用户 2026-09-23「出现大模型说做了，他根本没有做的问题」。
-        if (hasTools) add(ContextSource.toolRules, com.psyche.memo.provider.TOOL_RULES_BLOCK)
+        add(ContextSource.toolRules, com.psyche.memo.provider.ToolRules.blockFor(offeredToolNames))
         // 记忆规则（message_builder.injectMemoryAndRecentChats L1610-1643）：
         // 长期记忆规则与过往回忆规则各自独立门控。
         if (assistant != null && (assistant.enableMemory || assistant.allowPastConversationRecall)) {
@@ -2655,12 +2689,16 @@ class ChatViewModel(
             )
         }
         // Agent Skills：可用技能清单（上游 `Tool.systemPrompt` 的等价物，见 SkillTools）。
-        if (assistant != null && assistant.enabledSkills.isNotEmpty()) {
+        // 清单空但**这段对话以前给过目录**（模型自己调用过 use_skill）时也要注入 ——
+        // 那时递的是「墓碑」，否则模型会照着历史里那次成功的名字继续猜。
+        val catalogWasUsed = skillCatalogWasUsed()
+        if (assistant != null && (assistant.enabledSkills.isNotEmpty() || catalogWasUsed)) {
             add(
                 ContextSource.skillPrompt,
                 com.psyche.memo.provider.SkillTools.systemPromptBlock(
                     enabledSkills = assistant.enabledSkills,
                     allSkills = container.skillStore.listSkills(),
+                    catalogWasUsed = catalogWasUsed,
                 ),
             )
         }
@@ -2684,6 +2722,20 @@ class ChatViewModel(
         // injectInstructionPrompts L1748-1772 —— 助手启用中的注入项按顺序合并。
         add(ContextSource.instructionInjection, activeInstructionPrompts(assistant?.id))
         return parts
+    }
+
+    /**
+     * 这段对话里模型是否**已经调用过** `use_skill`（只看已加载消息的工具 part，纯内存）。
+     *
+     * 这是「技能目录曾经存在过」的唯一可靠信号：Memo 的目录在系统提示词里、每轮重建，
+     * 用户中途删技能后历史里什么都不会留下 —— 只剩模型自己那次成功的调用。
+     */
+    private fun skillCatalogWasUsed(): Boolean = _messages.value.any { message ->
+        message.parts.any { part ->
+            part is com.psyche.memo.data.model.ToolCallPart &&
+                com.psyche.memo.provider.SkillTools.USE_SKILL ==
+                com.psyche.memo.data.model.ToolCallPart.decode(part.payloadJson)?.name
+        }
     }
 
     /**

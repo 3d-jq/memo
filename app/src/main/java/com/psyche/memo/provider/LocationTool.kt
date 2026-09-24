@@ -166,12 +166,29 @@ object LocationTool {
             }
         }.toString()
 
-    /** 工具错误统一 `{error, message}`。 */
+    /**
+     * 工具错误走规范形状（`type=tool_error` + `status=error` + `tool`），并且**每种失败
+     * 各带一句自己的补救办法** —— 定位的三种失败对用户是完全不同的动作（给权限 /
+     * 打开定位服务 / 等一下），只回一句「失败了」模型就只会再敲一次同一颗调用。
+     */
     fun errorJson(code: String, message: String): String =
-        buildJsonObject {
-            put("error", code)
-            put("message", message)
-        }.toString()
+        com.psyche.memo.provider.tool.ToolResults.error(
+            code = code,
+            message = message,
+            tool = TOOL_NAME,
+            instruction = when (code) {
+                ERROR_PERMISSION_DENIED ->
+                    "Location permission was refused. Tell the user to grant it (system dialog " +
+                        "or app settings) and that you cannot state a location until then."
+                ERROR_SERVICE_DISABLED ->
+                    "Location services are switched off on the device. Ask the user to turn them " +
+                        "on; do not state a location."
+                ERROR_TIMEOUT ->
+                    "No fix arrived in time. Ask the user which city they are in, or retry once " +
+                        "later — do not guess a location."
+                else -> com.psyche.memo.provider.tool.ToolResults.REPORT_FAILURE
+            },
+        )
 
     // ------------------------------------------------------------------ 平台侧
 

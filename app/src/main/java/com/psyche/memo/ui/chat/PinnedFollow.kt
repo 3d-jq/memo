@@ -15,8 +15,31 @@ package com.psyche.memo.ui.chat
  */
 object PinnedFollow {
 
-    /** 贴底容差：小于它认为「已经在底部」，不再动（防抖 + 防自激）。 */
-    const val STICK_TOLERANCE_DP = 10
+    /**
+     * 跟随的**收敛容差**：离物理底部还差这么多像素以内就不再动。
+     *
+     * 2dp（Agora `MessageListTailEffects` 的落定判据是「误差 ≤2dp 且连续 8 帧稳定」）。
+     */
+    const val SETTLE_TOLERANCE_DP = 2
+
+    /**
+     * 「读者在底部」的判据容差（恢复跟随、键盘抬起钉底都用它），必须**宽于**收敛容差，
+     * 否则到底那一刻两个判定互相拉扯。Agora 同样是两套数（`isNearBottom(24)`）。
+     */
+    const val RESUME_TOLERANCE_DP = 24
+
+    /**
+     * 把「最后可见 item 底边距视口底」换算成**距物理底部的剩余距离**。
+     *
+     * 为什么要换算：列表底部有 `contentPadding.bottom`（[bottomPaddingPx]）也算在滚动范围里，
+     * 真到底时 raw gap = −padding。老代码拿 raw gap 直接和 10dp 比，于是每次都停在离
+     * `maxScrollExtent` 还差 `10 + padding` 的地方 —— 用户看到的「结束后底部还有一截空白，
+     * 可以再往上滑一下」（2026-09-24）。跟随的零点必须是哨兵那一边，不是 item 底边。
+     *
+     * 量不到可见项时（空列表 / 极端布局）原样返回 [Float.MAX_VALUE]，别让它加成一个正常数。
+     */
+    fun distanceToBottomPx(gapPx: Float, bottomPaddingPx: Float): Float =
+        if (gapPx == Float.MAX_VALUE) Float.MAX_VALUE else gapPx + bottomPaddingPx
 
     /**
      * 流式结束后尾部还会长高（操作行/Token 统计/思考卡收起），这段窗口继续允许贴底。
@@ -33,7 +56,9 @@ object PinnedFollow {
      * 3. 自动滚动开着（[autoScrollEnabled]）；
      * 4. 手指不在屏上（[pointerDown]，§4.42 硬规则）；
      * 5. 生成中**或**在结束后的宽限窗口内（[streaming] / [graceActive]）；
-     * 6. 尾部确实离开底部超过容差（[gapPx] > [tolerancePx]）—— 已经在底部就不必再滚。
+     * 6. 距**物理底部**还差得比容差多（[gapPx] > [tolerancePx]）—— 已经到底就不必再滚。
+     *    调用方传的必须是 [distanceToBottomPx] 换算后的值（含 `contentPadding`），
+     *    不是「最后一条 item 底边距视口底」的原始值 —— 见该函数注释里那条 2026-09-24 的实测。
      *
      * **注意：这里不能用 `isScrollInProgress` 当门** —— 跟随循环自己写的 `dispatchRawDelta`
      * 会把 `LazyListState.isScrollInProgress` 置真，下一帧就会把自己关掉（自锁），

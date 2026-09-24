@@ -366,11 +366,14 @@ object VisualTools {
     private fun kindList(): String = ChartSpec.Kind.entries.joinToString(", ") { it.wireName } +
         ", $KIND_SVG"
 
-    private fun errorJson(code: String, message: String): String = buildJsonObject {
-        put("type", JsonPrimitive("tool_error"))
-        put("error", JsonPrimitive(code))
-        put("message", JsonPrimitive(message))
-    }.toString()
+    /** 错误形状只有一个生产者（[com.psyche.memo.provider.tool.ToolResults]）：带 `status` 与补救句。 */
+    private fun errorJson(code: String, message: String): String =
+        com.psyche.memo.provider.tool.ToolResults.error(
+            code = code,
+            message = message,
+            tool = TOOL_NAME,
+            instruction = com.psyche.memo.provider.tool.ToolResults.ADJUST_AND_RETRY,
+        )
 
     /**
      * `kind` **字段**的说明 —— 模型同样会读它。

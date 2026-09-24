@@ -56,13 +56,15 @@ class ToolHandler(
                         error = "search_unavailable",
                         message = "Search engine is unavailable.",
                         tool = name,
+                        instruction = "Web search could not run. Answer from your own knowledge " +
+                            "and tell the user the result may be out of date.",
                     )
-                return com.psyche.memo.provider.search.SearchToolService.executeSearch(
+                return com.psyche.memo.provider.tool.ToolRunner.cap(com.psyche.memo.provider.search.SearchToolService.executeSearch(
                     query = query,
                     engine = engine,
                     service = searchService,
                     common = searchCommonOptions,
-                )
+                ))
             }
             // 沙箱工作区（WorkspaceTools）：助手绑定了工作区才生效。默认只有
             // workspace_shell 要审批（上游 DEFAULT_APPROVALS）；写到 /workspace、
@@ -89,6 +91,7 @@ class ToolHandler(
                                 error = "approval_denied",
                                 message = approval.denyReason ?: "User denied the tool call",
                                 tool = name,
+                                instruction = com.psyche.memo.provider.tool.ToolResults.USER_DECLINED,
                             )
                         }
                     }
@@ -105,12 +108,21 @@ class ToolHandler(
                             // 读图片：字节落盘成一个文件，再作为工具结果的图片交给调用方
                             // （上游把字节交给 FilesManager 出 Image part，等价物就是这里）。
                             outcome.image?.let { bytes -> persistToolImage(bytes)?.let(onImage) }
-                            outcome.json
+                            com.psyche.memo.provider.tool.ToolRunner.cap(outcome.json)
                         }
                         is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Failure ->
                             toolError(outcome.error, outcome.message, name)
                     }
                 }
+                // 助手没绑工作区却调了 `workspace_*`：直说缺什么（工具纪律第 3 条）。
+                // 让它落到下面那句「本机没有执行器」会误报成平台不支持，那是另一个原因。
+                return toolError(
+                    error = "workspace_not_bound",
+                    message = "This assistant is not bound to a workspace, so `$name` cannot run.",
+                    tool = name,
+                    instruction = "Ask the user to pick a workspace for this assistant (input bar " +
+                        "→ workspace). Do not claim any file was read, written or executed.",
+                )
             }
 
             // 生成图片 / 生成视频（GenerationTools，自研功能）：助手在「生成图片 /
@@ -177,6 +189,7 @@ class ToolHandler(
                         error = "approval_denied",
                         message = approval.denyReason ?: "User denied the tool call",
                         tool = name,
+                        instruction = com.psyche.memo.provider.tool.ToolResults.USER_DECLINED,
                     )
                 }
             }
@@ -203,11 +216,12 @@ class ToolHandler(
                                 error = "approval_denied",
                                 message = approval.denyReason ?: "User denied the tool call",
                                 tool = name,
+                                instruction = com.psyche.memo.provider.tool.ToolResults.USER_DECLINED,
                             )
                         }
                     }
                     return try {
-                        container.mcpConnections.callTool(serverId, name, args)
+                        com.psyche.memo.provider.tool.ToolRunner.cap(container.mcpConnections.callTool(serverId, name, args))
                     } catch (e: Exception) {
                         toolError(
                             error = "execution_error",
@@ -238,21 +252,42 @@ class ToolHandler(
                 assistant != null
             ) {
                 val skillName = (args["name"] as? JsonPrimitive)?.contentOrNull
-                    ?: return toolError("invalid_use_skill_request", "name is required", name)
+                    ?: return toolError(
+                        error = "invalid_use_skill_request",
+                        message = "name is required",
+                        tool = name,
+                        instruction = "Call $name with the exact skill name from the " +
+                            "available-skills catalog.",
+                    )
                 val available = com.psyche.memo.provider.SkillTools.availableSkills(
                     enabledSkills = assistant.enabledSkills,
                     allSkills = container.skillStore.listSkills(),
                 )
                 val skill = available.firstOrNull { it.name == skillName }
                     ?: return toolError(
+                        // 名字失效时**当场**把墓碑再立一次：历史里那次成功的调用还留在模型的
+                        // 上下文里，它不然会一直敲同一个旧名字。
                         error = "skill_not_available",
-                        message = "Skill '$skillName' is not available. " +
-                            "Available skills: ${available.joinToString { it.name }}",
+                        message = if (available.isEmpty()) {
+                            "Skill '$skillName' is not available. " +
+                                com.psyche.memo.provider.SkillTools.NO_SKILLS_TOMBSTONE
+                        } else {
+                            "Skill '$skillName' is not available. " +
+                                "Available skills: ${'$'}{available.joinToString { it.name }}"
+                        },
                         tool = name,
+                        instruction = if (available.isEmpty()) {
+                            "Do not try other skill names. Tell the user to import or enable a " +
+                                "skill, then continue without one."
+                        } else {
+                            "Load one of the listed skills instead, or answer without a skill " +
+                                "and say which skill you expected."
+                        },
                     )
                 val path = (args["path"] as? JsonPrimitive)?.contentOrNull
                 return when (val outcome = com.psyche.memo.provider.SkillTools.execute(skill, path)) {
-                    is com.psyche.memo.provider.SkillTools.Outcome.Success -> outcome.content
+                    is com.psyche.memo.provider.SkillTools.Outcome.Success ->
+                        com.psyche.memo.provider.tool.ToolRunner.cap(outcome.content)
                     is com.psyche.memo.provider.SkillTools.Outcome.Failure ->
                         toolError(outcome.error, outcome.message, name)
                 }
@@ -302,6 +337,8 @@ class ToolHandler(
                         error = "ask_user_unavailable",
                         message = "Ask user interaction service is unavailable.",
                         tool = name,
+                        instruction = "You cannot put a question to the user right now. State the " +
+                            "ambiguity in your reply and pick the most reasonable interpretation.",
                     )
                 }
                 return try {
@@ -316,6 +353,8 @@ class ToolHandler(
                         error = "invalid_ask_user_request",
                         message = e.message ?: "",
                         tool = name,
+                        instruction = "Fix the question payload (each question needs a text, and " +
+                            "multiple-choice questions need at least one option) and ask again.",
                     )
                 }
             }
@@ -345,19 +384,23 @@ class ToolHandler(
         return "${name}_${System.currentTimeMillis() * 1000}"
     }
 
-    /** tool_handler_service.dart _toolError 179-192。 */
+    /**
+     * tool_handler_service.dart _toolError 179-192 —— 形状只有一个生产者
+     * ([com.psyche.memo.provider.tool.ToolResults])：`type=tool_error` + `status=error` +
+     * `tool` + **必带的 `instruction`**。每条错误都得交代下一步，否则模型只会原地再敲
+     * 同一颗调用（deepseek-harness 的 post-execute 块就是这个道理）。
+     */
     private fun toolError(
         error: String,
         message: String,
         tool: String,
-        instruction: String? = null,
-    ): String = buildJsonObject {
-        put("type", "tool_error")
-        put("error", error)
-        put("message", message)
-        put("tool", tool)
-        instruction?.let { put("instruction", it) }
-    }.toString()
+        instruction: String = com.psyche.memo.provider.tool.ToolResults.ADJUST_AND_RETRY,
+    ): String = com.psyche.memo.provider.tool.ToolResults.error(
+        code = error,
+        message = message,
+        tool = tool,
+        instruction = instruction,
+    )
 
     /** local_tools_service.dart 460-461 — get_time_info 返回 `jsonEncode(_buildTimeInfoPayload(...))`。 */
     private fun timeInfoJson(): String =

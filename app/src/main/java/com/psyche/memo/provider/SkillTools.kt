@@ -28,6 +28,17 @@ object SkillTools {
 
     val ALL_TOOL_NAMES = setOf(USE_SKILL)
 
+    /**
+     * 空清单的「墓碑」句 —— 系统提示词的目录块与 `skill_not_available` 报错**共用**这一份，
+     * 抄成两份就会漂移（本工程不止一次栽在手抄第二份表上）。
+     *
+     * 出处：deepseek-harness `packages/skill/tool-skill/src/index.ts` 的
+     * `renderCatalogUpdate`（空清单分支）。
+     */
+    internal const val NO_SKILLS_TOMBSTONE =
+        "No skills are currently available through the `$USE_SKILL` tool. " +
+            "Do not use names from earlier skill catalogs."
+
     /** 与上游逐字一致。 */
     /**
      * 调用引导 —— RikkaHub 原文只有一句（"Call this tool when the user's request matches
@@ -66,13 +77,24 @@ object SkillTools {
         ),
     )
 
-    /** 上游 `Tool.systemPrompt` 的等价物；没有可用技能时返回 null（不注入空块）。 */
+    /**
+     * 上游 `Tool.systemPrompt` 的等价物。
+     *
+     * 清单空着时**默认什么都不递**（多数助手根本没有技能，白占上下文）。但 [catalogWasUsed]
+     * 为真 —— 这段对话里模型曾经成功调用过 `use_skill` —— 就必须立一块**墓碑**：它自己
+     * 历史里那次成功的名字还在，用户中途删掉/关掉技能后它照着旧名字接着调，每轮都撞
+     * `skill_not_available`。没有这句，它无从知道清单已经空了。
+     */
     fun systemPromptBlock(
         enabledSkills: Collection<String>,
         allSkills: List<SkillMetadata>,
+        catalogWasUsed: Boolean = false,
     ): String? {
         val available = availableSkills(enabledSkills, allSkills)
-        if (available.isEmpty()) return null
+        if (available.isEmpty()) {
+            if (!catalogWasUsed) return null
+            return "**Skills**\n$NO_SKILLS_TOMBSTONE"
+        }
         return buildString {
             appendLine("**Skills**")
             // 三句硬要求照 deepseek-harness（`tool-skill/src/index.ts` 渲染目录那段的收尾语）：

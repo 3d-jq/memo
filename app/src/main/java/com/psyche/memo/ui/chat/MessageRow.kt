@@ -582,12 +582,18 @@ internal fun MessageRow(
                     // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs
                     // 打开时按段落再拆）。助手正文 15.7 / 行高 1.5×15.7。
                     assistantBlocks.forEachIndexed { index, block ->
-                        // 渐显（照 Agora GenerationLifecycleMotion）：每个内容块第一次出现时
-                        // alpha 0→1 + scale 0.90→1（420ms），key 稳定 ⇒ 增长不重播、不闪。
-                        val blockAppearance = com.psyche.memo.ui.chat.generationAppearanceModifier(
-                            animationKey = "msg-${msg.id}-block-$index",
-                            animate = msg.isStreaming,
-                        )
+                        // 一次性入场（graphicsLayer alpha+scale 420ms，不改布局高度）**只给卡片与
+                        // 媒体**。正文块以前也吃这一套，于是观感变成「一坨一坨往外冒」、字还在
+                        // 动画里缩放 —— Agora 里正文根本不走这条路，它做逐字淡入
+                        // （`ui/markdown/StreamingGlyphFade.kt`，见该文件注释）。
+                        val blockAppearance = if (block is com.psyche.memo.ui.chat.AssistantBlock.Text) {
+                            Modifier
+                        } else {
+                            com.psyche.memo.ui.chat.generationAppearanceModifier(
+                                animationKey = "msg-${msg.id}-block-$index",
+                                animate = msg.isStreaming,
+                            )
+                        }
                         Box(modifier = blockAppearance) {
                         if (index > 0) Spacer(Modifier.height(8.dp))
                         when (block) {
@@ -632,6 +638,17 @@ internal fun MessageRow(
                                 }
                                 parts.forEachIndexed { partIndex, part ->
                                     if (partIndex > 0) Spacer(Modifier.height(8.dp))
+                                    // 逐字淡入只给「活的尾部」：这条消息还在生成、且这是最后一个
+                                    // 正文块的最后一段。出生表按消息 id remember ⇒ 同一条消息
+                                    // 增长期间不被清空（清空＝整段重播）。
+                                    val tailFadeScope = remember(msg.id) {
+                                        com.psyche.memo.ui.markdown.StreamTailFadeScope(
+                                            com.psyche.memo.ui.markdown.StreamTailFadeTracker(),
+                                        )
+                                    }
+                                    val tailFading = msg.isStreaming &&
+                                        index == assistantBlocks.lastIndex &&
+                                        partIndex == parts.lastIndex
                                     com.psyche.memo.ui.chat.ChatBubbleSurface(
                                         isUser = false,
                                         // CMW:2478-2484 _assistantBlockWidth：
@@ -643,17 +660,26 @@ internal fun MessageRow(
                                         },
                                     ) {
                                         if (timelineSettings.enableAssistantMarkdown) {
-                                            com.psyche.memo.ui.markdown.MarkdownText(
-                                                markdown = part,
-                                                baseFontSize = 15.7f,
-                                                baseLineHeight = 23.55f,
-                                                onCitationTap = handleCitationTap,
-                                                citationInfoResolver = citationResolver,
-                                                tableActions = tableActions,
-                                                codeBlock = codeBlockConfig,
-                                                codeBlockActions = codeBlockActions,
-                                                math = mathConfig,
-                                            )
+                                            val markdownBody: @Composable () -> Unit = {
+                                                com.psyche.memo.ui.markdown.MarkdownText(
+                                                    markdown = part,
+                                                    baseFontSize = 15.7f,
+                                                    baseLineHeight = 23.55f,
+                                                    onCitationTap = handleCitationTap,
+                                                    citationInfoResolver = citationResolver,
+                                                    tableActions = tableActions,
+                                                    codeBlock = codeBlockConfig,
+                                                    codeBlockActions = codeBlockActions,
+                                                    math = mathConfig,
+                                                )
+                                            }
+                                            if (tailFading) {
+                                                androidx.compose.runtime.CompositionLocalProvider(
+                                                    com.psyche.memo.ui.markdown.LocalStreamTailFade provides tailFadeScope,
+                                                ) { markdownBody() }
+                                            } else {
+                                                markdownBody()
+                                            }
                                         } else {
                                             // 关掉 Markdown：同字号/行高纯文本（CMW:2432-2441）。
                                             Text(
