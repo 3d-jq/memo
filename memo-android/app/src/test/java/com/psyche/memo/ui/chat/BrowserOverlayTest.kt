@@ -4,6 +4,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -104,6 +108,37 @@ class BrowserOverlayTest {
         assertEquals("点「交还」要走 onBack", 1, backCalls)
         assertEquals("「交还」不清数据：页面与登录态都得留着", 0, clearCalls)
         assertFalse("交还后模型要能继续操作", session.userControls)
+    }
+
+    /**
+     * spec §6 要求遮罩顶部显示**当前页面标题**，不是固定的「浏览器」。
+     *
+     * 兜底串也要有：`snapshot` 为 null（还没 find 过）或标题空白时回落 `browser_overlay_title`。
+     */
+    @Test
+    fun overlayTitleShowsTheCurrentPageTitleAndFallsBackWhenThereIsNone() {
+        val session = newSession()
+        open = true
+        mountOverlay(session)
+        // 没 find 过 ⇒ `snapshot == null` ⇒ 回落兜底串。
+        compose.onNodeWithText("Browser").assertExists()
+
+        session.publishSnapshot(
+            com.psyche.memo.provider.browser.BrowserPageSnapshot(
+                generation = 1,
+                url = "https://example.com",
+                title = "Example Domain",
+                elements = emptyList(),
+            ),
+        )
+        // 标题读的是普通字段（不是 State），所以要靠一次重组才跟上 —— 生产里 ChatContent 每有
+        // 消息/流式状态变化都会重组，接管期间这一下必然发生；测试里就自己摘掉再挂回来。
+        open = false
+        compose.waitForIdle()
+        open = true
+        compose.waitForIdle()
+        compose.onNodeWithText("Example Domain").assertExists()
+        compose.onAllNodesWithText("Browser").assertCountEquals(0)
     }
 
     @Test

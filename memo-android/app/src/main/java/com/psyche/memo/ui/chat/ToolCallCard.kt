@@ -203,6 +203,18 @@ data class ToolUiPart(
     }
 }
 
+/**
+ * 「查看页面」的**唯一**判据（时间线步与 boxed 卡共用一份）。
+ *
+ * `content` 判 `isNullOrEmpty` 而不是 `!= null`：`fromToolMessage` 落的是
+ * `obj.str("result").orEmpty()`，导入的 Chatbox 工具消息因此恒「有正文」——
+ * 用 `!= null` 会让这颗钮在导入的历史消息上常显、点了没反应。
+ */
+internal fun ToolUiPart.canTakeOverBrowser(onOpen: (() -> Unit)?): Boolean =
+    onOpen != null &&
+        toolName == com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME &&
+        !content.isNullOrEmpty()
+
 private fun JsonObject.str(key: String): String? =
     (this[key] as? kotlinx.serialization.json.JsonPrimitive)
         ?.takeIf { it !is JsonNull }?.content
@@ -486,19 +498,15 @@ fun ChainOfThoughtToolStep(
         } else {
             null
         }
-    val browserAction: (@Composable () -> Unit)? =
-        if (part.toolName == com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME &&
-            part.content != null &&
-            onOpenBrowser != null
-        ) {
-            {
-                TextButton(onClick = { onOpenBrowser() }) {
-                    Text(stringResource(UiR.string.browser_view_page))
-                }
+    val browserAction: (@Composable () -> Unit)? = if (part.canTakeOverBrowser(onOpenBrowser)) {
+        {
+            TextButton(onClick = { onOpenBrowser?.invoke() }) {
+                Text(stringResource(UiR.string.browser_view_page))
             }
-        } else {
-            null
         }
+    } else {
+        null
+    }
     // 三块正文（摘要 / 图片条 / 「查看页面」）共用同一份 `content` 判据：`contentVisible` 与
     // `expectContent` 都从这里派生，所以新增一块必须同时改这里 —— 只画不判会把折叠态算歪
     // （TimelineStepShell 里 `hasBody = content != null || expectContent`）。
@@ -810,14 +818,11 @@ fun ToolCallCard(
                     onOpenViewer = { paths, index -> viewerState = listOf(paths[index]) to 0 },
                 )
             }
-            // spec §6：浏览器工具卡的「查看页面」。判据与时间线步（ChainOfThoughtToolStep）
-            // 那第三块逐字一致 —— 两颗卡是同一个工具的两个表面，别一边有一边没有。
-            if (part.toolName == com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME &&
-                part.content != null &&
-                onOpenBrowser != null
-            ) {
+            // spec §6：浏览器工具卡的「查看页面」。两颗卡是同一个工具的两个表面，
+            // 判据共用 `canTakeOverBrowser` —— 抄两遍必然一边有一边没有。
+            if (part.canTakeOverBrowser(onOpenBrowser)) {
                 Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { onOpenBrowser() }) {
+                TextButton(onClick = { onOpenBrowser?.invoke() }) {
                     Text(stringResource(UiR.string.browser_view_page))
                 }
             }

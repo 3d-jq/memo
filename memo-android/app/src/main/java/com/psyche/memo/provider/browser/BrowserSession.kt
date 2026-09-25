@@ -287,11 +287,10 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
      * 世界照旧，但 `screenshotPng` 截到手机尺寸、`window.innerWidth` 变了、`find` 的
      * bounds 与模型回传的 x/y 全体错位。主线程调用（measure/layout 的要求）。
      *
-     * **closed 闸（Finding 1，fix round 2）**：close() 之后仍会有 detach 进来 —— Task 8 的
-     * 「清空并关闭」钮 `scope.launch { session.close() }` 后同步 `onBack()`，close 是
-     * `withContext(Dispatchers.Main)`（非 immediate ⇒ post 到队列），`DisposableEffect.onDispose`
-     * 与 `AndroidView.onRelease` 的 detach 排在它后面 ⇒ **destroy 先、detach 后**；被别的会话
-     * `sessionFor` 抢掉销毁时同理。平台契约是「destroy() 之后不得再调用本类的任何其它方法」，
+     * **closed 闸**：close() 之后仍会有 detach 进来 —— 换会话时是 `sessionFor` 关掉上一枚，
+     * 而 `close()` 里 `detach()` 之前已经置了 `closed`，那条路径由 store 的 `mutex` 排在
+     * `withContext(Main)` 之后；另一条是界面被拆掉时 `onDispose`/`onRelease` 补发 detach，
+     * 与销毁没有先后保证。平台契约是「destroy() 之后不得再调用本类的任何其它方法」，
      * measure 在无 provider 时直接 IllegalStateException。闸放这里而不是 detach() 开头：
      * close() 自己调的 detach **必须**保留 removeView（destroy 前必须先把视图从层级里摘掉），
      * 要拦的只是视口还原那两发 —— 且此刻实例已弃用，还原本身毫无意义。

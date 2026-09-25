@@ -2453,7 +2453,11 @@ MCP 工具编辑页的「需要审批」开关与 `McpToolConfig.needsApproval` 
 （可回看），而**"填好了、由你自己点"是提示词层面的行为边界而不是弹窗**。这条改动同时是
 Agent 浏览器与手机控制的前置：那两个功能的工具面直接沿用"无审批 + 全程可见可停"的形状。
 
-## 5.69 Agent 浏览器（`browser_use`）：内嵌 WebView + 用户接管遮罩（2026-09-25 spec/计划，2026-09-26 收口）
+## 5.69 Agent 浏览器（`browser_use`）：内嵌 WebView + 用户接管遮罩（2026-09-25 spec/计划，2026-09-26 代码收口）
+
+> **尚未真机验收**：计划 Task 8 Step 6 那 7 条（真导航、视口、selector 不外泄、旧代次拒执行、
+> 截图上行、接管/交还、跨会话隔离）一条都还没在设备上跑过 —— 下面「测试与验证边界」列的五类
+> 只能真机证。在此之前这条算「代码完成、未验证」。
 
 **这一整块超出上游**：上游 kelivo 与 RikkaHub 都**没有内嵌浏览器**（上游读网页只有 provider 侧的
 `web_fetch`、服务端 `search_web`）。唯一的参照实现是 **Eta**（本机 `D:\program\.eta-ref`），它是
@@ -2543,9 +2547,17 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
   `rememberCoroutineScope()`——页面作用域的 scope 会随遮罩离开组合而取消 `close()` 的中段，留下
   **未 destroy 的 WebView + 未清的 cookie jar**（半清且无声），Task 7 已经为此修过一次。
   「交还给助手」不清数据：用户可能只想看一眼再让助手接着做，页面与登录态都得留着。
-- 接管期间任何动作立即回 `USER_CONTROLS_PAGE` + `instruction`（"用户正在自己浏览，等他交还"）。
+- 接管期间**新**调用立即回 `USER_CONTROLS_PAGE` + `instruction`（"用户正在自己浏览，等他交还"）。
+  注意边界：**已在飞的那一颗不会被打断** —— `navigate`（25 s）/`run`（8 s）跑完才轮到下一颗被挡。
+  接管不是"中止"，是"不再给新动作"；要中止得走停止生成（§5.59）。
+- 网页正文「只是数据」这条（spec §7.2）**不靠工具自己消毒**：`BrowserTool` 故意不调
+  `PromptFrames.sanitize`，靠的是 `ChatViewModel` 对本轮**所有** tool 消息那一个咽喉
+  （写回处 `:2387` 与 `resumeAfterToolAnswer` 的 `:2517`）。那个咽喉哪天被搬走，这里会**静默失守**。
 - 入口在**两颗**工具卡：时间线步 `ChainOfThoughtToolStep` 的第三块正文（摘要 / 图片条 / 「查看页面」）
-  与独立卡 `ToolCallCard` 末尾，判据逐字一致（`browser_use` + 结果已回 + 宿主接了遮罩）。第三块必须
+  与独立卡 `ToolCallCard` 末尾，两处共用**同一个**判据 `ToolUiPart.canTakeOverBrowser`
+  （`browser_use` + 结果正文非空 + 宿主接了遮罩）—— 抄两份必然出现一边有一边没有。
+  判据里正文用 `isNullOrEmpty` 而不是 `!= null`：`fromToolMessage` 落的是 `orEmpty()`，
+  导入的 Chatbox 工具消息因此恒"有正文"，`!= null` 会让那颗钮常显、点了没反应。第三块必须
   同时进 `content` 的判据——`TimelineStepShell` 的 `hasBody = content != null || expectContent`，
   只画不判会把折叠态算歪。`toolTitleFor` 给它一个像样的标题（`agent_capabilities_browser_title`
   =「内置浏览器」），否则卡片落到默认的「调用工具 browser_use」。

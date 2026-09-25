@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
@@ -45,6 +46,10 @@ import com.psyche.memo.ui.R as UiR
 fun BrowserOverlay(session: BrowserSession, onBack: () -> Unit, onClearAndClose: () -> Unit) {
     OverlayBackHandler(onBack)
     val cs = MaterialTheme.colorScheme
+    // spec §6 的「遮罩顶部：当前标题」。`snapshot` 是只读的内存字段（与 `peek` 同量级），
+    // 直接读即可 —— 不订阅、不进 LaunchedEffect，那才是组合期该干的事。
+    val pageTitle = session.snapshot?.title?.takeIf { it.isNotBlank() }
+        ?: stringResource(UiR.string.browser_overlay_title)
 
     DisposableEffect(session) {
         session.takeOver()
@@ -61,7 +66,7 @@ fun BrowserOverlay(session: BrowserSession, onBack: () -> Unit, onClearAndClose:
             .statusBarsPadding(),
     ) {
         MemoTopBar(
-            title = stringResource(UiR.string.browser_overlay_title),
+            title = pageTitle,
             onBack = onBack,
             actions = {
                 TextButton(onClick = onBack) {
@@ -75,12 +80,18 @@ fun BrowserOverlay(session: BrowserSession, onBack: () -> Unit, onClearAndClose:
                 }
             },
         )
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                android.widget.FrameLayout(ctx).also { frame -> session.attachTo(frame) }
-            },
-            onRelease = { session.detach() },
-        )
+        // `key(session)`：遮罩开着的时候本会话实例也可能被别的会话 `sessionFor` 抢走并
+        // 销毁、随后本会话新建一枚。`factory` 只在节点首次进入组合时跑 —— 不加 key 就会
+        // 继续挂旧引用：遮罩画出**空白页**，而 `DisposableEffect(session)` 已经对新实例
+        // takeOver() ⇒ 模型被挡住、用户什么也看不见，且失败静默。
+        key(session) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    android.widget.FrameLayout(ctx).also { frame -> session.attachTo(frame) }
+                },
+                onRelease = { session.detach() },
+            )
+        }
     }
 }
