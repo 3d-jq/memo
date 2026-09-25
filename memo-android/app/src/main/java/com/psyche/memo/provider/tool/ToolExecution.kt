@@ -38,6 +38,9 @@ object ToolRunner {
         com.psyche.memo.provider.LocationTool.TOOL_NAME to
             com.psyche.memo.ui.chat.LocationPermissionService.DEFAULT_TIMEOUT_MS +
             com.psyche.memo.provider.LocationTool.FIX_TIMEOUT_MS + 15_000L,
+        // browser_use 一颗动作最坏是 navigate 25 s + 结算 250 ms，外面这层必须更宽，
+        // 否则就是「外面先超时、里面还在跑」的双重超时（Mermaid 同款理由）。
+        com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME to 30_000L,
     )
 
     /** 工具结果的字符上限（约 6k tokens 量级）：超了截断并附 `truncated` 说明。 */

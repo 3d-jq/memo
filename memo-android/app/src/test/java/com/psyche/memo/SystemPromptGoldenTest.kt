@@ -8,6 +8,7 @@ import com.psyche.memo.provider.LocalToolExecutors
 import com.psyche.memo.provider.LocationTool
 import com.psyche.memo.provider.MemoryTools
 import com.psyche.memo.provider.SkillTools
+import com.psyche.memo.provider.browser.BrowserTool
 import com.psyche.memo.provider.chart.MermaidTools
 import com.psyche.memo.provider.chart.VisualTools
 import com.psyche.memo.provider.generation.GenerationTools
@@ -57,6 +58,7 @@ class SystemPromptGoldenTest {
         GenerationTools.GENERATE_VIDEO,
         VisualTools.TOOL_NAME,
         MermaidTools.TOOL_NAME,
+        BrowserTool.TOOL_NAME,
     ) + WorkspaceTools.ALL_TOOL_NAMES.sorted()
 
     private fun viewModelWith(assistant: Assistant): ChatViewModel {

@@ -26,6 +26,7 @@ class ToolIconCoverageTest {
                 com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE,
                 com.psyche.memo.provider.generation.GenerationTools.GENERATE_VIDEO,
                 com.psyche.memo.provider.SkillTools.USE_SKILL,
+                com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME,
             )
 
     @Test

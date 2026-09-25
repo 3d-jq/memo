@@ -2639,6 +2639,21 @@ class ChatViewModel(
                 assistant = assistant,
             ),
         )
+        // Agent 浏览器（app 级：只看全局开关，与助手勾选无关；默认开是用户 2026-09-25 的决定）。
+        if (com.psyche.memo.ui.DisplayPrefs.readBool(
+                container,
+                com.psyche.memo.provider.browser.BrowserTool.PREFERENCE_KEY,
+                default = true,
+            )
+        ) {
+            out.add(
+                LlmToolSpec(
+                    name = com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME,
+                    description = com.psyche.memo.provider.browser.BrowserTool.DESCRIPTION,
+                    inputSchemaJson = com.psyche.memo.provider.browser.BrowserTool.DEFINITION.toString(),
+                ),
+            )
+        }
         // MCP 工具（mcp_tool_service）：助手绑定且已连接的服务器，仅启用的工具；
         // 与内置工具同名的条目按原版保留名规则剔除。
         val reserved = com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all.toSet() + setOf(
@@ -2646,7 +2661,8 @@ class ChatViewModel(
         ) + com.psyche.memo.provider.MemoryTools.ALL_TOOL_NAMES +
             com.psyche.memo.provider.SkillTools.ALL_TOOL_NAMES +
             com.psyche.memo.provider.workspace.WorkspaceTools.ALL_TOOL_NAMES +
-            com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES
+            com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES +
+            com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME
         for (serverId in assistant.mcpServerIds) {
             if (!container.mcpConnections.isConnected(serverId)) continue
             val config = container.mcpRepository.server(serverId) ?: continue

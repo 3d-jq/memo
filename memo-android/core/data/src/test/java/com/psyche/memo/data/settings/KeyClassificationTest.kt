@@ -59,7 +59,8 @@ class KeyClassificationTest {
     fun generatedSetCountsMatchDartSource() {
         assertEquals(9, SettingsKeyRegistry.LOCAL_ONLY_KEYS.size)
         assertEquals(6, SettingsKeyRegistry.DISCARDED_KEYS.size)
-        assertEquals(131, SettingsKeyRegistry.PREFERENCE_KEYS.size)
+        // Dart 侧生成的那 131 个 + Memo 自加的 `agent_browser_enabled_v1`（清单已手维，见文件头）。
+        assertEquals(132, SettingsKeyRegistry.PREFERENCE_KEYS.size)
         assertEquals(13, SettingsKeyRegistry.ENTITY_SOURCE_KEYS.size)
     }
 }

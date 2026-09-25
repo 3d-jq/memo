@@ -15,6 +15,8 @@ import java.time.ZonedDateTime
  * tool_handler_service.dart buildToolCallHandler 的 Native 分派：本地工具
  * （[com.psyche.memo.provider.LocalToolExecutors]）→ ask_user 交互服务 →
  * 上游那道"审批门"按用户 2026-09-25 的指示整块拆除，这里不再挂起等人批准。
+ * Agent 浏览器（[com.psyche.memo.provider.browser.BrowserTool]，app 级：不要求助手绑定
+ * 任何东西，所以它排在 MCP 之前、且不进 `LocalToolNames`）→
  * MCP 透传（[com.psyche.memo.provider.mcp]）→ 兜底 execution_error。
  * 到这里没被接住的只有两种情况：模型编出不存在的工具名，或该工具在本机没有执行器
  * （iOS-only 的定位/天气/健康/提醒，以及未移植的 STDIO MCP）——如实回 execution_error
@@ -160,6 +162,28 @@ class ToolHandler(
                         instruction = "Image/video generation failed. Tell the user what went wrong.",
                     )
                 }
+            }
+
+            // Agent 浏览器（BrowserTool）：app 级工具，只看全局开关，不要求助手绑定任何东西。
+            // 必须在 MCP 分支之前 —— 同名 MCP 工具不该顶掉它（offeredTools 那边也留了名）。
+            if (name == com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME && container != null) {
+                val gateway = container.browserSessions.sessionFor(conversationId ?: "")
+                // 走 ToolRunner.run 而不是裸 cap：异常归一 + **取消透传** —— handle() 末尾那个
+                // `catch (e: Exception)` 会把 CancellationException 吞成 execution_error，
+                // 只有 ToolRunner 先 rethrow，用户点「停止」才真的停得下来。
+                return com.psyche.memo.provider.tool.ToolRunner.run(tool = name) {
+                    com.psyche.memo.provider.browser.BrowserTool.execute(gateway, args) { bytes ->
+                        persistToolImage(bytes)?.let(onImage)
+                    }
+                } ?: toolError(
+                    // `run` 的返回是 `String?`（null = 这支不负责该工具）。BrowserTool 永远回话，
+                    // 所以这里只是把可空性收口 —— 真到这一步就是会话没建起来。
+                    error = "browser_unavailable",
+                    message = "The browser session returned nothing.",
+                    tool = name,
+                    instruction = "Tell the user the browser did not respond this time; do not " +
+                        "claim any page was read or any action was taken.",
+                )
             }
 
             // MCP tools: the assistant's bound servers, tool names not reserved

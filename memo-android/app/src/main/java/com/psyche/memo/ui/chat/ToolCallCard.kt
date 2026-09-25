@@ -82,6 +82,7 @@ import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.CloudSun
 import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.Earth
+import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.HeartPulse
@@ -231,6 +232,9 @@ fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
         "update_user_profile" -> Lucide.UserPen
         "chat_search", "builtin_search" -> Lucide.Search
         "search_web" -> Lucide.Earth
+        // Agent 浏览器（app 级工具，本工程新增）：Globe = 「真在开一个网页」，与
+        // search_web 那个「查一次搜索结果」区分开。
+        com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME -> Lucide.Globe
         // 生成工具（自研功能）：与设置里两个入口同一个图标语言。
         com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE -> Lucide.Image
         com.psyche.memo.provider.generation.GenerationTools.GENERATE_VIDEO -> Lucide.Video

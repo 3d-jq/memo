@@ -66,6 +66,7 @@ class ToolRulesTest {
             add(com.psyche.memo.provider.search.SearchToolService.TOOL_NAME)
             add(com.psyche.memo.provider.chart.VisualTools.TOOL_NAME)
             add(com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME)
+            add(com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME)
         }
         val block = com.psyche.memo.provider.ToolRules.blockFor(known.toList())!!
         // 全量递给模型时，每条路由句都该在（漏一条=那条能力没人引导）
@@ -80,6 +81,7 @@ class ToolRulesTest {
             com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE,
             com.psyche.memo.provider.generation.GenerationTools.GENERATE_VIDEO,
             com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME,
+            com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME,
         ).forEach { name ->
             assertTrue("路由句里缺了 $name", block.contains(name))
         }
