@@ -389,7 +389,8 @@ private fun localToolTitleFor(name: String, args: JsonObject?): String? = when (
 /**
  * 时间线里的一行工具调用：轨道图标（18dp 位，加载态是 3×2/12dp 的呼吸点）、
  * 13sp 标题（加载态带呼吸高光）、行尾 ChevronRight（ask-user 换成上下箭头），
- * 正文按 ask-user → TTS → 屏幕时间 → 天气 → 纯文本摘要的优先级取一种。
+ * 正文按 ask-user → TTS → 屏幕时间 → 天气 → 纯文本摘要的优先级取一种，
+ * 下面再按需追加两块：工具结果图片横滚条、浏览器工具的「查看页面」。
  * 点标题打开详情弹层（ask-user 改为折叠/展开）。
  */
 @Composable
@@ -668,7 +669,8 @@ private fun toolStepSummary(
 
 /**
  * `role == tool` 消息里的独立工具卡：18dp 状态位（loading 用 2dp 圆环，颜色
- * fg.accent）+ 13sp emphasis 标题（加载态呼吸高光）+ TTS / 天气 / 屏幕时间专属摘要。
+ * fg.accent）+ 13sp emphasis 标题（加载态呼吸高光）+ TTS / 天气 / 屏幕时间专属摘要，
+ * 末尾按需追加图片横滚条与浏览器「查看页面」。
  * 整卡 16dp 圆角、按压 260ms，点开详情弹层。ask-user 整卡换 [AskUserToolCard]。
  * 上游这里的审批状态位（Shield + "Waiting for approval" + Deny/Approve）随审批体系
  * 一起拆除（用户 2026-09-25「工具的权限审批全部去掉」）。
