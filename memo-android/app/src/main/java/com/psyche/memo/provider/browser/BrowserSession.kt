@@ -49,8 +49,13 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         const val SHOT_TIMEOUT_MS = 5_000L
         const val MAX_PNG_BYTES = 4 * 1024 * 1024
 
+        // close() 解 pendingScript 的哨兵：evaluateJavascript 的回调永远给 JSON（字符串结果
+        // 至少带一层引号），这种裸词不可能与真返回值撞车。
+        private const val SCRIPT_CLOSED = "MEMO_SESSION_CLOSED"
+
         /**
-         * WebView 只能在有 Looper 的线程创建。
+         * WebView 必须在**主线程**创建 —— 下面的 `check` 判的就是 Main，不是泛泛的
+         * 「有 Looper 的线程」（后台线程即使有 Looper 也不行）。
          *
          * 两个入口分开是**必需的**：suspend 那版内部 `withContext(Dispatchers.Main)`，而
          * Robolectric 的测试线程就是主 Looper 线程 —— Compose UI 测试（不能用
@@ -84,7 +89,8 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
     private var navigation: CompletableDeferred<String>? = null
     private var pendingScript: CompletableDeferred<String>? = null
     private var notice: String? = null
-    private var closed = false
+    // @Volatile：isClosed 承诺任意线程可读（见属性注释），写发生在 Main，读方有非 Main 的。
+    @Volatile private var closed = false
 
     /** 同一会话的动作串行（spec §8）：模型并行发两颗调用时不许互相踩。 */
     private val actionLock = Mutex()
@@ -93,7 +99,12 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
     override val url: String get() = urlState
     override val userControls: Boolean get() = userControlsState
     override val snapshot: BrowserPageSnapshot? get() = snapshotState
-    override val canGoBack: Boolean get() = view.canGoBack()
+
+    /**
+     * 纯读字段，任意线程安全：[closed] 标了 @Volatile，非 Main 的读方（store 的 `peek`、
+     * 界面判活）拿到的都是某一刻的真值；「判活之后它被关掉」这种竞态由 store 的锁兜住。
+     */
+    override val isClosed: Boolean get() = closed
 
     init {
         view.settings.apply {
@@ -112,11 +123,7 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         }
         view.setBackgroundColor(Color.WHITE)
         // 离屏也要有确定尺寸：否则 1280 宽的桌面版页面按手机宽度渲染。
-        view.measure(
-            View.MeasureSpec.makeMeasureSpec(VIEWPORT_WIDTH, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(VIEWPORT_HEIGHT, View.MeasureSpec.EXACTLY),
-        )
-        view.layout(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+        applyOffscreenViewport()
         view.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(webView: WebView, request: WebResourceRequest): Boolean =
                 !isAllowedUrl(request.url.toString())
@@ -128,7 +135,8 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
                 navigation?.complete("ok")
             }
 
-            // 页面级旧签名能直接拿到 failingUrl 拼成 NAV_FAILED 原因；新版回调反而给不了。
+            // 用旧的 4 参回调是为了它的触发条件：只在**主框架**加载失败时回调，
+            // 免掉新回调（onReceivedError(request, error)）还要自己过 request.isForMainFrame。
             @Suppress("OVERRIDE_DEPRECATION")
             override fun onReceivedError(
                 webView: WebView,
@@ -149,7 +157,7 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             override fun onJsAlert(
                 webView: WebView, url: String?, message: String?, result: JsResult?,
             ): Boolean {
-                notice = "JS_ALERT_SUPPRESSED:" + message.orEmpty().take(160)
+                appendNotice("JS_ALERT_SUPPRESSED:" + message.orEmpty().take(160))
                 result?.cancel()
                 return true
             }
@@ -157,7 +165,7 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             override fun onJsConfirm(
                 webView: WebView, url: String?, message: String?, result: JsResult?,
             ): Boolean {
-                notice = "JS_CONFIRM_SUPPRESSED:" + message.orEmpty().take(160)
+                appendNotice("JS_CONFIRM_SUPPRESSED:" + message.orEmpty().take(160))
                 result?.cancel()
                 return true
             }
@@ -169,25 +177,41 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
                 defaultValue: String?,
                 result: JsPromptResult?,
             ): Boolean {
-                notice = "JS_PROMPT_SUPPRESSED:" + message.orEmpty().take(160)
+                appendNotice("JS_PROMPT_SUPPRESSED:" + message.orEmpty().take(160))
                 result?.cancel()
                 return true
             }
 
             override fun onPermissionRequest(request: PermissionRequest) {
-                notice = "PERMISSION_DENIED:" + request.resources.joinToString().take(120)
+                appendNotice("PERMISSION_DENIED:" + request.resources.joinToString().take(120))
                 request.deny()
             }
 
-            /** 新窗口一律不开：Memo 没有多标签（spec §1 的非目标），开了就是丢页面。 */
+            /**
+             * 新窗口一律不开：Memo 没有多标签（spec §1 的非目标），开了就是丢页面。
+             * 拒绝也要在信封里说明（spec §7.3），否则模型收到 `ok` 会以为页面还在。
+             */
             override fun onCreateWindow(
                 webView: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?,
-            ): Boolean = false
+            ): Boolean {
+                // 回调签名里没有目标 URL；hit test 是唯一能顺到链接地址的地方，拿不到就只报码。
+                val target = view.hitTestResult?.extra
+                appendNotice(if (target == null) "NEW_WINDOW_REFUSED" else "NEW_WINDOW_REFUSED:" + target.take(120))
+                return false
+            }
         }
         view.setDownloadListener { url, _, contentDisposition, _, _ ->
-            notice = "DOWNLOAD_REFUSED:" + url.take(120) +
-                (if (contentDisposition.isNullOrBlank()) "" else "|" + contentDisposition)
+            appendNotice("DOWNLOAD_REFUSED:" + url.take(120) +
+                (if (contentDisposition.isNullOrBlank()) "" else "|" + contentDisposition))
         }
+    }
+
+    /**
+     * 累积一笔「本机挡掉了什么」：单槽会让五种来源互相覆盖 —— 一轮里先弹 alert
+     * 又要摄像头权限时，模型只看得见最后一笔，前一种被静默吞掉（spec §7.3）。
+     */
+    private fun appendNotice(raw: String) {
+        notice = notice?.let { "$it; $raw" } ?: raw
     }
 
     override fun drainNotice(): String? = notice.also { notice = null }
@@ -206,10 +230,36 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
     /** 把同一个实例挂到界面上（先从别处摘下来）。必须在主线程（Compose 里就是）。 */
     fun attachTo(container: ViewGroup) {
         (view.parent as? ViewGroup)?.removeView(view)
-        if (view.parent == null) container.addView(view)
+        if (view.parent == null) {
+            // 尺寸契约写明白：铺满宿主。之前靠「默认 LayoutParams 恰好是 MATCH_PARENT」的隐式约定。
+            container.addView(
+                view,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
     }
 
-    fun detach() { (view.parent as? ViewGroup)?.removeView(view) }
+    /**
+     * 摘下来之后必须把布局尺寸**还原回离屏视口**：接管期间真布局把 WebView 重排成了手机
+     * 尺寸，而 removeView 不会自己弹回去 —— 不还原的话 [userControls] 已交还、模型以为
+     * 世界照旧，但 `screenshotPng` 截到手机尺寸、`window.innerWidth` 变了、`find` 的
+     * bounds 与模型回传的 x/y 全体错位。主线程调用（measure/layout 的要求）。
+     */
+    private fun applyOffscreenViewport() {
+        view.measure(
+            View.MeasureSpec.makeMeasureSpec(VIEWPORT_WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(VIEWPORT_HEIGHT, View.MeasureSpec.EXACTLY),
+        )
+        view.layout(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+    }
+
+    fun detach() {
+        (view.parent as? ViewGroup)?.removeView(view)
+        applyOffscreenViewport()
+    }
 
     override suspend fun navigate(url: String): Result<Unit> = actionLock.withLock {
         withContext(Dispatchers.Main) {
@@ -220,53 +270,68 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             view.loadUrl(url)
             // 用「带原因的完成」而不是异常完成：`await()` 就不会抛，外层取消（用户点停止）
             // 仍是唯一能让它抛的东西 —— 那必须透传，不能被读成「导航失败」（spec §8）。
+            // try/finally 统一归还 deferred：六条路径各写一遍清线迟早漏一条，
+            // 挂在外面的那枚会被下一次导航的 onPageFinished「串台」完成掉。
             val verdict = try {
                 withTimeoutOrNull(NAV_TIMEOUT_MS) { done.await() }
             } catch (e: CancellationException) {
-                if (navigation === done) navigation = null
+                // 取消那次加载还在飞：不 stopLoading，它照样 onPageFinished，而那时
+                // 字段里很可能已是下一颗 navigate 的 deferred —— 下一次导航会被提前报成功。
                 withContext(NonCancellable) { view.stopLoading() }
                 throw e
+            } finally {
+                if (navigation === done) navigation = null
             }
             when (verdict) {
                 null -> {
-                    if (navigation === done) navigation = null
                     withContext(NonCancellable) { view.stopLoading() }
-                    return@withContext Result.failure(IllegalStateException("NAV_TIMEOUT"))
+                    Result.failure(IllegalStateException("NAV_TIMEOUT"))
                 }
-                "ok" -> Unit
-                else -> {
-                    if (navigation === done) navigation = null
-                    return@withContext Result.failure(IllegalStateException(verdict))
+                "ok" -> {
+                    urlState = view.url.orEmpty()
+                    Result.success(Unit)
                 }
+                else -> Result.failure(IllegalStateException(verdict))
             }
-            if (navigation === done) navigation = null
-            urlState = view.url.orEmpty()
-            Result.success(Unit)
         }
     }
 
-    override suspend fun goBack(): Boolean = withContext(Dispatchers.Main) {
-        if (closed || !view.canGoBack()) return@withContext false
-        view.goBack()
-        bumpGenerationAndDropSnapshot()
-        true
+    override suspend fun goBack(): Boolean = actionLock.withLock {
+        withContext(Dispatchers.Main) {
+            if (closed || !view.canGoBack()) return@withContext false
+            view.goBack()
+            bumpGenerationAndDropSnapshot()
+            true
+        }
     }
 
-    override suspend fun reload(): Result<Unit> = withContext(Dispatchers.Main) {
-        if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
-        val done = CompletableDeferred<String>()
-        navigation = done
-        view.reload()
-        // finally：取消路径（外层协程被点停止）也要先把这枚 deferred 交还，
-        // 否则迟到的 onPageFinished 会去 complete 一枚已经没人等的 deferred。
-        val verdict = try {
-            withTimeoutOrNull(NAV_TIMEOUT_MS) { done.await() }
-        } finally {
-            if (navigation === done) navigation = null
+    override suspend fun reload(): Result<Unit> = actionLock.withLock {
+        withContext(Dispatchers.Main) {
+            if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
+            val done = CompletableDeferred<String>()
+            navigation = done
+            view.reload()
+            val verdict = try {
+                withTimeoutOrNull(NAV_TIMEOUT_MS) { done.await() }
+            } catch (e: CancellationException) {
+                // 同 navigate：被放弃的加载照样会 onPageFinished，必须停掉，
+                // 否则它去 complete 下一颗动作的 deferred。
+                withContext(NonCancellable) { view.stopLoading() }
+                throw e
+            } finally {
+                if (navigation === done) navigation = null
+            }
+            bumpGenerationAndDropSnapshot()
+            when {
+                verdict == null -> {
+                    withContext(NonCancellable) { view.stopLoading() }
+                    Result.failure(IllegalStateException("NAV_TIMEOUT"))
+                }
+                // close() 以值解套的那次唤醒不能读成「重载成功」。
+                verdict == "RENDERER_GONE" -> Result.failure(IllegalStateException(verdict))
+                else -> Result.success(Unit)
+            }
         }
-        bumpGenerationAndDropSnapshot()
-        if (verdict == null) Result.failure(IllegalStateException("NAV_TIMEOUT"))
-        else Result.success(Unit)
     }
 
     override suspend fun run(script: String, timeoutMs: Long): Pair<Boolean, String> =
@@ -289,31 +354,42 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
                 withContext(NonCancellable) { view.stopLoading() }
                 return@withContext false to "SCRIPT_TIMEOUT"
             }
+            // close() 以值解套的那次唤醒：把码原样交出去，别把哨兵喂给 unwrap 变成 BAD_JSON。
+            if (raw == SCRIPT_CLOSED) return@withContext false to "CANCELLED"
             BrowserScripts.unwrap(raw)
         } }
 
-    /** 原尺寸截图（不缩放：缩放会让小字不可读）。主线程画位图。 */
-    override suspend fun screenshotPng(): ByteArray = withContext(Dispatchers.Main) {
-        if (closed) return@withContext ByteArray(0)
-        val out = ByteArrayOutputStream()
-        val bmp = Bitmap.createBitmap(
-            maxOf(1, view.width),
-            maxOf(1, view.height),
-            Bitmap.Config.ARGB_8888,
-        )
-        val canvas = android.graphics.Canvas(bmp)
-        canvas.drawColor(Color.WHITE)
-        view.draw(canvas)
-        bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
-        bmp.recycle()
-        out.toByteArray()
+    /** 原尺寸截图（不缩放：缩放会让小字不可读）。主线程画位图。上锁同 navigate：串行是 spec §8 的承诺。 */
+    override suspend fun screenshotPng(): ByteArray = actionLock.withLock {
+        withContext(Dispatchers.Main) {
+            if (closed) return@withContext ByteArray(0)
+            val out = ByteArrayOutputStream()
+            val bmp = Bitmap.createBitmap(
+                maxOf(1, view.width),
+                maxOf(1, view.height),
+                Bitmap.Config.ARGB_8888,
+            )
+            val canvas = android.graphics.Canvas(bmp)
+            canvas.drawColor(Color.WHITE)
+            view.draw(canvas)
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+            bmp.recycle()
+            out.toByteArray()
+        }
     }
 
     /** 不在 [BrowserGateway] 上：只有 [BrowserSessionStore]（换会话 / closeAll）需要关它。 */
     suspend fun close() = withContext(Dispatchers.Main) {
         if (closed) return@withContext
         closed = true
-        pendingScript?.completeExceptionally(IllegalStateException("CANCELLED"))
+        // 两枚在飞的 deferred 都**以值解套**而不是异常：completeExceptionally 会一路抛到
+        // ToolRunner 被归成 tool_crashed，RENDERER_GONE/CANCELLED 这两个码就到不了信封；
+        // 以带原因的值完成，await 侧走正常失败通道，也不会留未处理的异常完成。
+        // 不解锁的话被抢会话的 navigate 要干等满 NAV_TIMEOUT_MS（25 s，几乎吃光 browser_use 的 30 s）。
+        navigation?.complete("RENDERER_GONE")
+        navigation = null
+        pendingScript?.complete(SCRIPT_CLOSED)
+        pendingScript = null
         detach()
         view.stopLoading()
         view.destroy()

@@ -2,6 +2,8 @@ package com.psyche.memo.provider.browser
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -13,22 +15,35 @@ class BrowserSessionStore(private val appContext: Context) {
 
     private var holder: Pair<String, BrowserSession>? = null
 
-    suspend fun sessionFor(conversationId: String): BrowserSession = withContext(Dispatchers.Main) {
-        holder?.let { (id, session) ->
-            if (id == conversationId) return@withContext session
-            session.close()
-            holder = null
+    /**
+     * [session.close] 会挂起并让出 Main（[Dispatchers.Main] 非 immediate），此时 `holder`
+     * 还没置 null；不加锁的话另一会话的 [sessionFor] 能插进来，第一支恢复时把 holder 覆盖成
+     * 自己的新实例 ⇒ 两个活 WebView 并存，那个被顶掉的再没人关（cookie jar 却仍是同一份）。
+     */
+    private val mutex = Mutex()
+
+    suspend fun sessionFor(conversationId: String): BrowserSession = mutex.withLock {
+        withContext(Dispatchers.Main) {
+            holder?.let { (id, session) ->
+                // 命中但已 closed 的实例视为不存在：Task 8 的「清空并关闭」曾直接 close() 而
+                // 不动 store，尸体留在 holder 里会让这个会话之后每颗动作都 RENDERER_GONE。
+                if (id == conversationId && !session.isClosed) return@withContext session
+                session.close()
+                holder = null
+            }
+            BrowserSession.createOnMain(appContext).also { holder = conversationId to it }
         }
-        BrowserSession.createOnMain(appContext).also { holder = conversationId to it }
     }
 
-    /** 界面用它拿当前实例来接管；没有就 null（不创建）。 */
+    /** 界面用它拿当前实例来接管；没有或已关就 null（不创建，也不把尸体递出去重挂）。 */
     fun peek(conversationId: String): BrowserSession? =
-        holder?.takeIf { it.first == conversationId }?.second
+        holder?.takeIf { it.first == conversationId && !it.second.isClosed }?.second
 
     /** 「清空浏览器数据」/关掉全局开关。 */
-    suspend fun closeAll() = withContext(Dispatchers.Main) {
-        holder?.second?.close()
-        holder = null
+    suspend fun closeAll() = mutex.withLock {
+        withContext(Dispatchers.Main) {
+            holder?.second?.close()
+            holder = null
+        }
     }
 }
