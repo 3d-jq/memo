@@ -779,8 +779,8 @@ git commit -m "feat: 浏览器 JS 脚本与信封解析（参数走 JSON 字面�
 - Consumes: `BrowserScripts`（Task 4）、`BrowserPageSnapshot`（Task 3）
 - Produces:
   - `interface BrowserGateway { val generation: Int; val url: String; val userControls: Boolean; val snapshot: BrowserPageSnapshot?; val canGoBack: Boolean; suspend fun navigate(url: String): Result<Unit>; suspend fun run(script: String, timeoutMs: Long): Pair<Boolean, String>; suspend fun screenshotPng(): ByteArray; suspend fun goBack(): Boolean; suspend fun reload(): Result<Unit>; fun publishSnapshot(snapshot: BrowserPageSnapshot?); fun bumpGenerationAndDropSnapshot(); fun drainNotice(): String? }`
-  - `class BrowserSession : BrowserGateway` —— `suspend fun create(appContext: Context): BrowserSession`（伴生）、`val view: WebView`、`fun attachTo(container: ViewGroup)`、`fun detach()`、`fun takeOver()`、`fun release()`、`suspend fun close()`、`companion object { const val NAV_TIMEOUT_MS/SCRIPT_TIMEOUT_MS/SHOT_TIMEOUT_MS/VIEWPORT_WIDTH/VIEWPORT_HEIGHT/MAX_PNG_BYTES }`
-  - `class BrowserSessionStore(appContext: Context)`：`suspend fun sessionFor(conversationId: String): BrowserSession`、`fun peek(conversationId: String): BrowserSession?`、`suspend fun closeAll()`
+  - `class BrowserSession : BrowserGateway` —— 伴生 `fun createOnMain(appContext: Context): BrowserSession`（**调用方必须在主线程**）+ `suspend fun create(appContext: Context)`（`withContext(Main)` 包一层）、`val view: WebView`、`fun attachTo(container: ViewGroup)`、`fun detach()`、`fun takeOver()`、`fun release()`、`suspend fun close()`、`companion object { const val NAV_TIMEOUT_MS/SCRIPT_TIMEOUT_MS/SHOT_TIMEOUT_MS/VIEWPORT_WIDTH/VIEWPORT_HEIGHT/MAX_PNG_BYTES }`
+  - `class BrowserSessionStore(appContext: Context)`：`suspend fun sessionFor(conversationId: String): BrowserSession`（体内已在 Main 上，直接 `createOnMain`）、`fun peek(conversationId: String): BrowserSession?`、`suspend fun closeAll()`
   - `AppContainerImpl.browserSessions: BrowserSessionStore`
 
 - [ ] **Step 1: 写失败的测试**
@@ -929,9 +929,24 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         const val SHOT_TIMEOUT_MS = 5_000L
         const val MAX_PNG_BYTES = 4 * 1024 * 1024
 
-        /** WebView 只能在有 Looper 的线程创建，入口整体挂 Main。 */
+        /**
+         * WebView 只能在有 Looper 的线程创建。
+         *
+         * 两个入口分开是**必需的**：suspend 那版内部 `withContext(Dispatchers.Main)`，而
+         * Robolectric 的测试线程就是主 Looper 线程 —— Compose UI 测试（不能用
+         * `MainDispatcherRule`，会和 Compose 规则抢调度器）里 `runBlocking { create() }`
+         * 会当场自锁死（PORTING §5.40 那个坑的另一种形态）。所以主线程调用方直接用
+         * [createOnMain]，后台调用方用 [create]。
+         */
+        fun createOnMain(appContext: Context): BrowserSession {
+            check(android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                "WebView 必须在主线程创建"
+            }
+            return BrowserSession(appContext)
+        }
+
         suspend fun create(appContext: Context): BrowserSession =
-            withContext(Dispatchers.Main) { BrowserSession(appContext) }
+            withContext(Dispatchers.Main) { createOnMain(appContext) }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -1208,7 +1223,7 @@ class BrowserSessionStore(private val appContext: Context) {
             session.close()
             holder = null
         }
-        BrowserSession.create(appContext).also { holder = conversationId to it }
+        BrowserSession.createOnMain(appContext).also { holder = conversationId to it }
     }
 
     /** 界面用它拿当前实例来接管；没有就 null（不创建）。 */
@@ -1223,7 +1238,8 @@ class BrowserSessionStore(private val appContext: Context) {
 }
 ```
 
-> `withContext(Dispatchers.Main) { ... }` 的推导：`sessionFor` 的 lambda 有两条出口（复用现有实例 / 新建），两支都是 `BrowserSession`，编译无歧义。跑测试时 `MainDispatcherRule` 已把 Main 换成 unconfined，所以 `withContext(Main)` 在 Robolectric 里不会和 `runBlocking` 互相等死（这是 PORTING §5.40 那条纪律的用武之地）。
+> 两条出口（复用现有实例 / 新建）都返回 `BrowserSession`，`withContext` 的推导没有歧义。
+> Task 5 的测试挂 `MainDispatcherRule`（Main 换成 unconfined），`runBlocking { sessionFor(...) }` 不会和主 Looper 互相等死 —— 这是 PORTING §5.40 那条纪律的用武之地。**但 Compose UI 测试（Task 8）不能挂这条规则**，所以那边直接用 `BrowserSession.createOnMain(...)`。
 
 `AppContainer.kt`：紧挨 `workspaceTerminalSessions`（`:150-160`）加：
 
@@ -2211,7 +2227,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.psyche.memo.provider.browser.BrowserSession
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -2235,9 +2250,13 @@ class BrowserOverlayTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private fun newSession(): BrowserSession = runBlocking {
-        BrowserSession.create(ApplicationProvider.getApplicationContext())
-    }
+    /**
+     * 用 `createOnMain` 而不是 `create()`：这条测试挂的是 `createComposeRule`，它自己接管
+     * Main 调度器，再叠 `MainDispatcherRule` 或 `runBlocking { withContext(Main) }` 都会
+     * 自锁死（Compose 测试线程就是主 Looper 线程）。
+     */
+    private fun newSession(): BrowserSession =
+        BrowserSession.createOnMain(ApplicationProvider.getApplicationContext())
 
     @Test
     fun overlayBlocksTheModelWhileOpenAndHandsBackOnDispose() {
