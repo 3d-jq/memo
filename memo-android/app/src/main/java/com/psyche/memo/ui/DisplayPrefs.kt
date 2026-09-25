@@ -71,4 +71,12 @@ object DisplayPrefs {
     /** Agent 内置浏览器（本工程新增；**默认开**是用户 2026-09-25 的决定）。 */
     fun browserEnabled(container: AppContainerImpl): Boolean =
         readBool(container, BrowserTool.PREFERENCE_KEY, default = true)
+
+    /**
+     * [browserEnabled] 的写入侧。读写收在同一个文件里：键名 `BrowserTool.PREFERENCE_KEY`
+     * 在生产代码里只许被 `DisplayPrefs` 引用，调用方不再手递键名 —— 否则将来改键名会
+     * 「写进一个新键、读永远是默认开」，且没有任何测试会红。
+     */
+    fun writeBrowserEnabled(container: AppContainerImpl, value: Boolean) =
+        writeBool(container, BrowserTool.PREFERENCE_KEY, value)
 }
