@@ -75,7 +75,10 @@ selector 只在 JS 内部用来从快照取回同一个节点。
 
 ## 4. 门控与提示词
 
-- 新 PREFERENCE 键 `agent_browser_enabled_v1`，**默认 "0"（关）**。
+- 新 PREFERENCE 键 `agent_browser_enabled_v1`，**默认 "1"（开）** —— 用户 2026-09-25 复核 spec 时明确
+  「改成默认开着的」。直接后果：**开了以后所有助手都能用这个工具**（不绑助手），第一次对话就可能被
+  模型自己调用去查网页；缓解手段是提示词里那条路由句（"要读网页内容才用 `browser_use`，不要在浏览器里
+  登录/支付"）与设置页那颗随时可关的开关。
 - `ChatViewModel.offeredTools()` 新增一条 **app 级分支**（不读助手配置）：`currentAssistant()` 为空
   时仍然返回空（保持现状），否则开关为 "1" 就把 `browser_use` 加进去。这是 Memo 首例"不绑助手"，
   代码注释里写清楚为什么（浏览器是设备能力，不是人设能力）。
