@@ -86,4 +86,27 @@ class ToolRulesTest {
             assertTrue("路由句里缺了 $name", block.contains(name))
         }
     }
+
+    /**
+     * `browser_use` 是 **app 级**工具，永远不许进 `LocalToolNames.all`。那条名单是「助手
+     * 勾了才执行」的双闸（`ToolHandler.handle` 的本地工具两支都读
+     * `assistant.localToolIds.contains(name)`），塞进去就等于要求每个助手先勾一遍浏览器 ——
+     * 正是 spec §4「浏览器是设备能力，不是人设能力」要避免的那条路径；而它一旦落进那两支，
+     * `ToolHandler` 里那颗自成一族的分派支就成了死代码（门控也随之失效）。
+     *
+     * 这条约束此前只靠「没人写」维持，这里给它上一道闸。
+     */
+    @Test
+    fun `the app level browser tool stays out of the assistant gated local tool list`() {
+        assertTrue(
+            "browser_use 不该被助手勾选门控（它是 app 级工具）",
+            com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME !in
+                com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all,
+        )
+        assertTrue(
+            "browser_use 也不该出现在本地工具执行器表里 —— 那两支要求 assistant.localToolIds",
+            com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME !in
+                com.psyche.memo.provider.LocalToolExecutors.EXECUTABLE,
+        )
+    }
 }

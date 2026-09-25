@@ -27,6 +27,7 @@ class BrowserToolTest {
         override val userControls: Boolean = false,
         private val elements: BrowserPageSnapshot? = null,
         var runResult: Pair<Boolean, String> = false to "NOT_IN_TESTS",
+        private val shotBytes: Int = 8,
     ) : BrowserGateway {
         override val url = "https://example.com"
         override val isClosed = false
@@ -35,6 +36,7 @@ class BrowserToolTest {
         var lastScript = ""
         var navigatedTo: String? = null
         var bumps = 0
+        var reloads = 0
         override suspend fun navigate(url: String): Result<Unit> =
             if (url.startsWith("https://")) {
                 navigatedTo = url
@@ -46,9 +48,12 @@ class BrowserToolTest {
             lastScript = script
             return runResult
         }
-        override suspend fun screenshotPng(): ByteArray = ByteArray(8)
+        override suspend fun screenshotPng(): ByteArray = ByteArray(shotBytes)
         override suspend fun goBack(): Boolean = false
-        override suspend fun reload(): Result<Unit> = Result.success(Unit)
+        override suspend fun reload(): Result<Unit> {
+            reloads++
+            return Result.success(Unit)
+        }
         override fun publishSnapshot(snapshot: BrowserPageSnapshot?) { published = snapshot }
         override fun bumpGenerationAndDropSnapshot() { bumps++ }
         var notice: String? = null
@@ -71,6 +76,16 @@ class BrowserToolTest {
                 "#q", Bounds(0, 20, 200, 30)),
         ),
     )
+
+    /**
+     * 「递给模型的整条结果里不许出现 CSS selector」—— 对着**字符串**断言，不挑字段：
+     * 泄漏的形状以后可能是 detail、可能是 message，只钉一个键名等于没钉。
+     */
+    private fun assertNoSelectorLeak(result: String) {
+        assertTrue("结果里出现了结构路径 selector（模型唯一的把手是 index）：$result", !result.contains("nth-of-type"))
+        assertTrue("结果里出现了快照自己页面的 id：$result", !result.contains("#q"))
+        assertTrue("结果里出现了 `body >` 这种 CSS 链：$result", !result.contains("body >"))
+    }
 
     @Test
     fun definitionAndDescriptionStayInLockstep() {
@@ -202,21 +217,142 @@ class BrowserToolTest {
         assertEquals("点完要把代次推进、旧 index 作废（只推进一次）", 1, gateway.bumps)
     }
 
+    /**
+     * **本设计的地基**：index 是模型唯一的把手（`BrowserPageSnapshot` 头部那条纪律 +
+     * spec §3「模型永远看不到 CSS selector」）。`clickScript` 的 value 恰恰就是
+     * `{clicked: selFor(el)}` —— 回显它等于教模型「selector 也可寻址」，而 index+代次
+     * 这套契约存在的理由正是杀掉「同一枚 selector 在页面变化后静默点到另一个元素」；
+     * 顺带还把页面自己控制的 id 文本未经过滤地递进了上下文。
+     *
+     * 所以成功时回给模型的是**它自己传进来的那枚把手**。
+     */
+    @Test
+    fun clickSuccessEchoesTheHandleTheModelItselfPassed() = runBlocking {
+        val byIndex = FakeGateway(
+            elements = elementSnapshot(),
+            runResult = true to """{"clicked":"#q"}""",
+        )
+        val indexResult = BrowserTool.execute(
+            byIndex,
+            argsOf("\"action\":\"click\"", "\"index\":\"2\"", "\"generation\":\"4\""),
+        ) {}
+        assertEquals("index=2", obj(indexResult)["target"]!!.jsonPrimitive.content)
+        assertNoSelectorLeak(indexResult)
+
+        // 坐标那支同理：JS 回的是「实际点到的那个元素」的 selector，一样不许出口。
+        val byPoint = FakeGateway(runResult = true to """{"clicked":"body > div:nth-of-type(9) > #q"}""")
+        val pointResult = BrowserTool.execute(
+            byPoint,
+            argsOf("\"action\":\"click\"", "\"generation\":\"4\"", "\"x\":\"12\"", "\"y\":\"30\""),
+        ) {}
+        assertEquals("x=12,y=30", obj(pointResult)["target"]!!.jsonPrimitive.content)
+        assertNoSelectorLeak(pointResult)
+    }
+
+    /**
+     * `ACTIONS` 是声明侧的真值来源，而 `definitionAndDescriptionStayInLockstep` 只钉得住
+     * 「ACTIONS ↔ DEFINITION 的 enum」—— 钉不住「加了动作、忘了写分支」。过去末支是
+     * `else -> reload`，那种遗忘会被**当成页面重载执行**（错执行，不是拒执行）。
+     * 现在末支是 `NOT_IMPLEMENTED`，这条测试就是它真红的地方。
+     */
+    @Test
+    fun everyDeclaredActionIsImplemented() = runBlocking {
+        val offenders = BrowserTool.ACTIONS.filter { action ->
+            val result = BrowserTool.execute(
+                FakeGateway(elements = elementSnapshot(), runResult = true to """{"ok":1}"""),
+                argsOf(
+                    "\"action\":\"$action\"",
+                    "\"url\":\"https://example.com\"",
+                    "\"index\":\"1\"",
+                    "\"generation\":\"4\"",
+                    "\"text\":\"关键词\"",
+                    "\"x\":\"10\"",
+                    "\"y\":\"20\"",
+                    "\"direction\":\"down\"",
+                    "\"amount\":\"100\"",
+                    "\"offset\":\"0\"",
+                    "\"max_chars\":\"100\"",
+                ),
+            ) {}
+            "NOT_IMPLEMENTED" in result
+        }
+        assertTrue("这些动作在 ACTIONS 里却没有自己的分支，会被末支吞掉：$offenders", offenders.isEmpty())
+
+        // reload 与 navigate 各走各的门：末支写死之后仍要证明没被混成一次 loadUrl。
+        val reloaded = FakeGateway()
+        BrowserTool.execute(reloaded, argsOf("\"action\":\"reload\"")) {}
+        assertEquals("reload 要真的走 reload()", 1, reloaded.reloads)
+        assertEquals("reload 不许被读成 navigate", null, reloaded.navigatedTo)
+    }
+
+    /** 裁决 2：全局开关在执行侧的复查 —— 是一句**拒绝**，不是审批（PORTING §5.68）。 */
+    @Test
+    fun disabledSwitchRefusesTheToolWithoutAskingAnyone() {
+        val refusal = BrowserTool.rejectIfDisabled(false)
+        assertNull("开关开 = 放行", BrowserTool.rejectIfDisabled(true))
+        val result = obj(refusal!!)
+        assertEquals("tool_error", result["type"]!!.jsonPrimitive.content)
+        assertEquals("browser_disabled", result["error"]!!.jsonPrimitive.content)
+        val instruction = result["instruction"]!!.jsonPrimitive.content
+        assertTrue("要说清是用户关掉的、去设置里开", instruction.contains("browser"))
+        assertTrue("要叫它别再敲这颗工具", instruction.contains("Do not call"))
+        assertTrue("每条错误都要有下一步", instruction.isNotBlank())
+        assertNull("不许挂起等人：没有 pending 这种东西", result["pending"])
+    }
+
+    /** 参数错误 ≠ scheme 拒绝（B8：缺哪个参数就点名哪个）。 */
+    @Test
+    fun navigateWithoutUrlIsAnArgumentErrorNotASchemeRefusal() = runBlocking {
+        val gateway = FakeGateway()
+        val result = obj(BrowserTool.execute(gateway, argsOf("\"action\":\"navigate\"")) {})
+        assertEquals("invalid_arguments", result["error"]!!.jsonPrimitive.content)
+        assertTrue(
+            "violation 必须点名 url",
+            result["violations"]!!.jsonArray.any { it.jsonObject["param"]!!.jsonPrimitive.content == "url" },
+        )
+        assertTrue("不许把没给地址报成「地址被挡」", !result.toString().contains("BLOCKED_SCHEME"))
+        assertEquals("什么都没给，就不许 loadUrl", null, gateway.navigatedTo)
+    }
+
+    /**
+     * spec §4「填完就停」的另一半：**「没给 text」不等于「要把字段清空」**。
+     * 旧形状会照着空串往下写，等于一次谁都没要求的清空。
+     */
+    @Test
+    fun typeWithoutTextIsRefusedBeforeTouchingThePage() = runBlocking {
+        val gateway = FakeGateway(elements = elementSnapshot(), runResult = true to """{"typed":0}""")
+        val result = obj(
+            BrowserTool.execute(
+                gateway,
+                argsOf("\"action\":\"type\"", "\"index\":\"2\"", "\"generation\":\"4\""),
+            ) {},
+        )
+        assertEquals("invalid_arguments", result["error"]!!.jsonPrimitive.content)
+        assertTrue(
+            "violation 必须点名 text",
+            result["violations"]!!.jsonArray.any { it.jsonObject["param"]!!.jsonPrimitive.content == "text" },
+        )
+        assertEquals("参数不全之前不许把脚本递进页面", "", gateway.lastScript)
+        assertEquals("更不许推进代次", 0, gateway.bumps)
+    }
+
     @Test
     fun typeCarriesTheTextAndBumpsOnce() = runBlocking {
         val gateway = FakeGateway(
             elements = elementSnapshot(),
-            runResult = true to """{"typed":3}""",
+            runResult = true to """{"typed":3,"where":"#q"}""",
         )
-        val result = obj(
-            BrowserTool.execute(
-                gateway,
-                argsOf("\"action\":\"type\"", "\"index\":\"2\"", "\"generation\":\"4\"", "\"text\":\"关键词\""),
-            ) {},
-        )
+        val content = BrowserTool.execute(
+            gateway,
+            argsOf("\"action\":\"type\"", "\"index\":\"2\"", "\"generation\":\"4\"", "\"text\":\"关键词\""),
+        ) {}
+        val result = obj(content)
         assertEquals("tool_result", result["type"]!!.jsonPrimitive.content)
         assertTrue("文本要作为 JSON 字面量内联（转义交给 kotlinx）", gateway.lastScript.contains("\"text\":\"关键词\""))
         assertTrue("目标是快照里那条 input 的 selector", gateway.lastScript.contains("#q"))
+        assertEquals("index=2", result["target"]!!.jsonPrimitive.content)
+        assertEquals("3", result["chars"]!!.jsonPrimitive.content)
+        assertNoSelectorLeak(content)
         assertEquals(1, gateway.bumps)
     }
 
@@ -291,5 +427,26 @@ class BrowserToolTest {
         assertEquals("tool_result", result["type"]!!.jsonPrimitive.content)
         assertEquals(1, images.size)
         assertTrue(images[0].name.endsWith(".png"))
+    }
+
+    /**
+     * spec §5：图超限不发给模型，但**必须点名下一步**（「页面过大，请用 read 分段取正文」）。
+     * 只回 `status:"ok"` + `omitted` 等于告诉模型「一切正常，只是没图」，它就只会再敲一次
+     * screenshot。
+     */
+    @Test
+    fun oversizedScreenshotPointsAtReadInsteadOfJustShrugging() = runBlocking {
+        val images = mutableListOf<ToolImageBytes>()
+        val result = obj(
+            BrowserTool.execute(
+                FakeGateway(shotBytes = BrowserSession.MAX_PNG_BYTES + 1),
+                argsOf("\"action\":\"screenshot\""),
+            ) { images.add(it) },
+        )
+        assertEquals("tool_result", result["type"]!!.jsonPrimitive.content)
+        assertTrue("超限的图不许发给模型", images.isEmpty())
+        assertNotNull("要说明为什么没图", result["omitted"])
+        val instruction = result["instruction"]!!.jsonPrimitive.content
+        assertTrue("下一步必须是另一条读法：$instruction", instruction.contains("read"))
     }
 }

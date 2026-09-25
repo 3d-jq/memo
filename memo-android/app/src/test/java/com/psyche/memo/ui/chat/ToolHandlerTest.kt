@@ -2,7 +2,10 @@ package com.psyche.memo.ui.chat
 
 import com.psyche.memo.data.model.Assistant
 import com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
@@ -177,5 +180,36 @@ class ToolHandlerTest {
         val h = handler(assistant = assistant(listOf(LocalToolNames.ASK_USER)))
         val obj = decode(h.handle(LocalToolNames.TIME_INFO, JsonObject(emptyMap()), "call-1"))
         assertEquals("execution_error", obj["error"]!!.jsonPrimitive.content)
+    }
+
+    // ------------------------------------------------------------------
+    // 取消 ≠ 工具失败（handle() 末尾那个通用 catch）
+    // ------------------------------------------------------------------
+
+    /**
+     * 用户点「停止」= 协程被取消。取消**不是**一次工具结果：把它归成
+     * `execution_error` + 「You may try again with different parameters」有三个后果 ——
+     *  1. 对 `click`/`type`/写文件这类**有副作用**的动作，模型在「可能已经做了」的情况下
+     *     被告知重试（`ToolRunner` 的 tool_timeout 分支刻意躲的就是这一类）；
+     *  2. 那句注释里「只有先 rethrow，用户点停止才真停得下来」的保证被同一函数作废；
+     *  3. 与本仓「打断请求必须随生成终止释放」的纪律（AGENTS / PORTING §5.59）对不上。
+     *
+     * 所以这里断言的是**没有结果**：`handle` 被取消时不许返回任何写给模型的字符串。
+     */
+    @Test
+    fun cancellationIsNotReportedAsAToolFailure() = runBlocking {
+        val askUser = AskUserInteractionService()
+        val h = handler(askUser = askUser, assistant = assistant(listOf(AskUserToolNames.ASK_USER)))
+        val returned = CompletableDeferred<String>()
+        val job = launch {
+            returned.complete(h.handle(AskUserToolNames.ASK_USER, askUserArgs(), "ask-cancel"))
+        }
+        while (!askUser.isPending("ask-cancel")) { yield() }
+        job.cancelAndJoin()
+        assertFalse(
+            "取消被吞成了一条工具结果（等于叫模型去重试可能有副作用的动作）：" +
+                if (returned.isCompleted) returned.getCompleted() else "",
+            returned.isCompleted,
+        )
     }
 }
