@@ -2215,3 +2215,60 @@ skill, **before doing the task work**"（原描述同样来自 RikkaHub，属**�
 **物理底部**，收敛容差 `SETTLE_TOLERANCE_DP = 2`（Agora 的落定判据同为 ≤2dp）；
 「恢复跟随 / 键盘钉底」仍是宽判据，提成 `RESUME_TOLERANCE_DP = 24`。
 **不加**"结束时硬跳一次"（§5.52 之后用户已否过，1.0.17 也为此删过）—— 差距交给每帧指数收敛吃掉。
+
+## 5.59 没人等的审批/问询必须随生成终止释放（2026-09-25，用户「工作区工具传了参数，工具就全部问题，换了新对话就没有」）
+
+**症状不是工作区的，是会话级的。** 链路：`workspace_shell`（以及写到 `/workspace` 之外的
+write/edit）默认要审批 → `ToolHandler` 里 `requestApproval(...).await()` 把整条生成循环挂住
+→ 这张 pending 表是**容器级、按 (conversationId, toolCallId) 建键**的，而等待方是本会话的协程。
+原先只有 `ChatViewModel.stop()`（用户按「停止」）会 `cancelForConversation`，另外三条终止路径
+都不清：
+
+1. `ChatViewModel` **没有 `onCleared()`** —— 离开聊天页/Activity 重建时 `viewModelScope` 被取消，
+   协程死了，表项留着；
+2. `releaseForReuse()`（容器回收不忙的会话页 VM）里 `generationJob?.cancel()` 同样不清；
+3. 前台服务超时（`dataSync` 类型系统只给几分钟）走的是 `stopGeneration = { generationJob?.cancel() }`
+   这个裸取消，绕过了 `stop()` 的清理。
+
+泄漏之后 `ChatContent` 的打断面板只看这张表、不看有没有人在等，于是那条会话的**输入栏被一张
+永远没人应答的审批卡永久顶掉** —— 发不出消息、后续所有工具都不执行；而审批键含会话 id，
+换新对话立刻正常。这正是他看到的现象。
+
+修法（`ChatViewModel.releaseInterruptions()` 为唯一出口）：生成的 `finally`（两处：
+`startGeneration` 与 `resumeAfterToolAnswer`）、`stop()`、`releaseForReuse()`、`onCleared()`
+全部释放；FGS 超时的回调改成 `stop()` 而不是裸 `cancel()`；面板判据加 `generating` 一道门
+（`currentChatInterruption(..., generating = streaming)`）——**没有生成在跑就不许顶掉输入栏**，
+这是兜底：宁可少弹一次面板，也不能把会话锁死。`ToolApprovalServiceTest` 钉住前提：释放之后
+同一个 toolCallId 重新请求要拿到**新**的 deferred（不释放就会挂在旧对象上）。
+
+顺带把同源的第二个缺陷补了：**问询表此前按裸 toolCallId 建键**（审批表早就按会话分键了），
+而厂商不给 id 时解码器会造 `tool-1` 这种每轮重复的占位 id（`ChatCompletionsDecoder.toolSeriesId`）
+⇒ 后一条会话的问询会顶掉前一条的表项。`AskUserInteractionService` 现在与审批服务同形状
+（`(scope, toolCallId)` + unscoped 兜底 + List 快照），**这是对上游的一处有意偏离**，
+理由与审批服务那条相同。
+
+## 5.60 后台生成「开」这一档此前什么都不做（2026-09-25，用户「把实时通知显示那个做完整，就是退出 app 也可以继续那个部分」）
+
+`ChatBackgroundController.onGenerationStart` 原来只在 `ON_NOTIFY` 才 `acquire` 前台服务，
+而设置项文案（照上游 `AndroidBackgroundChatMode` 三态）写的是「开＝保活」「开+通知＝保活+完成通知」
+⇒ 选「开」时**既不保活也没有任何通知**，这个设置等于空。现在两档都 acquire、也都 release
+（release 用**开始时**记下的档位，中途改设置不会漏停服务）。
+
+仍然没做、也不该顺手做的：把生成从 `viewModelScope` 搬到容器级 scope。RikkaHub 的
+`ChatService` 是 Koin 单例 + `AppScope` + 按会话的 `ConversationSession{state, job, refCount}`，
+UI 只是订阅者（`ChatVM.kt:65`），所以它连「Activity 重建」都不怕；但**它也做不到进程被杀后续跑**
+（`START_NOT_STICKY`、没有"生成中"落库标记、`cleanup()` 开机不调）。Memo 目前的形态是
+容器按 conversationId 缓存会话页 VM（`registerChatViewModel`）+ 忙的不回收，所以切会话、
+进设置页都不中断，缺的只有 Activity 销毁/进程被杀这一档。要不要为它做完整的
+「执行体 + 消息状态搬到容器级 owner」，等他真机验过 5.60 之后再定，别在一个批次里
+同时改生成主干和两处观感。
+
+## 5.61 生成中的呼吸指示器换成品牌星形（2026-09-25，用户「我们这个呼吸圆点改成品牌图标里面那个的星吗」）
+
+`GenerationActivityDot` → **`GenerationActivityStar`**（文件同名改名）：只换形状，
+Agora 那套动画参数一行没动（scale 0.55⇄1.30 @1s FastOutSlowIn Reverse、alpha 0→1 400ms、
+只做 `graphicsLayer` 绘制态、颜色 `primary` 跟主题）。尺寸 11dp→**12dp**（星形视觉比同直径
+的圆点小一档）。形状用 `Path` 按 `docs/icon.png` 右上角那颗星手工描（24×24 视口、四尖角朝
+上下左右、四条三次贝塞尔边吸向中心），**不贴位图**：位图要么自带品牌蓝（不跟主题），
+要么当模板染色（抗锯齿灰边 + 缩放发糊）。坐标在 `brandStarPath(ratio)` 里手工乘出来，
+不用 `DrawScope.scale`（那份 Compose 版本里它与外层同名局部量打架，编译不过）。

@@ -842,12 +842,12 @@ internal fun MessageRow(
                 }
                 if (!isUser) {
                     // 照 Agora（`AssistantMessageContent.kt` 尾部 Box）：这条尾行**常驻**——
-                    // 流式时放呼吸圆点、结束后放操作按钮，行本身不折叠/展开
+                    // 流式时放呼吸星、结束后放操作按钮，行本身不折叠/展开
                     // ⇒ 结束时没有任何高度跳变（用户 2026-09-24「最后那排复制出现时不要那样一下」）。
                     if (msg.isStreaming) {
                         Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.CenterStart) {
-                            // 呼吸圆点（颜色跟随主题 primary；自带渐显）。
-                            com.psyche.memo.ui.chat.GenerationActivityDot()
+                            // 呼吸星形（品牌图标那颗；颜色跟随主题 primary，自带渐显）。
+                            com.psyche.memo.ui.chat.GenerationActivityStar()
                         }
                     } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {

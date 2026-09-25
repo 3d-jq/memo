@@ -104,4 +104,40 @@ class ChatBackgroundControllerTest {
             ),
         )
     }
+
+    // ---- shouldKeepAlive / shouldNotifyCompletion ------------------------
+
+    /**
+     * 「开」这一档必须也走前台服务：原先保活和通知被写成同一支（只在 ON_NOTIFY 才
+     * acquire），选「开」的人既不保活也没通知，设置等于空（用户 2026-09-25
+     * 「把实时通知显示那个做完整，就是退出 app 也可以继续那个部分」）。
+     */
+    @Test
+    fun `both non-off modes keep alive but only on_notify notifies`() {
+        assertFalse(
+            ChatBackgroundController.shouldKeepAlive(
+                ChatBackgroundController.AndroidBackgroundChatMode.OFF,
+            ),
+        )
+        assertTrue(
+            ChatBackgroundController.shouldKeepAlive(
+                ChatBackgroundController.AndroidBackgroundChatMode.ON,
+            ),
+        )
+        assertTrue(
+            ChatBackgroundController.shouldKeepAlive(
+                ChatBackgroundController.AndroidBackgroundChatMode.ON_NOTIFY,
+            ),
+        )
+        assertFalse(
+            ChatBackgroundController.shouldNotifyCompletion(
+                ChatBackgroundController.AndroidBackgroundChatMode.ON,
+            ),
+        )
+        assertTrue(
+            ChatBackgroundController.shouldNotifyCompletion(
+                ChatBackgroundController.AndroidBackgroundChatMode.ON_NOTIFY,
+            ),
+        )
+    }
 }

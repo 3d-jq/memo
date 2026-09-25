@@ -5,6 +5,8 @@ import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -165,6 +167,32 @@ class ToolApprovalServiceTest {
      * 别让它继续拦着这一轮生成（用户 2026-09-16「我关闭了确认 为什么还有确认呀」）。
      * 只放行同名的，其他工具/其他会话的请求原样等着。
      */
+    /**
+     * 「释放之后再要同一个 id」必须拿到**新**的 deferred。
+     *
+     * 同键重复请求会返回**已存在**的 completer（上游语义，见 [ToolApprovalService.requestApproval]），
+     * 所以一旦上一轮的等待方死了而 pending 没被清掉，这一轮的 `.await()` 就挂在一个
+     * 永远没人应答的旧对象上 —— 那条会话从此所有工具都不执行，换新对话才好
+     * （用户 2026-09-25）。本用例钉住的是修复成立的前提：**每条终止路径都要释放**，
+     * 释放之后同 id 重新请求要能拿到干净的 deferred。
+     */
+    @Test
+    fun releasedRequest_freesTheKeyForAFreshCompleter() = runBlocking {
+        val service = ToolApprovalService()
+        val first = service.requestApproval("tool-1", "workspace_shell", emptyArgs, "conv-1")
+        // 没释放之前，同一个键只会拿到旧 deferred（旧等待方已死 ⇒ 新调用永远挂住）。
+        assertSame(first, service.requestApproval("tool-1", "workspace_shell", emptyArgs, "conv-1"))
+
+        service.cancelForConversation("conv-1")
+        assertTrue(first.isCompleted)
+
+        val second = service.requestApproval("tool-1", "workspace_shell", emptyArgs, "conv-1")
+        assertNotSame(first, second)
+        assertFalse(second.isCompleted)
+        service.approve("tool-1", conversationId = "conv-1")
+        assertTrue(second.await().approved)
+    }
+
     @Test
     fun approvePendingForTool_releasesOnlyThatTool() = runBlocking {
         val service = ToolApprovalService()

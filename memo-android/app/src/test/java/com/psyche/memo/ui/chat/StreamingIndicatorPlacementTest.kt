@@ -22,14 +22,14 @@ class StreamingIndicatorPlacementTest {
         val content = File(chatDir, "ChatContent.kt")
         assertTrue("找不到 ${content.path}（工作目录应当是 app 模块）", content.isFile)
         assertFalse(
-            "列表末尾的独立指示项应当已删除（圆点已改长在助手消息尾部）",
+            "列表末尾的独立指示项应当已删除（指示器已改长在助手消息尾部）",
             content.readText().contains("STREAMING_INDICATOR_ITEM_KEY"),
         )
 
         val row = File(chatDir, "MessageRow.kt").readText()
         assertTrue(
-            "助手消息尾部应当渲染呼吸圆点（GenerationActivityDot）",
-            row.contains("GenerationActivityDot("),
+            "助手消息尾部应当渲染呼吸星形（GenerationActivityStar）",
+            row.contains("GenerationActivityStar("),
         )
         assertFalse(
             "消息行里不该再渲染扫光提示（回到消息内部就会在工具调用时跳动）",

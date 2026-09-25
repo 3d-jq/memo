@@ -324,6 +324,8 @@ class ChatViewModel(
         translationJobs.values.forEach { it.cancel() }
         translationJobs.clear()
         _streaming.value = false
+        // 这里也取消生成 ⇒ 同样是「等待方消失」的一条路径：挂着审批/问询的表项要还回去。
+        releaseInterruptions()
         _messages.value = emptyList()
         _versionInfo.value = emptyMap()
         _suggestions.value = emptyList()
@@ -659,14 +661,34 @@ class ChatViewModel(
         )
     }
 
+    /**
+     * 释放本会话**正挂着**的审批与问询请求（chat_actions.dart
+     * `_cancelStreamingByIdOnce` 1924-1941 的等价物）。
+     *
+     * 这两张表是容器级的、按会话建键，而生成的等待方是本会话的协程：协程没了（用户
+     * 停止、离开聊天页把 ViewModel 清掉、前台服务超时裸 `cancel()`）表项却还留着，
+     * 于是那条会话的输入栏被一张永远没人应答的面板顶掉 —— 同会话后续所有工具都不
+     * 执行，换新对话立刻正常（用户 2026-09-25「工作区工具传了参数，工具就全部问题」）。
+     * 所以**每一条终止路径**都要调它，不只是「停止」按钮。
+     */
+    private fun releaseInterruptions() {
+        container.toolApprovalService.cancelForConversation(conversationId)
+        container.askUserInteractionService.cancelForConversation(conversationId)
+    }
+
+    override fun onCleared() {
+        // ViewModel 被清（离开聊天页 / Activity 重建）会连带取消 viewModelScope，
+        // 挂在审批/问询上的协程就此消失 —— 表项必须还回去（用户 2026-09-25 的
+        // 「工作区工具传了参数，工具就全部问题，换新对话才好」）。
+        releaseInterruptions()
+        super.onCleared()
+    }
+
     fun stop() {
         generationJob?.cancel()
         container.cancellations.cancel(conversationId)
-        // chat_actions.dart _cancelStreamingByIdOnce 1924-1941 — cancel pending
-        // tool approvals / askUser requests for this conversation so the
-        // handler's await resolves instead of deadlocking the round loop.
-        container.toolApprovalService.cancelForConversation(conversationId)
-        container.askUserInteractionService.cancelForConversation(conversationId)
+        // chat_actions.dart _cancelStreamingByIdOnce 1924-1941 — 见 [releaseInterruptions]。
+        releaseInterruptions()
         _streaming.value = false
         val msgs = _messages.value
         if (msgs.isNotEmpty()) {
@@ -1365,6 +1387,10 @@ class ChatViewModel(
     /** 后台聊天生成（ChatBackgroundController，RikkaHub FGS 移植）的当前代 id。 */
     private var backgroundGenerationId: String? = null
 
+    /** [backgroundGenerationId] 那一刻的后台模式档位（release 与完成通知都按它判）。 */
+    private var backgroundGenerationMode:
+        com.psyche.memo.service.ChatBackgroundController.AndroidBackgroundChatMode? = null
+
     /**
      * Live Update 进度通知的 sender（RikkaHub ChatService senderName L538-543：
      * useAssistantAvatar 时助手名、空回退默认助手名；否则模型显示名）。Memo
@@ -1394,21 +1420,31 @@ class ChatViewModel(
     private fun beginBackgroundGeneration() {
         val id = java.util.UUID.randomUUID().toString()
         backgroundGenerationId = id
+        // 结束时要按**开始时**那一档来 release/通知：中途去设置里改档位，
+        // 不能把已经 acquire 的前台服务漏掉（漏掉就只能等系统超时停）。
+        backgroundGenerationMode = backgroundMode()
         backgroundSenderName = resolveNotificationSenderName()
         com.psyche.memo.service.ChatBackgroundController.onGenerationStart(
             conversationId = conversationId,
-            mode = backgroundMode(),
+            mode = backgroundGenerationMode
+                ?: com.psyche.memo.service.ChatBackgroundController.AndroidBackgroundChatMode.OFF,
             generationId = id,
-            stopGeneration = { generationJob?.cancel() },
+            // 必须走 stop() 而不是裸 generationJob?.cancel()：超时这一路也要释放
+            // 本会话挂着审批/问询（见 [releaseInterruptions]），否则前台服务一超时
+            // （dataSync 类型系统只给几分钟），那条会话就被孤儿面板锁死。
+            stopGeneration = { stop() },
         )
     }
 
     private fun endBackgroundGeneration() {
         val id = backgroundGenerationId ?: return
         backgroundGenerationId = null
+        val mode = backgroundGenerationMode
+            ?: com.psyche.memo.service.ChatBackgroundController.AndroidBackgroundChatMode.OFF
+        backgroundGenerationMode = null
         com.psyche.memo.service.ChatBackgroundController.onGenerationEnd(
             conversationId = conversationId,
-            mode = backgroundMode(),
+            mode = mode,
             generationId = id,
             isCurrentConversation = true,
         )
@@ -1858,6 +1894,8 @@ class ChatViewModel(
                 // 否则「N 秒后重试」会停在一个已经结束的消息上。
                 updateAssistantRetry(assistantId, null)
                 _streaming.value = false
+                // 协程要结束了：没人等的审批/问询必须还回去，否则这条会话被面板锁死。
+                releaseInterruptions()
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
                 endBackgroundGeneration()
@@ -2474,6 +2512,8 @@ class ChatViewModel(
             } finally {
                 updateAssistantRetry(messageId, null)
                 _streaming.value = false
+                // 同 [startGeneration] 的收尾：协程结束前释放本会话没人等的审批/问询。
+                releaseInterruptions()
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
                 endBackgroundGeneration()
