@@ -29,7 +29,17 @@ Source: https://github.com/rikkahub/rikkahub
 Note that kelivo's own interface design was in turn inspired by RikkaHub, so
 these lines converge visually.
 
-The context-compaction threshold mechanism follows **opencode**.
+Streaming motion and the bottom-of-list geometry were read from **Agora**,
+licensed under the GNU General Public License v3.0.
+Source: https://github.com/newo-ether/Agora
+
+The bundled **skill-creator** agent skill is third-party content copied from
+**anthropics/skills** and stays under its own Apache License 2.0. That license
+text ships unchanged beside the skill under
+`app/src/main/assets/skills/skill-creator/`, and the upstream commit it was
+fetched at is recorded in `app/src/main/assets/skills/BUNDLED.json`.
+
+The context-compaction threshold mechanism follows **opencode** (MIT).
 Source: https://github.com/sst/opencode
 
 Data compatibility
