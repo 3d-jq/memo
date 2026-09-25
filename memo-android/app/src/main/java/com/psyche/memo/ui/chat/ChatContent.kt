@@ -246,6 +246,8 @@ fun ChatContent(
     val suggestions by vm.suggestions.collectAsState()
     val input by vm.input.collectAsState()
     val streaming by vm.streaming.collectAsState()
+    // 长用户消息的展开态（本工程新增，见 CollapsibleUserBubble）。
+    val expandedUserMessages by vm.expandedUserMessages.collectAsState()
     // 上下文压缩：进行中 → 消息流末尾的扫光分隔线；占用 → 输入栏上方的 2dp 细条。
     val compacting by vm.compacting.collectAsState()
     val contextUsage by vm.contextUsage.collectAsState()
@@ -1339,6 +1341,8 @@ fun ChatContent(
                             ) {
                         com.psyche.memo.ui.chat.MessageRow(
                             msg = msg,
+                            userBubbleExpanded = msg.id in expandedUserMessages,
+                            onToggleUserBubbleExpanded = { vm.toggleUserMessageExpanded(msg.id) },
                             skipRegenerateConfirm = remember {
                                 container.preferenceRepository.readJson(
                                     "display_show_regenerate_confirm_dialog_v1",

@@ -182,6 +182,9 @@ internal fun MessageRow(
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)?,
     /** display_show_regenerate_confirm_dialog_v1 = false 时跳过确认弹窗。 */
     skipRegenerateConfirm: Boolean = false,
+    /** 长用户消息是否已展开（本工程新增，见 [CollapsibleUserBubble]）。 */
+    userBubbleExpanded: Boolean = false,
+    onToggleUserBubbleExpanded: () -> Unit = {},
 ) {
     ChatRecompositionProbe.messageRows++
     val cs = MaterialTheme.colorScheme
@@ -574,7 +577,14 @@ internal fun MessageRow(
                     }
                     if (userHasBubbleContent) {
                         if (userAttachmentParts.isNotEmpty()) Spacer(Modifier.height(8.dp))
-                        com.psyche.memo.ui.chat.ChatBubbleSurface(isUser = true) { userContent() }
+                        com.psyche.memo.ui.chat.ChatBubbleSurface(isUser = true) {
+                            // 长正文折叠（本工程新增 —— 上游与 RikkaHub 都不折用户消息）。
+                            CollapsibleUserBubble(
+                                expanded = userBubbleExpanded,
+                                onToggle = onToggleUserBubbleExpanded,
+                                textColor = com.psyche.memo.ui.chat.chatSurfacePlainTextColor(isUser = true),
+                            ) { userContent() }
+                        }
                     }
                 } else {
                     // CMW:2951-3009 —— 文本气泡与思考卡按 part 到达顺序交替出现，

@@ -169,6 +169,9 @@ _iosNavRow`) stay as-is because they are provenance, not UI text.
   `app/src/test/.../MainDispatcherRule.kt`（`Dispatchers.setMain(UnconfinedTestDispatcher())`）+ 等真实信号
   （`withTimeout(30_000) { vm.tailLoaded.first { it } }`）。**Compose UI 测试（`ComposeUiTest`）例外**：
   它自己接管 Main 调度器，挂这条规则会打架。
+  **Compose UI 测试的样例内容必须留在视口内**（Robolectric 默认 320×470 **px**）：节点被推出去以后
+  `assertIsDisplayed` 会因几何出界失败、`performClick` 会点空（`CollapsibleUserBubbleTest` 用 16 行正文
+  展开时实测踩过一次，改成 12 行才稳）。要证"变高了"就比 `boundsInRoot.height` 的数值，别依赖可见性断言。
   另外 **CI 上跳过 3 个"只在 CI 会卡"的类**（`ChatTimelineWindowTest` / `ChatHeaderAssistantTest` /
   `DrawerAndChatUiTest`，见根 `build.gradle.kts` 的 `ciSkippedTests` + `-PciSkipFlakyTests`）——
   它们**仍然在本地门禁里跑**；名单由 `CiSkipListTest` 守着，不要往里面加"只是偶尔红一次"的类。

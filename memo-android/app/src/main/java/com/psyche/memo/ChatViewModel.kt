@@ -214,6 +214,21 @@ class ChatViewModel(
     private val _streaming = MutableStateFlow(false)
     val streaming: StateFlow<Boolean> = _streaming
 
+    /**
+     * 哪些**用户**长消息被手动展开了（本工程新增，见 `CollapsibleUserBubble`）。
+     *
+     * 状态收在这里而不是 `MessageRow` 本地 `remember` —— LazyColumn 把行滑出视口就销毁
+     * 组合，本地态会让消息自己弹回折叠态（思维链卡 §4.41 是同一个坑）。只影响本次进入
+     * 会话期间，不落库。
+     */
+    private val _expandedUserMessages = MutableStateFlow<Set<String>>(emptySet())
+    val expandedUserMessages: StateFlow<Set<String>> = _expandedUserMessages
+
+    fun toggleUserMessageExpanded(id: String) {
+        val current = _expandedUserMessages.value
+        _expandedUserMessages.value = if (id in current) current - id else current + id
+    }
+
     private var generationJob: Job? = null
 
     /** 在途翻译请求（messageId → Job），新请求顶掉旧的（TS _runs 语义）。 */

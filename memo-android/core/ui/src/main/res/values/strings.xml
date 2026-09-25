@@ -2825,10 +2825,12 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="tts_settings_text_selection_quoted_only_description">Play text inside “”, ‘’, \"\", \'\', 「」, or 『』.</string>
     <string name="tts_settings_text_selection_quoted_only_title">Quoted text only</string>
     <string name="tts_settings_text_selection_section">Text Selection</string>
+    <string name="user_message_collapse">Collapse</string>
     <string name="user_message_edit_overwrite_content">Editing will overwrite the existing input. Overwrite it?</string>
     <string name="user_message_edit_overwrite_title">Notice</string>
     <string name="user_message_edit_save_only">Save Only</string>
     <string name="user_message_edit_unsupported_snackbar">This content does not support editing</string>
+    <string name="user_message_expand">Expand</string>
     <string name="user_profile_add_custom">Add custom field</string>
     <string name="user_profile_clear">Clear</string>
     <string name="user_profile_custom_key_hint">Key (custom.name)</string>

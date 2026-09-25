@@ -2383,3 +2383,35 @@ delta」的采集（连同 `turnTextWindowMs` 与 `MEASURABLE_STREAM_MS`）、`M
 保持不写 ⇒ 落库默认 `'{}'`。**不许**再加第三种计时口径回来。
 护栏：`TokenSpeedFormatTest.completionTokensAlwaysDivideByTheWholeTurnDuration`
 （先红后绿：同一条断言在旧实现下给出 6996.0）。
+
+## 5.67 用户长消息折叠/展开（2026-09-25，用户「用户输入的内容比较多，发送到界面的时候可以收起和展开那种效果」+「在左下角显示收起和展开，可以点击」）
+
+**这是超出上游的产品加法，两个参照仓都没有它**（查证过，别去找 1:1 目标）：kelivo 唯一那份
+`bounded_large_text_view.dart` 在**上游自己仓里就是死代码**（除自身测试外无人引用，聊天从未挂载），
+RikkaHub 的折叠只用在思维链卡 / 代码块 / 翻译上，用户与助手正文都没有 `maxLines` 或限高。
+Memo 里那份 `ui/chat/BoundedLargeTextView.kt`（UI-7a 的 1:1 移植）因此**继续不接线** ——
+它是纯文本 + 行数阈值 + 展开后气泡内 320dp 独立滚动区，接到用户气泡上会①丢掉 `MarkdownText`
+渲染，②在 LazyColumn 里嵌一层抢手势的滚动。
+
+实现落在新文件 `ui/chat/CollapsibleUserBubble.kt`：
+
+- **按高度封顶，不按行数**。用户正文走 `MarkdownText`（多段落 / 代码块 / 表格），
+  `Text(maxLines=N)` 数不出跨块的总高。封顶 = `ChatStyleSpec.USER_TEXT_LINE_HEIGHT_SP × 8`
+  （折叠线 8 行，字号设置改了折叠线跟着走）。
+- **测量方式**：内容始终按**无限高**测量（与 LazyColumn 本来给子节点的约束一致，嵌套滚动 /
+  表格不受影响），自定义 `layout` 只向外报告封顶高度 + `clipToBounds`；真实高度回写一次即稳定。
+- **只有真溢出才出现控件**（`userBubbleOverflows`，半像素误差不算）：短消息不画按钮也不裁剪，
+  与改动前逐像素相同。
+- **渐隐用 `BlendMode.DstIn` 擦 alpha，不盖背景色** —— 用户气泡是半透明的（primary@0.15/0.08），
+  盖一条不透明渐变就是一块"抹布"。
+- **展开态存在 `ChatViewModel.expandedUserMessages`（按消息 id 的集合）**，不放 `MessageRow`
+  本地 `remember`：LazyColumn 把行滑出视口就销毁组合，本地态会让消息自己弹回折叠 ——
+  与 §4.41 思维链卡同一教训。只在本次进入会话期间有效，不落库。
+- 控件在**气泡内左下角**（用户点名位置）：`ChevronDown/Up` 14dp + 「展开 / 收起」，
+  新增键 `user_message_expand` / `user_message_collapse`（三份 `strings.xml` 手维，键集已核一致）。
+- 没有加设置开关：**默认生效**。
+
+护栏 `CollapsibleUserBubbleTest`（Robolectric + Compose UI）：8 行折叠线、溢出判据、
+短消息无控件、长消息展开后根容器真的长高且能收回。测试样例固定 12 行 —— 16 行时展开态的
+控件行正好落到 Robolectric 默认视口（470px）之外，`assertIsDisplayed` 与 `performClick`
+都会因几何出界而失败（真机列表可滚，不是产品问题）。

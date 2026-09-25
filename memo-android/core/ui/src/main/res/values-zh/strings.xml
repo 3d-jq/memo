@@ -2827,10 +2827,12 @@
     <string name="tts_settings_text_selection_quoted_only_description">播放 “”、‘’、\"\"、\'\'、「」或『』内的文字。</string>
     <string name="tts_settings_text_selection_quoted_only_title">仅引号内文字</string>
     <string name="tts_settings_text_selection_section">文本选择</string>
+    <string name="user_message_collapse">收起</string>
     <string name="user_message_edit_overwrite_content">修改将覆盖输入框已有内容，是否覆盖？</string>
     <string name="user_message_edit_overwrite_title">提示</string>
     <string name="user_message_edit_save_only">仅保存</string>
     <string name="user_message_edit_unsupported_snackbar">该内容不支持编辑</string>
+    <string name="user_message_expand">展开</string>
     <string name="user_profile_add_custom">添加自定义字段</string>
     <string name="user_profile_clear">清除</string>
     <string name="user_profile_custom_key_hint">键名（custom.name）</string>
