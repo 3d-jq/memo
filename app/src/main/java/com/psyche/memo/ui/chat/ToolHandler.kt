@@ -102,6 +102,8 @@ class ToolHandler(
                             cwd = assistant.workspaceCwd,
                             name = name,
                             args = args,
+                            reads = container.workspaceReadLedger,
+                            conversationId = conversationId,
                         )
                     ) {
                         is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Success -> {
@@ -111,7 +113,16 @@ class ToolHandler(
                             com.psyche.memo.provider.tool.ToolRunner.cap(outcome.json)
                         }
                         is com.psyche.memo.provider.workspace.WorkspaceTools.Outcome.Failure ->
-                            toolError(outcome.error, outcome.message, name)
+                            toolError(
+                                error = outcome.error,
+                                message = outcome.message,
+                                tool = name,
+                                // 「未读不可改」「读过之后文件又变了」这类必须点名下一步，
+                                // 通用那句会让模型原地再敲同一颗 edit。
+                                instruction = outcome.instruction
+                                    ?: com.psyche.memo.provider.tool.ToolResults.ADJUST_AND_RETRY,
+                                violations = outcome.violations,
+                            )
                     }
                 }
                 // 助手没绑工作区却调了 `workspace_*`：直说缺什么（工具纪律第 3 条）。
@@ -395,11 +406,13 @@ class ToolHandler(
         message: String,
         tool: String,
         instruction: String = com.psyche.memo.provider.tool.ToolResults.ADJUST_AND_RETRY,
+        violations: List<com.psyche.memo.provider.tool.ArgViolation> = emptyList(),
     ): String = com.psyche.memo.provider.tool.ToolResults.error(
         code = error,
         message = message,
         tool = tool,
         instruction = instruction,
+        violations = violations,
     )
 
     /** local_tools_service.dart 460-461 — get_time_info 返回 `jsonEncode(_buildTimeInfoPayload(...))`。 */

@@ -2882,6 +2882,7 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="workspace_reinstall_rootfs">Reinstall Rootfs</string>
     <string name="workspace_rootfs_install_failed">Rootfs install failed</string>
     <string name="workspace_share">Share</string>
+    <string name="workspace_view_source">View source</string>
     <string name="workspace_status_broken">Broken</string>
     <string name="workspace_status_disabled">Not installed</string>
     <string name="workspace_status_installing">Installing…</string>

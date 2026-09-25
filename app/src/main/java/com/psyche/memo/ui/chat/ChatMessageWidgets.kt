@@ -233,6 +233,7 @@ fun TokenDisplay(
     completionTokens: Int?,
     cachedTokens: Int?,
     durationMs: Long?,
+    textStreamMs: Long? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
@@ -299,7 +300,7 @@ fun TokenDisplay(
                     )
                     TokenPopupRow(
                         icon = Lucide.Zap,
-                        text = formatTokensPerSecond(completionTokens, durationMs)?.let {
+                        text = formatTokensPerSecond(completionTokens, durationMs, textStreamMs)?.let {
                             androidx.compose.ui.res.stringResource(UiR.string.token_detail_speed, it)
                         },
                     )
@@ -754,12 +755,28 @@ fun VoiceTranscribingIndicator(
  * `token_detail_popup.dart:59-72`（`completionTokens / (durationMs / 1000.0)` 再
  * `toStringAsFixed(1)`）。上游的条件只有「都 > 0」，**没有**「太短就不显示」那类额外判断。
  */
-internal fun formatTokensPerSecond(completionTokens: Int?, durationMs: Long?): String? {
+internal fun formatTokensPerSecond(
+    completionTokens: Int?,
+    durationMs: Long?,
+    /**
+     * 正文**实际在流**的累计毫秒数。够长（≥ [MEASURABLE_STREAM_MS]）才拿它当分母 ——
+     * 上游那句 `completion ÷ 总耗时` 把排队、prefill 和工具轮次都算成「模型在写字」，
+     * 一次带搜索的回答会显示成 2 tok/s。
+     *
+     * 不够长就退回总耗时：非流式回合里正文是一个 chunk 吐完的，窗口接近 0，
+     * 拿它做分母会算出 600 tok/s 这种数（用户 2026-09-25 抓到过一次）。
+     */
+    textStreamMs: Long? = null,
+): String? {
     val tokens = completionTokens ?: return null
-    val ms = durationMs ?: return null
-    if (tokens <= 0 || ms <= 0) return null
-    return formatOneDecimal(tokens / (ms / 1000.0))
+    val total = durationMs ?: return null
+    if (tokens <= 0 || total <= 0) return null
+    val writing = textStreamMs?.takeIf { it >= MEASURABLE_STREAM_MS } ?: total
+    return formatOneDecimal(tokens / (writing / 1000.0))
 }
+
+/** 短于这个数的「流式窗口」不算测量（一次 chunk 吐完就是 0），分母退回总耗时。 */
+internal const val MEASURABLE_STREAM_MS = 1_000L
 
 /** 耗时秒数，一位小数（上游 `token_detail_popup.dart:76` 的 `toStringAsFixed(1)`）。 */
 internal fun formatSeconds(durationMs: Long): String = formatOneDecimal(durationMs / 1000.0)

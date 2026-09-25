@@ -1073,7 +1073,7 @@ fun SideDrawerContent(
                 TextButton(onClick = {
                     deleteTarget = null
                     val deletingCurrent = target.id == selectedId
-                    container.conversationDao.delete(target.id)
+                    container.deleteConversation(target.id)
                     reload()
                     // 源码 side_drawer.dart:387-392 —— 删除成功 snackbar。
                     com.psyche.memo.ui.snackbar.SnackbarManager.show(
@@ -1249,7 +1249,7 @@ fun SideDrawerContent(
                 TextButton(onClick = {
                     multiDeleteConfirm = false
                     val deletingCurrent = selectedId != null && selectedId in selectedIds
-                    selectedIds.toList().forEach { container.conversationDao.delete(it) }
+                    selectedIds.toList().forEach { container.deleteConversation(it) }
                     selectedIds.clear()
                     internalSelectionMode = false
                     reload()

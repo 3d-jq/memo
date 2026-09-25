@@ -2,6 +2,7 @@ package com.psyche.memo.ui
 
 import com.psyche.memo.workspace.WorkspaceFileEntry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -45,6 +46,22 @@ class WorkspacePathTest {
         // 没有扩展名的名字（Makefile 这类）交给系统应用打开，
         // 免得把二进制当文本读进编辑器。
         assertEquals(WorkspaceFileType.OTHER, entry("Makefile").detectFileType())
+    }
+
+    /**
+     * 可渲染的那两类点开是**渲染**，不是源码（用户 2026-09-25「工作区像 html 有些文件
+     * 点击跟没有渲染显示呀」）。其余一律 null —— 判错会让 css/js 这类文件点开变成
+     * 一坨被浏览器模板包起来的乱码。
+     */
+    @Test
+    fun `html and markdown render, everything else stays source`() {
+        assertEquals(WorkspaceRenderKind.HTML, entry("page.html").renderKind())
+        assertEquals(WorkspaceRenderKind.HTML, entry("PAGE.HTM").renderKind())
+        assertEquals(WorkspaceRenderKind.MARKDOWN, entry("notes.md").renderKind())
+        assertEquals(WorkspaceRenderKind.MARKDOWN, entry("README.markdown").renderKind())
+        assertNull("css 不是整篇渲染的文档", entry("site.css").renderKind())
+        assertNull(entry("main.kt").renderKind())
+        assertNull(entry("index").renderKind())
     }
 
     @Test

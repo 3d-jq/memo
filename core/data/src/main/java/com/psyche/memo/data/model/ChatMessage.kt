@@ -27,6 +27,15 @@ class ChatMessage(
     val completionTokens: Int? = null,
     val cachedTokens: Int? = null,
     val durationMs: Long? = null,
+    /**
+     * 本轮**正文实际在流**的累计毫秒数 —— 生成速度的分母。
+     *
+     * 上游口径是 `completion ÷ 总耗时`，把排队、prefill 和工具轮次全算成「模型在写字」，
+     * 一次带搜索的回答会显示成 2 tok/s；但也不能用「总耗时 − 首 token」：非流式回合里
+     * 那个差值接近 0，会算出 600 tok/s（用户 2026-09-25 抓到）。所以记真实流式窗口，
+     * 落在 `message_rows.extras_json`（schema 是 drift 生成的，不许加列）。
+     */
+    val textStreamMs: Long? = null,
     val updatedAt: Long? = null,
     val messageOrder: Int,
 ) {

@@ -2884,6 +2884,7 @@
     <string name="workspace_reinstall_rootfs">重新安裝 Rootfs</string>
     <string name="workspace_rootfs_install_failed">Rootfs 安裝失敗</string>
     <string name="workspace_share">分享</string>
+    <string name="workspace_view_source">檢視原始碼</string>
     <string name="workspace_status_broken">已損毀</string>
     <string name="workspace_status_disabled">未安裝</string>
     <string name="workspace_status_installing">安裝中…</string>

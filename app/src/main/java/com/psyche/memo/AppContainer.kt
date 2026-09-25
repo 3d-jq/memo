@@ -474,6 +474,14 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
     val locationPermissionService: com.psyche.memo.ui.chat.LocationPermissionService by lazy {
         com.psyche.memo.ui.chat.LocationPermissionService()
     }
+    /**
+     * 工作区「读过才许改」的账本（照 deepseek-harness 的 B10）：容器级一份，
+     * 按 (会话, 工作区, 路径) 记读取时的字节数 —— 生成可能跑在页面之外，账本不能跟着
+     * ViewModel 一起没了。见 [com.psyche.memo.provider.workspace.WorkspaceReadLedger]。
+     */
+    val workspaceReadLedger: com.psyche.memo.provider.workspace.WorkspaceReadLedger by lazy {
+        com.psyche.memo.provider.workspace.WorkspaceReadLedger()
+    }
 
     /**
      * 「冷启动那一次窗口加载」是否还没结束 —— 原版 `home_page_controller.dart:311`
@@ -505,6 +513,55 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         if (!liveChatViewModels.contains(vm)) liveChatViewModels.add(vm)
         reapIdleChatViewModels(keep = vm)
     }
+
+    /**
+     * 会话的**所有者**：按 conversationId 取，没有就建。
+     *
+     * 这是「生成不再跟着页面死」的那块地基（PORTING §5.62）：以前会话对象住在
+     * `ViewModelStore` 里，Activity 一销毁就被清掉、`viewModelScope` 连带取消正在
+     * 输出的回答；现在它住在容器里，页面只是订阅者 —— 回到会话拿到的是同一个对象，
+     * 流式状态直接接上。RikkaHub 是同一个形状（`ChatService` 单例 + `AppScope` +
+     * 按会话的 `ConversationSession`，`ChatVM.kt:65` 只是 `getConversationFlow`）。
+     *
+     * 上限 [chatSessionCap]：超出就销毁最旧的不忙会话（`destroy()` 取消作用域），
+     * 免得注册表本身变成新的泄漏。生成中的永不被挤。
+     */
+    fun chatSession(conversationId: String, injectPresets: Boolean = false): ChatViewModel {
+        chatSessions[conversationId]?.let { return it }
+        val vm = ChatViewModel(this, conversationId, injectPresets)
+        chatSessions[conversationId] = vm
+        evictOverflowChatSessions(keep = conversationId)
+        return vm
+    }
+
+    /** 删会话：连容器里的会话对象一起销毁（不然它带着消息窗口赖到被上限挤出去）。 */
+    fun deleteConversation(conversationId: String) {
+        conversationDao.delete(conversationId)
+        dropChatSession(conversationId)
+    }
+
+    /** 会话被删掉时连对象一起销毁（不只是清状态）。 */
+    fun dropChatSession(conversationId: String) {
+        val vm = chatSessions.remove(conversationId) ?: return
+        liveChatViewModels.remove(vm)
+        vm.destroy()
+    }
+
+    private fun evictOverflowChatSessions(keep: String) {
+        while (chatSessions.size > chatSessionCap) {
+            val victim = chatSessions.entries.firstOrNull {
+                it.key != keep && !it.value.isBusy
+            } ?: return
+            chatSessions.remove(victim.key)
+            liveChatViewModels.remove(victim.value)
+            victim.value.destroy()
+        }
+    }
+
+    private val chatSessions = LinkedHashMap<String, ChatViewModel>()
+
+    /** 同时留活的会话数上限（每条会话 = 一个作用域 + 一页消息窗口）。 */
+    private val chatSessionCap = 12
 
     /**
      * 把不忙（[ChatViewModel.isBusy] 为假）且还握着重状态的 VM 释放成空壳。
