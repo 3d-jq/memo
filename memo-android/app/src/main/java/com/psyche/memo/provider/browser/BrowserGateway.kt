@@ -30,7 +30,9 @@ interface BrowserGateway {
     /**
      * 取走并清空「这一轮本机替模型挡掉了什么」（JS 弹窗 / 下载 / 站点权限 / 新窗口）。
      * spec §7.3：拒绝也要说明，否则模型会以为动作正常完成了。
-     * 一轮里多笔来源各挡一次时会**累积**（分号分隔），不是互相覆盖。
+     * 一轮里多笔来源各挡一次时会**累积**（分号分隔），不是互相覆盖；累积有上界
+     * （BrowserSession 私有的 NOTICE_MAX_ENTRIES/NOTICE_MAX_CHARS：最多 3 条、总长 ≤480），
+     * 超上界丢最旧，串尾以 `…(+N)` 报丢了几条。
      */
     fun drainNotice(): String?
 }

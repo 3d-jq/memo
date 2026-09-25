@@ -2,8 +2,11 @@ package com.psyche.memo.provider.browser
 
 import com.psyche.memo.MainDispatcherRule
 import androidx.test.core.app.ApplicationProvider
+import android.view.View
 import android.webkit.CookieManager
+import android.widget.FrameLayout
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -71,5 +74,60 @@ class BrowserSessionStoreTest {
         val fresh = s.sessionFor("c1")
         assertNotSame("同会话在旧实例被关后必须重建", first, fresh)
         assertFalse("重建出来的实例是活的", fresh.isClosed)
+    }
+
+    /**
+     * Fix round 2 finding 1 的回归：**close() 之后 detach() 仍会进来**。
+     *
+     * 两条真路径：① Task 8 的「清空并关闭」钮 `scope.launch { session.close() }` 后同步
+     * `onBack()` —— close 走 `withContext(Dispatchers.Main)`（非 immediate ⇒ post 到队列），
+     * `DisposableEffect.onDispose` 与 `AndroidView.onRelease` 的 detach 排在它后面 ⇒ destroy 先、
+     * detach 后；② 正在看的会话被 `sessionFor(别的会话)` 抢掉销毁，随后它自己的 onDispose 再
+     * detach。平台契约是「destroy() 之后不得再调用本类的任何其它方法」，而 measure/layout 正是
+     * 「其它方法」——未修时每次多进来的 detach 都对尸体补一发视口还原。
+     *
+     * **断言层是实测选出来的**（Robolectric 4.13，本机探针实证，细节在 task-5-report 的
+     * Fix round 2）：`ShadowWebView.destroy` 是 no-op，destroy 之后 measure/layout **不会真抛**，
+     * `layout()` 也被 shadow 成 no-op（`view.right` 恒 0）——brief 里「断言不抛」与
+     * 「measuredWidth 真被平台改掉」这两条在 JVM 上都观测不到。唯一透到真代码的是
+     * `View.measure`（measuredWidth/Height 按 EXACTLY spec 被设置），所以钉**可观测事实**：
+     * closed 之后 detach 不许再把视口重设回 1280×1600。先用 360×640 的 spec 把 measuredWidth
+     * 弄脏（非空闸：未修实现这条也过，红要红在 detach 把它铺回去那一刻）。「真机必炸」这条
+     * 只有真机能证。
+     */
+    @Test
+    fun detachingAfterCloseMustNotResetTheViewportAgain() = runBlocking {
+        fun dirtyPhoneViewport(session: BrowserSession) {
+            session.view.measure(
+                View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(640, View.MeasureSpec.EXACTLY),
+            )
+            // 非空闸：measure 的效果必须真能被观测到，否则后面的断言全是恒真
+            assertEquals(360, session.view.measuredWidth)
+            assertEquals(640, session.view.measuredHeight)
+        }
+
+        val session = store().sessionFor("c1")
+        session.close()
+
+        // 路径 ①：close 之后裸 detach（launch{close()} + 同步 onBack 的排队顺序）
+        dirtyPhoneViewport(session)
+        session.detach()
+        assertEquals(
+            "closed 之后 detach 不许再重设离屏视口（destroy 后的 measure/layout 真机直接炸）",
+            360, session.view.measuredWidth,
+        )
+
+        // 路径 ②：attachTo 临时容器再 detach（AndroidView.onRelease）——removeView 是父容器
+        // 的操作、合法且必要；要闸掉的只有视口还原
+        val host = FrameLayout(ApplicationProvider.getApplicationContext())
+        session.attachTo(host)
+        dirtyPhoneViewport(session)
+        session.detach()
+        assertNull("detach 仍要把视图从父容器摘掉（被闸掉的只是 measure/layout）", session.view.parent)
+        assertEquals(
+            "closed 之后 detach 不许再重设离屏视口",
+            360, session.view.measuredWidth,
+        )
     }
 }

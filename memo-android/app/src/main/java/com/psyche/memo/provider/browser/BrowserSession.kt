@@ -54,6 +54,15 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         private const val SCRIPT_CLOSED = "MEMO_SESSION_CLOSED"
 
         /**
+         * notice 累积的上界（条数与总长都要封）：只有 drainNotice() 会清，而 drain 是每颗
+         * 工具调用一次 —— 接管期间页面循环弹 alert / 反复 window.open 时没人清，不封顶这串
+         * 就按每条 ≤160 无上界增长、最后整串进信封给模型。超出丢最旧，丢的条数折进串尾
+         * `…(+N)` 计数（各来源的条目在调用点已被 take(120/160) 封过，单条不可能顶破总长）。
+         */
+        private const val NOTICE_MAX_ENTRIES = 3
+        private const val NOTICE_MAX_CHARS = 480
+
+        /**
          * WebView 必须在**主线程**创建 —— 下面的 `check` 判的就是 Main，不是泛泛的
          * 「有 Looper 的线程」（后台线程即使有 Looper 也不行）。
          *
@@ -88,7 +97,13 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
     private var urlState = ""
     private var navigation: CompletableDeferred<String>? = null
     private var pendingScript: CompletableDeferred<String>? = null
-    private var notice: String? = null
+    /**
+     * notice 的累积本体 + 被上界挤掉（丢最旧）的条数，见 NOTICE_MAX_* 两个常量。
+     * 写入全在 WebView 回调（主线程），drain 由工具层取走 —— 与改造前的单槽 `notice` 同一
+     * 线程模型，没有新增共享状态。
+     */
+    private val notices = ArrayList<String>()
+    private var noticesDropped = 0
     // @Volatile：isClosed 承诺任意线程可读（见属性注释），写发生在 Main，读方有非 Main 的。
     @Volatile private var closed = false
 
@@ -201,20 +216,44 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             }
         }
         view.setDownloadListener { url, _, contentDisposition, _, _ ->
+            // contentDisposition 是服务端任意串：这里必须自己封一道（其余来源在各自回调点已 take），
+            // 否则 NOTICE_MAX_CHARS 的「每条有界」前提在这条来源上不成立。
             appendNotice("DOWNLOAD_REFUSED:" + url.take(120) +
-                (if (contentDisposition.isNullOrBlank()) "" else "|" + contentDisposition))
+                (if (contentDisposition.isNullOrBlank()) "" else "|" + contentDisposition.take(80)))
         }
     }
 
     /**
      * 累积一笔「本机挡掉了什么」：单槽会让五种来源互相覆盖 —— 一轮里先弹 alert
      * 又要摄像头权限时，模型只看得见最后一笔，前一种被静默吞掉（spec §7.3）。
+     *
+     * 上界（NOTICE_MAX_*）：条数超限或**渲染后总长**超限都丢最旧，丢的条数折进串尾
+     * `…(+N)`；至少留最新一条（每条在来源处已 take(≤160)，单条顶不穿总长）。
      */
     private fun appendNotice(raw: String) {
-        notice = notice?.let { "$it; $raw" } ?: raw
+        notices.add(raw)
+        while (notices.size > NOTICE_MAX_ENTRIES ||
+            (notices.size > 1 && renderedNoticeLength() > NOTICE_MAX_CHARS)
+        ) {
+            notices.removeAt(0)
+            noticesDropped++
+        }
     }
 
-    override fun drainNotice(): String? = notice.also { notice = null }
+    /** 当前队列若立刻 drainNotice() 会渲染出的长度（含 `…(+N)` 尾计数），封顶判据用它。 */
+    private fun renderedNoticeLength(): Int {
+        val body = notices.joinToString("; ").length
+        return if (noticesDropped == 0) body else body + "…(+$noticesDropped)".length
+    }
+
+    override fun drainNotice(): String? {
+        if (notices.isEmpty()) return null
+        val text = notices.joinToString("; ") +
+            (if (noticesDropped == 0) "" else "…(+$noticesDropped)")
+        notices.clear()
+        noticesDropped = 0
+        return text
+    }
 
     fun takeOver() { userControlsState = true }
 
@@ -247,13 +286,33 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
      * 尺寸，而 removeView 不会自己弹回去 —— 不还原的话 [userControls] 已交还、模型以为
      * 世界照旧，但 `screenshotPng` 截到手机尺寸、`window.innerWidth` 变了、`find` 的
      * bounds 与模型回传的 x/y 全体错位。主线程调用（measure/layout 的要求）。
+     *
+     * **closed 闸（Finding 1，fix round 2）**：close() 之后仍会有 detach 进来 —— Task 8 的
+     * 「清空并关闭」钮 `scope.launch { session.close() }` 后同步 `onBack()`，close 是
+     * `withContext(Dispatchers.Main)`（非 immediate ⇒ post 到队列），`DisposableEffect.onDispose`
+     * 与 `AndroidView.onRelease` 的 detach 排在它后面 ⇒ **destroy 先、detach 后**；被别的会话
+     * `sessionFor` 抢掉销毁时同理。平台契约是「destroy() 之后不得再调用本类的任何其它方法」，
+     * measure 在无 provider 时直接 IllegalStateException。闸放这里而不是 detach() 开头：
+     * close() 自己调的 detach **必须**保留 removeView（destroy 前必须先把视图从层级里摘掉），
+     * 要拦的只是视口还原那两发 —— 且此刻实例已弃用，还原本身毫无意义。
      */
     private fun applyOffscreenViewport() {
+        if (closed) return
         view.measure(
             View.MeasureSpec.makeMeasureSpec(VIEWPORT_WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(VIEWPORT_HEIGHT, View.MeasureSpec.EXACTLY),
         )
         view.layout(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+    }
+
+    /**
+     * 解套路径上的 stopLoading（超时支与取消支）。`withContext` 会把这块**重新 post 回
+     * Main**，中间 close() 可能插进来（它自己就带 stopLoading+destroy）—— destroy 之后
+     * 再调 view 的任何方法都违反平台契约（Finding 1 的同源两处），而加载本来就该停的
+     * 也已经停了，跳过就是正确行为。
+     */
+    private suspend fun stopLoadingUnlessClosed() {
+        withContext(NonCancellable) { if (!closed) view.stopLoading() }
     }
 
     fun detach() {
@@ -277,19 +336,25 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             } catch (e: CancellationException) {
                 // 取消那次加载还在飞：不 stopLoading，它照样 onPageFinished，而那时
                 // 字段里很可能已是下一颗 navigate 的 deferred —— 下一次导航会被提前报成功。
-                withContext(NonCancellable) { view.stopLoading() }
+                stopLoadingUnlessClosed()
                 throw e
             } finally {
                 if (navigation === done) navigation = null
             }
             when (verdict) {
                 null -> {
-                    withContext(NonCancellable) { view.stopLoading() }
+                    stopLoadingUnlessClosed()
                     Result.failure(IllegalStateException("NAV_TIMEOUT"))
                 }
                 "ok" -> {
-                    urlState = view.url.orEmpty()
-                    Result.success(Unit)
+                    // await 排回 Main 的窗口里 close() 可能插队（deferred 已被真 onPageFinished
+                    // 解套成 "ok"，destroy 却先落地）：view.url 同属「destroy 后不得再调」的
+                    // 其它方法（Finding 1 的同源第三处）。这个结果不再可信，报 RENDERER_GONE。
+                    if (closed) Result.failure(IllegalStateException("RENDERER_GONE"))
+                    else {
+                        urlState = view.url.orEmpty()
+                        Result.success(Unit)
+                    }
                 }
                 else -> Result.failure(IllegalStateException(verdict))
             }
@@ -316,20 +381,23 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             } catch (e: CancellationException) {
                 // 同 navigate：被放弃的加载照样会 onPageFinished，必须停掉，
                 // 否则它去 complete 下一颗动作的 deferred。
-                withContext(NonCancellable) { view.stopLoading() }
+                stopLoadingUnlessClosed()
                 throw e
             } finally {
                 if (navigation === done) navigation = null
             }
             bumpGenerationAndDropSnapshot()
-            when {
-                verdict == null -> {
-                    withContext(NonCancellable) { view.stopLoading() }
+            when (verdict) {
+                null -> {
+                    stopLoadingUnlessClosed()
                     Result.failure(IllegalStateException("NAV_TIMEOUT"))
                 }
-                // close() 以值解套的那次唤醒不能读成「重载成功」。
-                verdict == "RENDERER_GONE" -> Result.failure(IllegalStateException(verdict))
-                else -> Result.success(Unit)
+                // 与 navigate 同口径：**只有 "ok" 算成功**（Finding 3，fix round 2）。
+                // close() 注入的 "RENDERER_GONE" 与 onReceivedError 的 "NAV_FAILED:<code>"
+                // 过去走 else 被读成「重载成功」——被放弃/失败的加载替下一次动作报成功，
+                // 正是裁决 3 要消灭的那类口径。
+                "ok" -> Result.success(Unit)
+                else -> Result.failure(IllegalStateException(verdict))
             }
         }
     }
@@ -345,13 +413,13 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             val raw = try {
                 withTimeoutOrNull(timeoutMs) { deferred.await() }
             } catch (e: CancellationException) {
-                withContext(NonCancellable) { view.stopLoading() }
+                stopLoadingUnlessClosed()
                 throw e
             } finally {
                 pendingScript = null
             }
             if (raw == null) {
-                withContext(NonCancellable) { view.stopLoading() }
+                stopLoadingUnlessClosed()
                 return@withContext false to "SCRIPT_TIMEOUT"
             }
             // close() 以值解套的那次唤醒：把码原样交出去，别把哨兵喂给 unwrap 变成 BAD_JSON。
