@@ -2353,8 +2353,33 @@ md/markdown 用 `rawHtml = false`（消息里那套 markdown 模板，带 mermai
    都常驻显示。现在按上游：没选中服务 → 不可用；选中的是 `system` 那一类 → 才看本机识别器。
    顺带修一个同源的隐藏 bug：`shouldUseCloudAsr` 只看「有没有服务 + 有没有 client」，
    而 `SystemAsrOptions.isConfigured` 恒真 ⇒ 选中系统服务会被塞进 HTTP 云端分支，现在按 kind 挡住。
-3. **生成速度的分母换成实测流式窗口**：§5.64 之前那版（本批 TOK）用「总耗时 − 首 token」，
+3. **生成速度的分母换成实测流式窗口**（⚠️ **整条已被 §5.66 撤销**，别照着做）：
+   §5.64 之前那版（本批 TOK）用「总耗时 − 首 token」，
    在**非流式回合**里首 token 就是最后一个 chunk ⇒ 分母接近 0，120 token 显示成 600 tok/s
    （他实测抓到）。现在记的是各 HTTP 轮次「第一个正文 delta → 最后一个正文 delta」窗口的
    **累加**（跨工具轮次不再把跑工具的时间算成在写字），持久化键也从 `first_token_ms` 改成
    `text_stream_ms`；窗口不足 1 秒视为「没测到」，分母退回上游的总耗时，绝不除以零头。
+
+## 5.66 生成速度回到上游口径：撤销 §5.65.3 的流式窗口分母（2026-09-25，用户「我居然看到 6996.3tok/s 了这个太离谱了」）
+
+§5.65.3 那版是**修坏了**：分子 `completionTokens` 按上游 usage 是**含思考 token 的一个数**，
+分母却换成「正文在流」的窗口，等于分子算全程、分母只算最后写正文那一段 ⇒ 思考模型
+（DeepSeek / GLM / 阶跃这一类）动辄几千 token 的思考 + 一两秒吐完的正文，速度被放大几十倍，
+他真机看到的 6996.3 tok/s 就是这么来的。同一个错误的第一个形状是 600 tok/s（§5.65.3 的起因），
+当时用「窗口不足 1 秒退回总耗时」打了个补丁 —— 那是症状不是根因。
+
+**现在的口径**（`formatTokensPerSecond`）：`completionTokens ÷ (durationMs / 1000)`，
+1:1 上游 `token_detail_popup.dart:59-72`，与 RikkaHub `ChatMessageNerdLine.kt:85-91`
+（`completion ÷ (finishedAt − createdAt)`）同形。上游的「耗时」那一行就画在旁边，
+两个数自洽、用户能自己验算 —— 这是选它的第二个理由：**任何"看起来更准"的分母只要和
+旁边的耗时不一致，就是在骗人**。带工具的回合会把执行工具的时间算进去，显示成个位数 tok/s，
+那是上游本来的语义，不要再去"优化"。
+
+**整条 `text_stream_ms` 链路已删除**，不是留着不用：`ChatMessage.textStreamMs` 与
+`UiMessage.textStreamMs` 字段、`ChatViewModel` 里各轮次「第一个正文 delta → 最后一个正文
+delta」的采集（连同 `turnTextWindowMs` 与 `MEASURABLE_STREAM_MS`）、`MessageDao` 对
+`message_rows.extras_json` 的读写与两个私有 helper（连带那个只为它存在的
+`private val json`），以及 `MessageDaoExtrasTest`。`extras_json` 列本身是 drift 生成的，
+保持不写 ⇒ 落库默认 `'{}'`。**不许**再加第三种计时口径回来。
+护栏：`TokenSpeedFormatTest.completionTokensAlwaysDivideByTheWholeTurnDuration`
+（先红后绿：同一条断言在旧实现下给出 6996.0）。

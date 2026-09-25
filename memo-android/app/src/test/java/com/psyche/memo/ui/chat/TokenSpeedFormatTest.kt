@@ -34,28 +34,21 @@ class TokenSpeedFormatTest {
     }
 
     /**
-     * 有「正文实际在流」的窗口时，分母用它，不再算上排队/prefill/工具时间。
+     * 用户 2026-09-25 抓到的荒谬数：「我居然看到 6996.3 tok/s 了这个太离谱了」。
      *
-     * 但窗口短到不像在流（非流式回合一个 chunk 吐完 ⇒ 窗口 0）就退回总耗时 ——
-     * 拿 0.2 秒做分母会显示 600 tok/s（用户 2026-09-25 抓到的就是这个）。
+     * 形状是思考模型的回合：`completionTokens` 按上游 usage 是**含思考 token** 的一个数，
+     * 而 1.0.21 那版把分母换成「正文在流」的窗口（`text_stream_ms`）—— 分子算全程、
+     * 分母只算正文，速度被放大几十倍。分母必须是整回合耗时（上游
+     * `token_detail_popup.dart:59-72` 与 RikkaHub `ChatMessageNerdLine.kt:85-91` 同口径，
+     * 且和气泡里同排的「耗时」自洽，用户能自己验算）。
+     *
+     * 这条也钉死：**不许**再给 `formatTokensPerSecond` 加第三个参数。
      */
     @Test
-    fun dividesByTheMeasuredStreamingWindowAndFallsBackWhenItIsTooShort() {
-        assertEquals("100.0", formatTokensPerSecond(500, 10_000, textStreamMs = 5_000))
-        // 没记到（旧消息 / 非流式）仍按上游口径。
-        assertEquals("50.0", formatTokensPerSecond(500, 10_000, textStreamMs = null))
-        assertEquals(
-            "窗口 200ms 不算测量（一个 chunk 吐完），退回总耗时而不是 2500 tok/s",
-            "50.0", formatTokensPerSecond(500, 10_000, textStreamMs = 200),
-        )
-        assertEquals(
-            "刚好到线就用它",
-            "500.0", formatTokensPerSecond(500, 10_000, textStreamMs = 1_000),
-        )
-        assertEquals(
-            "窗口比总耗时还长（时钟跳变）也不能算出负数分母",
-            "50.0", formatTokensPerSecond(500, 10_000, textStreamMs = 0),
-        )
+    fun completionTokensAlwaysDivideByTheWholeTurnDuration() {
+        assertEquals("23.3", formatTokensPerSecond(6996, 300_000))
+        // 带工具的长回合同样按整回合算 —— 慢就是慢，不藏。
+        assertEquals("5.0", formatTokensPerSecond(500, 100_000))
     }
 
     @Test
