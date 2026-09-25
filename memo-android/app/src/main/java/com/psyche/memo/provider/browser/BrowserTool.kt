@@ -28,7 +28,8 @@ import kotlinx.serialization.json.put
  * generation；不一致就不执行（见 [checkGeneration]）。这是**刻意不做**「CSS selector
  * 直接寻址」—— 参照实现里同一条 selector 在页面变化后会静默点到另一个元素。也正因如此，
  * 成功结果里**不许回显 JS 的返回**（`clickScript` 的 value 就是那条 selector），只回模型
- * 自己传进来的那枚把手，见 [targetHandle]。
+ * 自己传进来的那枚把手 —— 它与脚本由 [targetJson] 一次取出（作废之前），见那里的第二轮
+ * 回归说明。
  */
 object BrowserTool {
 
@@ -277,7 +278,10 @@ object BrowserTool {
                             "it returned.",
                     )
                     GenerationCheck.Current -> {
-                        val target = targetJson(gateway, args, forType = action == "type")
+                        // 脚本与回显把手**一次解析成一对**（此刻快照还没作废；`settleAfterAction()`
+                        // 一跑，真会话的 snapshot 就是 null，之后再判「这一步用的是 index 还是坐标」
+                        // 永远判不到 index —— 第二轮抓到的 `x=null,y=null` 回归正是那个时机）。
+                        val (target, handle) = targetJson(gateway, args, forType = action == "type")
                             ?: return error(
                                 code = "TARGET_NOT_FOUND",
                                 detail = "No element matched the index/point you passed.",
@@ -298,8 +302,9 @@ object BrowserTool {
                         // 而 index+代次 这套契约存在的理由恰恰是杀掉「同一枚 selector 在页面变化
                         // 后静默点到另一个元素」；页面自己控制的 id 也不该未经过滤地进上下文。
                         // 所以只回模型自己递进来的那枚把手（`BrowserPageSnapshot` 头部写下的
-                        // 那条纪律：index 是唯一递给模型的把手）。
-                        val fields = linkedMapOf<String, Any>("target" to targetHandle(gateway, args))
+                        // 那条纪律：index 是唯一递给模型的把手）—— 它已由 [targetJson] 与脚本
+                        // 同源取好，不依赖作废之后的快照。
+                        val fields = linkedMapOf<String, Any>("target" to handle)
                         typed?.let { fields["chars"] = it.length }
                         ok(gateway, action, fields)
                     }
@@ -387,41 +392,44 @@ object BrowserTool {
     }
 
     /**
-     * 回显给模型的**把手**：模型自己传进来的 `index=N` 或 `x=…,y=…`。
+     * 把 index/x+y 换成正要递给 JS 的 target 字面量，**并顺带定好回显给模型的把手** ——
+     * 返回「脚本 target to 把手」一对（把手就是模型自己传进来的寻址方式：`index=N` 或
+     * `x=…,y=…`）。
      *
-     * 成功时不许带任何 JS 侧的东西（尤其 `selFor()` 造出的 selector）—— 见 `click`/`type`
-     * 那支的注释。优先级与 [targetJson] **逐字一致**（index 只有在快照里真取得到元素时才算
-     * 用了 index，否则那一步走的是坐标），否则回给模型的把手和实际点的东西不是一回事。
-     */
-    private fun targetHandle(gateway: BrowserGateway, args: JsonObject): String {
-        args.int("index")?.takeIf { gateway.snapshot?.find(it) != null }?.let { return "index=$it" }
-        return "x=${args.int("x")},y=${args.int("y")}"
-    }
-
-    /**
-     * 把 index/x+y 换成正要递给 JS 的 target 字面量。
+     * 两者必须一次取出、不许分成两次判定：成功回显曾由独立的 `targetHandle` 在
+     * `settleAfterAction()` **之后**再查一次 `gateway.snapshot` —— 而作废正是那句调用的
+     * 真语义（BrowserSession 把 `snapshotState = null`），于是真会话上 index 一支永远判空，
+     * 每次 index 类 click/type 都回 `"x=null,y=null"`（第二轮抓到的回归）。同源之后这对
+     * 值在时间上不可能再漂开。
      *
-     * index 优先（快照里存着 selector），否则退到坐标。`type` 还要带文本 —— 文本以
+     * index 优先（快照里存着 selector），否则退到坐标；优先级同时决定回显的把手，
+     * 「回给模型的把手」与「实际点的东西」由此恒等。`type` 还要带文本 —— 文本以
      * JSON 的形式内联，转义交给 kotlinx，绝不做 JS 字符串拼接。
      */
-    private fun targetJson(gateway: BrowserGateway, args: JsonObject, forType: Boolean): String? {
+    private fun targetJson(
+        gateway: BrowserGateway,
+        args: JsonObject,
+        forType: Boolean,
+    ): Pair<String, String>? {
         val text = args.text("text")
         args.int("index")?.let { index ->
             val element = gateway.snapshot?.find(index) ?: return@let
-            return if (forType) {
+            val target = if (forType) {
                 BrowserScripts.targetJsonWithText(element.selector, text.orEmpty())
             } else {
                 BrowserScripts.targetJsonFor(element.selector)
             }
+            return target to "index=$index"
         }
         val x = args.int("x")
         val y = args.int("y")
         if (x != null && y != null) {
-            return if (forType) {
+            val target = if (forType) {
                 BrowserScripts.targetJsonForPoint(x, y, text.orEmpty())
             } else {
                 BrowserScripts.targetJsonForPoint(x, y)
             }
+            return target to "x=$x,y=$y"
         }
         return null
     }

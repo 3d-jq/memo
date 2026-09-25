@@ -2,23 +2,23 @@ package com.psyche.memo.ui.chat
 
 import androidx.test.core.app.ApplicationProvider
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.MainDispatcherRule
 import com.psyche.memo.provider.browser.BrowserTool
-import com.psyche.memo.ui.DisplayPrefs
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * 全局开关在**执行侧**的那道复查（裁决 2）。
@@ -38,6 +38,23 @@ import java.util.concurrent.atomic.AtomicReference
 @Config(sdk = [34])
 class BrowserGateTest {
 
+    /**
+     * 为什么测试体能直接 `runBlocking`（上一轮这里是「后台线程 + `Thread.join(20s)`」）：
+     * `MainDispatcherRule` 把 `Dispatchers.Main` 换成 unconfined 测试调度器后，
+     * `sessionFor` 的 `withContext(Dispatchers.Main)` 在测试线程上**原地跑完** —— 真造出
+     * shadow WebView 实例这条路同包 `BrowserSessionStoreTest` 一直就是这么走的，从未挂死。
+     *
+     * 上一轮那套「不丢后台线程就必然挂死（`withTimeout` 也救不了）」的论证只在**不装这条
+     * 规则**时成立；挂 11 分钟是写法自己选出来的，不是 `sessionFor` 逼出来的。这也正面撞上
+     * AGENTS / PORTING §5.40 的硬纪律：Robolectric 测试不许拿真时钟轮询/有界等待替代断言
+     * （GitHub 2 核 runner 上会偶发挂到超时、本地多核永远复现不了）。**红要红在断言上，
+     * 不许红在计时器上** —— 装好规则后两条路径都是断言：门控在 ⇒ 毫秒级绿；哪天有人删掉
+     * 门控 ⇒ `sessionFor` 原地建出实例、执行侧撞 8 秒脚本超时（shadow 不回callback），
+     * 红的是 `assertEquals(browser_disabled)` 与 `assertNull(peek)`，秒级、明确、不挂。
+     */
+    @get:Rule
+    val mainDispatcher = MainDispatcherRule()
+
     private lateinit var container: AppContainerImpl
 
     @Before
@@ -54,50 +71,54 @@ class BrowserGateTest {
         container = container,
     )
 
-    /**
-     * 为什么把 `handle` 丢到另一根线程上、用 `Thread.join(超时)` 等：Robolectric 的测试体就
-     * 跑在「主线程」上，而 `BrowserSessionStore.sessionFor` 要 `withContext(Dispatchers.Main)`
-     * ——门控一旦丢，那条消息会永远排在被测试体占着的主 Looper 上，**整个测试任务挂死**
-     * （`withTimeout` 也救不了：取消要经同一个调度器交付）。丢到后台线程 + 有界 join，
-     * 就把「以后有人把这道复查删了」变成一次 20 秒后的红，而不是一根挂到 CI 超时的进程。
-     */
     @Test
-    fun offSwitchRefusesWithoutOpeningABrowserSession() {
+    fun offSwitchRefusesWithoutOpeningABrowserSession() = runBlocking {
         container.preferenceRepository.writeJson(BrowserTool.PREFERENCE_KEY, "0")
-        val content = AtomicReference<String>()
-        val worker = Thread {
-            content.set(
-                runBlocking {
-                    handler("conv-off").handle(BrowserTool.TOOL_NAME, obj("""{"action":"read"}"""), "call-1")
-                },
-            )
-        }.apply {
-            isDaemon = true
-            name = "browser-gate-probe"
-            start()
-        }
-        worker.join(20_000)
-        assertFalse(
-            "browser_use 分支没有在执行侧复查全局开关：调用卡在 sessionFor 的主线程调度上" +
-                "（这正是「用户关了开关却照样建出 WebView」那个洞）",
-            worker.isAlive,
+        val content = handler("conv-off").handle(
+            BrowserTool.TOOL_NAME, obj("""{"action":"read"}"""), "call-1",
         )
-        val result = obj(content.get())
+        val result = obj(content)
         assertEquals("tool_error", result["type"]!!.jsonPrimitive.content)
         assertEquals("browser_disabled", result["error"]!!.jsonPrimitive.content)
         assertTrue("每条错误都要有下一步", result["instruction"]!!.jsonPrimitive.content.isNotBlank())
+        assertTrue(
+            "这是一句拒绝，不是审批（PORTING §5.68）：结果串里不许出现任何等用户的键",
+            "pending" !in content,
+        )
         assertNull(
             "关掉开关不许建出浏览器实例（那是一个真 WebView + 用户的 cookie jar）",
             container.browserSessions.peek("conv-off"),
         )
     }
 
-    /** 默认值必须是「开」：偏好行不存在（全新安装）时不许把浏览器锁死。 */
+    /**
+     * 产品事实：**偏好行不存在（全新安装、用户从没碰过开关）时，`handle` 不许拒绝这颗工具**。
+     *
+     * 旧形状 `missingPreferenceDefaultsToOn` 是 `assertEquals(true, readBool(container, KEY,
+     * default = true))` —— `default` 是测试自己传进去的，行缺失时 readBool 原样返回它，
+     * 于是任何实现都过：把 ToolHandler 派发点里的 `default = true` 翻成 `false`，旧测试
+     * 照样绿。恒真断言当不了覆盖（第二轮审查点名的那条）。现在从派发点进，
+     * `default` 不再出现在测试里，它是被测对象的一部分（scratch 翻成 false 实测会红，
+     * 见 task-6-report 的 Fix round 2）。
+     *
+     * 探针动作用未知动作 `teleport`：它照样过门控、过 `sessionFor`（「放行」这件事由
+     * `peek` 非空观测到，与上一条测试的 assertNull 正好镜像），但在任何脚本递进页面之前
+     * 就以 `invalid_arguments` 返回 —— 毫秒级，不等 8 秒脚本超时、不碰网络。
+     */
     @Test
-    fun missingPreferenceDefaultsToOn() {
+    fun missingPreferenceRowDoesNotRefuseTheTool() = runBlocking {
+        val content = handler("conv-default").handle(
+            BrowserTool.TOOL_NAME, obj("""{"action":"teleport"}"""), "call-2",
+        )
+        val result = obj(content)
         assertEquals(
-            true,
-            DisplayPrefs.readBool(container, BrowserTool.PREFERENCE_KEY, default = true),
+            "开关缺失 = 默认开：派发点不许回 browser_disabled，要一路放行到执行侧的参数校验",
+            "invalid_arguments",
+            result["error"]!!.jsonPrimitive.content,
+        )
+        assertNotNull(
+            "门控放行后会话应当真被建出来（默认开的可观测面）",
+            container.browserSessions.peek("conv-default"),
         )
     }
 }

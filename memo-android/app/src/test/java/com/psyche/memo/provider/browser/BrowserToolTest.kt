@@ -25,13 +25,21 @@ class BrowserToolTest {
     private class FakeGateway(
         override val generation: Int = 4,
         override val userControls: Boolean = false,
-        private val elements: BrowserPageSnapshot? = null,
+        elements: BrowserPageSnapshot? = null,
         var runResult: Pair<Boolean, String> = false to "NOT_IN_TESTS",
         private val shotBytes: Int = 8,
     ) : BrowserGateway {
         override val url = "https://example.com"
         override val isClosed = false
-        override val snapshot: BrowserPageSnapshot? get() = elements
+        /**
+         * 替身必须遵守它所替接口的**文档语义**：`BrowserGateway.bumpGenerationAndDropSnapshot`
+         * 写的是「click/type 之后旧的 index 一律作废」，真身（BrowserSession）就是
+         * `snapshotState = null`。以前这里是「snapshot 永远返回构造参数、永不作废」，
+         * 于是掩护了第二轮抓到那条真回归：回显把手读快照的时机排在作废**之后**，
+         * 真会话上永远查不到元素，index 类动作全被回成 `x=null,y=null`。
+         */
+        private var snapshotState: BrowserPageSnapshot? = elements
+        override val snapshot: BrowserPageSnapshot? get() = snapshotState
         var published: BrowserPageSnapshot? = null
         var lastScript = ""
         var navigatedTo: String? = null
@@ -54,8 +62,14 @@ class BrowserToolTest {
             reloads++
             return Result.success(Unit)
         }
-        override fun publishSnapshot(snapshot: BrowserPageSnapshot?) { published = snapshot }
-        override fun bumpGenerationAndDropSnapshot() { bumps++ }
+        override fun publishSnapshot(snapshot: BrowserPageSnapshot?) {
+            published = snapshot
+            snapshotState = snapshot
+        }
+        override fun bumpGenerationAndDropSnapshot() {
+            bumps++
+            snapshotState = null
+        }
         var notice: String? = null
         override fun drainNotice(): String? = notice.also { notice = null }
     }
