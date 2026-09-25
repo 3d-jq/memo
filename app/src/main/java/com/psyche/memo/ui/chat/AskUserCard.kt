@@ -348,10 +348,10 @@ internal fun AskUserInlineBody(
     val fg = chatSurfaceFg()
     // ask_user_interaction_service.dart pendingRequests[part.id] —— 进行中的提问
     // 请求给出权威问题集；无请求时退回到参数的存储问题（Dart 6273-6277）。
-    val pendingMap by remember(askUser) {
-        askUser?.pendingRequests ?: MutableStateFlow<Map<String, AskUserRequest>>(emptyMap())
+    val pendingRequests by remember(askUser) {
+        askUser?.pendingRequests ?: MutableStateFlow<List<AskUserRequest>>(emptyList())
     }.collectAsState()
-    val pendingRequest = pendingMap[part.id]
+    val pendingRequest = pendingRequests.firstOrNull { it.toolCallId == part.id }
     val questions = remember(part.arguments, pendingRequest) {
         pendingRequest?.questions ?: normalizeAskUserQuestions(part.arguments)
     }
@@ -963,6 +963,7 @@ internal fun AskUserPanel(
                                 textValues,
                                 skipped,
                             ),
+                            conversationId = request.conversationId,
                         )
                     },
                 )

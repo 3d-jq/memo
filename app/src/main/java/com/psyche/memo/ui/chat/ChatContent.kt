@@ -1627,9 +1627,10 @@ fun ChatContent(
         // 待答问询 / 待审批时，底部换成对应面板、聊天输入栏暂时藏起来
         //（用户 2026-09-14「这个应该出现在输入框那个位置，体验更加友好」）。
         val interrupting = currentChatInterruption(
-            askUser = askUserPending.values,
+            askUser = askUserPending,
             approval = approvalPending,
             conversationId = conversationId,
+            generating = streaming,
         )
         if (interrupting != null) {
             ChatInterruptionPanel(

@@ -49,7 +49,7 @@ class AskUserPanelTest {
     fun pagerShowsOneQuestionAtATime() {
         val service = AskUserInteractionService()
         request(service)
-        val pending = service.pendingRequests.value.getValue("c1")
+        val pending = service.pendingRequests.value.single()
 
         compose.setContent {
             MaterialTheme {
@@ -77,7 +77,7 @@ class AskUserPanelTest {
     fun submitNeedsEveryQuestionAnsweredAndThenCompletesTheRequest() {
         val service = AskUserInteractionService()
         val deferred = request(service)
-        val pending = service.pendingRequests.value.getValue("c1")
+        val pending = service.pendingRequests.value.single()
 
         compose.setContent {
             MaterialTheme {
@@ -110,7 +110,7 @@ class AskUserPanelTest {
     fun closeReportsDismissAndCancelEndsTheRequest() {
         val service = AskUserInteractionService()
         val deferred = request(service)
-        val pending = service.pendingRequests.value.getValue("c1")
+        val pending = service.pendingRequests.value.single()
         var closed = false
 
         compose.setContent {

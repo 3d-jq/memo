@@ -29,12 +29,20 @@ internal sealed interface ChatInterruption {
 /**
  * 当前该显示哪个打断面板 —— 只看**本会话**的请求，问询优先（它在等一个回答才能继续，
  * 审批只是放行/拒绝）。都没有时返回 null（调用方据此显示正常的输入栏）。
+ *
+ * [generating] 是「这条会话现在真的有人在等」的判据：面板会**顶掉输入栏**，所以一个
+ * 等待方已经死掉的孤儿请求绝不能把它换下来（用户 2026-09-25「工作区工具传了参数，
+ * 工具就全部问题，换新对话才好」——审批挂起时离开聊天页 / 前台服务超时把生成协程取消，
+ * pending 留在容器级的表里没人清）。正常终止路径已经会释放（ChatViewModel 的 finally
+ * 与 onCleared），这一道是兜底：宁可少弹一次面板，也不能把会话锁死。
  */
 internal fun currentChatInterruption(
     askUser: Collection<AskUserRequest>,
     approval: Collection<ToolApprovalRequest>,
     conversationId: String?,
+    generating: Boolean,
 ): ChatInterruption? {
+    if (!generating) return null
     val scoped = conversationId?.trim().orEmpty()
     fun belongsToConversation(id: String?): Boolean {
         val candidate = id?.trim().orEmpty()
@@ -69,7 +77,12 @@ internal fun ChatInterruptionPanel(
                 request = interruption.request,
                 askUser = askUser,
                 // × 等价于取消这次提问（服务以 tool_error 'cancelled' 结束）。
-                onClose = { askUser?.cancel(interruption.request.toolCallId) },
+                onClose = {
+                    askUser?.cancel(
+                        interruption.request.toolCallId,
+                        conversationId = interruption.request.conversationId,
+                    )
+                },
             )
 
             is ChatInterruption.Approval -> ToolApprovalPanel(

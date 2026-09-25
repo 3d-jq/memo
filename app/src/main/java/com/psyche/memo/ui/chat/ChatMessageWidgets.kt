@@ -596,11 +596,12 @@ const val VOICE_WAVEFORM_TAG = "voice_waveform"
  */
 @Composable
 fun MemoLoadingIndicator(modifier: Modifier = Modifier) {
-    // 观感换成**呼吸圆点**（移植 Agora `GenerationActivityDot`）：11dp、颜色跟随主题
-    // （`onSurface`）、scale 0.55⇄1.30 @1s Reverse。用户 2026-09-23「用它这个吧，
-    // 颜色跟着主题走，他这个又好看又没有任何问题」——取代此前 28dp 的 app 图标。
-    // 尺寸由圆点自身固定（调用方不要再传 size，否则会把圆点放大）。
-    GenerationActivityDot(modifier = modifier)
+    // 观感换成**呼吸星形**（形状＝品牌图标那颗星，动画照 Agora `GenerationActivityDot`）：
+    // 12dp、颜色跟随主题 primary、scale 0.55⇄1.30 @1s Reverse。用户 2026-09-23
+    // 「用它这个吧，颜色跟着主题走，他这个又好看又没有任何问题」取代此前 28dp 的 app 图标；
+    // 2026-09-25 又点名把圆点换成品牌图标里的星。
+    // 尺寸由星形自身固定（调用方不要再传 size，否则把它放大）。
+    GenerationActivityStar(modifier = modifier)
 }
 
 /**

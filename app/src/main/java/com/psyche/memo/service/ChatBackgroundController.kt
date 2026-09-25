@@ -118,8 +118,26 @@ object ChatBackgroundController {
     }
 
     /**
-     * 生成开始（ChatViewModel.startGeneration / regenerate）：ON / ON_NOTIFY
-     * 时 acquire 前台服务；注册超时停止回调。
+     * 三态里哪几档要**前台服务保活**：「开」与「开+通知」都要，只有 off 不要。
+     *
+     * 拆成两条判据是因为原先把「保活」和「通知」写成同一支（只在 ON_NOTIFY 才 acquire），
+     * 于是选「开」的用户什么也没得到。
+     */
+    fun shouldKeepAlive(mode: AndroidBackgroundChatMode): Boolean =
+        mode != AndroidBackgroundChatMode.OFF
+
+    /** 三态里哪几档发**完成通知**：只有「开+通知」。 */
+    fun shouldNotifyCompletion(mode: AndroidBackgroundChatMode): Boolean =
+        mode == AndroidBackgroundChatMode.ON_NOTIFY
+
+    /**
+     * 生成开始（ChatViewModel.startGeneration / regenerate）：**只要不是 off 就 acquire
+     * 前台服务**（「开」＝只保活，「开+通知」＝保活 + 完成通知），并注册超时停止回调。
+     *
+     * 原先只在 `ON_NOTIFY` 才 acquire ⇒ 选「开」这一档时这个设置**什么都不做**：
+     * 没有前台服务、没有保活、也没有任何通知（用户 2026-09-25「把实时通知显示那个做完整，
+     * 就是退出 app 也可以继续那个部分」）。三态文案（[AndroidBackgroundChatMode] 的注释）
+     * 与上游一致，是实现漏了这一支。
      */
     fun onGenerationStart(
         conversationId: String,
@@ -127,11 +145,9 @@ object ChatBackgroundController {
         generationId: String,
         stopGeneration: () -> Unit,
     ) {
-        if (mode == AndroidBackgroundChatMode.OFF) return
+        if (!shouldKeepAlive(mode)) return
         stopGenerations[conversationId] = stopGeneration
-        if (mode == AndroidBackgroundChatMode.ON_NOTIFY) {
-            ChatGenerationForegroundService.acquire(appContext, generationId, conversationId)
-        }
+        ChatGenerationForegroundService.acquire(appContext, generationId, conversationId)
     }
 
     /**
@@ -145,9 +161,10 @@ object ChatBackgroundController {
         isCurrentConversation: Boolean,
     ) {
         stopGenerations.remove(conversationId)
-        if (mode == AndroidBackgroundChatMode.OFF) return
-        if (mode == AndroidBackgroundChatMode.ON_NOTIFY) {
-            ChatGenerationForegroundService.release(appContext, generationId)
+        if (!shouldKeepAlive(mode)) return
+        // 两档都 acquire 过，就都要 release（否则「开」这一档服务永远停不掉）。
+        ChatGenerationForegroundService.release(appContext, generationId)
+        if (shouldNotifyCompletion(mode)) {
             val notify = shouldShowChatCompleted(
                 isAndroid = true,
                 notifyModeEnabled = true,
