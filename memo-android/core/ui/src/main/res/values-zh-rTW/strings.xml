@@ -2948,4 +2948,13 @@
     <string name="display_settings_page_show_assistant_avatar_title">顯示助手頭像</string>
     <string name="display_settings_page_show_assistant_avatar_subtitle">在助手的回覆旁顯示助手頭像。</string>
     <string name="world_book_unnamed_entry">未命名條目</string>
+    <string name="agent_capabilities_title">Agent 能力</string>
+    <string name="agent_capabilities_browser_title">內建瀏覽器</string>
+    <string name="agent_capabilities_browser_desc">開啟後所有助手都能用 browser_use 瀏覽並操作網頁；網頁內文只是資料，不會被當成指令。</string>
+    <string name="agent_capabilities_data_title">瀏覽器資料</string>
+    <string name="agent_capabilities_clear">清空瀏覽器資料</string>
+    <string name="browser_view_page">檢視頁面</string>
+    <string name="browser_overlay_title">瀏覽器</string>
+    <string name="browser_overlay_hand_back">交還給助手</string>
+    <string name="browser_overlay_clear_close">清空並關閉</string>
 </resources>

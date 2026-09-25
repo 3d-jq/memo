@@ -182,11 +182,7 @@ class ToolHandler(
                 // 这是一句**拒绝**，不是审批（用户 2026-09-25 明令整块拆除，PORTING §5.68）：
                 // 不弹确认、不挂起等人。
                 com.psyche.memo.provider.browser.BrowserTool.rejectIfDisabled(
-                    com.psyche.memo.ui.DisplayPrefs.readBool(
-                        container,
-                        com.psyche.memo.provider.browser.BrowserTool.PREFERENCE_KEY,
-                        default = true,
-                    ),
+                    com.psyche.memo.ui.DisplayPrefs.browserEnabled(container),
                 )?.let { return it }
                 val gateway = container.browserSessions.sessionFor(conversationId ?: "")
                 // 走 ToolRunner.run 而不是裸 cap：异常归一 + 超时口径与所有本地工具一致

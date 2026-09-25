@@ -2946,4 +2946,13 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="display_settings_page_show_assistant_avatar_title">Show assistant avatar</string>
     <string name="display_settings_page_show_assistant_avatar_subtitle">Show the assistant avatar next to its replies.</string>
     <string name="world_book_unnamed_entry">Unnamed Entry</string>
+    <string name="agent_capabilities_title">Agent capabilities</string>
+    <string name="agent_capabilities_browser_title">Built-in browser</string>
+    <string name="agent_capabilities_browser_desc">When on, every assistant can use browser_use to read and operate web pages. Page text is data, not instructions.</string>
+    <string name="agent_capabilities_data_title">Browser data</string>
+    <string name="agent_capabilities_clear">Clear browsing data</string>
+    <string name="browser_view_page">View page</string>
+    <string name="browser_overlay_title">Browser</string>
+    <string name="browser_overlay_hand_back">Hand back</string>
+    <string name="browser_overlay_clear_close">Clear and close</string>
 </resources>

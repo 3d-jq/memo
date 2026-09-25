@@ -43,6 +43,7 @@ import com.psyche.memo.ui.AssistantDetailSectionScreen
 import com.psyche.memo.ui.AssistantSettingsEditScreen
 import com.psyche.memo.ui.AssistantSettingsScreen
 import com.psyche.memo.ui.AssistantTabLayoutScreen
+import com.psyche.memo.ui.AgentCapabilitySettingsScreen
 import com.psyche.memo.ui.R as UiR
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -607,6 +608,12 @@ private fun AppThemeAndContent(
                             onBack = { navController.popBackStack() },
                         )
                     }
+                    composable("agent_capabilities") {
+                        AgentCapabilitySettingsScreen(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                     composable("providers") {
                         ProvidersScreen(
                             container = container,
@@ -702,6 +709,7 @@ private fun AppThemeAndContent(
                             onOpenMessageStyle = { navController.navigate("message_style") },
                             onOpenAutoRetry = { navController.navigate("auto_retry") },
                             onOpenHaptics = { navController.navigate("haptics") },
+                            onOpenAgentCapabilities = { navController.navigate("agent_capabilities") },
                             onOpenTheme = { navController.navigate("theme_settings") },
                             onBack = { navController.popBackStack() },
                         )

@@ -2639,13 +2639,9 @@ class ChatViewModel(
                 assistant = assistant,
             ),
         )
-        // Agent 浏览器（app 级：只看全局开关，与助手勾选无关；默认开是用户 2026-09-25 的决定）。
-        if (com.psyche.memo.ui.DisplayPrefs.readBool(
-                container,
-                com.psyche.memo.provider.browser.BrowserTool.PREFERENCE_KEY,
-                default = true,
-            )
-        ) {
+        // Agent 浏览器（app 级：只看全局开关，与助手勾选无关；默认开是用户 2026-09-25 的决定。
+        // 读法唯一入口 = DisplayPrefs.browserEnabled，与 ToolHandler 复查/设置页同一支）。
+        if (com.psyche.memo.ui.DisplayPrefs.browserEnabled(container)) {
             out.add(
                 LlmToolSpec(
                     name = com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME,

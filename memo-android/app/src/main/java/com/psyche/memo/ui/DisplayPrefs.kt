@@ -1,6 +1,7 @@
 package com.psyche.memo.ui
 
 import com.psyche.memo.AppContainerImpl
+import com.psyche.memo.provider.browser.BrowserTool
 
 /**
  * 显示类布尔偏好的**唯一入口**。
@@ -66,4 +67,8 @@ object DisplayPrefs {
 
     fun showAssistantAvatar(container: AppContainerImpl): Boolean =
         readBool(container, SHOW_ASSISTANT_AVATAR, default = true)
+
+    /** Agent 内置浏览器（本工程新增；**默认开**是用户 2026-09-25 的决定）。 */
+    fun browserEnabled(container: AppContainerImpl): Boolean =
+        readBool(container, BrowserTool.PREFERENCE_KEY, default = true)
 }
