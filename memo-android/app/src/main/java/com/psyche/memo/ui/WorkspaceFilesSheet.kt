@@ -62,7 +62,23 @@ fun WorkspaceFilesSheet(
     var listError by remember { mutableStateOf<String?>(null) }
     var previewing by remember { mutableStateOf<com.psyche.memo.workspace.WorkspaceFileEntry?>(null) }
     var previewText by remember { mutableStateOf("") }
+    /** html / markdown 的整篇渲染预览（与详情页同一套判据 [renderKind]）。 */
+    var renderPreview by remember {
+        mutableStateOf<com.psyche.memo.ui.chat.HtmlPreviewRequest?>(null)
+    }
     var reload by remember { mutableStateOf(0) }
+
+    /** 读文件进只读预览（html/markdown 渲染读失败时也退回这里，别静默什么都不显示）。 */
+    fun openAsText(entry: com.psyche.memo.workspace.WorkspaceFileEntry) {
+        previewing = entry
+        previewText = ""
+        scope.launch {
+            previewText = withContext(Dispatchers.IO) {
+                runCatching { repo.readTextForPreview(workspaceId, area, entry.path) }
+                    .getOrElse { it.message ?: "" }
+            }
+        }
+    }
 
     // 与详情页同一套加载方式：listing 走 IO，错误只记消息（不吞异常）。
     LaunchedEffect(reload, path, area) {
@@ -120,17 +136,24 @@ sheetState = rememberMemoSheetState(),
                     onOpen = { entry ->
                         when {
                             entry.isDirectory -> path = entry.path
-                            entry.detectFileType() == WorkspaceFileType.TEXT -> {
-                                previewing = entry
-                                previewText = ""
+                            entry.renderKind() != null -> {
+                                val kind = entry.renderKind()
                                 scope.launch {
-                                    previewText = withContext(Dispatchers.IO) {
+                                    val text = withContext(Dispatchers.IO) {
                                         runCatching {
                                             repo.readTextForPreview(workspaceId, area, entry.path)
-                                        }.getOrElse { it.message ?: "" }
+                                        }.getOrNull()
+                                    }
+                                    if (text == null) openAsText(entry) else {
+                                        renderPreview = com.psyche.memo.ui.chat.HtmlPreviewRequest(
+                                            content = text,
+                                            rawHtml = kind == WorkspaceRenderKind.HTML,
+                                        )
                                     }
                                 }
                             }
+
+                            entry.detectFileType() == WorkspaceFileType.TEXT -> openAsText(entry)
                             // 其余（图片、PPT/Word/PDF…）**交给系统打开**：原来这个 when 没有 else，
                             // 于是非文本文件点了完全没反应（用户 2026-09-22 实测：生成的 PPT/Word
                             // 在加号里点不开，而「管理工作区」详情页里同样的文件点得开 —— 详情页
@@ -190,6 +213,21 @@ sheetState = rememberMemoSheetState(),
                     showFileActions = false,
                 )
             }
+        }
+    }
+
+    // 整篇渲染预览走独立窗口的 Dialog（与详情页同一形态）：**不能**再套
+    // ModalBottomSheet —— 本 sheet 已经叠在 WorkspaceSelectorSheet 之上，三层窗口
+    // 会让内容画不出来（用户 2026-09-22「md 点开没反应」）。
+    renderPreview?.let { request ->
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { renderPreview = null },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            com.psyche.memo.ui.chat.HtmlPreviewScreen(
+                request = request,
+                onBack = { renderPreview = null },
+            )
         }
     }
 }

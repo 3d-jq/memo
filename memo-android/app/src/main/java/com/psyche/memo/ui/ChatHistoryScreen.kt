@@ -240,7 +240,7 @@ fun ChatHistoryScreen(
                                     reload()
                                 },
                                 onDelete = {
-                                    container.conversationDao.delete(conv.id)
+                                    container.deleteConversation(conv.id)
                                     reload()
                                 },
                             )
@@ -256,7 +256,7 @@ fun ChatHistoryScreen(
                                 reload()
                             },
                             onDelete = {
-                                container.conversationDao.delete(conv.id)
+                                container.deleteConversation(conv.id)
                                 reload()
                             },
                         )
@@ -281,7 +281,7 @@ fun ChatHistoryScreen(
                     showDeleteAll = false
                     conversations
                         .filter { it.assistantId == null && !it.isPinned }
-                        .forEach { container.conversationDao.delete(it.id) }
+                        .forEach { container.deleteConversation(it.id) }
                     reload()
                 }) {
                     Text(

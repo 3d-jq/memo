@@ -32,6 +32,10 @@ class VoiceInputController(
     private val context: Context,
     /** 当前选中的云端 ASR 服务；null / 未配置 = 用系统识别。 */
     private val cloudOptions: () -> com.psyche.memo.ui.AsrServiceOptions? = { null },
+    /** 本机系统语音识别是否可用（测试注入用；真机上查 `SpeechRecognizer`）。 */
+    private val systemRecognizerAvailable: () -> Boolean = {
+        runCatching { SpeechRecognizer.isRecognitionAvailable(context) }.getOrDefault(false)
+    },
     private val httpClient: okhttp3.OkHttpClient? = null,
 ) {
 
@@ -84,10 +88,24 @@ class VoiceInputController(
     val isActive: Boolean
         get() = _state.value != State.Idle
 
-    /** 麦克风按钮的可见条件（CIB:2542-2546 showVoiceInput）：选中的云端服务可用，
-     *  或者系统识别可用。 */
-    fun canUse(): Boolean = cloudOptions() != null ||
-        runCatching { SpeechRecognizer.isRecognitionAvailable(context) }.getOrDefault(false)
+    /**
+     * 麦克风按钮的可见条件（CIB:2542-2546 `showVoiceInput`）—— **上游要求先选中一个
+     * ASR 服务**：`selectedAsrService != null && asr.canUse(selectedAsrService)`，
+     * 而 `selectedAsrService` 在 `asrServices` 为空时就是 null（settings_provider.dart:440-447
+     * 与 1525-1528）。
+     *
+     * 这里原先写的是「或者本机有系统识别就行」，于是在从没配过语音输入的手机上也常驻
+     * 一颗麦克风（用户 2026-09-25「我都没有设置呀，怎么还是要显示输入框里面图标呀」）。
+     * 选中的是 `system` 那一类时，可用性才等于「本机识别器在不在」。
+     */
+    fun canUse(): Boolean {
+        val selected = cloudOptions() ?: return false
+        return if (selected.kind == com.psyche.memo.ui.AsrServiceKind.system) {
+            systemRecognizerAvailable()
+        } else {
+            true
+        }
+    }
 
     fun start() {
         if (isActive || !canUse()) return
@@ -350,4 +368,7 @@ class VoiceInputController(
 internal fun shouldUseCloudAsr(
     options: com.psyche.memo.ui.AsrServiceOptions?,
     client: okhttp3.OkHttpClient?,
-): Boolean = options != null && client != null
+): Boolean = options != null && client != null &&
+    // `system` 那一类没有 HTTP 形状，走云端只会立刻失败（isConfigured 恒真，
+    // 所以光靠「配好了」挡不住）。
+    options.kind != com.psyche.memo.ui.AsrServiceKind.system

@@ -63,7 +63,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
+import com.composables.icons.lucide.Code
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.CornerLeftUp
 import com.composables.icons.lucide.EllipsisVertical
@@ -143,7 +146,43 @@ fun WorkspaceDetailScreen(
     var loading by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
     var editorText by remember { mutableStateOf("") }
+    /** 整篇渲染预览（html / markdown）—— 见 [renderKind]。 */
+    var renderPreview by remember {
+        mutableStateOf<com.psyche.memo.ui.chat.HtmlPreviewRequest?>(null)
+    }
     var reload by remember { mutableIntStateOf(0) }
+
+    /** 读文件进源码编辑 sheet（TEXT 类、以及渲染读失败时的退路：错误文本会显示出来）。 */
+    fun openAsText(entry: WorkspaceFileEntry) {
+        editing = entry
+        editorText = ""
+        scope.launch {
+            editorText = withContext(Dispatchers.IO) {
+                runCatching { repo.readTextForPreview(workspaceId, area, entry.path) }
+                    .getOrElse { it.message ?: "" }
+            }
+        }
+    }
+
+    /**
+     * 能整篇渲染的文件点开走 WebView 预览（用户 2026-09-25「工作区像 html 有些文件
+     * 点击跟没有渲染显示呀」）：html/htm 按原始文档加载，md/markdown 走消息里那套
+     * markdown 模板（mermaid/katex/高亮）。读不动就退回源码视图，别静默什么都不显示。
+     */
+    fun openRendered(entry: WorkspaceFileEntry) {
+        val kind = entry.renderKind() ?: return openAsText(entry)
+        scope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching { repo.readTextForPreview(workspaceId, area, entry.path) }.getOrNull()
+            }
+            if (text == null) openAsText(entry) else {
+                renderPreview = com.psyche.memo.ui.chat.HtmlPreviewRequest(
+                    content = text,
+                    rawHtml = kind == WorkspaceRenderKind.HTML,
+                )
+            }
+        }
+    }
 
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -293,16 +332,9 @@ fun WorkspaceDetailScreen(
                     onOpen = { entry ->
                         when {
                             entry.isDirectory -> path = entry.path
-                            entry.detectFileType() == WorkspaceFileType.TEXT -> {
-                                editing = entry
-                                editorText = ""
-                                scope.launch {
-                                    editorText = withContext(Dispatchers.IO) {
-                                        runCatching { repo.readTextForPreview(workspaceId, area, entry.path) }
-                                            .getOrElse { it.message ?: "" }
-                                    }
-                                }
-                            }
+                            entry.renderKind() != null -> openRendered(entry)
+
+                            entry.detectFileType() == WorkspaceFileType.TEXT -> openAsText(entry)
 
                             entry.detectFileType() == WorkspaceFileType.IMAGE -> {
                                 exportToCache(entry) { file -> previewImage = file.absolutePath }
@@ -332,6 +364,7 @@ fun WorkspaceDetailScreen(
                             }
                         }
                     },
+                    onOpenSource = { openAsText(it) },
                     onDelete = { deleteTarget = it },
                     onExport = { entry ->
                         exportTarget = entry
@@ -411,6 +444,20 @@ fun WorkspaceDetailScreen(
             initialIndex = 0,
             onClose = { previewImage = null },
         )
+    }
+
+    renderPreview?.let { request ->
+        // 整窗盖住详情页（与同文件的 ImageViewerOverlay 同一形态）：这一页的根是 Column
+        // 而不是 Box，直接把预览当兄弟节点画会去跟内容抢布局。
+        Dialog(
+            onDismissRequest = { renderPreview = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            com.psyche.memo.ui.chat.HtmlPreviewScreen(
+                request = request,
+                onBack = { renderPreview = null },
+            )
+        }
     }
 
     editing?.let { entry ->
@@ -745,6 +792,8 @@ internal fun FilesTab(
     onSelectArea: (WorkspaceStorageArea) -> Unit,
     onGoUp: () -> Unit,
     onOpen: (WorkspaceFileEntry) -> Unit,
+    /** 渲染类文件（html / markdown）的「查看源码」入口；默认与 [onOpen] 同（不渲染的那一侧）。 */
+    onOpenSource: (WorkspaceFileEntry) -> Unit = onOpen,
     onDelete: (WorkspaceFileEntry) -> Unit,
     onExport: (WorkspaceFileEntry) -> Unit,
     onShare: (WorkspaceFileEntry) -> Unit,
@@ -789,6 +838,7 @@ internal fun FilesTab(
             WorkspaceFileCard(
                 entry = entry,
                 onOpen = { onOpen(entry) },
+                onOpenSource = { onOpenSource(entry) },
                 onDelete = { onDelete(entry) },
                 onExport = { onExport(entry) },
                 onShare = { onShare(entry) },
@@ -872,6 +922,8 @@ private fun PathBar(path: String, canGoUp: Boolean, onGoUp: () -> Unit) {
 private fun WorkspaceFileCard(
     entry: WorkspaceFileEntry,
     onOpen: () -> Unit,
+    /** 渲染类文件（html / markdown）才有的一条：点开是渲染，源码得从菜单进。 */
+    onOpenSource: () -> Unit = onOpen,
     onDelete: () -> Unit,
     onExport: () -> Unit,
     onShare: () -> Unit,
@@ -935,6 +987,17 @@ private fun WorkspaceFileCard(
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     if (!entry.isDirectory) {
+                        // 点开已经改成渲染（html / markdown），源码只能从这儿进。
+                        if (entry.renderKind() != null) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.workspace_view_source)) },
+                                leadingIcon = { Icon(Lucide.Code, contentDescription = null) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenSource()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.workspace_export)) },
                             leadingIcon = { Icon(Lucide.FileUp, contentDescription = null) },
@@ -1147,6 +1210,22 @@ internal fun WorkspaceFileEntry.detectFileType(): WorkspaceFileType {
         else -> WorkspaceFileType.OTHER
     }
 }
+
+/** 能整篇渲染的两类文件（点开＝渲染，源码进溢出菜单）。 */
+internal enum class WorkspaceRenderKind { HTML, MARKDOWN }
+
+/**
+ * 上游的 `WorkspaceFileType` 只有 TEXT/IMAGE/OTHER，没有「可渲染文档」这一类，
+ * 所以这里另开一条判据、不动那个 1:1 枚举（用户 2026-09-25「工作区像 html 有些文件
+ * 点击跟没有渲染显示呀」）。html/htm 按原始文档加载，md/markdown 走消息里那套
+ * markdown 模板（mermaid/katex/高亮）。
+ */
+internal fun WorkspaceFileEntry.renderKind(): WorkspaceRenderKind? =
+    when (name.substringAfterLast('.', "").lowercase()) {
+        "html", "htm" -> WorkspaceRenderKind.HTML
+        "md", "markdown" -> WorkspaceRenderKind.MARKDOWN
+        else -> null
+    }
 
 /** Shell 状态 → 文案（上游 `toShellStatusLabel`）。 */
 @Composable

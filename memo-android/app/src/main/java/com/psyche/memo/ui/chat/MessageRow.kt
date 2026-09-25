@@ -920,6 +920,7 @@ internal fun MessageRow(
                         completionTokens = msg.completionTokens,
                         cachedTokens = msg.cachedTokens,
                         durationMs = msg.durationMs,
+                        textStreamMs = msg.textStreamMs,
                     )
                 }
             }

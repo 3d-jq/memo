@@ -1,8 +1,7 @@
 package com.psyche.memo
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import com.psyche.memo.common.logging.ContextSource
 import com.psyche.memo.common.logging.ContextTag
 import com.psyche.memo.data.model.ChatMessage
@@ -31,6 +30,7 @@ import com.psyche.memo.ui.snackbar.NotificationType
 import com.psyche.memo.ui.snackbar.SnackbarManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -59,9 +59,20 @@ class ChatViewModel(
      * 构造参数，注入静默失效（2026-09-13 修的真 bug，见 ChatPresetInjectionTest）。
      */
     private val injectPresets: Boolean = false,
-) : ViewModel() {
+) {
 
     private val isTemporary: Boolean = conversationId == com.psyche.memo.data.model.Conversation.TEMPORARY_ID
+
+    /**
+     * 本会话的协程作用域 —— **不是** `sessionScope`。
+     *
+     * 会话对象由容器按 conversationId 持有（`AppContainerImpl.chatSession` /
+     * `liveChatViewModels`），活到「会话被删」或「注册表淘汰」为止，比聊天页的
+     * ViewModelStore 长。生成跑在这里，所以 Activity 被销毁重建（旋转、主题切换、
+     * 系统回收）不再打断正在输出的回答 —— 回到页面拿回的是同一个对象，流式状态直接
+     * 接上（照 RikkaHub 的 `ChatService` + `AppScope`，见 PORTING §5.62）。
+     */
+    internal val sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     /**
      * `home_view_model.dart:185/423/495` `onHapticFeedback` —— **生成开始时**的触觉
@@ -124,6 +135,8 @@ class ChatViewModel(
         val completionTokens: Int? = null,
         val cachedTokens: Int? = null,
         val durationMs: Long? = null,
+        /** 第一个正文 token 的相对毫秒数（见 ChatMessage.textStreamMs）；速度要扣掉它。 */
+        val textStreamMs: Long? = null,
         /** Translated body (chat_message_widget.dart message.translation 显示层)。 */
         val translation: String? = null,
         /** Reasoning segment timings (`reasoning_segments_json`), zipped with
@@ -152,12 +165,14 @@ class ChatViewModel(
             completionTokens: Int?,
             cachedTokens: Int?,
             durationMs: Long?,
+            textStreamMs: Long? = null,
         ): UiMessage = copy(
             totalTokens = totalTokens ?: this.totalTokens,
             promptTokens = promptTokens ?: this.promptTokens,
             completionTokens = completionTokens ?: this.completionTokens,
             cachedTokens = cachedTokens ?: this.cachedTokens,
             durationMs = durationMs ?: this.durationMs,
+            textStreamMs = textStreamMs ?: this.textStreamMs,
         )
 
         /** In-bubble countdown while auto-retry waits for the next attempt
@@ -239,7 +254,7 @@ class ChatViewModel(
         if (!isTemporary) {
             // Home page shows the conversation's stored title; matches the
             // "New Chat" default of home_page_controller._createNewConversation.
-            viewModelScope.launch {
+            sessionScope.launch {
                 // 预设对话注入（home_view_model.dart L993-1023）：新会话把助手的
                 // presetMessages 作为真实消息落库（先于 refreshTail 读库，时序确定）。
                 if (injectPresets) withContext(Dispatchers.IO) { injectPresetsIfNeeded() }
@@ -272,9 +287,9 @@ class ChatViewModel(
         selectedProviderId.value = providerId
         selectedModelId.value = modelId
         // 阈值基准（上下文窗口）跟着模型走 —— 换了模型就重算占用条。
-        if (changed) viewModelScope.launch { refreshContextUsage() }
+        if (changed) sessionScope.launch { refreshContextUsage() }
         if (isTemporary) return
-        viewModelScope.launch {
+        sessionScope.launch {
             withContext(Dispatchers.IO) {
                 container.conversationDao.setChatModel(conversationId, providerId, modelId)
             }
@@ -286,7 +301,7 @@ class ChatViewModel(
      * 「上下文长度」之后，占用卡的分母/阈值要立刻跟上（用户 2026-09-14）。
      */
     fun refreshContextUsageNow() {
-        viewModelScope.launch { refreshContextUsage() }
+        sessionScope.launch { refreshContextUsage() }
     }
 
     /**
@@ -311,11 +326,11 @@ class ChatViewModel(
      *
      * 为什么需要：`ChatContent` 用 `viewModel(key = conversationId)` 取 VM，而
      * `ViewModelStore` **不会**因为 key 变化移除旧 VM —— 每点开一条会话就留下一个活的
-     * VM：40 条消息 + 每条的 parts、一个 `viewModelScope`、可能还有在途生成。真机上就是
+     * VM：40 条消息 + 每条的 parts、一个 `sessionScope`、可能还有在途生成。真机上就是
      * 「点击对话多还是会卡 / 从侧边栏到主页会很卡」（用户 2026-09-15）；同一时刻
      * `dumpsys meminfo` 对比：我们 RSS 259MB，原版 Flutter 版 120MB。
      *
-     * **刻意不动 `viewModelScope`**：scope 一旦 cancel 就不能再启动协程，切回来这个 VM
+     * **刻意不动 `sessionScope`**：scope 一旦 cancel 就不能再启动协程，切回来这个 VM
      * 就废了；这里只取消我们自己记着的长任务（生成 / 翻译），重状态清空即可让 GC 收走。
      */
     fun releaseForReuse() {
@@ -349,10 +364,10 @@ class ChatViewModel(
             _sendEnabled.value = true
             _tailLoaded.value = true
             // 临时会话不落库，但占用条一样要算（发给模型的还是同一套消息）。
-            viewModelScope.launch { refreshContextUsage() }
+            sessionScope.launch { refreshContextUsage() }
             return
         }
-        viewModelScope.launch { reloadTail() }
+        sessionScope.launch { reloadTail() }
     }
 
     /** chat_suggestions_json —— 助手回复后生成的 3 条建议气泡。 */
@@ -595,7 +610,7 @@ class ChatViewModel(
         clearSuggestions()
         // home_view_model.dart:423 —— 生成开始前给一次触觉（开关在页面侧）。
         onHapticFeedback?.invoke()
-        viewModelScope.launch {
+        sessionScope.launch {
             // nextOrder queries SQLite synchronously, so both the build and
             // the insert run on Dispatchers.IO; StateFlow updates (append)
             // stay outside the IO blocks, in the original order.
@@ -676,12 +691,17 @@ class ChatViewModel(
         container.askUserInteractionService.cancelForConversation(conversationId)
     }
 
-    override fun onCleared() {
-        // ViewModel 被清（离开聊天页 / Activity 重建）会连带取消 viewModelScope，
-        // 挂在审批/问询上的协程就此消失 —— 表项必须还回去（用户 2026-09-25 的
-        // 「工作区工具传了参数，工具就全部问题，换新对话才好」）。
+    /**
+     * 容器淘汰这个会话时调用（会话被删，或注册表把它挤出去）：取消作用域，并把
+     * 挂着没人等的审批/问询还回去（§5.59 那条不变式在这里同样成立）。
+     *
+     * **离开聊天页不会走到这里** —— 页面销毁不再销毁会话，这正是本次改动的目的；
+     * 生成中/流式中的对象由 `isBusy` 挡住，不会被误淘汰。
+     */
+    fun destroy() {
+        generationJob?.cancel()
         releaseInterruptions()
-        super.onCleared()
+        sessionScope.cancel()
     }
 
     fun stop() {
@@ -724,7 +744,7 @@ class ChatViewModel(
     /** Persists a rewritten segment payload after an out-of-band close. */
     private fun persistClosedSegments(messageId: String, json: String?) {
         if (json == null || isTemporary) return
-        viewModelScope.launch {
+        sessionScope.launch {
             withContext(Dispatchers.IO) { container.messageDao.updateReasoningSegments(messageId, json) }
         }
     }
@@ -755,7 +775,7 @@ class ChatViewModel(
         val next = if (conv.truncateIndex == count) -1 else count
         container.conversationDao.setTruncateIndex(conversationId, next)
         _contextVersion.value = _contextVersion.value + 1
-        viewModelScope.launch { refreshContextUsage() }
+        sessionScope.launch { refreshContextUsage() }
     }
 
     /** compactWindow 的返回值：成功时 [message] 是新建的检查点，否则 [errorKey]。 */
@@ -845,7 +865,7 @@ class ChatViewModel(
             onResult("busy")
             return
         }
-        viewModelScope.launch {
+        sessionScope.launch {
             _compacting.value = true
             try {
                 val window = compactionWindow(_messages.value)
@@ -1119,7 +1139,7 @@ class ChatViewModel(
         if (targetLang == null) return // cancelled
         if (targetLang == TranslateLanguage.CLEAR_TRANSLATION) {
             updateTranslationInPlace(messageId, "")
-            viewModelScope.launch {
+            sessionScope.launch {
                 if (!isTemporary) withContext(Dispatchers.IO) {
                     container.messageDao.updateTranslation(messageId, "")
                 }
@@ -1147,7 +1167,7 @@ class ChatViewModel(
         val prompt = promptTemplate
             .replace("{source_text}", message.content)
             .replace("{target_lang}", targetLang)
-        val job = viewModelScope.launch {
+        val job = sessionScope.launch {
             try {
                 val request = LlmRequest(
                     providerId = model.first,
@@ -1221,7 +1241,7 @@ class ChatViewModel(
         } else {
             msgs.drop(idx + 1).firstOrNull { it.role == "assistant" }?.groupId
         }
-        viewModelScope.launch {
+        sessionScope.launch {
             val nextVersion = if (targetGroupId != null && !isTemporary) {
                 withContext(Dispatchers.IO) {
                     container.messageDao.maxVersionForGroup(conversationId, targetGroupId) + 1
@@ -1345,7 +1365,7 @@ class ChatViewModel(
             _messages.value = msgs.filterNot { it.id == messageId }
             return
         }
-        viewModelScope.launch {
+        sessionScope.launch {
             withContext(Dispatchers.IO) {
                 container.messageDao.delete(messageId)
             }
@@ -1362,7 +1382,7 @@ class ChatViewModel(
             _messages.value = _messages.value.filterNot { it.groupId == target.groupId }
             return
         }
-        viewModelScope.launch {
+        sessionScope.launch {
             withContext(Dispatchers.IO) {
                 container.messageDao.deleteByGroup(conversationId, target.groupId)
             }
@@ -1383,6 +1403,14 @@ class ChatViewModel(
         version = version,
         messageOrder = messageOrder,
     )
+
+    /**
+     * 本轮**正文真正在流**的累计毫秒数（各 HTTP 轮次「第一个正文 delta → 最后一个正文
+     * delta」的窗口相加）。生成速度用它做分母，而不是「总耗时 − 首 token」：
+     * 后者在助手关了流式输出、或 provider 把正文一个 chunk 吐完时会退化成一个接近 0 的
+     * 窗口，120 token ÷ 0.2 秒会显示成 600 tok/s（用户 2026-09-25 实测抓到）。
+     */
+    private var turnTextWindowMs = 0L
 
     /** 后台聊天生成（ChatBackgroundController，RikkaHub FGS 移植）的当前代 id。 */
     private var backgroundGenerationId: String? = null
@@ -1467,7 +1495,8 @@ class ChatViewModel(
         _streaming.value = true
         beginBackgroundGeneration()
         val generationStartMs = System.currentTimeMillis()
-        generationJob = viewModelScope.launch {
+        turnTextWindowMs = 0L
+        generationJob = sessionScope.launch {
             // Publish streaming state so the drawer can show its loading dot.
             container.streamingConversationIds.value =
                 container.streamingConversationIds.value + conversationId
@@ -1508,6 +1537,7 @@ class ChatViewModel(
                     segments = allSegments,
                     usage = usage,
                     durationMs = System.currentTimeMillis() - generationStartMs,
+                    textStreamMs = turnTextWindowMs.takeIf { it > 0 },
                     segmentsJson = segmentsJson ?: encodeSegments(allSegments),
                     groupId = assistantGroupId,
                     version = assistantVersion,
@@ -1936,7 +1966,7 @@ class ChatViewModel(
             ?: com.psyche.memo.DefaultModelPrefs.DEFAULT_SUGGESTION_PROMPT
         val locale = java.util.Locale.getDefault().toLanguageTag()
         val thinking = readBoolPref("suggestion_generation_thinking_enabled_v1")
-        viewModelScope.launch {
+        sessionScope.launch {
             try {
                 // chat_service.clearConversationSuggestions —— 先清空旧建议。
                 _suggestions.value = emptyList()
@@ -1986,7 +2016,7 @@ class ChatViewModel(
      */
     private fun maybeGenerateTitle() {
         if (isTemporary) return
-        viewModelScope.launch {
+        sessionScope.launch {
             runCatching {
                 com.psyche.memo.TitleSummaryGenerator.generateTitle(container, conversationId, force = false)
             }.onFailure { e ->
@@ -2021,7 +2051,7 @@ class ChatViewModel(
      */
     fun refreshTitle() {
         if (isTemporary) return
-        viewModelScope.launch {
+        sessionScope.launch {
             val stored = withContext(Dispatchers.IO) {
                 container.conversationDao.get(conversationId)
             }
@@ -2035,7 +2065,7 @@ class ChatViewModel(
      */
     private fun maybeOrganizeMemory() {
         if (isTemporary) return
-        viewModelScope.launch {
+        sessionScope.launch {
             // The turn's assistant is the conversation's owner; the globally
             // selected assistant is only a fallback for an unbound conversation.
             val assistantId = withContext(Dispatchers.IO) {
@@ -2057,7 +2087,7 @@ class ChatViewModel(
      */
     private fun maybeGenerateSummary() {
         if (isTemporary) return
-        viewModelScope.launch {
+        sessionScope.launch {
             runCatching {
                 com.psyche.memo.TitleSummaryGenerator.generateSummary(container, conversationId)
             }.onFailure { e ->
@@ -2200,6 +2230,9 @@ class ChatViewModel(
             // mid-stream fold straight to the UI (Kotlin resolves the local
             // function at call time, not at lambda-creation time).
             lateinit var roundHandler: StreamChunkHandler
+            // 本轮正文的流式窗口（0 = 这一轮没吐过正文）。
+            var roundFirstTextAt = 0L
+            var roundLastTextAt = 0L
             fun roundUpdate() {
                 updateStreaming(
                     allParts + roundHandler.parts,
@@ -2230,7 +2263,12 @@ class ChatViewModel(
             chunks.collect { chunk ->
                 roundHandler.handle(chunk)
                 when (chunk) {
-                    is StreamChunk.TextDelta,
+                    is StreamChunk.TextDelta -> {
+                        val nowMs = System.currentTimeMillis()
+                        if (roundFirstTextAt == 0L) roundFirstTextAt = nowMs
+                        roundLastTextAt = nowMs
+                        roundUpdate()
+                    }
                     is StreamChunk.ReasoningDelta,
                     is StreamChunk.ToolCallDelta,
                     -> roundUpdate()
@@ -2272,6 +2310,11 @@ class ChatViewModel(
                     is StreamChunk.RetryAttemptStart -> updateAssistantRetry(assistantId, null)
                 }
             }
+            // 收口本轮的流式窗口：一个 chunk 吐完时窗口是 0，不累加（那种回合
+            // 交给分母的回退路径，见 formatTokensPerSecond）。
+            if (roundFirstTextAt != 0L && roundLastTextAt > roundFirstTextAt) {
+                turnTextWindowMs += roundLastTextAt - roundFirstTextAt
+            }
             if (failed) break
             val calls = takeCallsAfterRound(roundHandler)
             if (calls.isEmpty()) {
@@ -2293,6 +2336,7 @@ class ChatViewModel(
                     finalSegmentsJson,
                     usage = finishUsage,
                     durationMs = System.currentTimeMillis() - startedAtMs,
+                    textStreamMs = turnTextWindowMs.takeIf { it > 0 },
                 )
                 onPersist(finalParts, finishUsage, finalSegmentsJson)
                 break
@@ -2352,7 +2396,11 @@ class ChatViewModel(
                         role = "tool",
                         toolCallId = call.id,
                         toolName = call.name,
-                        content = results[index].first,
+                        // 外部内容（搜索结果 / 网页 / 工作区文件 / MCP / 技能正文）里若带着
+                        // 我们保留的框架标签，必须降级成普通文字 —— 否则那是一段能被模型当
+                        // 框架指令读的文本（A1，见 PromptFrames）。界面与落库仍是原文。
+                        content = com.psyche.memo.provider.tool.PromptFrames
+                            .sanitize(results[index].first),
                         // 工具结果附带的图片（工作区读图片）—— 照上游作为工具结果的一部分
                         // 回传；模型不支持图片输入时由客户端换成文本占位。
                         toolImages = results[index].second.map {
@@ -2410,7 +2458,7 @@ class ChatViewModel(
         generationJob?.cancel()
         _streaming.value = true
         beginBackgroundGeneration()
-        generationJob = viewModelScope.launch {
+        generationJob = sessionScope.launch {
             container.streamingConversationIds.value =
                 container.streamingConversationIds.value + conversationId
             // 本轮（续写）起始时刻 —— 收尾写 UI 的 durationMs 用。
@@ -2424,7 +2472,7 @@ class ChatViewModel(
                 if (persisted) return
                 persisted = true
                 if (isTemporary) return
-                viewModelScope.launch {
+                sessionScope.launch {
                     val dbMsg = withContext(Dispatchers.IO) { container.messageDao.get(messageId) }
                         ?: return@launch
                     withContext(Dispatchers.IO) {
@@ -2481,7 +2529,7 @@ class ChatViewModel(
                         role = "tool",
                         toolCallId = part.id,
                         toolName = part.toolName,
-                        content = resultJson,
+                        content = com.psyche.memo.provider.tool.PromptFrames.sanitize(resultJson),
                     ),
                 )
                 runGenerationLoop(
@@ -2547,6 +2595,7 @@ class ChatViewModel(
         completionTokens = completionTokens,
         cachedTokens = cachedTokens,
         durationMs = durationMs,
+        textStreamMs = textStreamMs,
         updatedAt = updatedAt,
         messageOrder = messageOrder,
     )
@@ -2999,6 +3048,7 @@ class ChatViewModel(
         segmentsJson: String? = null,
         usage: UsageStats? = null,
         durationMs: Long? = null,
+        textStreamMs: Long? = null,
     ) {
         val msgs = _messages.value
         val index = msgs.indexOfLast { it.id == assistantId }
@@ -3014,6 +3064,7 @@ class ChatViewModel(
             completionTokens = usage?.completionTokens,
             cachedTokens = usage?.cachedTokens,
             durationMs = durationMs,
+            textStreamMs = textStreamMs,
         )
         _messages.value = msgs.toMutableList().apply { set(index, finalUi) }
     }
@@ -3133,7 +3184,7 @@ class ChatViewModel(
         if (msgs[idx].isStreaming) segmentExpanded[segmentIndex] = !displayed
         _messages.value = msgs.map { if (it.id == messageId) it.copy(reasoningSegmentsJson = json) else it }
         if (isTemporary) return
-        viewModelScope.launch {
+        sessionScope.launch {
             withContext(Dispatchers.IO) { container.messageDao.updateReasoningSegments(messageId, json) }
         }
     }
@@ -3150,6 +3201,8 @@ class ChatViewModel(
         segments: List<com.psyche.memo.data.model.ReasoningSegment> = emptyList(),
         usage: UsageStats? = null,
         durationMs: Long = 0L,
+        /** 本轮正文实际在流的累计毫秒数（速度分母）；null = 没采到。 */
+        textStreamMs: Long? = null,
         /** 已算好的 `reasoning_segments_json`（含展开态）；null 时由 [segments] 兜底编码。 */
         segmentsJson: String? = null,
         /** 并入已有助手分组（重新生成 + 不删后续）时传入；null = 自成一组。 */
@@ -3166,7 +3219,7 @@ class ChatViewModel(
         }
         val startAt = closed.firstOrNull()?.startAt
         val finishedAt = closed.lastOrNull()?.finishedAt
-        viewModelScope.launch {
+        sessionScope.launch {
             withContext(Dispatchers.IO) {
                 if (container.messageDao.get(assistantId) != null) return@withContext
                 container.messageDao.insert(
@@ -3186,6 +3239,7 @@ class ChatViewModel(
                         completionTokens = usage?.completionTokens,
                         cachedTokens = usage?.cachedTokens,
                         durationMs = durationMs.takeIf { it > 0 },
+                        textStreamMs = textStreamMs,
                         groupId = groupId ?: assistantId,
                         version = version,
                         messageOrder = container.messageDao.nextOrder(conversationId),
@@ -3213,6 +3267,7 @@ class ChatViewModel(
         completionTokens = completionTokens,
         cachedTokens = cachedTokens,
         durationMs = durationMs,
+        textStreamMs = textStreamMs,
         translation = translation,
         reasoningSegmentsJson = reasoningSegmentsJson,
     )
@@ -3252,16 +3307,6 @@ class ChatViewModel(
 
         /** 预热的总字符预算（原版流式侧 `_streamingHighlightMaxChars = 12000` 同量级）。 */
         private const val MARKDOWN_PREWARM_CHARS = 40_000
-
-        fun factory(
-            container: AppContainerImpl,
-            conversationId: String,
-            injectPresets: Boolean = false,
-        ) = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                ChatViewModel(container, conversationId, injectPresets) as T
-        }
 
         /**
          * Fork ("create branch") copy: the message row duplicated into a new

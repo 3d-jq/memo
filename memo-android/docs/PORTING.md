@@ -2272,3 +2272,89 @@ Agora 那套动画参数一行没动（scale 0.55⇄1.30 @1s FastOutSlowIn Rever
 上下左右、四条三次贝塞尔边吸向中心），**不贴位图**：位图要么自带品牌蓝（不跟主题），
 要么当模板染色（抗锯齿灰边 + 缩放发糊）。坐标在 `brandStarPath(ratio)` 里手工乘出来，
 不用 `DrawScope.scale`（那份 Compose 版本里它与外层同名局部量打架，编译不过）。
+
+## 5.62 会话对象改由容器持有，生成不再跟着页面死（2026-09-25，用户点名「生成执行体从 ViewModel 搬到容器级 owner」）
+
+`ChatViewModel` **不再继承 `androidx.lifecycle.ViewModel`**：它自己带一个
+`sessionScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)`，实例由
+`AppContainerImpl.chatSession(conversationId)` 按会话持有（`chatSessions` 表 +
+`chatSessionCap = 12` 的上限，超了挤掉最旧且 `!isBusy` 的，挤的时候调 `destroy()`）。
+`ChatContent` 从 `viewModel(key = conversationId, factory = …)` 改成直接取容器那一份，
+`ChatViewModel.factory` 删除；`onCleared()` 变成 `destroy()`，只在**淘汰/删会话**时调用
+（`deleteConversation()` 现在同时删库和销毁会话对象）。
+
+为什么这样切：原来生成在 `viewModelScope` 里，Activity 一销毁（旋转、主题切换、系统回收、
+「不保留活动」）正在输出的回答就断，且 §5.59 那类「等待方消失」的泄漏也是同一个根。
+RikkaHub 的形状就是「会话住在页面之上」：`ChatService` 是 Koin 单例 + `AppScope`
+（`RikkaHubApp.kt:250`），按 conversationId 存 `ConversationSession{state, job, refCount}`，
+`ChatVM.kt:65` 只是 `getConversationFlow(id)` 的订阅者。Memo 的对应物是容器注册表 +
+本会话作用域，**没有**把整套消息状态再搬一层（那层状态本来就已经在按会话缓存的
+`liveChatViewModels` 里了，搬第二次只是 churn）。
+
+仍然没做的两件事，说清楚免得被当成已完成：
+- **进程被杀后续跑**做不到，RikkaHub 也做不到（`START_NOT_STICKY`、没有「生成中」落库标记）。
+  schema 里其实已经有 `generation_run_rows`（state: preparing/requesting/streaming/waiting_tool/
+  completed/failed/cancelled/interrupted + `state_revision` + `checkpoint_seq`），要真做恢复，
+  权威路径是往这张表写状态 + 启动时把非终态的判为 interrupted，而不是再加一个偏好键。
+- 审批/问询**没有超时**（B9 的一半）：会话活得更久之后，一个后台会话可以合法地等人回来点
+  「允许」，加超时反而会误杀；上游同样无超时。
+
+## 5.63 工作区 html / markdown 点开是真渲染（2026-09-25，用户「工作区像html有些文件点击跟没有渲染显示呀」）
+
+上游 `WorkspaceFileType` 只有 TEXT/IMAGE/OTHER，html 落在 TEXT ⇒ 点文件永远进纯文本编辑 sheet。
+Memo 另开一条判据 `renderKind()`（HTML / MARKDOWN，**不动那个 1:1 枚举**），点开时走
+既有的 `HtmlPreviewScreen`：html/htm 用 `rawHtml = true`（整篇文档原样加载），
+md/markdown 用 `rawHtml = false`（消息里那套 markdown 模板，带 mermaid/katex/高亮）。
+源码没丢 —— 溢出菜单多一行「查看源码」（`workspace_view_source`，三份 strings.xml 同步）。
+读文件失败时退回源码视图，让错误文本显示出来，而不是点了一下什么都没发生。
+
+## 5.64 harness 第二批：回放网 + 注入消毒 + 未读不可改 + 参数违规清单（2026-09-25）
+
+按 1.0.19 之后商定的顺序把剩下四条里能独立落的四条做完了（**F28 → A1 → B10 → B8**）：
+
+- **F28 系统提示词回放网**：`SystemPromptGoldenTest` + 基线文件
+  `app/src/test/resources/prompts/system-prompt-golden.txt`。场景刻意选全（记忆开、过往回忆开、
+  搜索开、工具名单给满），断言 `assembleSystemPrompt(buildSystemPromptParts(...))` 的**整段文本**
+  与段落顺序 ⇒ 任何一句提示词文案、任何一条门控变化都必须显式改基线。助手的系统提示词刻意不含
+  `{...}` 变量（日期会让基线每天漂），变量替换仍由 `SystemPromptVariablesTest` 单独钉。
+  另加一条：一颗工具都没递时**不许**出现 `ToolRules` 块。
+- **A1 注入消毒**：`provider/tool/PromptFrames.kt`。外部内容（搜索结果 / 网页 / 工作区文件 /
+  MCP 返回 / 技能正文）里伪装的保留标签（`<system-reminder>`、`<conversation-checkpoint>`、
+  `<available_skills>`、`<user_memory*>`、`<user_profile>`、`<citations>`）只把开头的 `<` 换成
+  `&lt;` —— 不转义全部尖括号（代码/HTML 是工具结果的主要内容），也不许误伤 `<citation>` 这种
+  近形词（名字后必须是空白/`>`/`/`/结尾）。接在**递给模型的那一份**上（`ChatViewModel` 两处
+  `role = "tool"`），界面与落库仍是原文。记忆块本来就被上游的 `MemoryBlockBuilder.escape()`
+  全量转义过，所以那一路已经是干净的。
+- **B10 未读不可改 + 乐观并发**：`provider/workspace/WorkspaceReadLedger.kt`，容器级一份，
+  按 `(会话, 工作区, 路径)` 记**读取时的字节数**；`workspace_edit_file` 先问一句 ——
+  没读过 → `not_read`，读过但字节数变了 → `stale_read`，两种都带明确下一步（先读再改）。
+  写完刷新账本（否则第二次编辑会被自己刚写的那份判成「已经变了」），LRU 上限 512。
+  为什么用大小不用内容哈希：工作区只有 `rootfsFileSize` 这条廉价通道，算哈希等于每次编辑
+  都先整篇导出。
+- **B8 参数违规清单**：`provider/tool/ToolArgs.kt` + `ArgViolation(param, constraint, fix)`。
+  工作区七颗工具在**执行前**统一校验，不合格直接回 `invalid_arguments` 并带 `violations` 数组，
+  一次报全（修一处撞一处是最坏的体验），错误里明说「什么都没执行、什么都没变」。
+  可选参数（`workspace_list` 的 path、grep 的 glob、shell 的 cwd）缺了不算违规。
+  `ToolResults.error` 因此多了一个可选 `violations` 参数，空时**不写这个键**（错误形状保持原样）。
+
+## 5.65 上一批的三处收口（2026-09-25，用户「工作区预览这个你只做一半呀」「我都没有设置呀，怎么还是要显示」「600tok/s 应该是算法有问题」）
+
+1. **工作区渲染只做了一半**：§5.63 改了「管理工作区」详情页，但输入栏那个预览 sheet
+   （`WorkspaceFilesSheet`）有**自己的一份 `onOpen`**，没同步 ⇒ 同一个文件在详情页能渲染、
+   在 sheet 里还是纯文本。现在两处共用 `renderKind()`，sheet 里读失败同样退回只读文本预览。
+   预览窗口用 `Dialog`（`ImageViewerOverlay` 同形态），**不能**再套一层 `ModalBottomSheet` ——
+   这个 sheet 本身已经叠在 `WorkspaceSelectorSheet` 之上，三层窗口会让内容画不出来
+   （那个坑是 2026-09-22「md 点开没反应」时踩出来的，注释就写在文件里）。
+2. **麦克风按上游门控**：上游 `showVoiceInput = asr != null && selectedAsrService != null &&
+   asr.canUse(selectedAsrService)`（`chat_input_bar.dart:2542-2546`），而 `selectedAsrService`
+   在 `asrServices` 为空时就是 null（`settings_provider.dart:440-447`、1525-1528）⇒
+   **没配过语音输入就不该有那颗钮**。Memo 原先写成 `cloudOptions() != null ||
+   SpeechRecognizer.isRecognitionAvailable(context)`，后半个条件让任何带系统识别器的手机
+   都常驻显示。现在按上游：没选中服务 → 不可用；选中的是 `system` 那一类 → 才看本机识别器。
+   顺带修一个同源的隐藏 bug：`shouldUseCloudAsr` 只看「有没有服务 + 有没有 client」，
+   而 `SystemAsrOptions.isConfigured` 恒真 ⇒ 选中系统服务会被塞进 HTTP 云端分支，现在按 kind 挡住。
+3. **生成速度的分母换成实测流式窗口**：§5.64 之前那版（本批 TOK）用「总耗时 − 首 token」，
+   在**非流式回合**里首 token 就是最后一个 chunk ⇒ 分母接近 0，120 token 显示成 600 tok/s
+   （他实测抓到）。现在记的是各 HTTP 轮次「第一个正文 delta → 最后一个正文 delta」窗口的
+   **累加**（跨工具轮次不再把跑工具的时间算成在写字），持久化键也从 `first_token_ms` 改成
+   `text_stream_ms`；窗口不足 1 秒视为「没测到」，分母退回上游的总耗时，绝不除以零头。

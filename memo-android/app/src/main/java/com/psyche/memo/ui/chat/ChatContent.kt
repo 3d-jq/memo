@@ -201,10 +201,9 @@ fun ChatContent(
     /** 是否处于「冷启动那一次窗口加载」（只有它会露骨架，见 showTimelineSkeleton）。 */
     startupWindowPending: Boolean = false,
 ) {
-    val vm: ChatViewModel = viewModel(
-        key = conversationId,
-        factory = ChatViewModel.factory(container, conversationId, injectPresets = injectPresets),
-    )
+    // 会话对象由容器持有（活到会话被删或注册表淘汰），**不再**跟着页面的
+    // ViewModelStore 生灭 —— 生成因此熬过 Activity 重建。见 AppContainer.chatSession。
+    val vm: ChatViewModel = container.chatSession(conversationId, injectPresets = injectPresets)
     // 抽屉改写了本会话标题 → 让 vm 重读库里的标题刷新顶栏（首次 tick=0 不触发）。
     androidx.compose.runtime.LaunchedEffect(titleRefreshTick) {
         if (titleRefreshTick > 0) vm.refreshTitle()

@@ -33,6 +33,31 @@ class TokenSpeedFormatTest {
         assertNull("耗时为 0 不显示（上游 `durationMs > 0`）", formatTokensPerSecond(500, 0))
     }
 
+    /**
+     * 有「正文实际在流」的窗口时，分母用它，不再算上排队/prefill/工具时间。
+     *
+     * 但窗口短到不像在流（非流式回合一个 chunk 吐完 ⇒ 窗口 0）就退回总耗时 ——
+     * 拿 0.2 秒做分母会显示 600 tok/s（用户 2026-09-25 抓到的就是这个）。
+     */
+    @Test
+    fun dividesByTheMeasuredStreamingWindowAndFallsBackWhenItIsTooShort() {
+        assertEquals("100.0", formatTokensPerSecond(500, 10_000, textStreamMs = 5_000))
+        // 没记到（旧消息 / 非流式）仍按上游口径。
+        assertEquals("50.0", formatTokensPerSecond(500, 10_000, textStreamMs = null))
+        assertEquals(
+            "窗口 200ms 不算测量（一个 chunk 吐完），退回总耗时而不是 2500 tok/s",
+            "50.0", formatTokensPerSecond(500, 10_000, textStreamMs = 200),
+        )
+        assertEquals(
+            "刚好到线就用它",
+            "500.0", formatTokensPerSecond(500, 10_000, textStreamMs = 1_000),
+        )
+        assertEquals(
+            "窗口比总耗时还长（时钟跳变）也不能算出负数分母",
+            "50.0", formatTokensPerSecond(500, 10_000, textStreamMs = 0),
+        )
+    }
+
     @Test
     fun formatsDurationSecondsWithOneDecimal() {
         assertEquals("1.0", formatSeconds(1_000))

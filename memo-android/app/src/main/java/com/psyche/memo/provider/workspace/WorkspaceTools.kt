@@ -1,6 +1,8 @@
 package com.psyche.memo.provider.workspace
 
 import com.psyche.memo.llm.client.LlmToolSpec
+import com.psyche.memo.provider.tool.ArgViolation
+import com.psyche.memo.provider.tool.ToolArgs
 import com.psyche.memo.workspace.WorkspaceFileEntry
 import com.psyche.memo.workspace.WorkspaceManager
 import kotlinx.serialization.json.JsonArray
@@ -589,7 +591,17 @@ object WorkspaceTools {
 
     sealed interface Outcome {
         data class Success(val json: String, val image: ToolImageBytes? = null) : Outcome
-        data class Failure(val error: String, val message: String) : Outcome
+        /**
+         * [instruction] = 这条失败该让模型**下一步做什么**（null 时由调用方给通用那句）。
+         * 「未读不可改」这类必须点名补救动作，否则模型只会原地再敲同一颗 edit。
+         */
+        data class Failure(
+            val error: String,
+            val message: String,
+            val instruction: String? = null,
+            /** 参数校验失败时逐条点名（B8）；其他失败为空。 */
+            val violations: List<com.psyche.memo.provider.tool.ArgViolation> = emptyList(),
+        ) : Outcome
     }
 
     /** 图片扩展名（1:1 上游 `WorkspaceTools.kt` 的 `IMAGE_EXTENSIONS`）。 */
@@ -623,25 +635,90 @@ object WorkspaceTools {
         cwd: String?,
         name: String,
         args: JsonObject,
-    ): Outcome = try {
-        when (name) {
-            READ_FILE -> readFile(repo, workspaceId, args)
-            WRITE_FILE -> writeFile(repo, workspaceId, args)
-            EDIT_FILE -> editFile(repo, workspaceId, args)
-            LIST -> list(repo, workspaceId, args)
-            GLOB -> glob(repo, workspaceId, args)
-            GREP -> grep(repo, workspaceId, args)
-            SHELL -> shell(repo, workspaceId, cwd, args)
-            else -> Outcome.Failure("unknown_tool", "Unknown workspace tool: $name")
+        /** 「读过才许改」的账本（见 [WorkspaceReadLedger]）；null = 不启用这条纪律。 */
+        reads: WorkspaceReadLedger? = null,
+        conversationId: String? = null,
+    ): Outcome {
+        // B8：先把参数校验干净，**不合格就一颗都不执行**。各工具里的
+        // absolutePath/stringArg 仍然是后手，但模型该看到的是「哪颗参数、缺什么、
+        // 怎么改」的清单，而不是 `IllegalStateException: path is required` 这种半句话。
+        val violations = validateArguments(name, args)
+        if (violations.isNotEmpty()) {
+            return Outcome.Failure(
+                error = "invalid_arguments",
+                message = "`$name` was not executed: ${violations.size} argument problem(s).",
+                instruction = "Fix the arguments listed in `violations` and call again. " +
+                    "Nothing ran and nothing changed — do not describe a result.",
+                violations = violations,
+            )
         }
-    } catch (e: Exception) {
-        Outcome.Failure("execution_error", e.message ?: e.toString())
+        return try {
+            when (name) {
+                READ_FILE -> readFile(repo, workspaceId, args, reads, conversationId)
+                WRITE_FILE -> writeFile(repo, workspaceId, args, reads, conversationId)
+                EDIT_FILE -> editFile(repo, workspaceId, args, reads, conversationId)
+                LIST -> list(repo, workspaceId, args)
+                GLOB -> glob(repo, workspaceId, args)
+                GREP -> grep(repo, workspaceId, args)
+                SHELL -> shell(repo, workspaceId, cwd, args)
+                else -> Outcome.Failure("unknown_tool", "Unknown workspace tool: $name")
+            }
+        } catch (e: Exception) {
+            Outcome.Failure("execution_error", e.message ?: e.toString())
+        }
+    }
+
+    /** 每颗工作区工具的入参约束（与上面 `*ParametersJson` 的 schema 同口径）。 */
+    private fun validateArguments(name: String, args: JsonObject): List<ArgViolation> {
+        val a = ToolArgs(args)
+        when (name) {
+            READ_FILE -> a.absolutePath("path")
+            WRITE_FILE -> {
+                a.absolutePath("path")
+                a.string("text")
+                a.boolean("overwrite", default = true)
+            }
+
+            EDIT_FILE -> {
+                a.absolutePath("path")
+                a.string("old_text")
+                a.string("new_text")
+                a.boolean("replace_all", default = false)
+            }
+
+            LIST -> a.absolutePath("path", required = false)
+            GLOB -> {
+                a.string("pattern")
+                a.absolutePath("path", required = false)
+            }
+
+            GREP -> {
+                a.string("pattern")
+                a.absolutePath("path", required = false)
+                a.string("glob", required = false)
+                a.boolean("ignore_case", default = false)
+            }
+
+            SHELL -> {
+                a.string("command")
+                a.string("cwd", required = false)
+                a.int(
+                    "timeout",
+                    default = 30,
+                    minimum = 1,
+                    maximum = SHELL_TIMEOUT_MAX_SECONDS.toInt(),
+                )
+            }
+        }
+        return a.violations
     }
 
     private suspend fun readFile(
         repo: WorkspaceRepository,
         workspaceId: String,
         args: JsonObject,
+        reads: WorkspaceReadLedger?,
+        conversationId: String?,
     ): Outcome {
         val path = absolutePath(args, "path")
         val size = repo.rootfsFileSize(workspaceId, path)
@@ -653,6 +730,8 @@ object WorkspaceTools {
         if (isImagePath(path)) {
             return imageReadOutcome(path, buffer.toByteArray())
         }
+        // 记下这份版本：之后要改它，必须先读过、且它没变过（B10）。
+        reads?.record(conversationId, workspaceId, path, size)
         return Outcome.Success(
             buildJsonObject {
                 put("path", path)
@@ -665,6 +744,8 @@ object WorkspaceTools {
         repo: WorkspaceRepository,
         workspaceId: String,
         args: JsonObject,
+        reads: WorkspaceReadLedger? = null,
+        conversationId: String? = null,
     ): Outcome {
         val path = absolutePath(args, "path")
         val text = stringArg(args, "text") ?: error("text is required")
@@ -692,6 +773,8 @@ object WorkspaceTools {
         )
         val entry = parseRootfsEntries(result.stdout).singleOrNull()
             ?: error("Invalid file metadata output")
+        // 刚写出去的就是模型见过的那一份 —— 记下来，紧接着的 edit 不该被当成「没读过」。
+        reads?.record(conversationId, workspaceId, path, entry.sizeBytes)
         return Outcome.Success(entryJson(entry))
     }
 
@@ -699,6 +782,8 @@ object WorkspaceTools {
         repo: WorkspaceRepository,
         workspaceId: String,
         args: JsonObject,
+        reads: WorkspaceReadLedger?,
+        conversationId: String?,
     ): Outcome {
         val path = absolutePath(args, "path")
         val oldText = stringArg(args, "old_text") ?: error("old_text is required")
@@ -707,6 +792,25 @@ object WorkspaceTools {
 
         val size = repo.rootfsFileSize(workspaceId, path)
         requireReadableSize(path, size)
+        // B10：没读过、或读过之后文件又变了，都不许改。只按 `old_text` 匹配的话，模型
+        // 猜中一段原文就能把用户手改的内容整篇盖回去，而且工具会报「替换成功」——
+        // 那是最坏的一种「说了做了」（用户 2026-09-23 起在收的那条纪律）。
+        when (val check = reads?.check(conversationId, workspaceId, path, size)) {
+            is WorkspaceReadLedger.EditCheck.NotRead -> return Outcome.Failure(
+                error = "not_read",
+                message = WorkspaceEditGuards.notRead(path),
+                instruction = WorkspaceEditGuards.notReadInstruction(path),
+            )
+
+            is WorkspaceReadLedger.EditCheck.Stale -> return Outcome.Failure(
+                error = "stale_read",
+                message = WorkspaceEditGuards.stale(path, check.seenBytes, check.nowBytes),
+                instruction = WorkspaceEditGuards.staleInstruction(path),
+            )
+
+            // 账本没接（null）= 这条纪律不启用，照旧允许直接改。
+            null, WorkspaceReadLedger.EditCheck.Ok -> Unit
+        }
         val buffer = emptyBuffer(size)
         repo.exportRootfsFile(workspaceId, path, buffer)
         val original = readBuffer(buffer)
@@ -725,6 +829,9 @@ object WorkspaceTools {
                 put("text", JsonPrimitive(replaced.updated))
                 put("overwrite", JsonPrimitive(true))
             },
+            // 改完要刷新账本，否则下一次 edit 会被自己刚写的那份判成「已经变了」。
+            reads,
+            conversationId,
         )
         if (write !is Outcome.Success) return write
 

@@ -2,6 +2,7 @@ package com.psyche.memo.provider.tool
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -168,6 +169,8 @@ object ToolResults {
         tool: String,
         instruction: String,
         type: String = "tool_error",
+        /** 参数校验失败时逐条点名（B8）：空就不写这个键，错误形状保持原样。 */
+        violations: List<ArgViolation> = emptyList(),
     ): String = buildJsonObject {
         put("type", JsonPrimitive(type))
         put("status", JsonPrimitive("error"))
@@ -175,5 +178,8 @@ object ToolResults {
         put("message", JsonPrimitive(message))
         put("tool", JsonPrimitive(tool))
         put("instruction", JsonPrimitive(instruction))
+        if (violations.isNotEmpty()) {
+            put("violations", JsonArray(violations.map { it.toJson() }))
+        }
     }.toString()
 }

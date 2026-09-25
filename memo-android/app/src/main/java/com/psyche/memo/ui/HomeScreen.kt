@@ -306,7 +306,7 @@ fun HomeScreen(
             currentId != Conversation.TEMPORARY_ID &&
             container.messageDao.count(currentId) == 0
         ) {
-            container.conversationDao.delete(currentId)
+            container.deleteConversation(currentId)
         }
         // draft 语义（chat_service.createDraftConversation L1869：只在内存，不落库）——
         // 一条消息都没发的空会话不该出现在历史列表里，等首条消息发送时才写
@@ -334,7 +334,7 @@ fun HomeScreen(
         if (currentId != null && currentId != Conversation.TEMPORARY_ID &&
             container.messageDao.count(currentId) == 0
         ) {
-            container.conversationDao.delete(currentId)
+            container.deleteConversation(currentId)
             selectedConversationId = null
             startupWindowPending = false
             container.startupConversationPending = false
