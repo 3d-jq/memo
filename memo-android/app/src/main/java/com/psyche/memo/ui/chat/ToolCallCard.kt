@@ -304,6 +304,11 @@ fun toolTitleFor(name: String, args: JsonObject?, isResult: Boolean): String {
         "chat_search" -> stringResource(UiR.string.chat_message_widget_chat_search)
         "create_memory" -> stringResource(UiR.string.chat_message_widget_create_memory)
         "search_web" -> stringResource(UiR.string.chat_message_widget_web_search, args?.str("query").orEmpty())
+        // Agent 浏览器（本工程新增，上游没有这颗工具）：给一个像样的标题，别落到默认的
+        // 「调用工具 browser_use」——用户看到的应该是在开网页，而不是某个匿名内部函数。
+        com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME -> stringResource(
+            UiR.string.agent_capabilities_browser_title,
+        )
         // 生成工具：标题带提示词（照 search_web 带 query 的写法）。
         com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE -> stringResource(
             UiR.string.chat_message_widget_generate_image,
@@ -396,6 +401,8 @@ fun ChainOfThoughtToolStep(
     hideToolResultImages: Boolean = false,
     conversationId: String? = null,
     askUser: AskUserInteractionService? = null,
+    /** 浏览器工具卡的「查看页面」（spec §6）；null = 所在页面没有接管能力。 */
+    onOpenBrowser: (() -> Unit)? = null,
     onSubmitAskUser: ((AskUserResult) -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -478,8 +485,24 @@ fun ChainOfThoughtToolStep(
         } else {
             null
         }
+    val browserAction: (@Composable () -> Unit)? =
+        if (part.toolName == com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME &&
+            part.content != null &&
+            onOpenBrowser != null
+        ) {
+            {
+                TextButton(onClick = { onOpenBrowser() }) {
+                    Text(stringResource(UiR.string.browser_view_page))
+                }
+            }
+        } else {
+            null
+        }
+    // 三块正文（摘要 / 图片条 / 「查看页面」）共用同一份 `content` 判据：`contentVisible` 与
+    // `expectContent` 都从这里派生，所以新增一块必须同时改这里 —— 只画不判会把折叠态算歪
+    // （TimelineStepShell 里 `hasBody = content != null || expectContent`）。
     val content: (@Composable () -> Unit)? =
-        if (summaryContent == null && imageStrip == null) {
+        if (summaryContent == null && imageStrip == null && browserAction == null) {
             null
         } else {
             {
@@ -489,6 +512,12 @@ fun ChainOfThoughtToolStep(
                         Spacer(Modifier.height(8.dp))
                     }
                     if (imageStrip != null) imageStrip()
+                    if (browserAction != null) {
+                        if (summaryContent != null || imageStrip != null) {
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        browserAction()
+                    }
                 }
             }
         }
@@ -651,6 +680,8 @@ fun ToolCallCard(
     conversationId: String? = null,
     askUser: AskUserInteractionService? = null,
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)? = null,
+    /** 浏览器工具卡的「查看页面」（spec §6），与时间线步同一判据、同一颗钮。 */
+    onOpenBrowser: (() -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
@@ -776,6 +807,17 @@ fun ToolCallCard(
                     maxWidth = ChatStyleSpec.TOOL_IMAGE_CARD_MAX_WIDTH_DP.dp,
                     onOpenViewer = { paths, index -> viewerState = listOf(paths[index]) to 0 },
                 )
+            }
+            // spec §6：浏览器工具卡的「查看页面」。判据与时间线步（ChainOfThoughtToolStep）
+            // 那第三块逐字一致 —— 两颗卡是同一个工具的两个表面，别一边有一边没有。
+            if (part.toolName == com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME &&
+                part.content != null &&
+                onOpenBrowser != null
+            ) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { onOpenBrowser() }) {
+                    Text(stringResource(UiR.string.browser_view_page))
+                }
             }
         }
     }

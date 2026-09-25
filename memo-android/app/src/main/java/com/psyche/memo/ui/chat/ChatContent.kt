@@ -512,6 +512,10 @@ fun ChatContent(
     var regenerateFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
     var selectCopyFor by remember { mutableStateOf<String?>(null) }
     var htmlPreviewFor by remember { mutableStateOf<com.psyche.memo.ui.chat.HtmlPreviewRequest?>(null) }
+    // 浏览器接管遮罩：只有一枚旗标，实例不落状态 —— 每次组合都从 store 同步 `peek`，
+    // 绝不跨挂起点持有 `BrowserSession`（`attachTo` 没有 closed 闸，把已 destroy 的 WebView
+    // 再 addView 回去真机必炸，见 BrowserOverlay 的 @param session）。
+    var browserOverlayOpen by remember { mutableStateOf(false) }
 
     val clipboard = androidx.compose.ui.platform.LocalClipboard.current
     val clipboardScope = rememberCoroutineScope()
@@ -1415,6 +1419,8 @@ fun ChatContent(
                             onOpenHtmlPreview = { code ->
                                 htmlPreviewFor = com.psyche.memo.ui.chat.HtmlPreviewRequest(code, rawHtml = true)
                             },
+                            // 浏览器工具卡上的「查看页面」= 接管（spec §6）。
+                            onOpenBrowser = { browserOverlayOpen = true },
                             askUserService = askUserService,
                             onRecoveredAnswer = { part, result ->
                                 vm.resumeAfterToolAnswer(msg.id, part, result.jsonString)
@@ -2109,6 +2115,24 @@ fun ChatContent(
             request = request,
             onBack = { htmlPreviewFor = null },
         )
+    }
+
+    // 用户接管浏览器：叠在同一层（与 HTML 预览同形状，不是 Dialog —— PORTING §5.31）。
+    if (browserOverlayOpen) {
+        val session = container.browserSessions.peek(conversationId)
+        if (session != null) {
+            com.psyche.memo.ui.chat.BrowserOverlay(
+                session = session,
+                onBack = { browserOverlayOpen = false },
+                // 容器作用域：`closeAll()` 第一步就挂起（切 Main），页面作用域的 scope 会随
+                // 遮罩销毁把它掐在 `close()` 中间 ⇒ 未 destroy 的 WebView + 未清的 cookie jar。
+                onClearAndClose = {
+                    container.appScope.launch { container.browserSessions.closeAll() }
+                },
+            )
+        } else {
+            browserOverlayOpen = false
+        }
     }
 
     editFor?.let { target ->

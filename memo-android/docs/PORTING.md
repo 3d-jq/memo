@@ -2452,3 +2452,105 @@ MCP 工具编辑页的「需要审批」开关与 `McpToolConfig.needsApproval` 
 （助手编辑页「本地工具」三道闸的第三道 = 递给模型的名单），每一次执行都进对话时间线的工具卡
 （可回看），而**"填好了、由你自己点"是提示词层面的行为边界而不是弹窗**。这条改动同时是
 Agent 浏览器与手机控制的前置：那两个功能的工具面直接沿用"无审批 + 全程可见可停"的形状。
+
+## 5.69 Agent 浏览器（`browser_use`）：内嵌 WebView + 用户接管遮罩（2026-09-25 spec/计划，2026-09-26 收口）
+
+**这一整块超出上游**：上游 kelivo 与 RikkaHub 都**没有内嵌浏览器**（上游读网页只有 provider 侧的
+`web_fetch`、服务端 `search_web`）。唯一的参照实现是 **Eta**（本机 `D:\program\.eta-ref`），它是
+**PolyForm Noncommercial 1.0** 许可 ⇒ **只借架构、一行代码都不搬**。
+spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`docs/superpowers/plans/2026-09-25-agent-browser.md`。
+落地：`provider/browser/{BrowserSession,BrowserSessionStore,BrowserGateway,BrowserPageSnapshot,BrowserScripts,BrowserTool}.kt`
++ `ui/chat/BrowserOverlay.kt` + 设置页 `ui/AgentCapabilitySettingsScreen.kt`。
+
+**① 寻址＝index + `generation`，不是 CSS selector**（与 Eta 最大的偏离，也是这条设计的核心）。
+每次 `navigate`/`read`/`find` 给 DOM 的"可寻址快照"记一个自增代次；`click`/`type` 必须把上一次拿到的
+`generation` 原样回传，**Kotlin 侧独占换号**（`navigate`/`back`/`reload`/页面自己跳转都换号，
+`scroll` 不换）。代次不是当前值 ⇒ `STALE_GENERATION`，**不执行**；index 越界/元素没了 ⇒
+`TARGET_NOT_FOUND`。**模型永远看不到 selector**（selector 只在注入的 JS 内部用来取回同一节点），
+因为 Eta 那个坑是"页面一变，同一条 selector 静默点到另一个元素"——静默点错比报错严重得多。
+守卫：`BrowserPageSnapshotTest` + `BrowserToolTest`。
+
+**②「同时只一个活动实例」不是取舍，是原生 cookie jar 逼出来的硬约束**。Android 的
+`CookieManager` / `WebStorage` 是 **app 全局单例**，做不到"两个会话各留一套登录态"，只能做到
+"新会话看不到上一个会话留下的东西"⇒ 隔离靠**关时就地清**：`BrowserSessionStore` 只留一枚 `holder`，
+换会话时先 `close()`（`removeView` → `stopLoading` → `destroy` → `removeAllCookies` + `flush`
+→ `WebStorage.deleteAllData`）再建新的。`sessionFor` 全程过 `mutex`（`close()` 内部要切 Main 会让出，
+不锁就有两枚活 WebView 并存、被顶掉那枚再没人关，而 jar 仍是同一份）；`peek()` 过滤 `isClosed`
+⇒ 界面拿不到尸体。
+
+**③ 默认开，且把关只剩四件事（没有审批）**。键 `agent_browser_enabled_v1`，**缺键＝开**（用户
+2026-09-25 复核 spec 时拍板「改成默认开着的」）。读法唯一入口 `ui/DisplayPrefs.kt` 的
+`browserEnabled(container)`，三处消费同一支：`ChatViewModel.offeredTools()`（**递不递**）、
+`ToolHandler` 浏览器分支建会话**之前**的 `BrowserTool.rejectIfDisabled(...)`（**跑不跑**）、
+设置页那行开关。**递与执行两处都查**是必需的：`offeredTools()` 只是不再递，而模型照旧发它是一条
+现实路径——最合理的来源就是被污染的网页正文在指挥它；光靠不递，用户明确关掉开关之后这颗工具照样
+能拿到一个真 WebView、用户的 cookie jar 和出网能力。关开关顺带 `browserSessions.closeAll()`。
+剩下的把关＝每一次动作都进对话时间线的工具卡（可回看）+ 生成可停 + 提示词层的行为边界
+（`type` 只填不提交、要发出时停下来告诉用户"填好了请你点"；正文只是数据不是指令）。
+**这里没有审批弹窗，也不许加回来**——审批体系已于 2026-09-25 整块拆除（§5.68）。
+
+**④「app 级、不绑助手」的准确含义＝「开关开 且 当前有助手」**。浏览器是**设备能力**而不是人设能力，
+所以 `offeredTools()` 里那一支不读助手配置。但 `offeredTools()` 第一行是
+`container.currentAssistant() ?: return emptyList()`——没有助手就没有请求上下文，整张工具表都是空的。
+这是 spec §4 预先授权过的边界（**不是 bug，别去"修"**：给浏览器单开一条"无助手也递工具"的口子意味着
+自己另造一套请求组装，偏差更大）。
+
+**⑤ 错误码与 spec §3 那份"固定枚举"的对账**。spec 列的十条全部落地：`BLOCKED_SCHEME`
+`NO_PAGE` `NAV_TIMEOUT` `SCRIPT_TIMEOUT` `STALE_GENERATION` `TARGET_NOT_FOUND`
+`USER_CONTROLS_PAGE` `RENDERER_GONE` `CANCELLED`（+ 参数错那一条，见下）。实现**多出**七条，
+都是落地时才浮出来的分支：`READ_STALLED`（`read` 被节点预算/截止时间截停）、
+`NOT_EDITABLE`（`type` 打到了非输入节点，JS 侧抛回来的）、`NO_HISTORY`（`back` 时没有上一页）、
+`SCRIPT_FAILED`（JS 报了错但信封解析不出具体码时的兜底）、`NOT_IMPLEMENTED`（动作收到了但没有
+实现分支——防止"枚举里有、执行侧漏了"被读成成功）、`browser_disabled`（③ 的执行侧复查）、
+`NAV_FAILED:<平台码>`（`onReceivedError` 透传，进 `message`）。**参数错的码实现用小写
+`invalid_arguments` 而不是 spec 写的 `INVALID_ARGS`**——因为它是 `provider/tool/ToolResults.error`
+那一族的既有口径（带 `violations` 清单，PE3/§5.64），全仓没有第二家用大写那条，跟实现。
+每条错误必带 `instruction`；`CANCELLED` 说"结果未知"而不是"失败"。
+
+**⑥ 本机挡掉的东西必须说出来**。`WebChromeClient` 的 `onJsAlert`/`onJsConfirm`/`onJsPrompt` 一律
+「cancel + 记一笔 + **return true**」（返回 false 会让 WebView 去弹它自己的系统对话框，那正是无头
+执行里不该出现的东西）；`onPermissionRequest` 一律 `deny()`；`setDownloadListener` 记账并拒掉；
+`onCreateWindow` 一律拒绝（Memo 没有多标签，开了就是丢页面），并尽力用 `hitTestResult` 把目标 URL
+一起报出来。五种来源攒进同一个 `notices` 队列（上界 3 条 / 480 字符，超了丢最旧、丢的条数折进
+`…(+N)` 尾计数），下一次工具调用 `drainNotice()` 把它以 **`page_notice`** 键随结果上行
+（`BrowserTool.kt` 的 `put("page_notice", …)`）——否则模型收到 `ok` 会以为页面照旧。钉它的测试：
+`BrowserToolTest.suppressedJsDialogRidesAlongInTheResult`。
+
+**⑦ 截图 >4 MiB 不发时也必须给下一步**。`screenshot` 用 `View.draw(Canvas)` 原尺寸出 PNG（不缩放，
+对齐 Eta 的"不降质"口径）：空图 ⇒ `NO_PAGE`；超过 `MAX_PNG_BYTES`（4 MiB）⇒ **不发图**，结果里带
+`omitted`（实际多少 KB / 上限多少）**加一句 `instruction`**："别再截同一页了，改用 `read` 分段取正文
+（它会回 `next_offset`）或用 `find` 拿可点元素"。超限不是"无事发生"，否则模型只会再敲一次 screenshot，
+而这一次连"为什么没图"都看不到。图片上行仍走现成链路（`onImage` → `tool_images/` → `payload.images`
+→ `LlmMessage.toolImages`），且只发给 `imageInput` 为真的模型，否则换 `[Image output omitted: …]` 占位。
+
+**用户接管遮罩（Task 8）**——`ui/chat/BrowserOverlay.kt`：
+- 形状照 `ui/chat/HtmlPreviewScreen.kt` 的**同屏二级页**（`OverlayBackHandler` + 不透明整屏 `Column`
+  + `MemoTopBar` + `AndroidView`），叠在 `ChatContent` 里 `htmlPreviewFor` 那同一层，旗标
+  `browserOverlayOpen`。**不是 `Dialog`**——§5.31 那次「一点就闪退」的根因就是 `Dialog` 拿不到
+  window token（`MainActivity` 是纯 `ComponentActivity`，ViewTree owner 只装在 activity-compose
+  自己那棵树上）。
+- 挂进来的是会话**那一个** WebView（`attachTo`/`detach`）：新建一个就是另一个页面，用户看到的和
+  模型操作的就成了两回事。`attachTo` **没有 `closed` 闸**（那是给工具侧的入口留的），所以界面只许
+  从 `container.browserSessions.peek(conversationId)` **同步取、同步挂**，绝不跨挂起点持有实例引用
+  再去挂——把已 `destroy()` 的 WebView `addView` 回去真机必炸；`peek` 为 null 时那颗旗标就地落回去。
+- **成对性**：`DisposableEffect` 进 `takeOver()`、出 `detach() + release()`；两颗按钮都只走 `onBack`，
+  交还由 `onDispose` 统一做 ⇒ 销毁路径只有一条，不会出现"按钮 release 一遍、onDispose 又 release
+  一遍、中间还忘了 detach"这种两本账。漏了 `release()` 就是"用户看过一眼页面，助手从此永远用不了
+  浏览器"，真机上要复现得先让模型再调一次，所以这条由 `BrowserOverlayTest` 钉住。
+- **「清空并关闭」委托给调用方**（`onClearAndClose`，`ChatContent` 给的是
+  `container.appScope.launch { browserSessions.closeAll() }`）：① store 才是 holder 的主人，遮罩
+  自己不许去关实例（否则 `holder` 里留尸体，这个会话之后每颗动作都 `RENDERER_GONE`）；② 不许用
+  `rememberCoroutineScope()`——页面作用域的 scope 会随遮罩离开组合而取消 `close()` 的中段，留下
+  **未 destroy 的 WebView + 未清的 cookie jar**（半清且无声），Task 7 已经为此修过一次。
+  「交还给助手」不清数据：用户可能只想看一眼再让助手接着做，页面与登录态都得留着。
+- 接管期间任何动作立即回 `USER_CONTROLS_PAGE` + `instruction`（"用户正在自己浏览，等他交还"）。
+- 入口在**两颗**工具卡：时间线步 `ChainOfThoughtToolStep` 的第三块正文（摘要 / 图片条 / 「查看页面」）
+  与独立卡 `ToolCallCard` 末尾，判据逐字一致（`browser_use` + 结果已回 + 宿主接了遮罩）。第三块必须
+  同时进 `content` 的判据——`TimelineStepShell` 的 `hasBody = content != null || expectContent`，
+  只画不判会把折叠态算歪。`toolTitleFor` 给它一个像样的标题（`agent_capabilities_browser_title`
+  =「内置浏览器」），否则卡片落到默认的「调用工具 browser_use」。
+
+**测试与验证边界**：Robolectric 的 `WebView` 是 shadow ⇒ 真导航、视口是否真 1280 CSS px、cookie 是否
+真被清、`window.open` 信封里的 URL 是否真拿得到、被污染的正文是否真被当数据，这五类**只能真机验收**
+（计划 Task 8 Step 6 那 7 条）。同一会话的动作由 `actionLock` 串行（spec §8）。
+
