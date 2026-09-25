@@ -182,3 +182,19 @@ androidComponents {
         builder.enableUnitTest = false
     }
 }
+
+/**
+ * 系统提示词基线的**显式重生成**入口。
+ *
+ * `./gradlew :app:testDebugUnitTest -Pgolden.bless=1` 让 `SystemPromptGoldenTest`
+ * 把当前拼装结果写回 fixture，而不是只报红等人肉抄。基线路径由构建脚本给绝对路径：
+ * 测试的工作目录不保证是模块目录，而 classpath 里那份是 build intermediates 的拷贝，
+ * 写它等于写空气。
+ */
+tasks.withType<Test>().configureEach {
+    if (findProperty("golden.bless") == "1") systemProperty("golden.bless", "1")
+    systemProperty(
+        "golden.fixture",
+        file("src/test/resources/prompts/system-prompt-golden.txt").absolutePath,
+    )
+}
