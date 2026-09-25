@@ -5,10 +5,6 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.psyche.memo.data.model.ChatMessage
 import com.psyche.memo.data.model.MessagePart
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.longOrNull
 
 /**
  * Hand-written DAO for message_rows + message_part_rows (drift v3 layout).
@@ -18,8 +14,6 @@ import kotlinx.serialization.json.longOrNull
  * conflicts to a regenerate path.
  */
 class MessageDao(private val db: SQLiteDatabase) {
-
-    private val json: Json = Json { ignoreUnknownKeys = true }
 
     /** Single message row (parts loaded). */
     fun get(id: String): ChatMessage? {
@@ -468,7 +462,6 @@ class MessageDao(private val db: SQLiteDatabase) {
         put("message_order", messageOrder)
         put("updated_at", updatedAt)
         putNull("sender_id")
-        put("extras_json", messageExtrasJson(textStreamMs))
     }
 
     /**
@@ -499,7 +492,6 @@ class MessageDao(private val db: SQLiteDatabase) {
             completionTokens = getIntOrNull("completion_tokens"),
             cachedTokens = getIntOrNull("cached_tokens"),
             durationMs = getLongOrNull("duration_ms"),
-            textStreamMs = parseTextStreamMs(getString(getColumnIndexOrThrow("extras_json"))),
             updatedAt = getLongOrNull("updated_at"),
             messageOrder = getInt(getColumnIndexOrThrow("message_order")),
         )
@@ -575,26 +567,4 @@ class MessageDao(private val db: SQLiteDatabase) {
          */
         const val SQLITE_IN_CLAUSE_CHUNK = 500
     }
-}
-
-/** `message_rows.extras_json` 里 Memo 用的那一个键（schema 是 drift 生成的，不许加列）。 */
-private const val TEXT_STREAM_MS_KEY = "text_stream_ms"
-
-private fun messageExtrasJson(textStreamMs: Long?): String =
-    if (textStreamMs == null) "{}"
-    else "{\"$TEXT_STREAM_MS_KEY\":$textStreamMs}"
-
-/** 读回来：坏 JSON / 没这个键 / 值不是数，一律当「没记」，绝不让一条消息读不出来。 */
-private fun parseTextStreamMs(extrasJson: String?): Long? {
-    if (extrasJson.isNullOrBlank()) return null
-    val root = try {
-        Json.parseToJsonElement(extrasJson) as? JsonObject
-    } catch (_: Exception) {
-        null
-    } ?: return null
-    // 只认**裸数字**：带引号的 "80" 不是我们写出去的形状（kotlinx 的 longOrNull
-    // 会顺手解析它），宁可当没记到，也别让两种形状同时合法。
-    return (root[TEXT_STREAM_MS_KEY] as? JsonPrimitive)
-        ?.takeIf { !it.isString }
-        ?.longOrNull
 }

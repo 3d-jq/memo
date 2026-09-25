@@ -135,8 +135,6 @@ class ChatViewModel(
         val completionTokens: Int? = null,
         val cachedTokens: Int? = null,
         val durationMs: Long? = null,
-        /** 第一个正文 token 的相对毫秒数（见 ChatMessage.textStreamMs）；速度要扣掉它。 */
-        val textStreamMs: Long? = null,
         /** Translated body (chat_message_widget.dart message.translation 显示层)。 */
         val translation: String? = null,
         /** Reasoning segment timings (`reasoning_segments_json`), zipped with
@@ -165,14 +163,12 @@ class ChatViewModel(
             completionTokens: Int?,
             cachedTokens: Int?,
             durationMs: Long?,
-            textStreamMs: Long? = null,
         ): UiMessage = copy(
             totalTokens = totalTokens ?: this.totalTokens,
             promptTokens = promptTokens ?: this.promptTokens,
             completionTokens = completionTokens ?: this.completionTokens,
             cachedTokens = cachedTokens ?: this.cachedTokens,
             durationMs = durationMs ?: this.durationMs,
-            textStreamMs = textStreamMs ?: this.textStreamMs,
         )
 
         /** In-bubble countdown while auto-retry waits for the next attempt
@@ -1404,14 +1400,6 @@ class ChatViewModel(
         messageOrder = messageOrder,
     )
 
-    /**
-     * 本轮**正文真正在流**的累计毫秒数（各 HTTP 轮次「第一个正文 delta → 最后一个正文
-     * delta」的窗口相加）。生成速度用它做分母，而不是「总耗时 − 首 token」：
-     * 后者在助手关了流式输出、或 provider 把正文一个 chunk 吐完时会退化成一个接近 0 的
-     * 窗口，120 token ÷ 0.2 秒会显示成 600 tok/s（用户 2026-09-25 实测抓到）。
-     */
-    private var turnTextWindowMs = 0L
-
     /** 后台聊天生成（ChatBackgroundController，RikkaHub FGS 移植）的当前代 id。 */
     private var backgroundGenerationId: String? = null
 
@@ -1495,7 +1483,6 @@ class ChatViewModel(
         _streaming.value = true
         beginBackgroundGeneration()
         val generationStartMs = System.currentTimeMillis()
-        turnTextWindowMs = 0L
         generationJob = sessionScope.launch {
             // Publish streaming state so the drawer can show its loading dot.
             container.streamingConversationIds.value =
@@ -1537,7 +1524,6 @@ class ChatViewModel(
                     segments = allSegments,
                     usage = usage,
                     durationMs = System.currentTimeMillis() - generationStartMs,
-                    textStreamMs = turnTextWindowMs.takeIf { it > 0 },
                     segmentsJson = segmentsJson ?: encodeSegments(allSegments),
                     groupId = assistantGroupId,
                     version = assistantVersion,
@@ -2230,9 +2216,6 @@ class ChatViewModel(
             // mid-stream fold straight to the UI (Kotlin resolves the local
             // function at call time, not at lambda-creation time).
             lateinit var roundHandler: StreamChunkHandler
-            // 本轮正文的流式窗口（0 = 这一轮没吐过正文）。
-            var roundFirstTextAt = 0L
-            var roundLastTextAt = 0L
             fun roundUpdate() {
                 updateStreaming(
                     allParts + roundHandler.parts,
@@ -2263,12 +2246,7 @@ class ChatViewModel(
             chunks.collect { chunk ->
                 roundHandler.handle(chunk)
                 when (chunk) {
-                    is StreamChunk.TextDelta -> {
-                        val nowMs = System.currentTimeMillis()
-                        if (roundFirstTextAt == 0L) roundFirstTextAt = nowMs
-                        roundLastTextAt = nowMs
-                        roundUpdate()
-                    }
+                    is StreamChunk.TextDelta,
                     is StreamChunk.ReasoningDelta,
                     is StreamChunk.ToolCallDelta,
                     -> roundUpdate()
@@ -2310,11 +2288,6 @@ class ChatViewModel(
                     is StreamChunk.RetryAttemptStart -> updateAssistantRetry(assistantId, null)
                 }
             }
-            // 收口本轮的流式窗口：一个 chunk 吐完时窗口是 0，不累加（那种回合
-            // 交给分母的回退路径，见 formatTokensPerSecond）。
-            if (roundFirstTextAt != 0L && roundLastTextAt > roundFirstTextAt) {
-                turnTextWindowMs += roundLastTextAt - roundFirstTextAt
-            }
             if (failed) break
             val calls = takeCallsAfterRound(roundHandler)
             if (calls.isEmpty()) {
@@ -2336,7 +2309,6 @@ class ChatViewModel(
                     finalSegmentsJson,
                     usage = finishUsage,
                     durationMs = System.currentTimeMillis() - startedAtMs,
-                    textStreamMs = turnTextWindowMs.takeIf { it > 0 },
                 )
                 onPersist(finalParts, finishUsage, finalSegmentsJson)
                 break
@@ -2595,7 +2567,6 @@ class ChatViewModel(
         completionTokens = completionTokens,
         cachedTokens = cachedTokens,
         durationMs = durationMs,
-        textStreamMs = textStreamMs,
         updatedAt = updatedAt,
         messageOrder = messageOrder,
     )
@@ -3048,7 +3019,6 @@ class ChatViewModel(
         segmentsJson: String? = null,
         usage: UsageStats? = null,
         durationMs: Long? = null,
-        textStreamMs: Long? = null,
     ) {
         val msgs = _messages.value
         val index = msgs.indexOfLast { it.id == assistantId }
@@ -3064,7 +3034,6 @@ class ChatViewModel(
             completionTokens = usage?.completionTokens,
             cachedTokens = usage?.cachedTokens,
             durationMs = durationMs,
-            textStreamMs = textStreamMs,
         )
         _messages.value = msgs.toMutableList().apply { set(index, finalUi) }
     }
@@ -3201,8 +3170,6 @@ class ChatViewModel(
         segments: List<com.psyche.memo.data.model.ReasoningSegment> = emptyList(),
         usage: UsageStats? = null,
         durationMs: Long = 0L,
-        /** 本轮正文实际在流的累计毫秒数（速度分母）；null = 没采到。 */
-        textStreamMs: Long? = null,
         /** 已算好的 `reasoning_segments_json`（含展开态）；null 时由 [segments] 兜底编码。 */
         segmentsJson: String? = null,
         /** 并入已有助手分组（重新生成 + 不删后续）时传入；null = 自成一组。 */
@@ -3239,7 +3206,6 @@ class ChatViewModel(
                         completionTokens = usage?.completionTokens,
                         cachedTokens = usage?.cachedTokens,
                         durationMs = durationMs.takeIf { it > 0 },
-                        textStreamMs = textStreamMs,
                         groupId = groupId ?: assistantId,
                         version = version,
                         messageOrder = container.messageDao.nextOrder(conversationId),
@@ -3267,7 +3233,6 @@ class ChatViewModel(
         completionTokens = completionTokens,
         cachedTokens = cachedTokens,
         durationMs = durationMs,
-        textStreamMs = textStreamMs,
         translation = translation,
         reasoningSegmentsJson = reasoningSegmentsJson,
     )

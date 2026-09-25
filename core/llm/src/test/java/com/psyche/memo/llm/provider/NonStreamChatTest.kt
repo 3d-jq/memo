@@ -56,6 +56,40 @@ class NonStreamChatTest {
 
     // ---- OpenAI chat completions ----
 
+    /**
+     * DeepSeek / GLM 这类兼容端在**没开思考**时照样回 `"reasoning_content": null`。
+     * kotlinx 的 `JsonNull` 也是 `JsonPrimitive`，`.content` 给出字面量 `"null"` ——
+     * 于是非流式分支会凭空开一张思考卡（正文里那串 "null" 就是它）。
+     * 流式分支早就用 `contentOrNull` 挡过同一个坑（见 JsonNullTrapTest），这里补齐。
+     */
+    @Test
+    fun `an explicit null reasoning_content does not open a thinking card`() = runBlocking {
+        server.enqueue(
+            MockResponse().setBody(
+                """
+                {"id":"1","choices":[{"finish_reason":"stop","message":{
+                  "role":"assistant","content":"正文在这里","reasoning_content":null
+                }}]}
+                """.trimIndent(),
+            ),
+        )
+        val client = OpenAiChatCompletionsClient(
+            httpClient = OkHttpClient(),
+            retryOptionsProvider = { AutoRetryOptions(maxRetries = 0) },
+            cancellations = CancellationRegistry(),
+        )
+        val chunks = client.completeAsChunks(
+            baseRequest(server.url("/").toString(), "deepseek", "deepseek-chat"),
+        ).toList()
+
+        assertEquals("正文在这里", textOf(chunks))
+        assertEquals("JSON null 不是思考内容", "", reasoningOf(chunks))
+        assertFalse(
+            "不许出现 ReasoningDelta（哪怕一个字符）",
+            chunks.any { it is StreamChunk.ReasoningDelta },
+        )
+    }
+
     @Test
     fun openAiNonStreamYieldsTextReasoningToolsAndUsage() = runBlocking {
         server.enqueue(

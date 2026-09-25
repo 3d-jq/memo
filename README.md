@@ -201,5 +201,13 @@ Memo 站在两个开源项目的肩膀上，两者也都是 AGPL-3.0：
 感谢这两个项目的作者把作品开源，让我们能在它们的基础上做自己的版本。
 
 其他直接进了依赖的开源项目：commonmark / GFM 解析、jlatexmath-android、snakeyaml、Coil、
-lucide-icons 等，完整清单见各模块的 `build.gradle.kts`。上下文压缩的阈值机制参照
-[sst opencode](https://github.com/sst/opencode) 的会话压缩实现。
+lucide-icons 等，完整清单见各模块的 `build.gradle.kts`。
+
+还有三处需要点名的参照与署名：
+
+- 流式观感（逐字渐显的速率、列表末尾的收口方式）读过 **[Agora](https://github.com/newo-ether/Agora)**（GPL-3.0）的做法。
+- 上下文压缩的阈值机制参照 **[opencode](https://github.com/sst/opencode)**（MIT）的会话压缩实现。
+- 内置的 `skill-creator` 技能是从 **[anthropics/skills](https://github.com/anthropics/skills)** 原样抓取的第三方内容，
+  按它自己的许可保留 **Apache-2.0** 文本（`app/src/main/assets/skills/skill-creator/LICENSE.txt`），
+  抓取时的上游 commit 记在 `app/src/main/assets/skills/BUNDLED.json`。
+
