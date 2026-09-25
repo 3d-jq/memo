@@ -3,6 +3,7 @@ package com.psyche.memo.provider.workspace
 import com.psyche.memo.llm.client.LlmToolSpec
 import com.psyche.memo.provider.tool.ArgViolation
 import com.psyche.memo.provider.tool.ToolArgs
+import com.psyche.memo.provider.tool.ToolImageBytes
 import com.psyche.memo.workspace.WorkspaceFileEntry
 import com.psyche.memo.workspace.WorkspaceManager
 import kotlinx.serialization.json.JsonArray
@@ -544,9 +545,6 @@ object WorkspaceTools {
     }
 
     // ---------------------------------------------------------------- 执行
-
-    /** 工具结果附带的图片：原始字节 + 文件名，由调用方（`ToolHandler`）落盘成文件。 */
-    class ToolImageBytes(val name: String, val bytes: ByteArray)
 
     sealed interface Outcome {
         data class Success(val json: String, val image: ToolImageBytes? = null) : Outcome

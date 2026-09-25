@@ -409,7 +409,7 @@ class ToolHandler(
      * 所以放 `filesDir` 而不是 cacheDir；目录独立于 upload/，不污染上传管理器列表。
      */
     private fun persistToolImage(
-        image: com.psyche.memo.provider.workspace.WorkspaceTools.ToolImageBytes,
+        image: com.psyche.memo.provider.tool.ToolImageBytes,
     ): com.psyche.memo.data.model.ToolImage? {
         val context = container?.appContext ?: return null
         return runCatching {
