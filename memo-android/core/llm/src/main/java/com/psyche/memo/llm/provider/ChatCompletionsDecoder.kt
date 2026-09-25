@@ -109,16 +109,22 @@ class ChatCompletionsDecoder(
                     accumulateToolCalls(delta["tool_calls"], chunks)
                 }
                 if (message != null) {
-                    message["content"]?.let { m ->
-                        if (m is JsonPrimitive && m.content.isNotEmpty()) {
-                            content += m.content
-                            assistantContent += m.content
+                    // **同一个 JSON null 陷阱，非流式分支也踩得着**：DeepSeek / GLM 在没开
+                    // 思考时照样回 `"reasoning_content": null`，而 `JsonNull` 也是
+                    // `JsonPrimitive`、`.content` 是字面量 "null" ⇒ 凭空开一张写着 null 的
+                    // 思考卡、正文里也混进 null。流式分支用 contentOrNull 挡过（见
+                    // JsonNullTrapTest），这里同源补齐（NonStreamChatTest 钉住）。
+                    (message["content"] as? JsonPrimitive)?.contentOrNull?.let { m ->
+                        if (m.isNotEmpty()) {
+                            content += m
+                            assistantContent += m
                         }
                     }
-                    val rcMsg = message["reasoning_content"] ?: message["reasoning"]
-                    if (rcMsg is JsonPrimitive && rcMsg.content.isNotEmpty()) {
-                        reasoningEcho?.append(rcMsg.content)
-                        reasoning = reasoning ?: rcMsg.content
+                    val rcMsg = (message["reasoning_content"] ?: message["reasoning"])
+                        ?.let { (it as? JsonPrimitive)?.contentOrNull }
+                    if (!rcMsg.isNullOrEmpty()) {
+                        reasoningEcho?.append(rcMsg)
+                        reasoning = reasoning ?: rcMsg
                     }
                     if (delta == null || delta["tool_calls"] == null) {
                         ingestCompleteToolCalls(message["tool_calls"], chunks)
