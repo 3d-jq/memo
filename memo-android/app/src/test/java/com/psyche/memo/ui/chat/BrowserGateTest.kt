@@ -48,9 +48,16 @@ class BrowserGateTest {
      * 规则**时成立；挂 11 分钟是写法自己选出来的，不是 `sessionFor` 逼出来的。这也正面撞上
      * AGENTS / PORTING §5.40 的硬纪律：Robolectric 测试不许拿真时钟轮询/有界等待替代断言
      * （GitHub 2 核 runner 上会偶发挂到超时、本地多核永远复现不了）。**红要红在断言上，
-     * 不许红在计时器上** —— 装好规则后两条路径都是断言：门控在 ⇒ 毫秒级绿；哪天有人删掉
-     * 门控 ⇒ `sessionFor` 原地建出实例、执行侧撞 8 秒脚本超时（shadow 不回callback），
-     * 红的是 `assertEquals(browser_disabled)` 与 `assertNull(peek)`，秒级、明确、不挂。
+     * 不许红在计时器上** —— 装好规则后两条路径都是毫秒级断言：门控在 ⇒ 绿；哪天有人删掉
+     * 门控 ⇒ `sessionFor` 原地建出实例（`peek` 非空 —— 本测试这条 `assertNull` 与下一条
+     * `assertNotNull` 观测的正是同一件事，互为镜像），`execute` 毫秒级回 `invalid_arguments`，
+     * 先红的是 `assertEquals(browser_disabled)`（它排在 `assertNull(peek)` 之前，方法当场
+     * 失败；两条断言都在这条回归的判据路径上）。探针因此用未知动作 `teleport` 而不是
+     * `read`（与下一条测试同源）：换之前删门控的红实测要 **30.2 s** 才轮到断言 —— `read`
+     * 的脚本递进 shadow 后永不回 callback（那颗 8 秒脚本超时落在测试调度器的虚拟时钟上
+     * 没人拨），要等 `ToolRunner` 外层 30 秒 cap 放行、清场异常被归一成 `tool_crashed`。
+     * 换探针后那 30 秒彻底消失（scratch 删门控实测红 0.314 s，见 task-6-report 的
+     * Fix round 3）。
      */
     @get:Rule
     val mainDispatcher = MainDispatcherRule()
@@ -74,8 +81,11 @@ class BrowserGateTest {
     @Test
     fun offSwitchRefusesWithoutOpeningABrowserSession() = runBlocking {
         container.preferenceRepository.writeJson(BrowserTool.PREFERENCE_KEY, "0")
+        // 探针 = 未知动作：绿路径上它根本走不到执行侧（门控先回拒绝，断言一字不变）；
+        // 红路径（哪天门控被删）它在任何脚本递进页面之前就回 invalid_arguments —— 毫秒级，
+        // 不像 `read` 那样在 shadow 里干等 `ToolRunner` 的 30 秒 cap（见类注释）。
         val content = handler("conv-off").handle(
-            BrowserTool.TOOL_NAME, obj("""{"action":"read"}"""), "call-1",
+            BrowserTool.TOOL_NAME, obj("""{"action":"teleport"}"""), "call-1",
         )
         val result = obj(content)
         assertEquals("tool_error", result["type"]!!.jsonPrimitive.content)

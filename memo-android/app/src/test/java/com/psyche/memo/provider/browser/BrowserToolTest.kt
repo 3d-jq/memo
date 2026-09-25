@@ -23,7 +23,7 @@ import org.junit.Test
 class BrowserToolTest {
 
     private class FakeGateway(
-        override val generation: Int = 4,
+        initialGeneration: Int = 4,
         override val userControls: Boolean = false,
         elements: BrowserPageSnapshot? = null,
         var runResult: Pair<Boolean, String> = false to "NOT_IN_TESTS",
@@ -32,12 +32,20 @@ class BrowserToolTest {
         override val url = "https://example.com"
         override val isClosed = false
         /**
-         * 替身必须遵守它所替接口的**文档语义**：`BrowserGateway.bumpGenerationAndDropSnapshot`
-         * 写的是「click/type 之后旧的 index 一律作废」，真身（BrowserSession）就是
-         * `snapshotState = null`。以前这里是「snapshot 永远返回构造参数、永不作废」，
-         * 于是掩护了第二轮抓到那条真回归：回显把手读快照的时机排在作废**之后**，
-         * 真会话上永远查不到元素，index 类动作全被回成 `x=null,y=null`。
+         * 替身必须遵守它所替接口的**文档语义**，且要忠实到它替的**整个**方法：
+         * `BrowserGateway.bumpGenerationAndDropSnapshot` 的真身（BrowserSession.kt
+         * `bumpGenerationAndDropSnapshot()`）做**两件**事 —— `generationState++` **且**
+         * `snapshotState = null`。
+         *
+         * 旧替身曾两度不忠实，各自掩护过一类真回归：
+         * ① 「snapshot 永不作废」⇒ 回显把手排在作废之后，真会话上 index 类动作全被回成
+         *    `x=null,y=null`（第二轮抓到的那条）；
+         * ② 「generation 是构造期定死的 val」⇒ `ok()` 回给模型的 `generation` 到底是
+         *    推进前还是推进后，测试面全程隐形（`BrowserTool` 构信封时读的是
+         *    `gateway.generation`）。
          */
+        override var generation: Int = initialGeneration
+            private set
         private var snapshotState: BrowserPageSnapshot? = elements
         override val snapshot: BrowserPageSnapshot? get() = snapshotState
         var published: BrowserPageSnapshot? = null
@@ -68,6 +76,7 @@ class BrowserToolTest {
         }
         override fun bumpGenerationAndDropSnapshot() {
             bumps++
+            generation++
             snapshotState = null
         }
         var notice: String? = null
@@ -229,6 +238,15 @@ class BrowserToolTest {
         assertEquals("tool_result", result["type"]!!.jsonPrimitive.content)
         assertTrue("内联的目标必须是快照里的 selector", gateway.lastScript.contains("body > a:nth-of-type(2)"))
         assertEquals("点完要把代次推进、旧 index 作废（只推进一次）", 1, gateway.bumps)
+        // 信封里的 `generation` 是模型下一颗 click/type 的**入场券**（`ok()` 在
+        // `settleAfterAction()` 之后读 `gateway.generation`）：作废已发生，回给它的就必须
+        // 是推进后的那一代。替身以前 `generation` 是定死的 val，这条整类回归（比如有人把
+        // 读数挪到 bump 之前、回一个已经作废的 4）在测试面全程隐形。
+        assertEquals(
+            "回给模型的必须是推进后代次（推进前=4，推进后=5，断言要能区分这两者）",
+            "5", result["generation"]!!.jsonPrimitive.content,
+        )
+        assertEquals("替身自己的代次同步推进（与真身逐字同语义）", 5, gateway.generation)
     }
 
     /**
