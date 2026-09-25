@@ -79,6 +79,102 @@ class BrowserScriptsTest {
     }
 
     /**
+     * 审查 1：候选循环过去只对「已收到几条」设限，可**每个**候选都要付一次
+     * `getBoundingClientRect` + `getComputedStyle`（两者都强制布局/样式）。几千个不可见的
+     * `[role]`/`[tabindex]` 就是一趟无上限的重排扫射 —— 正是「遍历页面必须带节点预算 +
+     * 截止时间双闸」这条纪律在本文件里唯一的漏口（`readScript` 是照做了的）。
+     */
+    @Test
+    fun findScanIsGatedByTheSameBudgetAndDeadlineReadUses() {
+        val find = BrowserScripts.findScript()
+        val read = BrowserScripts.readScript(6000, 0)
+        val findBudget = Regex("""i > (\d+)""").find(find)
+        val readBudget = Regex("""nodes > (\d+)""").find(read)
+        assertTrue("find 必须有「已扫候选数」这道闸", findBudget != null && readBudget != null)
+        assertEquals(
+            "闸按已扫候选数计，不是按已收条目数（不可见候选一样白付重排）",
+            readBudget!!.groupValues[1],
+            findBudget!!.groupValues[1],
+        )
+        assertEquals(
+            "截止时间与 read 共用同一组常量，不许开出第二组数字",
+            Regex("""Date\.now\(\) \+ (\d+)""").find(read)!!.groupValues[1],
+            Regex("""Date\.now\(\) \+ (\d+)""").find(find)!!.groupValues[1],
+        )
+        val gate = find.indexOf("capped = true")
+        val measure = find.indexOf("if (!vis(el)) continue")
+        assertTrue("超预算/超时那一次不许再去量盒子", gate in 0 until measure)
+        assertTrue("停扫描要能被调用方说成「清单可能不完整」", find.contains("capped: capped"))
+        assertTrue(
+            "截停要读得出来",
+            BrowserScripts.findCapped("""{"url":"https://a","title":"T","elements":[],"capped":true}"""),
+        )
+        assertFalse(
+            "没截停（含 capped 缺键）就是 false",
+            BrowserScripts.findCapped("""{"url":"https://a","title":"T","elements":[]}"""),
+        )
+    }
+
+    /**
+     * 审查 2：游标必须落在**实际交付的字符数**上。旧形状（正文事后 `slice`、`nextOffset` 却按
+     * 整段计）会让横跨截断点那一段的剩余字符永远读不到，而调用方被告知「从 next_offset 继续」。
+     * 本类不引 WebView，所以两半一起钉：前半按 `readScript` 的契约连读两页验「拼起来＝整篇、
+     * 不重不漏」，后半把生成侧那三处算术钉死（少了后半，前半只是在验测试自己的模型）。
+     */
+    @Test
+    fun readPagesCoverTheWholeStreamWithoutOverlap() {
+        // 审查里那个可复现推演的形状：3 段 × 10 字符、limit 25 —— 截断点正落在最后一段中间。
+        val stream = listOf("aaaaaaaaaa", "bbbbbbbbbb", "cccccccccc").joinToString("\n", postfix = "\n")
+        val limit = 25
+
+        val first = readPageValue(stream, offset = 0, limit = limit)
+        val (head, headTruncated) = BrowserScripts.parseRead(first)
+        assertEquals(stream.substring(0, limit).replace("\n", " "), head)
+        assertTrue(headTruncated)
+        assertEquals(
+            "游标只能走到交付末尾（旧实现在这里报 33 = 整段计数，于是丢掉最后 7 个字符）",
+            limit,
+            BrowserScripts.readNextOffset(first),
+        )
+
+        val second = readPageValue(stream, offset = BrowserScripts.readNextOffset(first), limit = limit)
+        val (tail, tailTruncated) = BrowserScripts.parseRead(second)
+        assertFalse("走到流尾就不许再喊截断", tailTruncated)
+        assertEquals(
+            "两页拼起来必须正好是整篇正文",
+            BrowserScripts.parseRead(readPageValue(stream, offset = 0, limit = stream.length)).first,
+            head + tail,
+        )
+
+        val js = BrowserScripts.readScript(limit, 0)
+        assertTrue("nextOffset 要跟着交付的字符数走", js.contains("nextOffset: off + text.length"))
+        assertFalse("不许再有「整段长度」那个计数器", js.contains("emitted"))
+        assertTrue("窗口要在流坐标上裁，不是拼完再 slice", js.contains("off + limit - cursor"))
+    }
+
+    /**
+     * 审查 3：`var dy = ` 后面必须是**一个**良构数字。旧写法把符号和数值分两处插值，
+     * `up` + 负数得到 `var dy = --800;` —— Chromium 读成前缀自减 ⇒ SyntaxError，整条脚本作废。
+     */
+    @Test
+    fun scrollOffsetIsOneWellFormedNumberWhateverTheSign() {
+        assertEquals(800, scrollDy(BrowserScripts.scrollScript("down", 800)))
+        assertEquals(-800, scrollDy(BrowserScripts.scrollScript("up", 800)))
+        assertEquals("负数输入不能被拼成两个减号", 800, scrollDy(BrowserScripts.scrollScript("up", -800)))
+        assertEquals(-800, scrollDy(BrowserScripts.scrollScript("down", -800)))
+    }
+
+    /** 按 `readScript` 的契约产一页的 value：正文＝流的 `[off, off+limit)` 窗口，游标只走到交付末尾。 */
+    private fun readPageValue(stream: String, offset: Int, limit: Int): String {
+        val text = stream.substring(offset, minOf(offset + limit, stream.length))
+        val truncated = offset + text.length < stream.length
+        return """{"text":${JsonPrimitive(text)},"truncated":$truncated,"offset":$offset,"nextOffset":${offset + text.length}}"""
+    }
+
+    private fun scrollDy(js: String): Int =
+        Regex("""var dy = (-?\d+);""").find(js)!!.groupValues[1].toInt()
+
+    /**
      * 纵深防御：JS 侧的 `clean()` 折叠空白只是第一道闸 —— 渲染出的清单**一行一条**，
      * 字段里夹一个换行就能把一行劈成两行、甚至伪造出一条假条目。解析端必须自己再折一次。
      */

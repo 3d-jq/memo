@@ -90,13 +90,22 @@ object BrowserScripts {
 
     // ---------------------------------------------------------------- 脚本
 
-    /** 可交互元素清单：编号从 1 起、DOM 顺序、上限 [FIND_LIMIT]。 */
+    /**
+     * 可交互元素清单：编号从 1 起、DOM 顺序、上限 [FIND_LIMIT]。
+     *
+     * 扫描带双闸，且按**已扫候选数**（JS 里的 `i`）计而不是按已收条目数：每个候选都要量一次
+     * 盒子（`getBoundingClientRect` + `getComputedStyle` 都强制布局），可见的不足 [FIND_LIMIT]
+     * 时只按 `out.length` 设闸等于在主线程上来一趟无上限的重排扫射。被截停时 `capped` 为真，
+     * 已收到的条目照原样返回，由 [findCapped] 读出来告诉模型「清单可能不完整」。
+     */
     fun findScript(): String = wrap("""
         var LIMIT = $FIND_LIMIT;
         var cand = Array.prototype.slice.call(document.querySelectorAll(
           'a,button,input,textarea,select,[role],[tabindex],[onclick]'));
-        var out = [], n = 0;
+        var out = [], n = 0, capped = false;
+        var deadline = Date.now() + $DEADLINE_MS;
         for (var i = 0; i < cand.length && out.length < LIMIT; i++) {
+          if (i > $NODE_BUDGET || (i % 64 === 0 && Date.now() > deadline)) { capped = true; break; }
           var el = cand[i];
           if (!vis(el)) continue;
           var role = el.getAttribute('role');
@@ -119,14 +128,21 @@ object BrowserScripts {
           });
         }
         return JSON.stringify({ ok: true, value: { url: location.href,
-          title: clean(document.title, $TEXT_CHARS), elements: out } });
+          title: clean(document.title, $TEXT_CHARS), elements: out, capped: capped } });
     """)
 
-    /** 可见正文：自写 TreeWalker（`innerText` 在离屏 WebView 上不可靠），跳过脚本/样式/图片类标签。 */
+    /**
+     * 可见正文：自写 TreeWalker（`innerText` 在离屏 WebView 上不可靠），跳过脚本/样式/图片类标签。
+     *
+     * `[off, off + limit)` 是**文本流**上的坐标（每段自带行尾），裁窗口在拼串之前做。反过来
+     * ——先 join 再 `slice`、游标却按整段长度前进——会把最后一段腰斩还算成整段已读，横跨截断点
+     * 的那些字符永远读不到，而调用方是被告知「从 next_offset 继续」的。`nextOffset` 因此只由
+     * 实际交付的字符数推进，两页拼起来正好是整篇（不重也不漏）。
+     */
     fun readScript(maxChars: Int, offset: Int): String = wrap("""
         var limit = Math.max(1, Math.min($maxChars, $READ_HARD_MAX_CHARS)), off = Math.max(0, $offset);
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-        var parts = [], chars = 0, emitted = 0, nodes = 0, truncated = false, item;
+        var parts = [], cursor = 0, nodes = 0, truncated = false, item;
         var deadline = Date.now() + $DEADLINE_MS;
         while ((item = walker.nextNode())) {
           nodes++;
@@ -139,14 +155,15 @@ object BrowserScripts {
           if (!vis(p)) continue;
           var s = clean(item.nodeValue, 2000);
           if (!s) continue;
-          if (emitted + s.length + 1 <= off) { emitted += s.length + 1; continue; }
-          if (chars >= limit) { truncated = true; break; }
-          parts.push(s); chars += s.length + 1; emitted += s.length + 1;
+          s += '\n';
+          var end = cursor + s.length;
+          if (end > off) parts.push(s.slice(Math.max(0, off - cursor), off + limit - cursor));
+          cursor = end;
+          if (cursor >= off + limit) { truncated = true; break; }
         }
-        var text = parts.join('\n').slice(0, limit);
-        if (text.length >= limit) truncated = true;
+        var text = parts.join('');
         return JSON.stringify({ ok: true, value: { text: text, truncated: truncated,
-          offset: off, nextOffset: emitted } });
+          offset: off, nextOffset: off + text.length } });
     """)
 
     /** [targetJson] 是 `{"selector":"…"}` 或 `{"x":n,"y":n}`（由 [targetJsonFor] 生成）。 */
@@ -180,8 +197,13 @@ object BrowserScripts {
         return JSON.stringify({ ok: true, value: { typed: want.length } });
     """)
 
+    /**
+     * 滚动一页。符号在这里就算好，插进脚本的永远是**一个**良构数字 —— 把「-」和数值分两处拼，
+     * 遇到负的 [amount] 会拼出 `var dy = --800;`，Chromium 读成前缀自减 ⇒ SyntaxError，
+     * 整条滚动脚本作废（Task 6 只传正数，这是让生成器自身不留这个口子）。
+     */
     fun scrollScript(direction: String, amount: Int): String = wrap("""
-        var dy = ${if (direction == "up") "-" else ""}$amount;
+        var dy = ${if (direction == "up") -amount else amount};
         window.scrollBy({ top: dy, left: 0, behavior: 'instant' });
         var doc = document.scrollingElement || document.documentElement;
         return JSON.stringify({ ok: true, value: {
@@ -262,6 +284,13 @@ object BrowserScripts {
 
     fun readNextOffset(json: String): Int =
         Json.parseToJsonElement(json).jsonObject["nextOffset"].intOr(0)
+
+    /**
+     * find 的扫描是否被节点预算/截止时间截停。为真时清单**可能不完整**，Task 6 必须把这句话
+     * 带给模型（否则模型会以为「页面上就这 20 个」而漏掉目标）。缺键＝没截停。
+     */
+    fun findCapped(json: String): Boolean =
+        Json.parseToJsonElement(json).jsonObject["capped"]?.jsonPrimitive?.booleanOrNull == true
 
     /** JS 抛出的错误码 → 枚举；不认识的（真·JS 异常）返回 null。 */
     fun parseJsErrorCode(payload: String): BrowserJsError? =
