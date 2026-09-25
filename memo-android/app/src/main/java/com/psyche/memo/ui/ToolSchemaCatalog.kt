@@ -501,12 +501,6 @@ object BuiltInToolCatalog {
             CALENDAR_QUERY, CALENDAR_CREATE, CURRENT_LOCATION, WEATHER, HEALTH_SUMMARY,
             REMINDERS_QUERY, REMINDERS_CREATE, REMINDERS_COMPLETE, RENDER_VISUAL, RENDER_MERMAID,
         )
-
-        /** local_tools_service.dart L48-52 — creating calendar events or changing
-         * reminders modifies user data, so these always require approval. */
-        val requiresUserApproval = listOf(
-            CALENDAR_CREATE, REMINDERS_CREATE, REMINDERS_COMPLETE,
-        )
     }
 
     /** local_tools_service.dart definitionFor — schema builders for the Android-visible set. */

@@ -55,22 +55,18 @@ fun timelineReasoningLoading(finishedAt: Long?, isStreaming: Boolean): Boolean =
     finishedAt == null && isStreaming
 
 /**
- * timeline_visibility.dart `isTimelineToolVisible` 263-279：ask-user 常驻
- * （否则生成会卡在等待回答），未执行完的工具卡只在等待审批时保留。
- *
- * 审批服务属工具执行器批次，native 侧 [pendingApproval] 目前恒为 false。
+ * timeline_visibility.dart `isTimelineToolVisible` 263-279：隐藏工具卡时 ask-user 仍常驻
+ * （否则生成会卡在等待回答）。上游那条「未执行完的工具卡只在等待审批时保留」的例外随
+ * 审批体系一起删除（用户 2026-09-25「工具的权限审批全部去掉」），所以再没有 loading 例外。
  */
 fun isTimelineToolVisible(
     toolName: String,
-    loading: Boolean,
     showToolCards: Boolean,
-    pendingApproval: Boolean = false,
     filterBuiltinSearch: Boolean = true,
 ): Boolean {
     if (filterBuiltinSearch && toolName == BUILTIN_SEARCH_TOOL_NAME) return false
     if (showToolCards) return true
-    if (toolName == BuiltInToolCatalog.LocalToolNames.ASK_USER) return true
-    return loading && pendingApproval
+    return toolName == BuiltInToolCatalog.LocalToolNames.ASK_USER
 }
 
 /** timeline_visibility.dart `collapseTimelineSteps` 281-309。 */

@@ -27,7 +27,7 @@ class AskUserRequest(
  * 序列化实现（answer/error 载荷与源码 toJsonString 逐字节一致）。
  *
  * **一处有意偏离**：pending 以 `(scope, toolCallId)` 为键而不是裸 toolCallId ——
- * 与 [ToolApprovalService] 同一个理由（厂商不给 tool_call id 时解码器会造
+ * 理由与已拆除的审批服务相同（厂商不给 tool_call id 时解码器会造
  * `tool-1` 这种每轮都重复的占位 id，两条会话共用它会让后到的请求顶掉前一条的表项，
  * 前一条的等待方从此挂在一个哪儿都看不到的对象上）。快照因此是 List 而不是 Map。
  */

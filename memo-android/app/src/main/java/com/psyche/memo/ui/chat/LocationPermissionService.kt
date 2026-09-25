@@ -8,7 +8,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * 工具执行期申请运行时权限的那根「挂起 → UI 回答」通道（现在是定位在用）。
  *
- * 形状照本文件的两个同族 [ToolApprovalService] / [AskUserInteractionService]：执行器挂起
+ * 形状照同族的 [AskUserInteractionService]（审批服务已整块拆除）：执行器挂起
  * 等一个 [CompletableDeferred]，Compose 侧（ChatContent）观察 [pending] 去弹系统权限框，
  * 把结果 [resolve] 回来 —— 因为只有界面手里才有 ActivityResultRegistry。
  *

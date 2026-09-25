@@ -107,7 +107,6 @@ class McpToolParamsTest {
             description = "latest items",
             params = listOf(McpParamSpec(name = "limit", required = false, type = "integer")),
             schema = buildJsonObject { put("type", "object") },
-            needsApproval = true,
         )
         val json = Json { encodeDefaults = true }
         val text = json.encodeToString(McpToolConfig.serializer(), tool)

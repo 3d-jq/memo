@@ -12,15 +12,15 @@ import java.time.DayOfWeek
 import java.time.ZonedDateTime
 
 /**
- * tool_handler_service.dart buildToolCallHandler 的 Native 分派，顺序一致：审批门 →
- * 本地工具（[com.psyche.memo.provider.LocalToolExecutors]）→ ask_user 交互服务 →
+ * tool_handler_service.dart buildToolCallHandler 的 Native 分派：本地工具
+ * （[com.psyche.memo.provider.LocalToolExecutors]）→ ask_user 交互服务 →
+ * 上游那道"审批门"按用户 2026-09-25 的指示整块拆除，这里不再挂起等人批准。
  * MCP 透传（[com.psyche.memo.provider.mcp]）→ 兜底 execution_error。
  * 到这里没被接住的只有两种情况：模型编出不存在的工具名，或该工具在本机没有执行器
  * （iOS-only 的定位/天气/健康/提醒，以及未移植的 STDIO MCP）——如实回 execution_error
  * 让模型自行处置。
  */
 class ToolHandler(
-    private val approvalService: ToolApprovalService?,
     private val askUserService: AskUserInteractionService?,
     private val conversationId: String?,
     private val assistant: Assistant?,
@@ -66,35 +66,15 @@ class ToolHandler(
                     common = searchCommonOptions,
                 ))
             }
-            // 沙箱工作区（WorkspaceTools）：助手绑定了工作区才生效。默认只有
-            // workspace_shell 要审批（上游 DEFAULT_APPROVALS）；写到 /workspace、
-            // /tmp 之外也会升级为需要审批（上游 pathOutsideWritableRoots）。
+            // 沙箱工作区（WorkspaceTools）：助手绑定了工作区才生效。审批门已拆除
+            // （用户 2026-09-25「工具的权限审批全部去掉」），连 shell 也直接执行 ——
+            // 它跑在 proot rootfs 里，搞坏的是沙箱自己；写到可写区之外由工具自己拒。
             if (container != null && assistant != null &&
                 name in com.psyche.memo.provider.workspace.WorkspaceTools.ALL_TOOL_NAMES
             ) {
                 val workspaceId = assistant.workspaceId
                 if (!workspaceId.isNullOrBlank()) {
                     val tools = com.psyche.memo.provider.workspace.WorkspaceTools
-                    val overrides = container.workspaceRepository
-                        .get(workspaceId)?.toolApprovalOverrides().orEmpty()
-                    val outsideRoots = (name == tools.WRITE_FILE || name == tools.EDIT_FILE) &&
-                        tools.pathOutsideWritableRoots(args, "path") == true
-                    if ((tools.resolveApproval(name, overrides) || outsideRoots) && approvalService != null) {
-                        val approval = approvalService.requestApproval(
-                            toolCallId = approvalIdFor(name, toolCallId),
-                            toolName = name,
-                            arguments = args,
-                            conversationId = conversationId,
-                        ).await()
-                        if (!approval.approved) {
-                            return toolError(
-                                error = "approval_denied",
-                                message = approval.denyReason ?: "User denied the tool call",
-                                tool = name,
-                                instruction = com.psyche.memo.provider.tool.ToolResults.USER_DECLINED,
-                            )
-                        }
-                    }
                     return when (
                         val outcome = tools.execute(
                             repo = container.workspaceRepository,
@@ -182,55 +162,14 @@ class ToolHandler(
                 }
             }
 
-            // Creating calendar events or changing reminders modifies user data,
-            // so those tools always require explicit user approval first.
-            if (LocalToolNames.requiresUserApproval.contains(name) &&
-                assistant != null &&
-                assistant.localToolIds.contains(name) &&
-                approvalService != null
-            ) {
-                val approval = approvalService.requestApproval(
-                    toolCallId = approvalIdFor(name, toolCallId),
-                    toolName = name,
-                    arguments = args,
-                    conversationId = conversationId,
-                ).await()
-                if (!approval.approved) {
-                    return toolError(
-                        error = "approval_denied",
-                        message = approval.denyReason ?: "User denied the tool call",
-                        tool = name,
-                        instruction = com.psyche.memo.provider.tool.ToolResults.USER_DECLINED,
-                    )
-                }
-            }
-
             // MCP tools: the assistant's bound servers, tool names not reserved
-            // by built-ins. Approval-gated tools ask the user first.
+            // by built-ins.
             if (container != null && assistant != null && name !in com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all) {
                 val serverId = assistant.mcpServerIds.firstOrNull { id ->
                     container.mcpConnections.isConnected(id) &&
                         container.mcpConnections.toolsFor(id).any { it.name == name }
                 }
                 if (serverId != null) {
-                    val config = container.mcpRepository.server(serverId)
-                    val needsApproval = config?.toolByName(name)?.needsApproval == true
-                    if (needsApproval && approvalService != null) {
-                        val approval = approvalService.requestApproval(
-                            toolCallId = approvalIdFor(name, toolCallId),
-                            toolName = name,
-                            arguments = args,
-                            conversationId = conversationId,
-                        ).await()
-                        if (!approval.approved) {
-                            return toolError(
-                                error = "approval_denied",
-                                message = approval.denyReason ?: "User denied the tool call",
-                                tool = name,
-                                instruction = com.psyche.memo.provider.tool.ToolResults.USER_DECLINED,
-                            )
-                        }
-                    }
                     return try {
                         com.psyche.memo.provider.tool.ToolRunner.cap(container.mcpConnections.callTool(serverId, name, args))
                     } catch (e: Exception) {
@@ -386,13 +325,6 @@ class ToolHandler(
                 instruction = "The tool execution failed unexpectedly. You may try again with different parameters or inform the user about the issue.",
             )
         }
-    }
-
-    /** tool_handler_service.dart approvalIdFor 382-386 — 空 toolCallId 落到 name_µs。 */
-    fun approvalIdFor(name: String, toolCallId: String?): String {
-        val trimmed = toolCallId?.trim()
-        if (!trimmed.isNullOrEmpty()) return trimmed
-        return "${name}_${System.currentTimeMillis() * 1000}"
     }
 
     /**

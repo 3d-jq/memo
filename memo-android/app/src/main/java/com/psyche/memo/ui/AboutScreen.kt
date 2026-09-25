@@ -307,7 +307,7 @@ fun AboutScreen(
                     description = context.getString(UiR.string.about_page_update_downloading),
                 )
             },
-            // 「关闭」复用审批面板那颗（chat_interruption_close），不为一个按钮新造 key。
+            // 「关闭」复用问询面板那颗（chat_interruption_close），不为一个按钮新造 key。
             dismissLabel = stringResource(UiR.string.chat_interruption_close),
         )
     }

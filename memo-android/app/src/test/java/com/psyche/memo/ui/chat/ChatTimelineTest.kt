@@ -265,8 +265,8 @@ class ChatTimelineTest {
 
     @Test
     fun toolVisibility_honoursShowToolCards() {
-        assertTrue(isTimelineToolVisible("get_weather", loading = true, showToolCards = true))
-        assertFalse(isTimelineToolVisible("get_weather", loading = true, showToolCards = false))
+        assertTrue(isTimelineToolVisible("get_weather", showToolCards = true))
+        assertFalse(isTimelineToolVisible("get_weather", showToolCards = false))
     }
 
     @Test
@@ -274,39 +274,32 @@ class ChatTimelineTest {
         assertTrue(
             isTimelineToolVisible(
                 toolName = BuiltInToolCatalog.LocalToolNames.ASK_USER,
-                loading = true,
                 showToolCards = false,
             ),
         )
         assertTrue(
             isTimelineToolVisible(
                 toolName = BuiltInToolCatalog.LocalToolNames.ASK_USER,
-                loading = false,
                 showToolCards = false,
             ),
         )
     }
 
     @Test
-    fun toolVisibility_loadingOnlyKeptForApproval() {
-        // No approval service in native → pendingApproval always false, so an
-        // unresolved tool is hidden when cards are off.
+    fun toolVisibility_noApprovalExceptionLeft() {
+        // 上游那条「loading 且在等审批 ⇒ 隐藏工具卡时也保留」的例外随审批体系一起删除
+        //（用户 2026-09-25），所以关掉工具卡后未执行完的普通工具也不再冒出来。
         assertFalse(
-            isTimelineToolVisible(
-                toolName = "get_weather",
-                loading = true,
-                showToolCards = false,
-            ),
+            isTimelineToolVisible(toolName = "get_weather", showToolCards = false),
         )
     }
 
     @Test
     fun toolVisibility_filtersBuiltinSearchUnlessDisabled() {
-        assertFalse(isTimelineToolVisible("builtin_search", loading = false, showToolCards = true))
+        assertFalse(isTimelineToolVisible("builtin_search", showToolCards = true))
         assertTrue(
             isTimelineToolVisible(
                 "builtin_search",
-                loading = false,
                 showToolCards = true,
                 filterBuiltinSearch = false,
             ),

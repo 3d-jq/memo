@@ -25,11 +25,10 @@ class ToolHandlerTest {
         Assistant(id = "a1", name = "A", localToolIds = localToolIds)
 
     private fun handler(
-        approval: ToolApprovalService? = null,
         askUser: AskUserInteractionService? = null,
         assistant: Assistant? = assistant(listOf(LocalToolNames.TIME_INFO)),
         conversationId: String? = "conv-1",
-    ) = ToolHandler(approval, askUser, conversationId, assistant)
+    ) = ToolHandler(askUser, conversationId, assistant)
 
     private fun decode(content: String): JsonObject =
         Json.parseToJsonElement(content).jsonObject
@@ -58,7 +57,7 @@ class ToolHandlerTest {
     @Test
     fun buildTimeInfoPayloadMatchesDartShape() {
         val now = ZonedDateTime.of(2026, 9, 8, 10, 30, 45, 123_000_000, ZoneOffset.ofHours(8))
-        val obj = ToolHandler(null, null, "conv-1", null).buildTimeInfoPayload(now)
+        val obj = ToolHandler(null, "conv-1", null).buildTimeInfoPayload(now)
         // Raw ints like the Dart map ('month': now.month); only date/time pad.
         assertEquals("2026", obj["year"]!!.jsonPrimitive.content)
         assertEquals("9", obj["month"]!!.jsonPrimitive.content)
@@ -77,62 +76,25 @@ class ToolHandlerTest {
     @Test
     fun buildTimeInfoPayloadNegativeOffset() {
         val now = ZonedDateTime.of(2026, 1, 1, 0, 0, 0, 0, ZoneOffset.ofHours(-5))
-        val obj = ToolHandler(null, null, "conv-1", null).buildTimeInfoPayload(now)
+        val obj = ToolHandler(null, "conv-1", null).buildTimeInfoPayload(now)
         assertEquals("-05:00", obj["utc_offset"]!!.jsonPrimitive.content)
     }
 
     // ------------------------------------------------------------------
-    // Approval gate (tool_handler_service.dart 454-471)
+    // 审批闸门已整块拆除（用户 2026-09-25「工具的权限审批全部去掉」）：改用户数据的
+    // 本地工具直接执行，ToolHandler 构造里不再有 approvalService。这条测试钉住
+    // 「不再有闸」——日历创建一路走到执行器（执行器本批未移植 ⇒ execution_error），
+    // 中途不会挂起等任何人点批准。
     // ------------------------------------------------------------------
 
     @Test
-    fun approvalDeniedReturnsToolError() = runBlocking {
-        val service = ToolApprovalService()
-        val h = handler(
-            approval = service,
-            assistant = assistant(listOf(LocalToolNames.CALENDAR_CREATE)),
+    fun dataModifyingLocalToolRunsStraightThrough() = runBlocking {
+        val obj = decode(
+            handler(assistant = assistant(listOf(LocalToolNames.CALENDAR_CREATE)))
+                .handle(LocalToolNames.CALENDAR_CREATE, JsonObject(emptyMap()), "call-1"),
         )
-        val content = async {
-            h.handle(LocalToolNames.CALENDAR_CREATE, JsonObject(emptyMap()), "call-1")
-        }
-        // The async block starts only when this coroutine suspends; wait until
-        // the request is registered before completing it.
-        while (!service.isPending("call-1", conversationId = "conv-1")) { yield() }
-        service.deny("call-1", reason = "not now", conversationId = "conv-1")
-        val obj = decode(content.await())
-        assertEquals("tool_error", obj["type"]!!.jsonPrimitive.content)
-        assertEquals("approval_denied", obj["error"]!!.jsonPrimitive.content)
-        assertEquals("not now", obj["message"]!!.jsonPrimitive.content)
-        assertEquals(LocalToolNames.CALENDAR_CREATE, obj["tool"]!!.jsonPrimitive.content)
-    }
-
-    @Test
-    fun approvalApprovedFallsThroughToExecutor() = runBlocking {
-        val service = ToolApprovalService()
-        val h = handler(
-            approval = service,
-            assistant = assistant(listOf(LocalToolNames.CALENDAR_CREATE)),
-        )
-        val content = async {
-            h.handle(LocalToolNames.CALENDAR_CREATE, JsonObject(emptyMap()), "call-1")
-        }
-        while (!service.isPending("call-1", conversationId = "conv-1")) { yield() }
-        service.approve("call-1", conversationId = "conv-1")
-        val obj = decode(content.await())
-        // Executor unported this batch → honest execution_error after approval.
-        assertEquals("tool_error", obj["type"]!!.jsonPrimitive.content)
         assertEquals("execution_error", obj["error"]!!.jsonPrimitive.content)
         assertEquals(LocalToolNames.CALENDAR_CREATE, obj["tool"]!!.jsonPrimitive.content)
-    }
-
-    @Test
-    fun approvalIdForFallsBackToNameEpoch() {
-        val h = handler()
-        assertEquals("call-1", h.approvalIdFor(LocalToolNames.CALENDAR_CREATE, "call-1"))
-        assertEquals("call-1", h.approvalIdFor(LocalToolNames.CALENDAR_CREATE, "  call-1  "))
-        val fallback = h.approvalIdFor(LocalToolNames.CALENDAR_CREATE, null)
-        assertTrue(fallback.startsWith("${LocalToolNames.CALENDAR_CREATE}_"))
-        assertTrue(fallback.length > LocalToolNames.CALENDAR_CREATE.length + 1)
     }
 
     // ------------------------------------------------------------------

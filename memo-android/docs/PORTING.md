@@ -2415,3 +2415,40 @@ Memo 里那份 `ui/chat/BoundedLargeTextView.kt`（UI-7a 的 1:1 移植）因此
 短消息无控件、长消息展开后根容器真的长高且能收回。测试样例固定 12 行 —— 16 行时展开态的
 控件行正好落到 Robolectric 默认视口（470px）之外，`assertIsDisplayed` 与 `performClick`
 都会因几何出界而失败（真机列表可滚，不是产品问题）。
+
+## 5.68 工具审批体系整块拆除（2026-09-25，用户「我们项目里面的工具有很多，权限的审批都要全部去掉」+「有些本身它是个手机 APP，并不会带来什么破坏性的影响，反而每次都要审批的话，会影响用户体验」）
+
+**这是有意偏离上游 kelivo**（上游 `local_tools_service.dart:48-52` 与 `WorkspaceToolDefaultApprovals`
+都要审批），所以逐条写清楚删了什么、留下什么、以及新的把关在哪里。
+
+**删掉的两处闸门**（全仓审批只有这两处真在拦人）：
+
+1. 本地工具名单 `LocalToolNames.requiresUserApproval`（`calendar_create` / `reminders_create` /
+   `reminders_complete`）+ `ToolHandler` 里那段"先挂起等批准"的分支。
+2. `workspace_shell` 的默认审批（`WorkspaceTools.DEFAULT_APPROVALS` / `resolveApproval`）+ 工作区
+   详情页「工具审批」那张卡（`WorkspaceRepository.setToolApproval` / `WorkspaceStore.setToolApproval` /
+   `WorkspaceEntity.toolApprovals` 字段与 `toolApprovalOverrides()` 一并删除）+ 上游"写到
+   `/workspace`、`/tmp` 之外升级为需要审批"那条升级（`pathOutsideWritableRoots` /
+   `isOutsideWritableRoots` / `WRITABLE_ROOT_PREFIXES` 全删，**没有换成硬拒** —— 所有写都在 proot
+   rootfs 内，宿主碰不到，所以既不需要弹窗也不该由我改成拒绝）。
+
+**顺带删除**：`ToolApprovalService.kt`、`ToolApprovalPanel` / `ApprovalButton` / `ApprovalDenyDialog`、
+工具卡上的 Shield 状态位与「等待审批」副标题与参数摘要框、`ChatInterruption.Approval` 那一支、
+MCP 工具编辑页的「需要审批」开关与 `McpToolConfig.needsApproval` 字段、`isTimelineToolVisible` 的
+`pendingApproval` 例外（连带 `loading` 形参，因为那个例外是唯一使用者）、16 条 ×3 语言的字符串
+（`tool_approval_*` / `mcp_tool_needs_approval` / `workspace_tool_approvals*` / `workspace_tool_*` 七条
+工具名串）。`argsSummary` 那个纯 helper 保留（别处还在用）。
+
+**保留的两件事**：① `ask_user_input_v0`（模型向用户提问）与它的输入栏面板、`ChatInterruptionPanel`
+只剩这一条通道；② **系统运行时权限**（相机/麦克风/位置/通知，以后还有无障碍）——那是操作系统弹的框，
+不是我们的审批，删不掉。`ChatViewModel.releaseInterruptions()` 现在只释放问询表，
+「没人等就不许用面板顶掉输入栏」那条兜底门（`generating = streaming`）照旧。
+
+**旧数据兼容**：已存在的 workspace payload 里还带着 `toolApprovals` 键，`ignoreUnknownKeys` 让它
+照样解出来（`WorkspaceEntityTest.decodingIgnoresTheRemovedToolApprovalsKey` 钉住，否则老工作区会
+凭空消失）。MCP 的 `mcp_server_rows.payload` 同理。
+
+**新的把关在哪里**（不是"没有"，是换了形式）：改用户数据的能力仍然只有用户显式配过的助手能拿到
+（助手编辑页「本地工具」三道闸的第三道 = 递给模型的名单），每一次执行都进对话时间线的工具卡
+（可回看），而**"填好了、由你自己点"是提示词层面的行为边界而不是弹窗**。这条改动同时是
+Agent 浏览器与手机控制的前置：那两个功能的工具面直接沿用"无审批 + 全程可见可停"的形状。

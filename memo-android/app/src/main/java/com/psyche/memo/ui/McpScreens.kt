@@ -62,7 +62,6 @@ import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.RefreshCw
-import com.composables.icons.lucide.Shield
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Timer
 import com.composables.icons.lucide.Trash
@@ -325,7 +324,7 @@ private fun McpServerEditSheet(
     val urlRequiredMessage = stringResource(R.string.mcp_server_edit_sheet_url_required)
     val liveStates by container.mcpConnections.states.collectAsState()
 
-    // tools/list 刷新是异步的：连接成功后再把最新工具并回列表（保留已有开关/审批）。
+    // tools/list 刷新是异步的：连接成功后再把最新工具并回列表（保留已有启用开关）。
     androidx.compose.runtime.LaunchedEffect(serverId, liveStates) {
         val sid = existing?.id ?: return@LaunchedEffect
         val live = container.mcpConnections.toolsFor(sid)
@@ -341,7 +340,6 @@ private fun McpServerEditSheet(
                 // chips，备份里的 MCP 工具也缺一段（原版会写）。
                 params = deriveToolParams(remote.inputSchema),
                 schema = remote.inputSchema,
-                needsApproval = prior?.needsApproval ?: false,
             )
         }
         if (merged.map { it.name } != tools.map { it.name }) {
@@ -591,8 +589,8 @@ private fun McpServerEditSheet(
                     // 工具卡（mcp_server_edit_sheet.dart L511-690）：原版在工具 tab 里
                     // 没有计数/同步行 —— 同步按钮在 sheet 顶栏右侧，列表就是
                     // 「每工具一张卡」。卡内：名称（bodyMedium+emphasis）+ 描述
-                    // 12sp@0.7 + 参数 chips（必填高亮）+ 启用开关（与名称同排、顶端对齐），
-                    // 启用时才追加卡内审批行。
+                    // 12sp@0.7 + 参数 chips（必填高亮）+ 启用开关（与名称同排、顶端对齐）。
+                    // 原「启用时才追加的卡内审批行」随审批体系一起删除（2026-09-25）。
                     if (tools.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
@@ -673,39 +671,6 @@ private fun McpServerEditSheet(
                                     value = tool.enabled,
                                     onValueChanged = { tools[index] = tool.copy(enabled = it) },
                                 )
-                            }
-                            // 审批行（L639-683）：只在工具启用时出现，卡内紧凑一行
-                            // （Shield 13dp + 12sp 文案 + IosSwitch），文案是
-                            // `mcpToolNeedsApproval`（需要审批）—— 之前这里错绑了
-                            // `mcp_conversation_sheet_title`（"MCP服务器"），于是每个
-                            // 启用的工具都多出一行"MCP服务器"，看着像 MCP 服务被重复列出。
-                            if (tool.enabled) {
-                                Spacer(Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(
-                                        Lucide.Shield,
-                                        contentDescription = null,
-                                        tint = if (tool.needsApproval) {
-                                            cs.primary
-                                        } else {
-                                            cs.onSurface.copy(alpha = 0.4f)
-                                        },
-                                        modifier = Modifier.size(13.dp),
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = stringResource(R.string.mcp_tool_needs_approval),
-                                        style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f)),
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    IosSwitch(
-                                        value = tool.needsApproval,
-                                        onValueChanged = { tools[index] = tool.copy(needsApproval = it) },
-                                    )
-                                }
                             }
                         }
                         // 原版每张卡自带 `margin: EdgeInsets.only(bottom: 10)`。

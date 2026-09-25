@@ -1454,7 +1454,6 @@
     <string name="mcp_timeout_invalid">請輸入大於 0 的秒數</string>
     <string name="mcp_timeout_seconds_label">工具呼叫逾時（秒）</string>
     <string name="mcp_timeout_settings_tooltip">設定工具呼叫逾時</string>
-    <string name="mcp_tool_needs_approval">需要審批</string>
     <string name="mcp_transport_option_stdio">STDIO</string>
     <string name="mcp_transport_tag_http">HTTP</string>
     <string name="mcp_transport_tag_inmemory">內建</string>
@@ -2695,12 +2694,6 @@
     <string name="token_detail_prompt_tokens_with_cache">%1$s tokens (%2$s cached)</string>
     <string name="token_detail_speed">%1$s tok/s</string>
     <string name="token_detail_total_tokens">%1$s tokens</string>
-    <string name="tool_approval_approve">批准</string>
-    <string name="tool_approval_denied_message">工具調用 \"%1$s\" 已被使用者拒絕。原因：%2$s</string>
-    <string name="tool_approval_deny">拒絕</string>
-    <string name="tool_approval_deny_hint">原因（可選）</string>
-    <string name="tool_approval_deny_title">拒絕工具調用</string>
-    <string name="tool_approval_pending">等待審批</string>
     <string name="tool_schema_editor_page_title">編輯描述</string>
     <string name="tool_schema_settings_cancel">取消</string>
     <string name="tool_schema_settings_description_label">描述</string>
@@ -2903,15 +2896,6 @@
     <string name="workspace_terminal_not_installed">先去安裝 Rootfs —— 終端需要它。</string>
     <string name="workspace_terminal_title">終端</string>
     <string name="workspace_terminal_title_with_name">終端 · %1$s</string>
-    <string name="workspace_tool_approvals">工具審批</string>
-    <string name="workspace_tool_approvals_desc">下面這些工具在動工作區之前需要先確認。</string>
-    <string name="workspace_tool_edit_file">編輯檔案</string>
-    <string name="workspace_tool_glob">尋找檔案</string>
-    <string name="workspace_tool_grep">搜尋內容</string>
-    <string name="workspace_tool_list">列出目錄</string>
-    <string name="workspace_tool_read_file">讀取檔案</string>
-    <string name="workspace_tool_shell">執行 Shell 命令</string>
-    <string name="workspace_tool_write_file">寫入檔案</string>
     <string name="workspace_unbind_current">解除目前助手綁定</string>
     <string name="workspace_view_files">查看檔案</string>
     <string name="workspace_will_delete">將刪除：%1$s</string>

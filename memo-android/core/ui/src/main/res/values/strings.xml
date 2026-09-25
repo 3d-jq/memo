@@ -1452,7 +1452,6 @@ Updating Memo first is the safer choice.</string>
     <string name="mcp_timeout_invalid">Enter a positive number of seconds</string>
     <string name="mcp_timeout_seconds_label">Tool call timeout (seconds)</string>
     <string name="mcp_timeout_settings_tooltip">Set tool call timeout</string>
-    <string name="mcp_tool_needs_approval">Require approval</string>
     <string name="mcp_transport_option_stdio">STDIO</string>
     <string name="mcp_transport_tag_http">HTTP</string>
     <string name="mcp_transport_tag_inmemory">Built-in</string>
@@ -2693,12 +2692,6 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="token_detail_prompt_tokens_with_cache">%1$s tokens (%2$s cached)</string>
     <string name="token_detail_speed">%1$s tok/s</string>
     <string name="token_detail_total_tokens">%1$s tokens</string>
-    <string name="tool_approval_approve">Approve</string>
-    <string name="tool_approval_denied_message">Tool call \"%1$s\" was denied by user. Reason: %2$s</string>
-    <string name="tool_approval_deny">Deny</string>
-    <string name="tool_approval_deny_hint">Reason (optional)</string>
-    <string name="tool_approval_deny_title">Deny tool call</string>
-    <string name="tool_approval_pending">Waiting for approval</string>
     <string name="tool_schema_editor_page_title">Edit description</string>
     <string name="tool_schema_settings_cancel">Cancel</string>
     <string name="tool_schema_settings_description_label">Description</string>
@@ -2901,15 +2894,6 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="workspace_terminal_not_installed">Install the Rootfs first — the terminal needs it.</string>
     <string name="workspace_terminal_title">Terminal</string>
     <string name="workspace_terminal_title_with_name">Terminal · %1$s</string>
-    <string name="workspace_tool_approvals">Tool approvals</string>
-    <string name="workspace_tool_approvals_desc">Tools listed below ask for confirmation before touching the workspace.</string>
-    <string name="workspace_tool_edit_file">Edit file</string>
-    <string name="workspace_tool_glob">Find files</string>
-    <string name="workspace_tool_grep">Search contents</string>
-    <string name="workspace_tool_list">List directory</string>
-    <string name="workspace_tool_read_file">Read file</string>
-    <string name="workspace_tool_shell">Run shell command</string>
-    <string name="workspace_tool_write_file">Write file</string>
     <string name="workspace_unbind_current">Unbind from current assistant</string>
     <string name="workspace_view_files">View files</string>
     <string name="workspace_will_delete">About to delete: %1$s</string>

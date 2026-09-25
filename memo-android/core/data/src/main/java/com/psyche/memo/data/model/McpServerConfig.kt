@@ -25,7 +25,6 @@ data class McpToolConfig(
     val description: String? = null,
     val params: List<McpParamSpec> = emptyList(),
     val schema: JsonObject? = null,
-    val needsApproval: Boolean = false,
 )
 
 @Serializable

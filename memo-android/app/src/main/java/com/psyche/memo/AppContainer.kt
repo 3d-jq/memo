@@ -463,10 +463,7 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         "$versionName+$versionCode"
     }.getOrDefault("0+0")
 
-    /** tool_approval_service.dart / ask_user_interaction_service.dart 服务对。 */
-    val toolApprovalService: com.psyche.memo.ui.chat.ToolApprovalService by lazy {
-        com.psyche.memo.ui.chat.ToolApprovalService()
-    }
+    /** ask_user_interaction_service.dart（同族的 tool_approval_service 已整块拆除）。 */
     val askUserInteractionService: com.psyche.memo.ui.chat.AskUserInteractionService by lazy {
         com.psyche.memo.ui.chat.AskUserInteractionService()
     }

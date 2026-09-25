@@ -21,14 +21,7 @@ data class WorkspaceEntity(
     val createdAt: Long,
     val updatedAt: Long,
     val lastAccessAt: Long? = null,
-    /** 工具审批的用户覆盖（toolName -> needsApproval）；未覆盖的工具沿用默认值。 */
-    val toolApprovals: String = "{}",
 ) {
-    /** `tool_approvals` 的解析结果；坏 JSON 一律当「没有覆盖」。 */
-    fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
-        json.decodeFromString<Map<String, Boolean>>(toolApprovals)
-    }.getOrDefault(emptyMap())
-
     companion object {
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 

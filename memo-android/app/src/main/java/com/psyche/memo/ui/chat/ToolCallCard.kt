@@ -35,7 +35,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,7 +61,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -106,7 +104,6 @@ import com.composables.icons.lucide.Puzzle
 import com.composables.icons.lucide.MapPin
 import com.composables.icons.lucide.MessageCircleQuestion
 import com.composables.icons.lucide.Search
-import com.composables.icons.lucide.Shield
 import com.composables.icons.lucide.Smartphone
 import com.composables.icons.lucide.Terminal
 import com.composables.icons.lucide.Volume2
@@ -119,7 +116,6 @@ import com.psyche.memo.ui.IosIconButton
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.AppFontWeights
 import com.psyche.memo.ui.theme.LocalSemanticColors
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -137,10 +133,9 @@ import kotlinx.serialization.json.jsonObject
  *
  * Tool result image strips (`parseToolResultImages` + ImageViewerPage) and
  * the ask-user surfaces (`_AskUserToolCard` / `_AskUserInlineBody`) are
- * ported (AskUserCard.kt / ToolResultImageStrip.kt). Still deferred to the
- * tool-execution batch, where the data first becomes reachable: approval
- * pending state (Shield icon, deny/approve buttons, `_argsSummary` — the
- * pure helper itself is ported in ToolResultImages.kt).
+ * ported (AskUserCard.kt / ToolResultImageStrip.kt). 上游那套审批 UI（Shield 状态位、
+ * 拒绝/允许按钮、审批中换参数摘要）按用户 2026-09-25「工具的权限审批全部去掉」整块拆除，
+ * 只留下 [_argsSummary] 那个纯 helper（ToolResultImages.kt）——摘要别处还在用。
  */
 
 /** UI data for a tool call — mirrors chat_message_widget.dart ToolUIPart. */
@@ -396,7 +391,6 @@ fun ChainOfThoughtToolStep(
     showToolResultSummary: Boolean,
     hideToolResultImages: Boolean = false,
     conversationId: String? = null,
-    approval: ToolApprovalService? = null,
     askUser: AskUserInteractionService? = null,
     onSubmitAskUser: ((AskUserResult) -> Unit)? = null,
 ) {
@@ -405,19 +399,12 @@ fun ChainOfThoughtToolStep(
     val fg = chatSurfaceFg()
     val isAskUser = part.toolName == LocalToolNames.ASK_USER
     val loading = part.loading
-    // CMW:5388-5398 —— 待审批时（loading 且命中请求）在轨道位显示工具图标、行尾加
-    // X/Check extra 按钮，摘要换参数摘要。
-    val pendingRequests by remember(approval) {
-        approval?.pendingRequests ?: MutableStateFlow<List<ToolApprovalRequest>>(emptyList())
-    }.collectAsState()
-    val pendingRequest = matchingApprovalRequest(pendingRequests, conversationId, part.id)
-    val isPendingApproval = pendingRequest != null
     // _askUserExpanded 默认 true（`_askUserExpanded ?? true`）。
     var askUserExpanded by rememberSaveable { mutableStateOf(true) }
     var showDetail by remember { mutableStateOf(false) }
     var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
-    val icon: @Composable () -> Unit = if (isAskUser || !loading || isPendingApproval) {
+    val icon: @Composable () -> Unit = if (isAskUser || !loading) {
         @Composable {
             Icon(
                 imageVector = toolIconFor(part.toolName, part.arguments),
@@ -472,7 +459,6 @@ fun ChainOfThoughtToolStep(
         errorColor = cs.error,
         isAskUser = isAskUser,
         showToolResultSummary = showToolResultSummary,
-        pendingApproval = pendingRequest,
     )
     val imageStrip: (@Composable () -> Unit)? =
         if (!isAskUser && !hideToolResultImages && part.allImagePaths.isNotEmpty()) {
@@ -542,7 +528,7 @@ fun ChainOfThoughtToolStep(
         indicator = indicator,
         content = content,
         contentVisible = content != null && (!isAskUser || askUserExpanded),
-        expectContent = loading || isPendingApproval || isAskUser || content != null,
+        expectContent = loading || isAskUser || content != null,
     )
 
     if (showDetail) {
@@ -568,7 +554,6 @@ private fun toolStepSummary(
     errorColor: Color,
     isAskUser: Boolean,
     showToolResultSummary: Boolean,
-    pendingApproval: ToolApprovalRequest?,
 ): (@Composable () -> Unit)? {
     if (isAskUser) return null
     val cleanText = part.cleanText
@@ -587,10 +572,7 @@ private fun toolStepSummary(
     } else {
         null
     }
-    // CMW:5443-5451 —— 审批中摘要换参数摘要（approvalRequest.arguments）。
-    val summaryText = if (pendingApproval != null) {
-        argsSummary(pendingApproval.arguments)
-    } else if (cleanText.isNotEmpty()) {
+    val summaryText = if (cleanText.isNotEmpty()) {
         cleanText
     } else {
         part.arguments.str("query") ?: part.arguments.str("url") ?: part.arguments.str("text") ?: ""
@@ -630,12 +612,12 @@ private fun toolStepSummary(
             {
                 Text(
                     text = summaryText.trim(),
-                    maxLines = if (pendingApproval != null) 2 else 4,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
                     style = TextStyle(
                         fontSize = 12.sp,
                         lineHeight = 16.8.sp,
-                        fontFamily = if (pendingApproval != null) FontFamily.Monospace else null,
+                        fontFamily = null,
                         color = fg.body,
                     ),
                 )
@@ -650,36 +632,19 @@ private fun toolStepSummary(
 // Boxed inline card (chat_message_widget.dart _ToolCallItem, mobile)
 // ---------------------------------------------------------------------------
 
-/** chat_message_widget.dart `_matchingApprovalRequest` 4360-4372 —— 列表版 pendingFor 匹配。 */
-internal fun matchingApprovalRequest(
-    requests: List<ToolApprovalRequest>,
-    conversationId: String?,
-    toolCallId: String?,
-): ToolApprovalRequest? {
-    if (toolCallId.isNullOrEmpty()) return null
-    val scopedId = conversationId?.trim().orEmpty()
-    if (scopedId.isNotEmpty()) {
-        return requests.firstOrNull { it.toolCallId == toolCallId && it.conversationId == scopedId }
-            ?: requests.firstOrNull { it.toolCallId == toolCallId && it.conversationId == null }
-    }
-    val matches = requests.filter { it.toolCallId == toolCallId }
-    if (matches.size == 1) return matches.single()
-    return matches.firstOrNull { it.conversationId == null }
-}
 
 /**
- * `role == tool` 消息里的独立工具卡：18dp 状态位（approval pending → Shield，
- * 否则 loading 用 2dp 圆环，颜色 fg.accent）+ 13sp emphasis 标题（加载态呼吸高光，
- * 审批中 accent 标题 + "Waiting for approval" 副标题）+ TTS / 天气 / 屏幕时间专属
- * 摘要 + 审批态的参数摘要框与 Deny/Approve 按钮。整卡 16dp 圆角、按压 260ms，审批中
- * 禁点开详情、其余点开详情弹层。ask-user 整卡换 [AskUserToolCard]。
+ * `role == tool` 消息里的独立工具卡：18dp 状态位（loading 用 2dp 圆环，颜色
+ * fg.accent）+ 13sp emphasis 标题（加载态呼吸高光）+ TTS / 天气 / 屏幕时间专属摘要。
+ * 整卡 16dp 圆角、按压 260ms，点开详情弹层。ask-user 整卡换 [AskUserToolCard]。
+ * 上游这里的审批状态位（Shield + "Waiting for approval" + Deny/Approve）随审批体系
+ * 一起拆除（用户 2026-09-25「工具的权限审批全部去掉」）。
  */
 @Composable
 fun ToolCallCard(
     part: ToolUiPart,
     hideToolResultImages: Boolean = false,
     conversationId: String? = null,
-    approval: ToolApprovalService? = null,
     askUser: AskUserInteractionService? = null,
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)? = null,
 ) {
@@ -687,7 +652,6 @@ fun ToolCallCard(
     val isDark = cs.surface.luminance() < 0.5f
     val fg = chatSurfaceFg()
     var showDetail by remember { mutableStateOf(false) }
-    var showDeny by remember { mutableStateOf(false) }
     var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
     // CMW:5686-5688 —— ask-user 整卡换 _AskUserToolCard；onSubmit 只接恢复路径
@@ -702,12 +666,6 @@ fun ToolCallCard(
     }
 
     val loading = part.loading
-    // CMW:5691-5700 —— 提交审批回调选择器：loading 时按 (conversationId, id) 取待批请求。
-    val pendingRequests by remember(approval) {
-        approval?.pendingRequests ?: MutableStateFlow<List<ToolApprovalRequest>>(emptyList())
-    }.collectAsState()
-    val pendingRequest = matchingApprovalRequest(pendingRequests, conversationId, part.id)
-    val isPendingApproval = pendingRequest != null
     val ttsText = if (part.toolName == LocalToolNames.TEXT_TO_SPEECH) {
         textToSpeechToolText(part.arguments)
     } else {
@@ -715,11 +673,7 @@ fun ToolCallCard(
     }
 
     CardPress(
-        onTap = if (isPendingApproval) {
-            null
-        } else {
-            { showDetail = true }
-        },
+        onTap = { showDetail = true },
         isDark = isDark,
         modifier = Modifier.fillMaxWidth(),
         radius = 16.dp,
@@ -748,12 +702,6 @@ fun ToolCallCard(
                     contentAlignment = Alignment.Center,
                 ) {
                     when {
-                        isPendingApproval -> Icon(
-                            imageVector = Lucide.Shield,
-                            contentDescription = null,
-                            tint = fg.accent,
-                            modifier = Modifier.size(18.dp),
-                        )
                         loading -> CircularProgressIndicator(
                             color = fg.accent,
                             strokeWidth = 2.dp,
@@ -773,31 +721,19 @@ fun ToolCallCard(
                         text = toolTitleFor(
                             part.toolName,
                             part.arguments,
-                            isResult = !loading && !isPendingApproval,
+                            isResult = !loading,
                         ),
                         style = TextStyle(
                             fontSize = 13.sp,
                             fontWeight = AppFontWeights.emphasis,
-                            color = if (isPendingApproval) fg.accent else fg.strong,
+                            color = fg.strong,
                         ),
                         modifier = Modifier.thinkingSheen(
                             fg.strong,
                             isDark,
-                            enabled = loading && !isPendingApproval,
+                            enabled = loading,
                         ),
                     )
-                    // "Waiting for approval" subtitle
-                    if (isPendingApproval) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = stringResource(UiR.string.tool_approval_pending),
-                            style = TextStyle(
-                                fontSize = 11.sp,
-                                fontWeight = AppFontWeights.medium,
-                                color = fg.medium,
-                            ),
-                        )
-                    }
                 }
             }
             if (ttsText.isNotEmpty()) {
@@ -808,14 +744,14 @@ fun ToolCallCard(
                     buttonColor = fg.accent,
                 )
             }
-            if (!loading && !isPendingApproval && part.toolName == LocalToolNames.WEATHER) {
+            if (!loading && part.toolName == LocalToolNames.WEATHER) {
                 val weather = WeatherToolResult.tryParse(part.content)
                 if (weather != null && !weather.isError) {
                     Spacer(Modifier.height(8.dp))
                     WeatherToolSummary(result = weather, textColor = fg.body)
                 }
             }
-            if (!loading && !isPendingApproval && part.toolName == LocalToolNames.SCREEN_TIME) {
+            if (!loading && part.toolName == LocalToolNames.SCREEN_TIME) {
                 val screenTime = ScreenTimeResult.tryParse(part.content)
                 if (screenTime != null && (screenTime.isNoPermission || screenTime.hasApps)) {
                     Spacer(Modifier.height(8.dp))
@@ -827,33 +763,6 @@ fun ToolCallCard(
                     )
                 }
             }
-            // Argument summary so users know what the tool is about to do
-            if (isPendingApproval && part.arguments.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            cs.onSurface.copy(alpha = if (isDark) 0.06f else 0.04f),
-                            RoundedCornerShape(MemoRadius.SMALL_DP.dp),
-                        )
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        text = argsSummary(part.arguments),
-                        style = TextStyle(
-                            fontSize = 11.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = fg.body,
-                        ),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            // 审批按钮不再内联：待审批时由**输入栏位置的审批面板**负责
-            // （用户 2026-09-14「工具权限确认这个…应该出现在输入框那个位置」），
-            // 这里只保留参数摘要，让人看得见"要做什么"。
             // CMW:5905-5929 —— 工具结果图片横滚条（180/320 常量），点击只开单张。
             if (!hideToolResultImages && part.allImagePaths.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
@@ -867,14 +776,6 @@ fun ToolCallCard(
         }
     }
 
-    if (showDeny && pendingRequest != null && approval != null) {
-        ApprovalDenyDialog(
-            approval = approval,
-            toolCallId = pendingRequest.toolCallId,
-            conversationId = pendingRequest.conversationId,
-            onDismiss = { showDeny = false },
-        )
-    }
     if (showDetail) {
         ToolDetailSheet(part = part, onDismiss = { showDetail = false })
     }
@@ -885,110 +786,6 @@ fun ToolCallCard(
             onClose = { viewerState = null },
         )
     }
-}
-
-/** _ApprovalButton (chat_message_widget.dart 6769-6814)：高 36 居中，filled 用色浸底、
- * 否则透明；描边 α filled?0.5:0.35，文字 13 semibold，禁用时文字半透明。 */
-@Composable
-private fun ApprovalButton(
-    label: String,
-    color: Color,
-    filled: Boolean,
-    modifier: Modifier = Modifier,
-    onTap: (() -> Unit)?,
-) {
-    val cs = MaterialTheme.colorScheme
-    val isDark = cs.surface.luminance() < 0.5f
-    val enabled = onTap != null
-    CardPress(
-        onTap = onTap,
-        isDark = isDark,
-        modifier = modifier,
-        radius = 10.dp,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(36.dp)
-                .background(
-                    if (filled) color.copy(alpha = if (isDark) 0.25f else 0.15f) else Color.Transparent,
-                    RoundedCornerShape(MemoRadius.SMALL_DP.dp),
-                )
-                .border(
-                    width = 1.dp,
-                    color = color.copy(alpha = if (filled) 0.5f else 0.35f),
-                    shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = label,
-                style = TextStyle(
-                    fontSize = 13.sp,
-                    fontWeight = AppFontWeights.semibold,
-                    color = if (enabled) color else color.copy(alpha = 0.45f),
-                ),
-            )
-        }
-    }
-}
-
-/** _showDenyDialog (chat_message_widget.dart 5333-5372 / 5936-5975)：AlertDialog + 备注
- * 输入，确认时 trim 后空则无原因，直接 deny。 */
-@Composable
-private fun ApprovalDenyDialog(
-    approval: ToolApprovalService,
-    toolCallId: String,
-    conversationId: String?,
-    onDismiss: () -> Unit,
-) {
-    var reason by remember { mutableStateOf("") }
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-    val cs = MaterialTheme.colorScheme
-    AlertDialog(
-        containerColor = MaterialTheme.colorScheme.overlaySurfaceColor(),
-            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(UiR.string.tool_approval_deny_title)) },
-        text = {
-            BasicTextField(
-                value = reason,
-                onValueChange = { reason = it },
-                modifier = Modifier.focusRequester(focusRequester).fillMaxWidth(),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                decorationBox = { inner ->
-                    Box {
-                        if (reason.isEmpty()) {
-                            Text(
-                                text = stringResource(UiR.string.tool_approval_deny_hint),
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = cs.onSurface.copy(alpha = 0.5f),
-                                ),
-                            )
-                        }
-                        inner()
-                    }
-                },
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val trimmed = reason.trim()
-                    approval.deny(toolCallId, reason = trimmed.ifEmpty { null }, conversationId = conversationId)
-                    onDismiss()
-                },
-            ) {
-                Text(stringResource(UiR.string.tool_approval_deny))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(UiR.string.home_page_cancel))
-            }
-        },
-    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1313,121 +1110,3 @@ private fun TextBlockChunk(first: Boolean, last: Boolean, content: @Composable (
 }
 
 // TTS replay row lives in TtsPlayer.kt (TextToSpeechReplayRow).
-
-
-// ---------------------------------------------------------------------------
-// 输入栏位置的审批面板（本工程新增；用户 2026-09-14「工具权限确认这个…应该出现在
-// 输入框那个位置」）
-// ---------------------------------------------------------------------------
-
-/**
- * 底部审批面板：工具名 + 参数摘要 + 拒绝/允许。与内联卡共用同一套
- * [ApprovalButton] / [ApprovalDenyDialog] 与同一条 [ToolApprovalService] 链路，
- * 只是把宿主从对话里的工具卡换到输入栏位置。
- */
-@Composable
-internal fun ToolApprovalPanel(
-    request: ToolApprovalRequest,
-    approval: ToolApprovalService?,
-    conversationId: String?,
-) {
-    val cs = MaterialTheme.colorScheme
-    val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg()
-    var showDeny by remember(request.toolCallId) { mutableStateOf(false) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                cs.primaryContainer.copy(
-                    alpha = if (isDark) {
-                        ChatStyleSpec.TIMELINE_CARD_ALPHA_DARK
-                    } else {
-                        ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
-                    },
-                ),
-                RoundedCornerShape(MemoRadius.CARD_DP.dp),
-            )
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = toolIconFor(request.toolName, request.arguments),
-                contentDescription = null,
-                tint = fg.strong,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = toolTitleFor(request.toolName, request.arguments, isResult = false),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = TextStyle(
-                    fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
-                    fontWeight = AppFontWeights.semibold,
-                    color = fg.strong,
-                ),
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = stringResource(UiR.string.tool_approval_pending),
-                style = TextStyle(fontSize = 11.sp, color = cs.onSurfaceVariant),
-            )
-        }
-        if (request.arguments.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        cs.onSurface.copy(alpha = if (isDark) 0.06f else 0.04f),
-                        RoundedCornerShape(MemoRadius.SMALL_DP.dp),
-                    )
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-            ) {
-                Text(
-                    text = argsSummary(request.arguments),
-                    style = TextStyle(
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = fg.body,
-                    ),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row {
-            ApprovalButton(
-                label = stringResource(UiR.string.tool_approval_deny),
-                color = cs.error,
-                filled = false,
-                modifier = Modifier.weight(1f),
-                onTap = { showDeny = true },
-            )
-            Spacer(Modifier.width(8.dp))
-            ApprovalButton(
-                label = stringResource(UiR.string.tool_approval_approve),
-                color = fg.accent,
-                filled = true,
-                modifier = Modifier.weight(1f),
-                onTap = {
-                    approval?.approve(request.toolCallId, conversationId = request.conversationId)
-                    Unit
-                },
-            )
-        }
-    }
-
-    if (showDeny && approval != null) {
-        ApprovalDenyDialog(
-            approval = approval,
-            toolCallId = request.toolCallId,
-            conversationId = request.conversationId ?: conversationId,
-            onDismiss = { showDeny = false },
-        )
-    }
-}
