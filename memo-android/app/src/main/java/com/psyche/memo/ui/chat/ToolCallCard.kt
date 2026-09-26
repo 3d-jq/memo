@@ -31,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -204,17 +203,10 @@ data class ToolUiPart(
 }
 
 /**
- * 「查看页面」的**唯一**判据（时间线步与 boxed 卡共用一份）。
- *
- * `content` 判 `isNullOrEmpty` 而不是 `!= null`：`fromToolMessage` 落的是
- * `obj.str("result").orEmpty()`，导入的 Chatbox 工具消息因此恒「有正文」——
- * 用 `!= null` 会让这颗钮在导入的历史消息上常显、点了没反应。
+ * 「查看页面」的入口不在这里（spec §12.5，用户 2026-09-26）：浏览器页面是**整会话共享**的，
+ * 不属于某一条消息，工具卡还会滚走。那一行临时落在输入区的「+」面板
+ * （`ui/BottomToolsSheet.kt`），判据是「本会话有没有活着的浏览器实例」。
  */
-internal fun ToolUiPart.canTakeOverBrowser(onOpen: (() -> Unit)?): Boolean =
-    onOpen != null &&
-        toolName == com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME &&
-        !content.isNullOrEmpty()
-
 private fun JsonObject.str(key: String): String? =
     (this[key] as? kotlinx.serialization.json.JsonPrimitive)
         ?.takeIf { it !is JsonNull }?.content
@@ -402,7 +394,7 @@ private fun localToolTitleFor(name: String, args: JsonObject?): String? = when (
  * 时间线里的一行工具调用：轨道图标（18dp 位，加载态是 3×2/12dp 的呼吸点）、
  * 13sp 标题（加载态带呼吸高光）、行尾 ChevronRight（ask-user 换成上下箭头），
  * 正文按 ask-user → TTS → 屏幕时间 → 天气 → 纯文本摘要的优先级取一种，
- * 下面再按需追加两块：工具结果图片横滚条、浏览器工具的「查看页面」。
+ * 下面再按需追加一块：工具结果图片横滚条。
  * 点标题打开详情弹层（ask-user 改为折叠/展开）。
  */
 @Composable
@@ -414,8 +406,6 @@ fun ChainOfThoughtToolStep(
     hideToolResultImages: Boolean = false,
     conversationId: String? = null,
     askUser: AskUserInteractionService? = null,
-    /** 浏览器工具卡的「查看页面」（spec §6）；null = 所在页面没有接管能力。 */
-    onOpenBrowser: (() -> Unit)? = null,
     onSubmitAskUser: ((AskUserResult) -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -498,20 +488,11 @@ fun ChainOfThoughtToolStep(
         } else {
             null
         }
-    val browserAction: (@Composable () -> Unit)? = if (part.canTakeOverBrowser(onOpenBrowser)) {
-        {
-            TextButton(onClick = { onOpenBrowser?.invoke() }) {
-                Text(stringResource(UiR.string.browser_view_page))
-            }
-        }
-    } else {
-        null
-    }
-    // 三块正文（摘要 / 图片条 / 「查看页面」）共用同一份 `content` 判据：`contentVisible` 与
+    // 两块正文（摘要 / 图片条）共用同一份 `content` 判据：`contentVisible` 与
     // `expectContent` 都从这里派生，所以新增一块必须同时改这里 —— 只画不判会把折叠态算歪
     // （TimelineStepShell 里 `hasBody = content != null || expectContent`）。
     val content: (@Composable () -> Unit)? =
-        if (summaryContent == null && imageStrip == null && browserAction == null) {
+        if (summaryContent == null && imageStrip == null) {
             null
         } else {
             {
@@ -521,12 +502,6 @@ fun ChainOfThoughtToolStep(
                         Spacer(Modifier.height(8.dp))
                     }
                     if (imageStrip != null) imageStrip()
-                    if (browserAction != null) {
-                        if (summaryContent != null || imageStrip != null) {
-                            Spacer(Modifier.height(8.dp))
-                        }
-                        browserAction()
-                    }
                 }
             }
         }
@@ -678,7 +653,7 @@ private fun toolStepSummary(
 /**
  * `role == tool` 消息里的独立工具卡：18dp 状态位（loading 用 2dp 圆环，颜色
  * fg.accent）+ 13sp emphasis 标题（加载态呼吸高光）+ TTS / 天气 / 屏幕时间专属摘要，
- * 末尾按需追加图片横滚条与浏览器「查看页面」。
+ * 末尾按需追加图片横滚条。
  * 整卡 16dp 圆角、按压 260ms，点开详情弹层。ask-user 整卡换 [AskUserToolCard]。
  * 上游这里的审批状态位（Shield + "Waiting for approval" + Deny/Approve）随审批体系
  * 一起拆除（用户 2026-09-25「工具的权限审批全部去掉」）。
@@ -690,8 +665,6 @@ fun ToolCallCard(
     conversationId: String? = null,
     askUser: AskUserInteractionService? = null,
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)? = null,
-    /** 浏览器工具卡的「查看页面」（spec §6），与时间线步同一判据、同一颗钮。 */
-    onOpenBrowser: (() -> Unit)? = null,
 ) {
     val cs = MaterialTheme.colorScheme
     val isDark = cs.surface.luminance() < 0.5f
@@ -817,14 +790,6 @@ fun ToolCallCard(
                     maxWidth = ChatStyleSpec.TOOL_IMAGE_CARD_MAX_WIDTH_DP.dp,
                     onOpenViewer = { paths, index -> viewerState = listOf(paths[index]) to 0 },
                 )
-            }
-            // spec §6：浏览器工具卡的「查看页面」。两颗卡是同一个工具的两个表面，
-            // 判据共用 `canTakeOverBrowser` —— 抄两遍必然一边有一边没有。
-            if (part.canTakeOverBrowser(onOpenBrowser)) {
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { onOpenBrowser?.invoke() }) {
-                    Text(stringResource(UiR.string.browser_view_page))
-                }
             }
         }
     }

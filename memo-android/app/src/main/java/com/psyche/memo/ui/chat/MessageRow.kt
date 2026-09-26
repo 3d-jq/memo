@@ -173,8 +173,6 @@ internal fun MessageRow(
     conversationId: String?,
     /** 代码块「预览」（HTML 块）→ 打开 WebView 预览页（core:ui 不认识该页面）。 */
     onOpenHtmlPreview: ((String) -> Unit)? = null,
-    /** 浏览器工具卡「查看页面」→ 打开用户接管遮罩（spec §6；遮罩在 ChatContent 那一层）。 */
-    onOpenBrowser: (() -> Unit)? = null,
     /** ask-user 交互服务（ask_user_interaction_service.dart）。 */
     askUserService: AskUserInteractionService?,
     /** 恢复已持久化 ask-user 回答（home_page_controller.submitRecoveredAskUserAnswer）。 */
@@ -324,7 +322,6 @@ internal fun MessageRow(
                         conversationId = conversationId,
                         askUser = askUserService,
                         onRecoveredAnswer = onRecoveredAnswer,
-                        onOpenBrowser = onOpenBrowser,
                     )
                 }
             }
@@ -709,7 +706,6 @@ internal fun MessageRow(
                                     conversationId = conversationId,
                                     askUser = askUserService,
                                     onRecoveredAnswer = onRecoveredAnswer,
-                                    onOpenBrowser = onOpenBrowser,
                                     onToggleReasoning = onToggleReasoning,
                                 )
                         }

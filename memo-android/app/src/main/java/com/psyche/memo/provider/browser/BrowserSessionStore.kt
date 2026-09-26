@@ -39,6 +39,15 @@ class BrowserSessionStore(private val appContext: Context) {
     fun peek(conversationId: String): BrowserSession? =
         holder?.takeIf { it.first == conversationId && !it.second.isClosed }?.second
 
+    /**
+     * 「+」面板那行「查看页面」的**唯一**判据（spec §12.5）：本会话有活着的浏览器实例。
+     *
+     * 走 [peek] 而不是直接读 `holder`：尸体（`isClosed`）也算 holder 里的一项，而遮罩拿不到
+     * 实例就只能落回旗标 —— 判据与取值必须是同一条式子，否则会出现「行在、点了没页面」。
+     * 纯内存读：不建实例、不查库、不读偏好，可以在组合期调用。
+     */
+    fun hasLiveSession(conversationId: String): Boolean = peek(conversationId) != null
+
     /** 「清空浏览器数据」/关掉全局开关。 */
     suspend fun closeAll() = mutex.withLock {
         withContext(Dispatchers.Main) {

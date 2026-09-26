@@ -108,8 +108,6 @@ fun ChainOfThoughtCard(
     conversationId: String? = null,
     askUser: AskUserInteractionService? = null,
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)? = null,
-    /** 浏览器工具卡「查看页面」→ 接管遮罩（透传给 [ChainOfThoughtToolStep]）。 */
-    onOpenBrowser: (() -> Unit)? = null,
     onToggleReasoning: (segmentIndex: Int) -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -222,7 +220,6 @@ fun ChainOfThoughtCard(
                         hideToolResultImages = settings.hideToolResultImages,
                         conversationId = conversationId,
                         askUser = askUser,
-                        onOpenBrowser = onOpenBrowser,
                         onSubmitAskUser = onRecoveredAnswer?.let { cb -> { result -> cb(step.part, result) } },
                     )
                 }

@@ -33,6 +33,7 @@ import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Eye
+import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.Puzzle
@@ -69,6 +70,14 @@ fun BottomToolsSheet(
     onOpenMcp: () -> Unit = {},
     /** 工作区入口 —— 开工作区选择面板（照 RikkaHub 的 `WorkspacePickerListItem`）。 */
     onOpenWorkspace: () -> Unit = {},
+    /**
+     * 「查看页面」（Agent 浏览器接管遮罩）入口 —— spec §12.5：入口**不在工具卡里**
+     * （浏览器页面是整会话共享的，不属于某一条消息，工具卡还会滚走），统一重做输入区之前
+     * 先临时落在这里。判据由调用方给（`container.browserSessions.hasLiveSession(...)`，
+     * 纯内存读），**本会话没有活动浏览器实例时这一行整行不出现**。
+     */
+    browserPageAvailable: Boolean = false,
+    onOpenBrowserPage: () -> Unit = {},
     /** 生成图片 / 生成视频入口（自研功能）—— 开生成面板，结果直接进当前对话。 */
     onOpenImageGeneration: () -> Unit = {},
     onOpenVideoGeneration: () -> Unit = {},
@@ -259,6 +268,32 @@ fun BottomToolsSheet(
                     modifier = Modifier.weight(1f),
                 )
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+            }
+            // 「查看页面」行（spec §12.5 的临时落位）：只在**本会话有活动浏览器实例**时出现，
+            // 点了先关面板再开遮罩 —— 与 MCP / 工作区那两行同一个写法。
+            if (browserPageAvailable) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(semantic.surfaceCard, RoundedCornerShape(MemoRadius.INNER_DP.dp))
+                        .clickable {
+                            Haptics.light(view)
+                            onOpenBrowserPage()
+                        }
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Lucide.Globe, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.browser_view_page),
+                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+                }
             }
             // 生成图片 / 生成视频（自研功能）：两行入口，各开一个**模型选择**面板
             //（选服务 = 绑当前助手；用户 2026-09-17「点击是选择对应的模型，不是点击

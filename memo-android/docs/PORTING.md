@@ -2553,14 +2553,16 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 - 网页正文「只是数据」这条（spec §7.2）**不靠工具自己消毒**：`BrowserTool` 故意不调
   `PromptFrames.sanitize`，靠的是 `ChatViewModel` 对本轮**所有** tool 消息那一个咽喉
   （写回处 `:2387` 与 `resumeAfterToolAnswer` 的 `:2517`）。那个咽喉哪天被搬走，这里会**静默失守**。
-- 入口在**两颗**工具卡：时间线步 `ChainOfThoughtToolStep` 的第三块正文（摘要 / 图片条 / 「查看页面」）
-  与独立卡 `ToolCallCard` 末尾，两处共用**同一个**判据 `ToolUiPart.canTakeOverBrowser`
-  （`browser_use` + 结果正文非空 + 宿主接了遮罩）—— 抄两份必然出现一边有一边没有。
-  判据里正文用 `isNullOrEmpty` 而不是 `!= null`：`fromToolMessage` 落的是 `orEmpty()`，
-  导入的 Chatbox 工具消息因此恒"有正文"，`!= null` 会让那颗钮常显、点了没反应。第三块必须
-  同时进 `content` 的判据——`TimelineStepShell` 的 `hasBody = content != null || expectContent`，
-  只画不判会把折叠态算歪。`toolTitleFor` 给它一个像样的标题（`agent_capabilities_browser_title`
-  =「内置浏览器」），否则卡片落到默认的「调用工具 browser_use」。
+- 入口**不在工具卡里**（用户 2026-09-26，spec §12.5）：浏览器页面是**整会话共享**的，不属于某一条
+  消息，工具卡还会滚走。统一重做输入区之前（跟踪在 task #130），「查看页面」临时落在输入区的
+  **「+」面板**——`ui/BottomToolsSheet.kt` 那一行，判据 `BrowserSessionStore.hasLiveSession(conversationId)`
+  （纯内存读，与遮罩取实例用的 `peek` 同一条式子，尸体不算活着；钉在 `BrowserSessionStoreTest`）。
+  原先那两处渲染（时间线步 `ChainOfThoughtToolStep` 的第三块正文 + 独立卡 `ToolCallCard` 末尾）、
+  判据 `ToolUiPart.canTakeOverBrowser` 与整条 `onOpenBrowser` 透传链（`ChatContent`→`MessageRow`→
+  `ChainOfThoughtCard`→卡片）**已整块删净，不留死参数**；时间线步的正文判据因此回到两块
+  （摘要 / 图片条）——`TimelineStepShell` 的 `hasBody = content != null || expectContent`，
+  新增一块正文必须同时进这个判据，只画不判会把折叠态算歪。遮罩本身没动（`browserOverlayOpen`
+  旗标 + `BrowserOverlay(...)` 那一层原样）。
 
 **测试与验证边界**：Robolectric 的 `WebView` 是 shadow ⇒ 真导航、视口是否真 1280 CSS px、cookie 是否
 真被清、`window.open` 信封里的 URL 是否真拿得到、被污染的正文是否真被当数据，这五类**只能真机验收**

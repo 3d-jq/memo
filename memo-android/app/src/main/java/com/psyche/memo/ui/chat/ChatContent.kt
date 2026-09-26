@@ -1419,8 +1419,6 @@ fun ChatContent(
                             onOpenHtmlPreview = { code ->
                                 htmlPreviewFor = com.psyche.memo.ui.chat.HtmlPreviewRequest(code, rawHtml = true)
                             },
-                            // 浏览器工具卡上的「查看页面」= 接管（spec §6）。
-                            onOpenBrowser = { browserOverlayOpen = true },
                             askUserService = askUserService,
                             onRecoveredAnswer = { part, result ->
                                 vm.resumeAfterToolAnswer(msg.id, part, result.jsonString)
@@ -1832,6 +1830,13 @@ fun ChatContent(
             onOpenWorkspace = {
                 showToolsSheet = false
                 showWorkspaceSheet = true
+            },
+            // 「查看页面」（spec §12.5）：判据 = 本会话有活着的浏览器实例，**纯内存读**
+            // （hasLiveSession 走 store 的 holder，不查库、不读偏好、不建实例）。
+            browserPageAvailable = container.browserSessions.hasLiveSession(conversationId),
+            onOpenBrowserPage = {
+                showToolsSheet = false
+                browserOverlayOpen = true
             },
             onOpenImageGeneration = {
                 showToolsSheet = false
