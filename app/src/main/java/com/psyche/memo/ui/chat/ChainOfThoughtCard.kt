@@ -106,7 +106,6 @@ fun ChainOfThoughtCard(
     steps: List<TimelineStep>,
     settings: ChatTimelineSettings,
     conversationId: String? = null,
-    approval: ToolApprovalService? = null,
     askUser: AskUserInteractionService? = null,
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)? = null,
     onToggleReasoning: (segmentIndex: Int) -> Unit,
@@ -115,24 +114,14 @@ fun ChainOfThoughtCard(
     val isDark = cs.surface.luminance() < 0.5f
     val fg = chatSurfaceFg()
 
-    // _visibleChatTimelineSteps 4406-4443。审批态驱动可见性：未执行完的工具卡只在
-    // 等待审批时保留（timeline_visibility.isTimelineToolVisible pendingApproval）。
-    val pendingRequests by remember(approval) {
-        approval?.pendingRequests ?: MutableStateFlow<List<ToolApprovalRequest>>(emptyList())
-    }.collectAsState()
-    val filteredSteps = remember(steps, settings.showThinkingCards, settings.showToolCards, pendingRequests) {
+    // _visibleChatTimelineSteps 4406-4443（审批态那一支已随审批体系删除）。
+    val filteredSteps = remember(steps, settings.showThinkingCards, settings.showToolCards) {
         steps.filter { step ->
             when (step) {
                 is TimelineStep.Reasoning -> settings.showThinkingCards
                 is TimelineStep.Tool -> isTimelineToolVisible(
                     toolName = step.part.toolName,
-                    loading = step.part.loading,
                     showToolCards = settings.showToolCards,
-                    pendingApproval = matchingApprovalRequest(
-                        pendingRequests,
-                        conversationId,
-                        step.part.id,
-                    ) != null,
                 )
             }
         }
@@ -230,7 +219,6 @@ fun ChainOfThoughtCard(
                         showToolResultSummary = settings.showToolResultSummary,
                         hideToolResultImages = settings.hideToolResultImages,
                         conversationId = conversationId,
-                        approval = approval,
                         askUser = askUser,
                         onSubmitAskUser = onRecoveredAnswer?.let { cb -> { result -> cb(step.part, result) } },
                     )

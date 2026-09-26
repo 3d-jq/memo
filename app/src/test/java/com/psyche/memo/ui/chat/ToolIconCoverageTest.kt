@@ -20,6 +20,8 @@ class ToolIconCoverageTest {
     private val mustHaveOwnIcon: List<String> =
         // 工作区整族直接取自 ALL_TOOL_NAMES：再加工具时这里不用改，但图标必须补。
         WorkspaceTools.ALL_TOOL_NAMES.toList() +
+            // 浏览器整族同理（spec §12.1 拆成 13 颗独立工具）：加一颗就红在这里，不会漏配图标。
+            com.psyche.memo.provider.browser.BrowserTools.ALL_TOOL_NAMES.toList() +
             listOf(
                 com.psyche.memo.provider.chart.VisualTools.TOOL_NAME,
                 com.psyche.memo.provider.chart.MermaidTools.TOOL_NAME,
@@ -70,6 +72,29 @@ class ToolIconCoverageTest {
         modern.forEach { name ->
             assertEquals("设置页图标应与聊天一致：$name", toolIconFor(name), toolSchemaIconFor(name))
         }
+    }
+
+    /**
+     * 浏览器族**一颗动作一个图标 + 一行标题**（spec §12.1 拆工具的全部理由：九种动作挤在
+     * 同一张「内置浏览器」卡上，看不出模型这一轮到底做了什么 —— 图标或标题再撞车，
+     * 那份可读性就等于还回去了）。写法照上面「记忆族一动作一图标」那条。
+     */
+    @Test
+    fun theBrowserFamilyHasOneIconAndOneTitlePerAction() {
+        val names = com.psyche.memo.provider.browser.BrowserTools.ALL_TOOL_NAMES.toList()
+        val icons = names.map { toolIconFor(it) }
+        assertEquals("浏览器工具应当一个动作一个图标：$names", names.size, icons.toSet().size)
+        names.forEach { name ->
+            assertEquals("两个界面同源：$name", toolIconFor(name), toolSchemaIconFor(name))
+        }
+        // 标题：每个名字都要在自己的那份表里，且两两不同（漏一条会落到默认的「调用工具 X」，
+        // 撞车就又是「看不出做了什么」）。
+        val titles = names.map { BROWSER_TITLE_RES[it] }
+        assertTrue(
+            "这些浏览器工具没有自己的标题：${names.filterIndexed { i, _ -> titles[i] == null }}",
+            titles.none { it == null },
+        )
+        assertEquals("浏览器工具应当一个动作一行标题：$names", names.size, titles.toSet().size)
     }
 
     /**

@@ -67,7 +67,6 @@ import com.psyche.memo.ui.UserAvatarFallback
 import com.psyche.memo.ui.UserProfileStore
 import com.psyche.memo.ui.chat.AskUserInteractionService
 import com.psyche.memo.ui.chat.AskUserResult
-import com.psyche.memo.ui.chat.ToolApprovalService
 import com.psyche.memo.ui.chat.ToolUiPart
 import kotlin.math.max
 
@@ -174,14 +173,15 @@ internal fun MessageRow(
     conversationId: String?,
     /** 代码块「预览」（HTML 块）→ 打开 WebView 预览页（core:ui 不认识该页面）。 */
     onOpenHtmlPreview: ((String) -> Unit)? = null,
-    /** 工具审批服务（tool_approval_service.dart）—— 审批卡与时间线可见性。 */
-    approvalService: ToolApprovalService?,
     /** ask-user 交互服务（ask_user_interaction_service.dart）。 */
     askUserService: AskUserInteractionService?,
     /** 恢复已持久化 ask-user 回答（home_page_controller.submitRecoveredAskUserAnswer）。 */
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)?,
     /** display_show_regenerate_confirm_dialog_v1 = false 时跳过确认弹窗。 */
     skipRegenerateConfirm: Boolean = false,
+    /** 长用户消息是否已展开（本工程新增，见 [CollapsibleUserBubble]）。 */
+    userBubbleExpanded: Boolean = false,
+    onToggleUserBubbleExpanded: () -> Unit = {},
 ) {
     ChatRecompositionProbe.messageRows++
     val cs = MaterialTheme.colorScheme
@@ -298,7 +298,6 @@ internal fun MessageRow(
         // is redundant (and smart-casts through the local).
         val visible = toolPart != null && com.psyche.memo.ui.chat.isTimelineToolVisible(
             toolName = toolPart.toolName,
-            loading = toolPart.loading,
             showToolCards = timelineSettings.showToolCards,
             filterBuiltinSearch = false,
         )
@@ -321,7 +320,6 @@ internal fun MessageRow(
                         part = toolPart,
                         hideToolResultImages = timelineSettings.hideToolResultImages,
                         conversationId = conversationId,
-                        approval = approvalService,
                         askUser = askUserService,
                         onRecoveredAnswer = onRecoveredAnswer,
                     )
@@ -574,7 +572,14 @@ internal fun MessageRow(
                     }
                     if (userHasBubbleContent) {
                         if (userAttachmentParts.isNotEmpty()) Spacer(Modifier.height(8.dp))
-                        com.psyche.memo.ui.chat.ChatBubbleSurface(isUser = true) { userContent() }
+                        com.psyche.memo.ui.chat.ChatBubbleSurface(isUser = true) {
+                            // 长正文折叠（本工程新增 —— 上游与 RikkaHub 都不折用户消息）。
+                            CollapsibleUserBubble(
+                                expanded = userBubbleExpanded,
+                                onToggle = onToggleUserBubbleExpanded,
+                                textColor = com.psyche.memo.ui.chat.chatSurfacePlainTextColor(isUser = true),
+                            ) { userContent() }
+                        }
                     }
                 } else {
                     // CMW:2951-3009 —— 文本气泡与思考卡按 part 到达顺序交替出现，
@@ -699,7 +704,6 @@ internal fun MessageRow(
                                     steps = block.steps,
                                     settings = timelineSettings,
                                     conversationId = conversationId,
-                                    approval = approvalService,
                                     askUser = askUserService,
                                     onRecoveredAnswer = onRecoveredAnswer,
                                     onToggleReasoning = onToggleReasoning,

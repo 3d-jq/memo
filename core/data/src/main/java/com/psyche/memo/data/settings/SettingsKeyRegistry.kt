@@ -17,7 +17,7 @@ object SettingsKeyRegistry {
     )
 
     val PREFERENCE_KEYS: Set<String> = setOf(
-        "android_background_chat_mode_v1", "app_launch_count_v1", "app_locale_v1",
+        "agent_browser_enabled_v1", "android_background_chat_mode_v1", "app_launch_count_v1", "app_locale_v1",
         "asr_selected_service_id_v1", "asr_services_v1", "assistant_tag_collapsed_v1",
         "assistant_tag_map_v1", "avatar_type", "avatar_value",
         "backup_reminder_enabled_at_v1", "backup_reminder_enabled_v1", "backup_reminder_interval_days_v1",

@@ -1454,7 +1454,6 @@
     <string name="mcp_timeout_invalid">請輸入大於 0 的秒數</string>
     <string name="mcp_timeout_seconds_label">工具呼叫逾時（秒）</string>
     <string name="mcp_timeout_settings_tooltip">設定工具呼叫逾時</string>
-    <string name="mcp_tool_needs_approval">需要審批</string>
     <string name="mcp_transport_option_stdio">STDIO</string>
     <string name="mcp_transport_tag_http">HTTP</string>
     <string name="mcp_transport_tag_inmemory">內建</string>
@@ -2695,12 +2694,6 @@
     <string name="token_detail_prompt_tokens_with_cache">%1$s tokens (%2$s cached)</string>
     <string name="token_detail_speed">%1$s tok/s</string>
     <string name="token_detail_total_tokens">%1$s tokens</string>
-    <string name="tool_approval_approve">批准</string>
-    <string name="tool_approval_denied_message">工具調用 \"%1$s\" 已被使用者拒絕。原因：%2$s</string>
-    <string name="tool_approval_deny">拒絕</string>
-    <string name="tool_approval_deny_hint">原因（可選）</string>
-    <string name="tool_approval_deny_title">拒絕工具調用</string>
-    <string name="tool_approval_pending">等待審批</string>
     <string name="tool_schema_editor_page_title">編輯描述</string>
     <string name="tool_schema_settings_cancel">取消</string>
     <string name="tool_schema_settings_description_label">描述</string>
@@ -2710,6 +2703,7 @@
     <string name="tool_schema_settings_group_search">搜尋</string>
     <string name="tool_schema_settings_group_skill">技能</string>
     <string name="tool_schema_settings_group_workspace">工作區工具</string>
+    <string name="tool_schema_settings_group_browser">內建瀏覽器</string>
     <string name="tool_schema_settings_memory_lang_note">記憶工具的預設描述會隨記憶提示語言在中/英之間切換。自訂描述依工具名只存一份，切換語言後不會跟著變。</string>
     <string name="tool_schema_settings_modified">已修改</string>
     <string name="tool_schema_settings_page_title">工具描述</string>
@@ -2827,10 +2821,12 @@
     <string name="tts_settings_text_selection_quoted_only_description">播放 “”、‘’、\"\"、\'\'、「」或『』內的文字。</string>
     <string name="tts_settings_text_selection_quoted_only_title">僅引號內文字</string>
     <string name="tts_settings_text_selection_section">文字選擇</string>
+    <string name="user_message_collapse">收起</string>
     <string name="user_message_edit_overwrite_content">修改將覆蓋輸入框已有內容，是否覆蓋？</string>
     <string name="user_message_edit_overwrite_title">提示</string>
     <string name="user_message_edit_save_only">僅儲存</string>
     <string name="user_message_edit_unsupported_snackbar">該內容不支援編輯</string>
+    <string name="user_message_expand">展開</string>
     <string name="user_profile_add_custom">新增自訂欄位</string>
     <string name="user_profile_clear">清除</string>
     <string name="user_profile_custom_key_hint">鍵名（custom.name）</string>
@@ -2901,15 +2897,6 @@
     <string name="workspace_terminal_not_installed">先去安裝 Rootfs —— 終端需要它。</string>
     <string name="workspace_terminal_title">終端</string>
     <string name="workspace_terminal_title_with_name">終端 · %1$s</string>
-    <string name="workspace_tool_approvals">工具審批</string>
-    <string name="workspace_tool_approvals_desc">下面這些工具在動工作區之前需要先確認。</string>
-    <string name="workspace_tool_edit_file">編輯檔案</string>
-    <string name="workspace_tool_glob">尋找檔案</string>
-    <string name="workspace_tool_grep">搜尋內容</string>
-    <string name="workspace_tool_list">列出目錄</string>
-    <string name="workspace_tool_read_file">讀取檔案</string>
-    <string name="workspace_tool_shell">執行 Shell 命令</string>
-    <string name="workspace_tool_write_file">寫入檔案</string>
     <string name="workspace_unbind_current">解除目前助手綁定</string>
     <string name="workspace_view_files">查看檔案</string>
     <string name="workspace_will_delete">將刪除：%1$s</string>
@@ -2962,4 +2949,37 @@
     <string name="display_settings_page_show_assistant_avatar_title">顯示助手頭像</string>
     <string name="display_settings_page_show_assistant_avatar_subtitle">在助手的回覆旁顯示助手頭像。</string>
     <string name="world_book_unnamed_entry">未命名條目</string>
+    <string name="browser_feature_title">瀏覽器功能</string>
+    <string name="browser_enable_title">啟用內建瀏覽器</string>
+    <string name="browser_enable_desc">開啟後所有助手都能用內建瀏覽器工具開啟、讀取並操作網頁；網頁內文只是資料，不會被當成指令。</string>
+    <string name="browser_data_title">瀏覽器資料</string>
+    <string name="browser_clear">清空瀏覽器資料</string>
+    <string name="browser_view_page">檢視頁面</string>
+    <string name="browser_open_browser">開啟瀏覽器</string>
+    <string name="browser_overlay_title">瀏覽器</string>
+    <string name="browser_overlay_hand_back">交還給助手</string>
+    <string name="browser_overlay_clear_close">清空並關閉</string>
+    <string name="browser_tab_new">新分頁</string>
+    <string name="browser_tab_close">關閉分頁</string>
+    <string name="browser_address_hint">輸入網址（http 或 https）</string>
+    <string name="browser_address_go">前往</string>
+    <string name="browser_address_blocked">只能開啟 http / https 網址</string>
+    <string name="browser_js_confirm">確定</string>
+    <string name="browser_js_cancel">取消</string>
+    <!-- Agent 瀏覽器那一族 13 顆工具的卡片標題（spec §12.1 拆工具的全部理由：
+         一顆動作一行標題，看得出模型這一輪到底做了什麼）。 -->
+    <string name="chat_message_widget_browser_open">開啟網頁</string>
+    <string name="chat_message_widget_browser_read">讀取網頁</string>
+    <string name="chat_message_widget_browser_find">尋找頁面元素</string>
+    <string name="chat_message_widget_browser_click">點擊頁面元素</string>
+    <string name="chat_message_widget_browser_type">填寫頁面輸入框</string>
+    <string name="chat_message_widget_browser_select">選擇頁面下拉項</string>
+    <string name="chat_message_widget_browser_scroll">滾動網頁</string>
+    <string name="chat_message_widget_browser_screenshot">網頁截圖</string>
+    <string name="chat_message_widget_browser_back">網頁後退</string>
+    <string name="chat_message_widget_browser_forward">網頁前進</string>
+    <string name="chat_message_widget_browser_wait">等待網頁變化</string>
+    <string name="chat_message_widget_browser_page_info">網頁資訊</string>
+    <string name="chat_message_widget_browser_reload">重新載入網頁</string>
+    <string name="chat_message_widget_browser_tabs">管理瀏覽器分頁</string>
 </resources>

@@ -86,13 +86,6 @@ class WorkspaceRepository(
         store.isNameTaken(name, excludeId)
     }
 
-    suspend fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean =
-        withContext(Dispatchers.IO) {
-            val ok = store.setToolApproval(id, toolName, needsApproval)
-            if (ok) _version.value++
-            ok
-        }
-
     /** 记录一次访问（`last_access_at`），供列表排序/「最近使用」用。 */
     suspend fun touch(id: String) = withContext(Dispatchers.IO) {
         store.touch(id)

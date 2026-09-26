@@ -57,18 +57,6 @@ class WorkspaceStore(db: SQLiteDatabase) {
         return true
     }
 
-    fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean {
-        val entity = get(id) ?: return false
-        val overrides = entity.toolApprovalOverrides() + (toolName to needsApproval)
-        put(
-            entity.copy(
-                toolApprovals = json.encodeToString(overrides),
-                updatedAt = System.currentTimeMillis(),
-            ),
-        )
-        return true
-    }
-
     /** 标记一次访问（`last_access_at`）。 */
     fun touch(id: String, at: Long = System.currentTimeMillis()): Boolean {
         val entity = get(id) ?: return false

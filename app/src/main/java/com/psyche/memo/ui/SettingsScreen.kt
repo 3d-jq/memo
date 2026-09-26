@@ -50,6 +50,7 @@ import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.Database
 import com.composables.icons.lucide.Earth
 import com.composables.icons.lucide.EthernetPort
+import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Heart
@@ -97,6 +98,8 @@ fun SettingsScreen(
     onOpenDisplay: () -> Unit,
     onOpenProviders: () -> Unit,
     onOpenSearchServices: () -> Unit,
+    /** 「设置 → 模型与服务」里的浏览器功能入口（用户 2026-09-26 点名要从偏好设置搬过来）。 */
+    onOpenBrowserFeature: () -> Unit,
     /** 生成服务（自研功能）：设置里两个入口。 */
     onOpenImageGeneration: () -> Unit,
     onOpenVideoGeneration: () -> Unit,
@@ -254,6 +257,9 @@ fun SettingsScreen(
                     SettingsRow(Lucide.Boxes, stringResource(UiR.string.settings_page_providers), onTap = onOpenProviders)
                     DividerRow()
                     SettingsRow(Lucide.Earth, stringResource(UiR.string.settings_page_search), onTap = onOpenSearchServices)
+                    DividerRow()
+                    // 浏览器是设备能力（与搜索/MCP/技能/工作区同一族），不是显示偏好 —— 入口就在这一组。
+                    SettingsRow(Lucide.Globe, stringResource(UiR.string.browser_feature_title), onTap = onOpenBrowserFeature)
                     DividerRow()
                     // 生成图片 / 生成视频（自研功能，上游没有）：两个入口各管一类服务。
                     SettingsRow(Lucide.Image, stringResource(UiR.string.settings_page_image_generation), onTap = onOpenImageGeneration)

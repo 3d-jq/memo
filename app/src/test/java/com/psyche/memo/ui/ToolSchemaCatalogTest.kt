@@ -1,5 +1,6 @@
 package com.psyche.memo.ui
 
+import com.psyche.memo.provider.browser.BrowserTools
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
@@ -157,6 +158,38 @@ class ToolSchemaCatalogTest {
         assertTrue(
             "LOCAL group should have Android-available tools",
             catalog.any { it.group == BuiltInToolGroup.LOCAL },
+        )
+    }
+
+    // —— Browser family (added 2026-09-26: user asked for it in the tool-schema page) ——
+
+    @Test
+    fun entries_browserGroup_isTheOfferedListItselfNotACopy() {
+        // 用户 2026-09-26「在工具描述里面加一下吧」：这一组的名单**必须等于真正递给模型的那份**
+        // （`BrowserTools.catalogDefinitions()` = `definitions()`）。页面自己抄一张的话，改描述是
+        // 按名字匹配的，名字对不上时用户改的是一套、模型拿到的是另一套 —— 这条断言就是防那件事。
+        val group = BuiltInToolCatalog.entries(MemoryPromptLang.en)
+            .filter { it.group == BuiltInToolGroup.BROWSER }
+        assertEquals(BrowserTools.catalogDefinitions().map { it.name }, group.map { it.name })
+        assertEquals("整族 14 颗都该在", 14, group.size)
+        assertTrue(
+            "每颗都要有默认描述（缺一颗这一页就只显示名字，编辑页等于白开）",
+            group.all { !it.defaultDescription.isNullOrBlank() },
+        )
+        // 参数也得摊开给编辑页（describeParams 走同一份 schema）：browser_open 两颗。
+        assertEquals(
+            listOf("url", "new_tab"),
+            BuiltInToolCatalog.describeParams(group.first().defaultDefinition).map { it.path },
+        )
+    }
+
+    @Test
+    fun entries_browserToolsStayOutOfTheAssistantGatedLocalNames() {
+        // 进这一页只是为了「看得见、能改描述」。它们**绝不进** `LocalToolNames.all` ——
+        // 那张表是「助手勾了才执行」的双闸之一，浏览器是设备能力不是人设能力
+        //（与 `ToolRulesTest` 里那条同名断言互为兜底：那条盯递交侧，这条盯目录侧）。
+        assertTrue(
+            BrowserTools.ALL_TOOL_NAMES.none { it in BuiltInToolCatalog.LocalToolNames.all },
         )
     }
 }

@@ -11,7 +11,7 @@ import org.junit.Test
 /**
  * 工具执行期申请定位权限的那根「挂起 → UI 回答」通道。
  *
- * 形状跟 [ToolApprovalService]/[AskUserInteractionService] 一致：执行器挂起等一个
+ * 形状跟 [AskUserInteractionService] 一致（同族的审批服务已拆除）：执行器挂起等一个
  * deferred，Compose 侧观察 [LocationPermissionService.pending] 去弹系统权限框，结果回填。
  * 关键约束是**它绝不能永远挂着** —— 后台生成时页面上没有 ChatContent，没人回答就必须
  * 自己收尾，否则那条生成会卡死。

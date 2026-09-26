@@ -143,7 +143,6 @@ import com.psyche.memo.data.model.TextPart
 import com.psyche.memo.ui.chat.AskUserInteractionService
 import com.psyche.memo.ui.chat.AskUserResult
 import com.psyche.memo.ui.chat.ChatInterruptionPanel
-import com.psyche.memo.ui.chat.ToolApprovalService
 import com.psyche.memo.ui.chat.ToolUiPart
 import com.psyche.memo.ui.chat.currentChatInterruption
 import com.psyche.memo.ui.chat.ImePinTracker

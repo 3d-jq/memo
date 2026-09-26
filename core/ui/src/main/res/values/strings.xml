@@ -1452,7 +1452,6 @@ Updating Memo first is the safer choice.</string>
     <string name="mcp_timeout_invalid">Enter a positive number of seconds</string>
     <string name="mcp_timeout_seconds_label">Tool call timeout (seconds)</string>
     <string name="mcp_timeout_settings_tooltip">Set tool call timeout</string>
-    <string name="mcp_tool_needs_approval">Require approval</string>
     <string name="mcp_transport_option_stdio">STDIO</string>
     <string name="mcp_transport_tag_http">HTTP</string>
     <string name="mcp_transport_tag_inmemory">Built-in</string>
@@ -2693,12 +2692,6 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="token_detail_prompt_tokens_with_cache">%1$s tokens (%2$s cached)</string>
     <string name="token_detail_speed">%1$s tok/s</string>
     <string name="token_detail_total_tokens">%1$s tokens</string>
-    <string name="tool_approval_approve">Approve</string>
-    <string name="tool_approval_denied_message">Tool call \"%1$s\" was denied by user. Reason: %2$s</string>
-    <string name="tool_approval_deny">Deny</string>
-    <string name="tool_approval_deny_hint">Reason (optional)</string>
-    <string name="tool_approval_deny_title">Deny tool call</string>
-    <string name="tool_approval_pending">Waiting for approval</string>
     <string name="tool_schema_editor_page_title">Edit description</string>
     <string name="tool_schema_settings_cancel">Cancel</string>
     <string name="tool_schema_settings_description_label">Description</string>
@@ -2708,6 +2701,7 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="tool_schema_settings_group_search">Search</string>
     <string name="tool_schema_settings_group_skill">Skills</string>
     <string name="tool_schema_settings_group_workspace">Workspace tools</string>
+    <string name="tool_schema_settings_group_browser">Built-in browser</string>
     <string name="tool_schema_settings_memory_lang_note">Memory tool defaults follow the memory prompt language. A custom description is stored once per tool and will not switch when you change that language.</string>
     <string name="tool_schema_settings_modified">Modified</string>
     <string name="tool_schema_settings_page_title">Tool Descriptions</string>
@@ -2825,10 +2819,12 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="tts_settings_text_selection_quoted_only_description">Play text inside “”, ‘’, \"\", \'\', 「」, or 『』.</string>
     <string name="tts_settings_text_selection_quoted_only_title">Quoted text only</string>
     <string name="tts_settings_text_selection_section">Text Selection</string>
+    <string name="user_message_collapse">Collapse</string>
     <string name="user_message_edit_overwrite_content">Editing will overwrite the existing input. Overwrite it?</string>
     <string name="user_message_edit_overwrite_title">Notice</string>
     <string name="user_message_edit_save_only">Save Only</string>
     <string name="user_message_edit_unsupported_snackbar">This content does not support editing</string>
+    <string name="user_message_expand">Expand</string>
     <string name="user_profile_add_custom">Add custom field</string>
     <string name="user_profile_clear">Clear</string>
     <string name="user_profile_custom_key_hint">Key (custom.name)</string>
@@ -2899,15 +2895,6 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="workspace_terminal_not_installed">Install the Rootfs first — the terminal needs it.</string>
     <string name="workspace_terminal_title">Terminal</string>
     <string name="workspace_terminal_title_with_name">Terminal · %1$s</string>
-    <string name="workspace_tool_approvals">Tool approvals</string>
-    <string name="workspace_tool_approvals_desc">Tools listed below ask for confirmation before touching the workspace.</string>
-    <string name="workspace_tool_edit_file">Edit file</string>
-    <string name="workspace_tool_glob">Find files</string>
-    <string name="workspace_tool_grep">Search contents</string>
-    <string name="workspace_tool_list">List directory</string>
-    <string name="workspace_tool_read_file">Read file</string>
-    <string name="workspace_tool_shell">Run shell command</string>
-    <string name="workspace_tool_write_file">Write file</string>
     <string name="workspace_unbind_current">Unbind from current assistant</string>
     <string name="workspace_view_files">View files</string>
     <string name="workspace_will_delete">About to delete: %1$s</string>
@@ -2960,4 +2947,37 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="display_settings_page_show_assistant_avatar_title">Show assistant avatar</string>
     <string name="display_settings_page_show_assistant_avatar_subtitle">Show the assistant avatar next to its replies.</string>
     <string name="world_book_unnamed_entry">Unnamed Entry</string>
+    <string name="browser_feature_title">Browser feature</string>
+    <string name="browser_enable_title">Enable built-in browser</string>
+    <string name="browser_enable_desc">When on, every assistant can use the built-in browser tools to open, read and operate web pages. Page text is data, not instructions.</string>
+    <string name="browser_data_title">Browser data</string>
+    <string name="browser_clear">Clear browsing data</string>
+    <string name="browser_view_page">View page</string>
+    <string name="browser_open_browser">Open browser</string>
+    <string name="browser_overlay_title">Browser</string>
+    <string name="browser_overlay_hand_back">Hand back</string>
+    <string name="browser_overlay_clear_close">Clear and close</string>
+    <string name="browser_tab_new">New tab</string>
+    <string name="browser_tab_close">Close tab</string>
+    <string name="browser_address_hint">Type an address (http or https)</string>
+    <string name="browser_address_go">Go</string>
+    <string name="browser_address_blocked">Only http and https addresses can be opened</string>
+    <string name="browser_js_confirm">OK</string>
+    <string name="browser_js_cancel">Cancel</string>
+    <!-- Agent 浏览器那一族 13 颗工具的卡片标题（spec §12.1 拆工具的全部理由：
+         一颗动作一行标题，看得出模型这一轮到底做了什么）。 -->
+    <string name="chat_message_widget_browser_open">Open web page</string>
+    <string name="chat_message_widget_browser_read">Read web page</string>
+    <string name="chat_message_widget_browser_find">Find page elements</string>
+    <string name="chat_message_widget_browser_click">Click page element</string>
+    <string name="chat_message_widget_browser_type">Type into page field</string>
+    <string name="chat_message_widget_browser_select">Choose page option</string>
+    <string name="chat_message_widget_browser_scroll">Scroll web page</string>
+    <string name="chat_message_widget_browser_screenshot">Screenshot web page</string>
+    <string name="chat_message_widget_browser_back">Web page back</string>
+    <string name="chat_message_widget_browser_forward">Web page forward</string>
+    <string name="chat_message_widget_browser_wait">Wait for web page</string>
+    <string name="chat_message_widget_browser_page_info">Web page info</string>
+    <string name="chat_message_widget_browser_reload">Reload web page</string>
+    <string name="chat_message_widget_browser_tabs">Manage browser tabs</string>
 </resources>

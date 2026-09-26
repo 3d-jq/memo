@@ -304,16 +304,6 @@ fun WorkspaceDetailScreen(
                     rootfsReady = rootfsReady,
                     installProgress = installProgress,
                     onInstallRootfs = { showInstallDialog = true },
-                    onSetApproval = { tool, value ->
-                        scope.launch {
-                            withContext(Dispatchers.IO) { repo.setToolApproval(workspaceId, tool, value) }
-                        }
-                        // 关掉审批开关的那一刻，屏上可能还挂着这个工具**之前**建出来的
-                        // 审批面板（用户 2026-09-16「我关闭了确认 为什么还有确认呀」）。
-                        // 用户的意图就是「这个工具以后不用问我」→ 把待审批的直接放行，
-                        // 别让它继续卡住这一轮生成。
-                        if (!value) container.toolApprovalService.approvePendingForTool(tool)
-                    },
                 )
             } else {
                 FilesTab(
@@ -532,12 +522,10 @@ private fun BasicTab(
     rootfsReady: Boolean,
     installProgress: RootfsInstallProgress?,
     onInstallRootfs: () -> Unit,
-    onSetApproval: (String, Boolean) -> Unit,
     container: AppContainerImpl,
     workspaceId: String,
 ) {
     val cs = MaterialTheme.colorScheme
-    val overrides = workspace?.toolApprovalOverrides().orEmpty()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -592,79 +580,6 @@ private fun BasicTab(
             }
         }
 
-        item {
-            SectionHeader(stringResource(R.string.workspace_tool_approvals))
-            SectionCard {
-                Text(
-                    text = stringResource(R.string.workspace_tool_approvals_desc),
-                    style = TextStyle(fontSize = 13.sp, color = cs.onSurfaceVariant),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                )
-                toolApprovalItems().forEach { (toolName, label) ->
-                    DividerRow()
-                    ToolApprovalRow(
-                        toolName = toolName,
-                        label = label,
-                        needsApproval = WorkspaceTools.resolveApproval(toolName, overrides),
-                        enabled = workspace != null,
-                        onChange = { onSetApproval(toolName, it) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * 上游 `workspaceToolApprovalItems()`：固定顺序、人类可读名 + 工具名。
- *
- * 上游是四项；[WorkspaceTools.LIST] / [WorkspaceTools.GLOB] / [WorkspaceTools.GREP]
- * 三个只读工具是本工程新增（上游没有），按「读 → 找 → 搜 → 写 → 改 → 执行」的顺序插在
- * 读文件之后，默认全免审批（见 `WorkspaceTools.DEFAULT_APPROVALS`）。
- */
-@Composable
-private fun toolApprovalItems(): List<Pair<String, String>> = listOf(
-    "workspace_read_file" to stringResource(R.string.workspace_tool_read_file),
-    "workspace_list" to stringResource(R.string.workspace_tool_list),
-    "workspace_glob" to stringResource(R.string.workspace_tool_glob),
-    "workspace_grep" to stringResource(R.string.workspace_tool_grep),
-    "workspace_write_file" to stringResource(R.string.workspace_tool_write_file),
-    "workspace_edit_file" to stringResource(R.string.workspace_tool_edit_file),
-    "workspace_shell" to stringResource(R.string.workspace_tool_shell),
-)
-
-/** 上游 `WorkspaceToolApprovalCard` 的一行：两行文案（标签 / 工具名）+ 开关。 */
-@Composable
-private fun ToolApprovalRow(
-    toolName: String,
-    label: String,
-    needsApproval: Boolean,
-    enabled: Boolean,
-    onChange: (Boolean) -> Unit,
-) {
-    val cs = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(text = label, style = TextStyle(fontSize = 15.sp))
-            Text(
-                text = toolName,
-                style = TextStyle(fontSize = 12.sp, color = cs.onSurfaceVariant),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        IosSwitch(
-            value = needsApproval,
-            onValueChanged = if (enabled) onChange else null,
-            semanticLabel = toolName,
-        )
     }
 }
 

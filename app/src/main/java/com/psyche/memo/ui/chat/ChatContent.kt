@@ -78,7 +78,6 @@ import com.psyche.memo.ChatViewModel
 import com.psyche.memo.data.model.Conversation
 import com.psyche.memo.ui.chat.AskUserInteractionService
 import com.psyche.memo.ui.chat.ChatInterruptionPanel
-import com.psyche.memo.ui.chat.ToolApprovalService
 import com.psyche.memo.ui.chat.currentChatInterruption
 import com.psyche.memo.ui.chat.ImePinTracker
 import com.psyche.memo.ui.chat.checkpointPart
@@ -246,6 +245,8 @@ fun ChatContent(
     val suggestions by vm.suggestions.collectAsState()
     val input by vm.input.collectAsState()
     val streaming by vm.streaming.collectAsState()
+    // 长用户消息的展开态（本工程新增，见 CollapsibleUserBubble）。
+    val expandedUserMessages by vm.expandedUserMessages.collectAsState()
     // 上下文压缩：进行中 → 消息流末尾的扫光分隔线；占用 → 输入栏上方的 2dp 细条。
     val compacting by vm.compacting.collectAsState()
     val contextUsage by vm.contextUsage.collectAsState()
@@ -273,12 +274,10 @@ fun ChatContent(
             ),
         )
     }
-    // 工具执行服务（tool_approval_service / ask_user_interaction_service）—— 审批卡、
-    // ask-user 卡与时间线可见性都从这里取状态。
-    val approvalService = container.toolApprovalService
+    // ask_user_interaction_service —— ask-user 卡与时间线可见性都从这里取状态。
+    // （同族的 tool_approval_service 已整块拆除：用户 2026-09-25「工具的权限审批全部去掉」。）
     val askUserService = container.askUserInteractionService
-    // 底部打断面板的数据源（问询 / 审批）——见 ChatInterruptionPanel.kt。
-    val approvalPending by approvalService.pendingRequests.collectAsState()
+    // 底部打断面板的数据源 —— 见 ChatInterruptionPanel.kt。
     val askUserPending by askUserService.pendingRequests.collectAsState()
     // 自动滚动（scroll_controller.dart）：总开关默认开；用户拖动后
     // `autoScrollIdleSeconds` 秒内的跟随暂停（默认 8）。
@@ -513,6 +512,14 @@ fun ChatContent(
     var regenerateFor by remember { mutableStateOf<ChatViewModel.UiMessage?>(null) }
     var selectCopyFor by remember { mutableStateOf<String?>(null) }
     var htmlPreviewFor by remember { mutableStateOf<com.psyche.memo.ui.chat.HtmlPreviewRequest?>(null) }
+    // 浏览器接管遮罩：只有一枚旗标，实例不落状态 —— 每次组合都从 store 同步 `peek`，
+    // 绝不跨挂起点持有 `BrowserSession`（`attachTo` 自带 closed 闸会拒绝挂已销毁的实例，
+    // 但那道闸只保证「不炸」，不保证「看得见」：拿新实例再挂才是对的形状，见 BrowserOverlay
+    // 的 @param session）。
+    var browserOverlayOpen by remember { mutableStateOf(false) }
+    // 「打开浏览器 / 查看页面」那行的可见性 = 设置里的全局开关（用户 2026-09-26 要求入口常驻）。
+    // 默认 true 与出厂默认同值；面板每次打开时重读一次，于是设置页改完回来必然跟上。
+    var browserEntryEnabled by remember { mutableStateOf(true) }
 
     val clipboard = androidx.compose.ui.platform.LocalClipboard.current
     val clipboardScope = rememberCoroutineScope()
@@ -1339,6 +1346,8 @@ fun ChatContent(
                             ) {
                         com.psyche.memo.ui.chat.MessageRow(
                             msg = msg,
+                            userBubbleExpanded = msg.id in expandedUserMessages,
+                            onToggleUserBubbleExpanded = { vm.toggleUserMessageExpanded(msg.id) },
                             skipRegenerateConfirm = remember {
                                 container.preferenceRepository.readJson(
                                     "display_show_regenerate_confirm_dialog_v1",
@@ -1414,7 +1423,6 @@ fun ChatContent(
                             onOpenHtmlPreview = { code ->
                                 htmlPreviewFor = com.psyche.memo.ui.chat.HtmlPreviewRequest(code, rawHtml = true)
                             },
-                            approvalService = approvalService,
                             askUserService = askUserService,
                             onRecoveredAnswer = { part, result ->
                                 vm.resumeAfterToolAnswer(msg.id, part, result.jsonString)
@@ -1623,11 +1631,10 @@ fun ChatContent(
         }
         val searchSvcName = searchSvc?.let { stringResource(com.psyche.memo.ui.SearchServiceUi.nameRes(it)) }
         val searchIconAsset = searchSvcName?.let { BrandAssets.assetForName(it) }
-        // 待答问询 / 待审批时，底部换成对应面板、聊天输入栏暂时藏起来
+        // 有待答问询时，底部换成面板、聊天输入栏暂时藏起来
         //（用户 2026-09-14「这个应该出现在输入框那个位置，体验更加友好」）。
         val interrupting = currentChatInterruption(
             askUser = askUserPending,
-            approval = approvalPending,
             conversationId = conversationId,
             generating = streaming,
         )
@@ -1635,8 +1642,6 @@ fun ChatContent(
             ChatInterruptionPanel(
                 interruption = interrupting,
                 askUser = askUserService,
-                approval = approvalService,
-                conversationId = conversationId,
             )
         } else {
         ChatInputBar(
@@ -1763,6 +1768,14 @@ fun ChatContent(
         }
     }
 
+    LaunchedEffect(showToolsSheet) {
+        if (showToolsSheet) {
+            browserEntryEnabled = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.psyche.memo.ui.DisplayPrefs.browserEnabled(container)
+            }
+        }
+    }
+
     if (showToolsSheet) {
         BottomToolsSheet(
             onCamera = {
@@ -1829,6 +1842,22 @@ fun ChatContent(
             onOpenWorkspace = {
                 showToolsSheet = false
                 showWorkspaceSheet = true
+            },
+            // 「打开浏览器 / 查看页面」（spec §12.5）：判据 = 全局开关（上面那次重读的结果），
+            // **常驻**；「有没有活动实例」只决定这一行写哪个名字。
+            browserEntryAvailable = browserEntryEnabled,
+            browserSessionLive = container.browserSessions.hasLiveSession(conversationId),
+            onOpenBrowserPage = {
+                showToolsSheet = false
+                // 建实例这件事必须在**容器作用域**：`sessionFor` 第一步就挂起（切 Main 并可能
+                // 先 close 掉别的会话那枚），面板一关就把它掐在半路 ⇒ 半套状态。
+                // 开关在这里再判一次是必需的：上面那次读是"面板打开时"的快照，用户可能已经
+                // 在设置页关掉了它 —— 不许替用户建一个他明确关掉的 WebView。
+                container.appScope.launch {
+                    if (!com.psyche.memo.ui.DisplayPrefs.browserEnabled(container)) return@launch
+                    container.browserSessions.sessionFor(conversationId)
+                    browserOverlayOpen = true
+                }
             },
             onOpenImageGeneration = {
                 showToolsSheet = false
@@ -2112,6 +2141,24 @@ fun ChatContent(
             request = request,
             onBack = { htmlPreviewFor = null },
         )
+    }
+
+    // 用户接管浏览器：叠在同一层（与 HTML 预览同形状，不是 Dialog —— PORTING §5.31）。
+    if (browserOverlayOpen) {
+        val session = container.browserSessions.peek(conversationId)
+        if (session != null) {
+            com.psyche.memo.ui.chat.BrowserOverlay(
+                session = session,
+                onBack = { browserOverlayOpen = false },
+                // 容器作用域：`closeAll()` 第一步就挂起（切 Main），页面作用域的 scope 会随
+                // 遮罩销毁把它掐在 `close()` 中间 ⇒ 未 destroy 的 WebView + 未清的 cookie jar。
+                onClearAndClose = {
+                    container.appScope.launch { container.browserSessions.closeAll() }
+                },
+            )
+        } else {
+            browserOverlayOpen = false
+        }
     }
 
     editFor?.let { target ->

@@ -8,6 +8,7 @@ import com.psyche.memo.provider.LocalToolExecutors
 import com.psyche.memo.provider.LocationTool
 import com.psyche.memo.provider.MemoryTools
 import com.psyche.memo.provider.SkillTools
+import com.psyche.memo.provider.browser.BrowserTools
 import com.psyche.memo.provider.chart.MermaidTools
 import com.psyche.memo.provider.chart.VisualTools
 import com.psyche.memo.provider.generation.GenerationTools
@@ -57,7 +58,7 @@ class SystemPromptGoldenTest {
         GenerationTools.GENERATE_VIDEO,
         VisualTools.TOOL_NAME,
         MermaidTools.TOOL_NAME,
-    ) + WorkspaceTools.ALL_TOOL_NAMES.sorted()
+    ) + BrowserTools.ALL_TOOL_NAMES.sorted() + WorkspaceTools.ALL_TOOL_NAMES.sorted()
 
     private fun viewModelWith(assistant: Assistant): ChatViewModel {
         val container = AppContainerImpl(context)
@@ -66,10 +67,14 @@ class SystemPromptGoldenTest {
         return ChatViewModel(container, Conversation.create(title = "golden").id)
     }
 
-    private fun golden(): String = requireNotNull(
-        javaClass.classLoader?.getResourceAsStream("prompts/system-prompt-golden.txt"),
-    ) { "缺少系统提示词基线 app/src/test/resources/prompts/system-prompt-golden.txt" }
-        .reader(Charsets.UTF_8).use { it.readText() }
+    /** fixture 的**源码**文件：bless 模式写的和断言读的必须是同一个路径。 */
+    private fun fixtureFile(): java.io.File = java.io.File(
+        requireNotNull(System.getProperty("golden.fixture")) {
+            "golden.fixture 没传进来 —— 必须通过 Gradle 跑（见 app/build.gradle.kts）"
+        },
+    )
+
+    private fun golden(): String = fixtureFile().readText()
 
     @Test
     fun `the whole assembled system prompt matches the fixture`() {
@@ -98,7 +103,16 @@ class SystemPromptGoldenTest {
             ),
             parts.map { it.first },
         )
-        assertEquals(golden(), assembleSystemPrompt(parts))
+        val actual = assembleSystemPrompt(parts)
+        if (System.getProperty("golden.bless") == "1") {
+            fixtureFile().writeText(actual)
+            return  // 显式重生成：这一趟不做比较
+        }
+        assertEquals(
+            "系统提示词基线变了；确认是有意改动后用 -Pgolden.bless=1 重写基线再 git diff 复核",
+            golden(),
+            actual,
+        )
     }
 
     @Test

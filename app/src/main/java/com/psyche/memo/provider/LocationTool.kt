@@ -26,7 +26,7 @@ import kotlin.math.roundToInt
  *
  * ⚠️ **超出上游的平台能力**：上游 kelivo 的 `DeviceLocalTools.locationSupported` 是 iOS-only
  * （`iosDeviceToolsSupported`），Android 侧压根没实现。工具**名字、空参数、描述文案、
- * 不进 `requiresUserApproval`** 全部照上游（`local_tools_service.dart` 的
+ * 不在需要审批的名单里**（那份名单 2026-09-25 已整块拆除）全部照上游（`local_tools_service.dart` 的
  * `_currentLocationDefinition`），只有执行是安卓侧自写：运行时策略照搬已在真机用过的参考
  * 实现 —— 先看权限 → 再看定位服务开关 → **10 分钟内的缓存位置直接秒回** → 否则实时定位
  * 10 秒超时 → 超时回退过期缓存 → 全拿不到才报错；逆地理用平台 [Geocoder]（零 API key、

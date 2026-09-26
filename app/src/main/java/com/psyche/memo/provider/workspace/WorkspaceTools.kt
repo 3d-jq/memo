@@ -3,6 +3,7 @@ package com.psyche.memo.provider.workspace
 import com.psyche.memo.llm.client.LlmToolSpec
 import com.psyche.memo.provider.tool.ArgViolation
 import com.psyche.memo.provider.tool.ToolArgs
+import com.psyche.memo.provider.tool.ToolImageBytes
 import com.psyche.memo.workspace.WorkspaceFileEntry
 import com.psyche.memo.workspace.WorkspaceManager
 import kotlinx.serialization.json.JsonArray
@@ -25,8 +26,10 @@ import java.io.ByteArrayOutputStream
  *  1. **写文件是走 shell 的**（`cat > path` + stdin），读文件走 `rootfsFileSize` +
  *     `exportRootfsFile` —— 因为 proot 只暴露一个执行入口，直接碰宿主文件会绕过 rootfs
  *     的路径映射（bind mount 就看不懂了）。
- *  2. **免审批的安全可写区**只有 `/workspace` 与 `/tmp`；写到别处自动升级为需要审批。
- *  3. `workspace_shell` 默认需要审批（[DEFAULT_APPROVALS]），其余三个默认免审批。
+ *  2. 写路径**不再拦**：上游把 `/workspace`、`/tmp` 之外的写升级为"需要审批"，审批体系
+ *     2026-09-25 整块拆除后这条升级没有了（所有写都发生在 proot rootfs 内，宿主碰不到）。
+ *  3. 所有工具都直接执行，不再有任何审批门（用户 2026-09-25「工具的权限审批全部去掉」；
+ *     shell 跑在 proot rootfs 里，能搞坏的只有沙箱自己）。
  *
  * 与上游的唯一缺口：`workspace_read_file` 读**图片**那条分支没移植（上游把字节交给
  * `FilesManager` 生成图片 part；Memo 的工具结果要接进它自己的图片通道，见 PORTING）。
@@ -36,7 +39,7 @@ import java.io.ByteArrayOutputStream
  * 「在工作区加上工具，list，glob，grep 工具」）：上游没有这三个（RikkaHub 的工作区工具
  * 面只有上面四个），所以描述文案是按本工程口径自己写的，不是移植。它们和
  * `workspace_read_file` 同一条通道 —— 都是 proot 里的 shell 命令 + 结构化 JSON 回给模型，
- * 都默认免审批。
+ * 都直接执行，不需要任何审批。
  */
 object WorkspaceTools {
 
@@ -50,28 +53,6 @@ object WorkspaceTools {
 
     val ALL_TOOL_NAMES = setOf(READ_FILE, WRITE_FILE, EDIT_FILE, LIST, GLOB, GREP, SHELL)
 
-    /**
-     * 上游 `WorkspaceToolDefaultApprovals`：只有 shell 默认要审批。
-     *
-     * [LIST]/[GLOB]/[GREP] 是**本工程新增**的三个只读工具（上游没有，用户 2026-09-22
-     * 点名要），默认免审批 —— 它们和 `workspace_read_file` 一样只看不改。
-     */
-    val DEFAULT_APPROVALS: Map<String, Boolean> = mapOf(
-        READ_FILE to false,
-        WRITE_FILE to false,
-        EDIT_FILE to false,
-        LIST to false,
-        GLOB to false,
-        GREP to false,
-        SHELL to true,
-    )
-
-    /** 上游 `resolveWorkspaceToolApproval`：工作区上的覆盖项优先，其次默认值。 */
-    fun resolveApproval(name: String, overrides: Map<String, Boolean>): Boolean =
-        overrides[name] ?: DEFAULT_APPROVALS[name] ?: false
-
-    /** 免强制审批的可写安全区（上游 `WRITABLE_ROOT_PREFIXES`）。 */
-    private val WRITABLE_ROOT_PREFIXES = listOf("/workspace", "/tmp")
 
     private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
     private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
@@ -372,27 +353,6 @@ object WorkspaceTools {
         append(" | head -n ${MAX_GREP_MATCHES + 1}")
     }
 
-    /**
-     * 写到 `/workspace`、`/tmp` 之外要不要额外审批（上游 `pathOutsideWritableRoots`）。
-     *
-     * **有意偏离上游的一处**：参数里根本解析不出绝对路径时返回 `null`（上游那版在这里是
-     * `getOrDefault(true)`，于是这个调用会先弹一次审批、用户点完只会收到
-     * 「path is required」）。这种调用无论路径是什么都执行不了 —— 模型发来一个截断/坏掉的
-     * tool call 参数就会走到这里（用户 2026-09-16「我关闭了确认 为什么还有确认呀」，
-     * 库里那条 `workspace_write_file` 的 arguments 就是被截断的），不该占用用户一次确认。
-     * 调用方判据用 `== true`，`null` 表示「参数不可用，直接让工具报参数错误」。
-     */
-    fun pathOutsideWritableRoots(args: JsonObject, name: String): Boolean? = runCatching {
-        isOutsideWritableRoots(absolutePath(args, name))
-    }.getOrNull()
-
-    fun isOutsideWritableRoots(path: String): Boolean {
-        val normalized = path.trimEnd('/').ifBlank { "/" }
-        return WRITABLE_ROOT_PREFIXES.none { prefix ->
-            normalized == prefix || normalized.startsWith("$prefix/")
-        }
-    }
-
     /** POSIX 单引号转义（上游 `shellQuote`）。 */
     fun shellQuote(raw: String): String = "'" + raw.replace("'", "'\"'\"'") + "'"
 
@@ -585,9 +545,6 @@ object WorkspaceTools {
     }
 
     // ---------------------------------------------------------------- 执行
-
-    /** 工具结果附带的图片：原始字节 + 文件名，由调用方（`ToolHandler`）落盘成文件。 */
-    class ToolImageBytes(val name: String, val bytes: ByteArray)
 
     sealed interface Outcome {
         data class Success(val json: String, val image: ToolImageBytes? = null) : Outcome

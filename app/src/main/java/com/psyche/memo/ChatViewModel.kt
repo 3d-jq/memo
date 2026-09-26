@@ -214,6 +214,21 @@ class ChatViewModel(
     private val _streaming = MutableStateFlow(false)
     val streaming: StateFlow<Boolean> = _streaming
 
+    /**
+     * 哪些**用户**长消息被手动展开了（本工程新增，见 `CollapsibleUserBubble`）。
+     *
+     * 状态收在这里而不是 `MessageRow` 本地 `remember` —— LazyColumn 把行滑出视口就销毁
+     * 组合，本地态会让消息自己弹回折叠态（思维链卡 §4.41 是同一个坑）。只影响本次进入
+     * 会话期间，不落库。
+     */
+    private val _expandedUserMessages = MutableStateFlow<Set<String>>(emptySet())
+    val expandedUserMessages: StateFlow<Set<String>> = _expandedUserMessages
+
+    fun toggleUserMessageExpanded(id: String) {
+        val current = _expandedUserMessages.value
+        _expandedUserMessages.value = if (id in current) current - id else current + id
+    }
+
     private var generationJob: Job? = null
 
     /** 在途翻译请求（messageId → Job），新请求顶掉旧的（TS _runs 语义）。 */
@@ -335,7 +350,7 @@ class ChatViewModel(
         translationJobs.values.forEach { it.cancel() }
         translationJobs.clear()
         _streaming.value = false
-        // 这里也取消生成 ⇒ 同样是「等待方消失」的一条路径：挂着审批/问询的表项要还回去。
+        // 这里也取消生成 ⇒ 同样是「等待方消失」的一条路径：挂着问询的表项要还回去。
         releaseInterruptions()
         _messages.value = emptyList()
         _versionInfo.value = emptyMap()
@@ -673,23 +688,22 @@ class ChatViewModel(
     }
 
     /**
-     * 释放本会话**正挂着**的审批与问询请求（chat_actions.dart
+     * 释放本会话**正挂着**的问询请求（chat_actions.dart
      * `_cancelStreamingByIdOnce` 1924-1941 的等价物）。
      *
-     * 这两张表是容器级的、按会话建键，而生成的等待方是本会话的协程：协程没了（用户
+     * 这张表是容器级的、按会话建键，而生成的等待方是本会话的协程：协程没了（用户
      * 停止、离开聊天页把 ViewModel 清掉、前台服务超时裸 `cancel()`）表项却还留着，
      * 于是那条会话的输入栏被一张永远没人应答的面板顶掉 —— 同会话后续所有工具都不
      * 执行，换新对话立刻正常（用户 2026-09-25「工作区工具传了参数，工具就全部问题」）。
      * 所以**每一条终止路径**都要调它，不只是「停止」按钮。
      */
     private fun releaseInterruptions() {
-        container.toolApprovalService.cancelForConversation(conversationId)
         container.askUserInteractionService.cancelForConversation(conversationId)
     }
 
     /**
      * 容器淘汰这个会话时调用（会话被删，或注册表把它挤出去）：取消作用域，并把
-     * 挂着没人等的审批/问询还回去（§5.59 那条不变式在这里同样成立）。
+     * 挂着没人等的问询还回去（§5.59 那条不变式在这里同样成立）。
      *
      * **离开聊天页不会走到这里** —— 页面销毁不再销毁会话，这正是本次改动的目的；
      * 生成中/流式中的对象由 `isBusy` 挡住，不会被误淘汰。
@@ -1446,7 +1460,7 @@ class ChatViewModel(
                 ?: com.psyche.memo.service.ChatBackgroundController.AndroidBackgroundChatMode.OFF,
             generationId = id,
             // 必须走 stop() 而不是裸 generationJob?.cancel()：超时这一路也要释放
-            // 本会话挂着审批/问询（见 [releaseInterruptions]），否则前台服务一超时
+            // 本会话挂着的问询（见 [releaseInterruptions]），否则前台服务一超时
             // （dataSync 类型系统只给几分钟），那条会话就被孤儿面板锁死。
             stopGeneration = { stop() },
         )
@@ -1910,7 +1924,7 @@ class ChatViewModel(
                 // 否则「N 秒后重试」会停在一个已经结束的消息上。
                 updateAssistantRetry(assistantId, null)
                 _streaming.value = false
-                // 协程要结束了：没人等的审批/问询必须还回去，否则这条会话被面板锁死。
+                // 协程要结束了：没人等的问询必须还回去，否则这条会话被面板锁死。
                 releaseInterruptions()
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
@@ -2114,7 +2128,6 @@ class ChatViewModel(
         // 采样参数/自定义请求层的助手侧来源（chat_actions.dart 用 ctx.assistant）。
         val assistant = container.currentAssistant()
         val toolHandler = ToolHandler(
-            approvalService = container.toolApprovalService,
             askUserService = container.askUserInteractionService,
             conversationId = conversationId,
             assistant = container.currentAssistant(),
@@ -2532,7 +2545,7 @@ class ChatViewModel(
             } finally {
                 updateAssistantRetry(messageId, null)
                 _streaming.value = false
-                // 同 [startGeneration] 的收尾：协程结束前释放本会话没人等的审批/问询。
+                // 同 [startGeneration] 的收尾：协程结束前释放本会话没人等的问询。
                 releaseInterruptions()
                 container.streamingConversationIds.value =
                     container.streamingConversationIds.value - conversationId
@@ -2626,6 +2639,12 @@ class ChatViewModel(
                 assistant = assistant,
             ),
         )
+        // Agent 浏览器（app 级：**一整族 13 颗工具**，只看全局开关，与助手勾选无关；默认开是
+        // 用户 2026-09-25 的决定，拆成独立工具是 2026-09-26 的 spec §12.1。
+        // 读法唯一入口 = DisplayPrefs.browserEnabled，与 ToolHandler 复查/设置页同一支）。
+        if (com.psyche.memo.ui.DisplayPrefs.browserEnabled(container)) {
+            out.addAll(com.psyche.memo.provider.browser.BrowserTools.definitions())
+        }
         // MCP 工具（mcp_tool_service）：助手绑定且已连接的服务器，仅启用的工具；
         // 与内置工具同名的条目按原版保留名规则剔除。
         val reserved = com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.all.toSet() + setOf(
@@ -2633,7 +2652,8 @@ class ChatViewModel(
         ) + com.psyche.memo.provider.MemoryTools.ALL_TOOL_NAMES +
             com.psyche.memo.provider.SkillTools.ALL_TOOL_NAMES +
             com.psyche.memo.provider.workspace.WorkspaceTools.ALL_TOOL_NAMES +
-            com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES
+            com.psyche.memo.provider.generation.GenerationTools.ALL_TOOL_NAMES +
+            com.psyche.memo.provider.browser.BrowserTools.ALL_TOOL_NAMES
         for (serverId in assistant.mcpServerIds) {
             if (!container.mcpConnections.isConnected(serverId)) continue
             val config = container.mcpRepository.server(serverId) ?: continue

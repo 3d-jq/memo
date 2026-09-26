@@ -159,6 +159,14 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         )
     }
 
+    /**
+     * Agent 浏览器：按会话持有的离屏 WebView。**同时只一个活动实例**，
+     * 因为 cookie / WebStorage 是 app 全局的（见 BrowserSessionStore 注释）。
+     */
+    val browserSessions: com.psyche.memo.provider.browser.BrowserSessionStore by lazy {
+        com.psyche.memo.provider.browser.BrowserSessionStore(appContext)
+    }
+
     /** 长期记忆数据层（memory_entry_rows 表 + payload 投影，见 MemoryEntryRowDao）。 */
     val memoryProviderV2: com.psyche.memo.ui.MemoryProviderV2 by lazy {
         com.psyche.memo.ui.MemoryProviderV2(database.writableDatabase)
@@ -463,10 +471,7 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         "$versionName+$versionCode"
     }.getOrDefault("0+0")
 
-    /** tool_approval_service.dart / ask_user_interaction_service.dart 服务对。 */
-    val toolApprovalService: com.psyche.memo.ui.chat.ToolApprovalService by lazy {
-        com.psyche.memo.ui.chat.ToolApprovalService()
-    }
+    /** ask_user_interaction_service.dart（同族的 tool_approval_service 已整块拆除）。 */
     val askUserInteractionService: com.psyche.memo.ui.chat.AskUserInteractionService by lazy {
         com.psyche.memo.ui.chat.AskUserInteractionService()
     }

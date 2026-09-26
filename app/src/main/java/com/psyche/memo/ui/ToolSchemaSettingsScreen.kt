@@ -314,6 +314,7 @@ fun ToolSchemaSettingsScreen(
                                 BuiltInToolGroup.LOCAL -> UiR.string.tool_schema_settings_group_local
                                 BuiltInToolGroup.SKILL -> UiR.string.tool_schema_settings_group_skill
                                 BuiltInToolGroup.WORKSPACE -> UiR.string.tool_schema_settings_group_workspace
+                                BuiltInToolGroup.BROWSER -> UiR.string.tool_schema_settings_group_browser
                                 BuiltInToolGroup.GENERATION -> UiR.string.tool_schema_settings_group_generation
                             },
                         ),

@@ -31,54 +31,18 @@ class WorkspaceToolsTest {
         }
     }
 
-    // ---- 审批 ----
-
-    @Test
-    fun onlyShellNeedsApprovalByDefault() {
-        assertTrue(WorkspaceTools.DEFAULT_APPROVALS.getValue(WorkspaceTools.SHELL))
-        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.READ_FILE, emptyMap()))
-        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.WRITE_FILE, emptyMap()))
-        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.EDIT_FILE, emptyMap()))
-        assertTrue(WorkspaceTools.resolveApproval(WorkspaceTools.SHELL, emptyMap()))
-        // 本工程新增的三个只读工具也必须免审批 —— 否则「看一眼目录」都要点一次确认。
-        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.LIST, emptyMap()))
-        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.GLOB, emptyMap()))
-        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.GREP, emptyMap()))
-        // 未知工具默认不放行。
-        assertFalse(WorkspaceTools.resolveApproval("nope", emptyMap()))
-    }
-
     /**
-     * 每一处「工具名清单」都要跟着 [WorkspaceTools.ALL_TOOL_NAMES] 走：审批表、定义表、
-     * 提示词块、详情页审批行。漏一个的后果分别是「审批缺失」和「模型根本不知道有这个工具」
-     * —— 位置工具就栽在后者（用户 2026-09-21「为什么大模型说没有呀」）。
+     * 每一处「工具名清单」都要跟着 [WorkspaceTools.ALL_TOOL_NAMES] 走：定义表、提示词块。
+     * 漏一个的后果是「模型根本不知道有这个工具」—— 位置工具就栽过（用户 2026-09-21
+     * 「为什么大模型说没有呀」）。审批表那一处随审批体系一起删除（2026-09-25）。
      */
     @Test
-    fun everyToolNameIsCoveredByApprovalsAndDefinitions() {
-        assertEquals(WorkspaceTools.ALL_TOOL_NAMES, WorkspaceTools.DEFAULT_APPROVALS.keys)
+    fun everyToolNameIsCoveredByDefinitions() {
         val definitionNames = WorkspaceTools.catalogDefinitions().map { it.name }
         assertEquals(WorkspaceTools.ALL_TOOL_NAMES.size, definitionNames.size)
         assertTrue(definitionNames.containsAll(WorkspaceTools.ALL_TOOL_NAMES))
         WorkspaceTools.ALL_TOOL_NAMES.forEach {
             assertTrue("$it 缺少参数 schema", WorkspaceTools.catalogDefinitions().any { spec -> spec.name == it })
-        }
-    }
-
-    @Test
-    fun workspaceOverridesBeatTheDefaults() {
-        assertFalse(WorkspaceTools.resolveApproval(WorkspaceTools.SHELL, mapOf(WorkspaceTools.SHELL to false)))
-        assertTrue(WorkspaceTools.resolveApproval(WorkspaceTools.READ_FILE, mapOf(WorkspaceTools.READ_FILE to true)))
-    }
-
-    // ---- 路径边界 ----
-
-    @Test
-    fun onlyWorkspaceAndTmpAreWritableRoots() {
-        listOf("/workspace", "/workspace/a/b.txt", "/tmp", "/tmp/x", "/workspace/").forEach {
-            assertFalse("$it 应当在可写安全区内", WorkspaceTools.isOutsideWritableRoots(it))
-        }
-        listOf("/", "/etc/passwd", "/usr", "/workspaceX", "/tmpfoo").forEach {
-            assertTrue("$it 应当在可写安全区外", WorkspaceTools.isOutsideWritableRoots(it))
         }
     }
 
@@ -98,30 +62,6 @@ class WorkspaceToolsTest {
         assertThrows(IllegalArgumentException::class.java) {
             WorkspaceTools.absolutePath(args("path" to "/a\u0000b"), "path")
         }
-    }
-
-    /**
-     * 路径判定的三态：
-     * - 能解析出绝对路径 → 按前缀判内外；
-     * - 解析不出（缺 `path`、相对路径、带 `\0`）→ `null`，调用方**不弹审批**，直接让
-     *   工具报参数错误（上游这里返回 true ⇒ 先弹一次审批、点完只收到「path is required」）。
-     */
-    @Test
-    fun pathOutsideWritableRootsIsTriState() {
-        assertNull(WorkspaceTools.pathOutsideWritableRoots(buildJsonObject { }, "path"))
-        assertNull(WorkspaceTools.pathOutsideWritableRoots(args("path" to "relative"), "path"))
-        assertEquals(true, WorkspaceTools.pathOutsideWritableRoots(args("path" to "/etc/x"), "path"))
-        assertEquals(false, WorkspaceTools.pathOutsideWritableRoots(args("path" to "/workspace/x"), "path"))
-    }
-
-    /** 闸门判据只认 `== true`；`null`（参数不可用）不进审批。 */
-    @Test
-    fun unusablePathArgumentsDoNotAskForApproval() {
-        fun gate(args: JsonObject) = WorkspaceTools.pathOutsideWritableRoots(args, "path") == true
-        assertFalse(gate(buildJsonObject { }))
-        assertFalse(gate(args("path" to "relative/x")))
-        assertTrue(gate(args("path" to "/etc/passwd")))
-        assertFalse(gate(args("path" to "/workspace/a.txt")))
     }
 
     // ---- 定义 ----

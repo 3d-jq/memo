@@ -40,10 +40,19 @@ object ToolRunner {
             com.psyche.memo.provider.LocationTool.FIX_TIMEOUT_MS + 15_000L,
     )
 
+    /** 工具名 → 外层 deadline。 */
+    fun timeoutFor(tool: String): Long = when {
+        // Agent 浏览器是**一整族**（spec §12.1 的 13 颗）：共用一个常量，不在上面写 13 行副本。
+        // 一颗动作最坏是 navigate 25 s + 结算 250 ms，外面这层必须更宽，
+        // 否则就是「外面先超时、里面还在跑」的双重超时（Mermaid 同款理由）。
+        tool in com.psyche.memo.provider.browser.BrowserTools.ALL_TOOL_NAMES ->
+            com.psyche.memo.provider.browser.BrowserTools.TIMEOUT_MS
+
+        else -> TIMEOUT_OVERRIDES[tool] ?: DEFAULT_TIMEOUT_MS
+    }
+
     /** 工具结果的字符上限（约 6k tokens 量级）：超了截断并附 `truncated` 说明。 */
     const val MAX_RESULT_CHARS = 24_000
-
-    fun timeoutFor(tool: String): Long = TIMEOUT_OVERRIDES[tool] ?: DEFAULT_TIMEOUT_MS
 
     /**
      * 跑一次工具执行。
