@@ -51,6 +51,7 @@ import com.composables.icons.lucide.Lucide
 import com.psyche.memo.ui.R
 import com.psyche.memo.ui.theme.alphaBlend
 import com.psyche.memo.ui.theme.LocalSemanticColors
+import com.psyche.memo.ui.theme.MemoRadius
 import org.commonmark.node.Code
 import org.commonmark.node.Text
 
@@ -210,7 +211,7 @@ internal fun CodeBlockView(
     val bodyBg = cs.surfaceContainer.copy(alpha = CODE_BLOCK_FILL_ALPHA)
     val headerBg = cs.surfaceContainerHighest.copy(alpha = CODE_BLOCK_FILL_ALPHA)
     val borderColor = codeBlockBorderColor(cs, LocalSemanticColors.current.isDark)
-    val corner = 16.dp
+    val corner = MemoRadius.INNER_DP.dp
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(
             modifier = Modifier

@@ -2678,3 +2678,25 @@ schema 实测 1392 tokens / 5565 字符（新增 `submit` 的钱从别的措辞�
 `MAX_TABS` 上界、已关会话挂不上视图）、接管态两支纯逻辑（`BrowserTakeoverTest`）、遮罩的成对性与标签条
 接线（`BrowserOverlayTest`）。同一会话的动作由 `actionLock` 串行（spec §8）。
 
+
+## 5.70 浏览器界面与残留圆角按 Apple 参考系收口（2026-09-26，用户「优化一下浏览器这个界面…没有用我们这个 Apple Copy 设置规范」+「顺便看看项目哪里没有遵守」）
+
+全项目按 `MemoRadius`（CARD 20 / INNER 16 / SMALL 10 / PILL 999）重扫一遍 `RoundedCornerShape`，真违觇四处：
+
+- **`BrowserOverlay.JsDialogLayer`**：此前是 M3 `Card` 默认形状（12dp）+ 裸 `cs.surface` 底 + 默认排版 +
+  无着色按钮。改成 **MemoAlertDialog 基线的非 Dialog 版**（必须是页面上的一层，MemoAlertDialog 本体是
+  Dialog、window token 拿不到，§5.31）：CARD 圆角 + `overlaySurfaceColor()` 底 + 14sp 正文 + PROMPT
+  输入框 INNER 档（fill = surfaceCardFill、focus ring primary@0.4，与地址栏同源）+ 取消
+  onSurface@74% / 确认 primary，14sp。
+- **`BrowserOverlay.AddressBar`**：SMALL(10) → **CARD(20)**。SMALL 是 `IosFormField` inline（行内紧凑
+  字段）专用档；地址栏是独立整行输入框，照 Pinguo「全局唯一 radius 19.2px」归一级容器档。
+- **`MarkdownTable.TABLE_CARD_RADIUS`** 12dp → INNER(16)，与代码块（16）同档 —— 同为消息内容 chrome。
+- **`CodeBlock` corner / `ToolCallCard.TextBlockChunk`**：16dp / 10dp 本来就在档上，纯 token 化
+  （`MemoRadius.INNER_DP` / `MemoRadius.SMALL_DP`），零视觉变化。
+
+**查过合规、有意不动的**：聊天气泡家族（`ChatBubbleSurface`/思维链卡/预设对话气泡/气泡样式预览，§5.26
+明记的例外）、`IosSwitch`/滑杆/进度条的半高胶囊（= Pill 语义）、图表 3dp 微件与 2dp 发丝旋钮（微细节，
+非容器）、`50%` 圆（= CircleShape 的写法）、`ChatStyleSpec` 停止钮 SVG 半径（上游 1:1）。浏览器标签条
+已是 PILL 胶囊 + 主题取色，无需改。
+
+护栏：无新测试（纯样式）；`:core:ui` + `:app` 编译与全量单测绿。

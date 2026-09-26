@@ -1125,10 +1125,10 @@ private fun TextBlockChunk(first: Boolean, last: Boolean, content: @Composable (
     val semantic = LocalSemanticColors.current
     val line = cs.outlineVariant.copy(alpha = 0.2f)
     val shape: Shape = RoundedCornerShape(
-        topStart = if (first) 10.dp else 0.dp,
-        topEnd = if (first) 10.dp else 0.dp,
-        bottomStart = if (last) 10.dp else 0.dp,
-        bottomEnd = if (last) 10.dp else 0.dp,
+        topStart = if (first) MemoRadius.SMALL_DP.dp else 0.dp,
+        topEnd = if (first) MemoRadius.SMALL_DP.dp else 0.dp,
+        bottomStart = if (last) MemoRadius.SMALL_DP.dp else 0.dp,
+        bottomEnd = if (last) MemoRadius.SMALL_DP.dp else 0.dp,
     )
     Box(
         modifier = Modifier

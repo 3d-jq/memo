@@ -70,6 +70,7 @@ import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.ImageDown
 import com.psyche.memo.ui.R
 import com.psyche.memo.ui.theme.alphaBlend
+import com.psyche.memo.ui.theme.MemoRadius
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -85,7 +86,7 @@ private const val TABLE_BODY_SP = 13.5f
 private const val TABLE_LINE_HEIGHT_MULT = 1.42f
 internal val TABLE_CELL_PADDING_H = 10.dp
 internal val TABLE_CELL_PADDING_V = 9.dp
-private val TABLE_CARD_RADIUS = 12.dp
+private val TABLE_CARD_RADIUS = MemoRadius.INNER_DP.dp
 private val TABLE_BORDER_WIDTH = 0.5.dp
 private val TABLE_INSET_VERTICAL = 6.dp
 private const val TABLE_HEADER_ALPHA_DARK = 0.15

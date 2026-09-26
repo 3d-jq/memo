@@ -45,10 +45,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Plus
@@ -59,6 +61,7 @@ import com.psyche.memo.provider.browser.BrowserTabInfo
 import com.psyche.memo.provider.browser.addressInputToUrl
 import com.psyche.memo.provider.browser.isAllowedUrl
 import com.psyche.memo.ui.MemoTopBar
+import com.psyche.memo.ui.overlaySurfaceColor
 import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.OverlayBackHandler
@@ -321,7 +324,8 @@ private fun AddressBar(
             },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
+            // 独立整行输入框走一级容器档（IosFormField 非 inline 同款）；SMALL 是行内紧凑字段专用。
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedContainerColor = semantic.surfaceCardFill,
                 unfocusedContainerColor = semantic.surfaceCardFill,
@@ -373,6 +377,7 @@ private fun JsDialogLayer(
     onDismiss: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
     var text by remember(message) { mutableStateOf(defaultValue) }
     Box(
         modifier = Modifier
@@ -381,18 +386,33 @@ private fun JsDialogLayer(
             .clickable(onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
+        // 配色与字号照 MemoAlertDialog 的基线（CARD 圆角 + overlaySurface 底 + 14sp 正文 +
+        // 取消 onSurface@74% / 确认 primary），但**不能**用 MemoAlertDialog 本体 —— 那是
+        // Dialog（window token 拿不到，§5.31），这里必须是页面之上的一层。
         Card(
-            colors = CardDefaults.cardColors(containerColor = cs.surface),
+            shape = RoundedCornerShape(MemoRadius.CARD_DP.dp),
+            colors = CardDefaults.cardColors(containerColor = cs.overlaySurfaceColor()),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(text = message, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = message,
+                    style = TextStyle(fontSize = 14.sp, color = cs.onSurface),
+                )
                 if (needsText) {
                     OutlinedTextField(
                         value = text,
                         onValueChange = { text = it },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                         singleLine = true,
+                        // 容器内嵌套块 = INNER 档；配色与地址栏同源（calm fill + focus ring）。
+                        shape = RoundedCornerShape(MemoRadius.INNER_DP.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = semantic.surfaceCardFill,
+                            unfocusedContainerColor = semantic.surfaceCardFill,
+                            focusedBorderColor = cs.primary.copy(alpha = 0.4f),
+                            unfocusedBorderColor = Color.Transparent,
+                        ),
                     )
                 }
                 Row(
@@ -400,10 +420,16 @@ private fun JsDialogLayer(
                     horizontalArrangement = Arrangement.End,
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text(stringResource(UiR.string.browser_js_cancel))
+                        Text(
+                            text = stringResource(UiR.string.browser_js_cancel),
+                            style = TextStyle(fontSize = 14.sp, color = cs.onSurface.copy(alpha = 0.74f)),
+                        )
                     }
                     TextButton(onClick = { onConfirm(if (needsText) text else null) }) {
-                        Text(stringResource(UiR.string.browser_js_confirm))
+                        Text(
+                            text = stringResource(UiR.string.browser_js_confirm),
+                            style = TextStyle(fontSize = 14.sp, color = cs.primary),
+                        )
                     }
                 }
             }
