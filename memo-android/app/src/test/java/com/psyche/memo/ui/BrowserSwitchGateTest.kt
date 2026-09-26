@@ -14,7 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 浏览器开关的默认开：**`agent_browser_enabled_v1` 没写过键就是开**
+ * 「设置 → 模型与服务 → 浏览器功能」那颗开关的默认开：**`agent_browser_enabled_v1` 没写过键就是开**
  * （用户 2026-09-25「改成默认开着的」）。
  *
  * 钉的是新入口自身，不是 `decodeBool` —— 旧形状四条断言全打在纯函数上、`default` 由测试
@@ -30,7 +30,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
-class AgentCapabilityGateTest {
+class BrowserSwitchGateTest {
 
     @get:Rule
     val mainDispatcher = MainDispatcherRule()

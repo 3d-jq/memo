@@ -2464,7 +2464,7 @@ Agent 浏览器与手机控制的前置：那两个功能的工具面直接沿�
 **PolyForm Noncommercial 1.0** 许可 ⇒ **只借架构、一行代码都不搬**。
 spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`docs/superpowers/plans/2026-09-25-agent-browser.md`。
 落地：`provider/browser/{BrowserSession,BrowserTab,BrowserSessionStore,BrowserGateway,BrowserPageSnapshot,BrowserScripts,BrowserTakeover,BrowserTools}.kt`
-+ `ui/chat/BrowserOverlay.kt` + 设置页 `ui/AgentCapabilitySettingsScreen.kt` + `ui/BottomToolsSheet.kt` 那一行入口。
++ `ui/chat/BrowserOverlay.kt` + 设置页 `ui/BrowserFeatureSettingsScreen.kt`（「设置 → 模型与服务」里那一行「浏览器功能」） + `ui/BottomToolsSheet.kt` 那一行入口。
 **v2 的两处形状变更（用户 2026-09-26 点名，别按 v1 的字面读）**：① 单工具 `browser_use` + `action` 枚举**整块删除**、
 拆成 14 颗独立工具（`browser_open/read/find/click/type/select/scroll/screenshot/back/forward/wait/page_info/reload/tabs`），
 每颗自己的图标与标题（`ToolCallCard.browserIconFor` / `BROWSER_TITLES`，三份 strings.xml 各 14 条）——理由是本仓卡片体系
@@ -2497,7 +2497,13 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 2026-09-25 复核 spec 时拍板「改成默认开着的」）。读法唯一入口 `ui/DisplayPrefs.kt` 的
 `browserEnabled(container)`，三处消费同一支：`ChatViewModel.offeredTools()`（**递不递**）、
 `ToolHandler` 浏览器分支建会话**之前**的 `BrowserTools.rejectIfDisabled(...)`（**跑不跑**）、
-设置页那行开关。**递与执行两处都查**是必需的：`offeredTools()` 只是不再递，而模型照旧发它是一条
+设置页那行开关。**位置与名字同日改过一次**（用户「你怎么放到偏好设置里面了呀，名字也不对应，应该叫
+浏览器功能呀，应该在设置里的模型与服务里呀」）：现在落在**「设置 → 模型与服务」**那一组，行名与页名都叫
+**「浏览器功能」**——旧页名「Agent 能力」、显示设置里那个入口、`agent_capabilities_*` 五个字符串键、
+`onOpenAgentCapabilities` 形参、路由 `agent_capabilities`、测试类 `AgentCapabilityGateTest` 全部跟着改
+（→ `browser_feature_title` 等 / `onOpenBrowserFeature` / `browser_feature` / `BrowserSwitchGateTest`），
+**没有留兼容**。偏好键 `agent_browser_enabled_v1` **不动** —— 那是数据，跟着 UI 改名会把用户已写的值作废。
+**递与执行两处都查**是必需的：`offeredTools()` 只是不再递，而模型照旧发它是一条
 现实路径——最合理的来源就是被污染的网页正文在指挥它；光靠不递，用户明确关掉开关之后这颗工具照样
 能拿到一个真 WebView、用户的 cookie jar 和出网能力。关开关顺带 `browserSessions.closeAll()`。
 剩下的把关＝每一次动作都进对话时间线的工具卡（可回看）+ 生成可停 + 提示词层的行为边界
@@ -2584,9 +2590,25 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
   是全串匹配，把 `http://example.com` 改写成 `https://http://example.com`）+ 弹窗那一层（**同屏 scrim +
   卡片，不是 `Dialog`**，理由同上面那段旧注释）。标签清单与两笔请求都是 `StateFlow`，写入点全在主线程。
 - 入口**不在工具卡里**（用户 2026-09-26，spec §12.5）：浏览器页面是**整会话共享**的，不属于某一条
-  消息，工具卡还会滚走。统一重做输入区之前（跟踪在 task #130），「查看页面」临时落在输入区的
-  **「+」面板**——`ui/BottomToolsSheet.kt` 那一行，判据 `BrowserSessionStore.hasLiveSession(conversationId)`
-  （纯内存读，与遮罩取实例用的 `peek` 同一条式子，尸体不算活着；钉在 `BrowserSessionStoreTest`）。
+  消息，工具卡还会滚走。统一重做输入区之前（跟踪在 task #130），入口落在输入区的**「+」面板**。
+  **同日二次改口**（用户「为什么不能常驻啊？大模型可以使用这个浏览器，用户也可以使用呀」）：
+  判据从 `hasLiveSession(conversationId)` 改成**「全局开关开着」⇒ 常驻**，`hasLiveSession` 从此只决定
+  文案 —— 没实例写「打开浏览器」（点下去在**容器 `appScope`** 上 `sessionFor(...)` 当场建一枚，
+  空白标签靠地址栏自己输网址），有实例写「查看页面」。建实例这件事不能派发到页面作用域：
+  `sessionFor` 第一步就挂起（切 Main，并可能先 close 掉别的会话那枚），面板一关就掐在半路。
+  点击时**再读一次开关**（面板打开时那次读是快照，用户可能中途在设置页关掉过 —— 不许替他建
+  一个他明确关掉的 WebView）。`BrowserSessionStoreTest` 里那条判据测试的措辞跟着改了语义：
+  它现在钉的是「判据与 `peek` 同一条式子」（写着查看页面就得真拿得到页面），不再是「行在不在」。
+- 「设置 → 工具描述」里加了一组**「内置浏览器」**（14 条，用户 2026-09-26「在工具描述里面加一下吧」）：
+  那一页才是本仓**唯一**摊开工具名与描述、并允许用户改描述的地方（`tool_schema_overrides_v1` 按名字套回
+  请求，见 `ChatViewModel.offeredTools()` 末尾的 `ToolSchemaOverrides.apply`）。所以条目必须取自
+  `BrowserTools.catalogDefinitions()` —— **就是真正递给模型的那一份**，抄第二份会漂移到「用户改的是一套、
+  模型拿到的是另一套」。**先在「浏览器功能」页里做过一节只读清单，随后整块删掉**（同一事实两个所有者，
+  而且那一页既看不了也改不了描述）—— 别再把它加回去。图标自动对上是因为 `toolSchemaIconFor` 早已是
+  `toolIconFor` 的别名（就是那次「工具描述里面的图标怎么没有变呀」留下的收口）。钉在
+  `ToolSchemaCatalogTest.entries_browserGroup_isTheOfferedListItselfNotACopy`（名单逐颗相等 +
+  `describeParams` 摊得出 `url`/`new_tab`）与 `entries_browserToolsStayOutOfTheAssistantGatedLocalNames`
+  （进目录 ≠ 进助手勾选表）。
   原先那两处渲染（时间线步 `ChainOfThoughtToolStep` 的第三块正文 + 独立卡 `ToolCallCard` 末尾）、
   判据 `ToolUiPart.canTakeOverBrowser` 与整条 `onOpenBrowser` 透传链（`ChatContent`→`MessageRow`→
   `ChainOfThoughtCard`→卡片）**已整块删净，不留死参数**；时间线步的正文判据因此回到两块

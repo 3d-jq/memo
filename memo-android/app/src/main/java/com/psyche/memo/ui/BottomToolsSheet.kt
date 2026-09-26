@@ -71,12 +71,19 @@ fun BottomToolsSheet(
     /** 工作区入口 —— 开工作区选择面板（照 RikkaHub 的 `WorkspacePickerListItem`）。 */
     onOpenWorkspace: () -> Unit = {},
     /**
-     * 「查看页面」（Agent 浏览器接管遮罩）入口 —— spec §12.5：入口**不在工具卡里**
-     * （浏览器页面是整会话共享的，不属于某一条消息，工具卡还会滚走），统一重做输入区之前
-     * 先临时落在这里。判据由调用方给（`container.browserSessions.hasLiveSession(...)`，
-     * 纯内存读），**本会话没有活动浏览器实例时这一行整行不出现**。
+     * 「打开浏览器 / 查看页面」入口 —— 用户 2026-09-26「大模型可以使用这个浏览器，用户也可以使用呀，
+     * 点击查看的时候也可以使用」：**入口常驻**，判据只剩「设置里那颗全局开关开着」。
+     *
+     * 之前这一行只在**本会话已有活动浏览器实例**时才出现，等于把浏览器做成"模型先动手、用户才能看"
+     * 的附属品 —— 用户自己想打开一个页面看看，界面上根本没有门。现在两种状态各有各的名字：
+     * [browserSessionLive] 为假 ⇒ 写「打开浏览器」（点了当场建一枚会话，空白标签 + 地址栏自己输网址）；
+     * 为真 ⇒ 写「查看页面」（回到模型或用户正在操作的那一枚）。
+     *
+     * 入口仍**不在工具卡里**（spec §12.5：浏览器页面是整会话共享的，不属于某一条消息，工具卡还会滚走），
+     * 统一重做输入区之前先落在这里（跟踪在 task #130）。
      */
-    browserPageAvailable: Boolean = false,
+    browserEntryAvailable: Boolean = false,
+    browserSessionLive: Boolean = false,
     onOpenBrowserPage: () -> Unit = {},
     /** 生成图片 / 生成视频入口（自研功能）—— 开生成面板，结果直接进当前对话。 */
     onOpenImageGeneration: () -> Unit = {},
@@ -269,9 +276,9 @@ fun BottomToolsSheet(
                 )
                 Icon(Lucide.ChevronRight, contentDescription = null, tint = cs.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
             }
-            // 「查看页面」行（spec §12.5 的临时落位）：只在**本会话有活动浏览器实例**时出现，
-            // 点了先关面板再开遮罩 —— 与 MCP / 工作区那两行同一个写法。
-            if (browserPageAvailable) {
+            // 「打开浏览器 / 查看页面」行：全局开关开着就常驻（判据由调用方给，组合期只读偏好缓存）。
+            // 点了先关面板再交给调用方 —— 与 MCP / 工作区那两行同一个写法。
+            if (browserEntryAvailable) {
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier
@@ -288,7 +295,10 @@ fun BottomToolsSheet(
                     Icon(Lucide.Globe, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        text = stringResource(R.string.browser_view_page),
+                        text = stringResource(
+                            if (browserSessionLive) R.string.browser_view_page
+                            else R.string.browser_open_browser,
+                        ),
                         style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
                         modifier = Modifier.weight(1f),
                     )

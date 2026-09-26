@@ -284,6 +284,16 @@ object BrowserTools {
     /** 递给模型的整族定义（`ChatViewModel.offeredTools()` 用；顺序 = [ORDERED]）。 */
     fun definitions(): List<LlmToolSpec> = ORDERED.map { DEFINITIONS.getValue(it) }
 
+    /**
+     * 「设置 → 工具描述」那页的名单：**就是 [definitions] 同一份**，不是第二份抄写。
+     *
+     * 那一页把每一颗的默认描述摊开给你改（改出来的 `tool_schema_overrides_v1` 在
+     * `ChatViewModel.offeredTools()` 末尾由 `ToolSchemaOverrides.apply` 套回请求），所以它显示的
+     * 默认文字**必须**等于真正递给模型的那句 —— 另抄一份就会变成「你改的和你看到的都不是模型
+     * 拿到的那句」。用户 2026-09-26「在工具描述里面加一下吧」。
+     */
+    fun catalogDefinitions(): List<LlmToolSpec> = definitions()
+
     // ------------------------------------------------------------------ 执行
 
     private const val READ_DEFAULT_CHARS = 6_000

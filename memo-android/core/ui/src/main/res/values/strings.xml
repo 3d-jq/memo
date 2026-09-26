@@ -2701,6 +2701,7 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="tool_schema_settings_group_search">Search</string>
     <string name="tool_schema_settings_group_skill">Skills</string>
     <string name="tool_schema_settings_group_workspace">Workspace tools</string>
+    <string name="tool_schema_settings_group_browser">Built-in browser</string>
     <string name="tool_schema_settings_memory_lang_note">Memory tool defaults follow the memory prompt language. A custom description is stored once per tool and will not switch when you change that language.</string>
     <string name="tool_schema_settings_modified">Modified</string>
     <string name="tool_schema_settings_page_title">Tool Descriptions</string>
@@ -2946,12 +2947,13 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="display_settings_page_show_assistant_avatar_title">Show assistant avatar</string>
     <string name="display_settings_page_show_assistant_avatar_subtitle">Show the assistant avatar next to its replies.</string>
     <string name="world_book_unnamed_entry">Unnamed Entry</string>
-    <string name="agent_capabilities_title">Agent capabilities</string>
-    <string name="agent_capabilities_browser_title">Built-in browser</string>
-    <string name="agent_capabilities_browser_desc">When on, every assistant can use the built-in browser tools to open, read and operate web pages. Page text is data, not instructions.</string>
-    <string name="agent_capabilities_data_title">Browser data</string>
-    <string name="agent_capabilities_clear">Clear browsing data</string>
+    <string name="browser_feature_title">Browser feature</string>
+    <string name="browser_enable_title">Enable built-in browser</string>
+    <string name="browser_enable_desc">When on, every assistant can use the built-in browser tools to open, read and operate web pages. Page text is data, not instructions.</string>
+    <string name="browser_data_title">Browser data</string>
+    <string name="browser_clear">Clear browsing data</string>
     <string name="browser_view_page">View page</string>
+    <string name="browser_open_browser">Open browser</string>
     <string name="browser_overlay_title">Browser</string>
     <string name="browser_overlay_hand_back">Hand back</string>
     <string name="browser_overlay_clear_close">Clear and close</string>

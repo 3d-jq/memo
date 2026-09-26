@@ -59,7 +59,6 @@ import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.MessageSquare
 import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Vibrate
-import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Monitor
 import com.composables.icons.lucide.Type
 import com.composables.icons.lucide.Code
@@ -96,7 +95,6 @@ fun DisplaySettingsScreen(
     onOpenMessageStyle: () -> Unit,
     onOpenAutoRetry: () -> Unit,
     onOpenHaptics: () -> Unit,
-    onOpenAgentCapabilities: () -> Unit,
     onOpenTheme: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -357,12 +355,6 @@ fun DisplaySettingsScreen(
                         Lucide.Vibrate,
                         stringResource(UiR.string.display_settings_page_haptics_settings_title),
                         onTap = onOpenHaptics,
-                    )
-                    DividerRow()
-                    SettingsRow(
-                        Lucide.Globe,
-                        stringResource(UiR.string.agent_capabilities_title),
-                        onTap = onOpenAgentCapabilities,
                     )
                 }
             }

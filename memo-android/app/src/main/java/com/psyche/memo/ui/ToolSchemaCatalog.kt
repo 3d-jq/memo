@@ -68,7 +68,7 @@ data class ToolParamDescriptor(
     val defaultDescription: String?,
 )
 
-enum class BuiltInToolGroup { SEARCH, MEMORY, LOCAL, SKILL, WORKSPACE, GENERATION }
+enum class BuiltInToolGroup { SEARCH, MEMORY, LOCAL, SKILL, WORKSPACE, BROWSER, GENERATION }
 
 /** built_in_tool_catalog.dart BuiltInToolCatalogEntry (schema as JSON). */
 data class BuiltInToolCatalogEntry(
@@ -153,6 +153,14 @@ object BuiltInToolCatalog {
         }
         for (spec in WorkspaceTools.catalogDefinitions()) {
             out.add(BuiltInToolCatalogEntry(spec.name, definitionOf(spec), BuiltInToolGroup.WORKSPACE))
+        }
+        // Agent 浏览器（app 级，14 颗）：用户 2026-09-26「在工具描述里面加一下吧」——
+        // 对话里的卡片有中文标题与图标，这一页却说不出模型手上到底有哪几颗、叫什么名。
+        // 名单取自 `BrowserTools.catalogDefinitions()`（= 真正递给模型的那份），不在这里抄第二份。
+        // ⚠️ 它们**不进** `LocalToolNames.all`：那是「助手勾了才执行」的双闸，浏览器是设备能力
+        //（`ToolRulesTest.the app level browser tools stay out of the assistant gated local tool list`）。
+        for (spec in com.psyche.memo.provider.browser.BrowserTools.catalogDefinitions()) {
+            out.add(BuiltInToolCatalogEntry(spec.name, definitionOf(spec), BuiltInToolGroup.BROWSER))
         }
         // 生成工具（自研功能）：图片 / 视频各一条，描述可在「工具描述」页改。
         for (spec in com.psyche.memo.provider.generation.GenerationTools.catalogDefinitions()) {

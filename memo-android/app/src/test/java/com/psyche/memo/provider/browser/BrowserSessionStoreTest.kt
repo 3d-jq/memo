@@ -132,22 +132,23 @@ class BrowserSessionStoreTest {
     }
 
     /**
-     * 「+」面板那行「查看页面」的判据（spec §12.5，入口从工具卡搬到这里）。
+     * `hasLiveSession` 这条判据本身（spec §12.5；2026-09-26 之后它**不再决定「+」面板那行在不在**，
+     * 只决定那一行写「查看页面」还是「打开浏览器」—— 入口常驻，判据只剩全局开关，见
+     * `ChatContent` 的 `browserEntryAvailable`）。
      *
-     * 三条都要钉：没实例 ⇒ 行不出现；有活实例 ⇒ 出现；**已关的尸体 ⇒ 不出现**。最后一条是
-     * 这行的全部难度所在 —— 判据必须与遮罩取实例用**同一条式子**（[BrowserSessionStore.peek]），
-     * 直接读 `holder` 会让「行还在、点了没页面」成为真路径（遮罩那边 `peek` 为 null 就把旗标
-     * 落回去，用户看到的是「这一行点了没反应」）。
+     * 三条都要钉：没实例 ⇒ false；有活实例 ⇒ true；**已关的尸体 ⇒ false**。最后一条是它的全部难度：
+     * 判据必须与遮罩取实例用**同一条式子**（[BrowserSessionStore.peek]），直接读 `holder` 会让
+     * 「写着查看页面、点开却没页面」成为真路径（那一行点下去要挂的就是 `peek` 拿到的那一枚）。
      *
-     * 另一条边界：同一会话内换会话（holder 只留一枚）不许让别的会话也显示这一行。
+     * 另一条边界：同一 holder 里换会话（只留一枚）不许让别的会话也报 true。
      */
     @Test
     fun theViewPageEntryAppearsOnlyForALiveSessionOfThisConversation() = runBlocking {
         val s = store()
-        assertFalse("没有实例 ⇒ 那一行不出现", s.hasLiveSession("c1"))
+        assertFalse("没有实例 ⇒ 那一行该写「打开浏览器」", s.hasLiveSession("c1"))
 
         val session = s.sessionFor("c1")
-        assertTrue("建出实例 ⇒ 那一行出现", s.hasLiveSession("c1"))
+        assertTrue("建出实例 ⇒ 那一行改口成「查看页面」", s.hasLiveSession("c1"))
         assertFalse(
             "判据按会话分：c1 有实例不代表 c2 也能查看页面",
             s.hasLiveSession("c2"),
@@ -155,7 +156,7 @@ class BrowserSessionStoreTest {
 
         session.close()
         assertFalse(
-            "尸体不算活着 —— 遮罩那边 peek 为 null，行却留在面板上就是「点了没页面」",
+            "尸体不算活着 —— 判据说没页面、peek 就得真没页面，两者不许各说一套",
             s.hasLiveSession("c1"),
         )
     }

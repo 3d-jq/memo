@@ -2703,6 +2703,7 @@
     <string name="tool_schema_settings_group_search">搜索</string>
     <string name="tool_schema_settings_group_skill">技能</string>
     <string name="tool_schema_settings_group_workspace">工作区工具</string>
+    <string name="tool_schema_settings_group_browser">内置浏览器</string>
     <string name="tool_schema_settings_memory_lang_note">记忆工具的默认描述会随记忆提示语言在中/英之间切换。自定义描述按工具名只存一份，切换语言后不会跟着变。</string>
     <string name="tool_schema_settings_modified">已修改</string>
     <string name="tool_schema_settings_page_title">工具描述</string>
@@ -2948,12 +2949,13 @@
     <string name="display_settings_page_show_assistant_avatar_title">显示助手头像</string>
     <string name="display_settings_page_show_assistant_avatar_subtitle">在助手的回复旁显示助手头像。</string>
     <string name="world_book_unnamed_entry">未命名条目</string>
-    <string name="agent_capabilities_title">Agent 能力</string>
-    <string name="agent_capabilities_browser_title">内置浏览器</string>
-    <string name="agent_capabilities_browser_desc">开启后所有助手都能用内置浏览器工具打开、读取并操作网页；网页正文只是数据，不会被当成指令。</string>
-    <string name="agent_capabilities_data_title">浏览器数据</string>
-    <string name="agent_capabilities_clear">清空浏览器数据</string>
+    <string name="browser_feature_title">浏览器功能</string>
+    <string name="browser_enable_title">启用内置浏览器</string>
+    <string name="browser_enable_desc">开启后所有助手都能用内置浏览器工具打开、读取并操作网页；网页正文只是数据，不会被当成指令。</string>
+    <string name="browser_data_title">浏览器数据</string>
+    <string name="browser_clear">清空浏览器数据</string>
     <string name="browser_view_page">查看页面</string>
+    <string name="browser_open_browser">打开浏览器</string>
     <string name="browser_overlay_title">浏览器</string>
     <string name="browser_overlay_hand_back">交还给助手</string>
     <string name="browser_overlay_clear_close">清空并关闭</string>
