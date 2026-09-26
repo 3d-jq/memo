@@ -2957,6 +2957,13 @@
     <string name="browser_overlay_title">浏览器</string>
     <string name="browser_overlay_hand_back">交还给助手</string>
     <string name="browser_overlay_clear_close">清空并关闭</string>
+    <string name="browser_tab_new">新建标签</string>
+    <string name="browser_tab_close">关闭标签</string>
+    <string name="browser_address_hint">输入网址（仅 https）</string>
+    <string name="browser_address_go">前往</string>
+    <string name="browser_address_blocked">只允许打开 https 地址</string>
+    <string name="browser_js_confirm">确定</string>
+    <string name="browser_js_cancel">取消</string>
     <!-- Agent 浏览器那一族 13 颗工具的卡片标题（spec §12.1 拆工具的全部理由：
          一颗动作一行标题，看得出模型这一轮到底做了什么）。 -->
     <string name="chat_message_widget_browser_open">打开网页</string>
@@ -2972,4 +2979,5 @@
     <string name="chat_message_widget_browser_wait">等待网页变化</string>
     <string name="chat_message_widget_browser_page_info">网页信息</string>
     <string name="chat_message_widget_browser_reload">重新加载网页</string>
+    <string name="chat_message_widget_browser_tabs">管理浏览器标签</string>
 </resources>

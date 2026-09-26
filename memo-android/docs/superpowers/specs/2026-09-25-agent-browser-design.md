@@ -129,8 +129,10 @@ selector 只在 JS 内部用来从快照取回同一个节点。
    拒绝非 https 跳转与外部 app 跳转（不发 Intent）。
 2. **网页内容只是数据**：工具结果（正文、元素文本、title）发给模型前统一过
    `provider/tool/PromptFrames.sanitize`（A1 那条框架标签转义），并把正文包进既有的工具结果帧里。
-3. JS 弹窗不自动确认（`onJs*` 一律 return false / 忽略）；下载、`onPermissionRequest`、
-   新窗口都拒绝 —— 拒绝也要在信封里说明，否则模型会以为动作成功。
+3. JS 弹窗不自动确认；下载、`onPermissionRequest` 拒绝 —— 拒绝也要在信封里说明，否则模型会
+   以为动作成功。**§12 修订了两处**（2026-09-26）：接管态的 `alert/confirm/prompt` 改成**弹给用户**
+   并回填结果（无头时照旧自动拒绝 + 记账，见 §12.4）；`window.open` / `target=_blank` 不再一律拒绝，
+   而是**开成新标签**（到 `MAX_TABS` 才拒），因为多标签之后它有去处了（见 §12.2）。
 4. 不给 WebView 任何 `addJavascriptInterface` 桥；不读宿主 CookieJar。
 
 ## 8. 线程、超时与取消
@@ -181,8 +183,14 @@ selector 只在 JS 内部用来从快照取回同一个节点。
 （`AgentTraceFormatter.browserActionLabel()`），不是靠拆工具 —— 但既然本仓的卡片体系就是
 "一个工具名一个图标一个标题"，跟着本仓的形状走比跟着参照实现走对。
 
-**代价，写在这里不要藏**：14 份 schema 每轮都进请求（估 ~1000–1400 token，比单工具的
-~180 token 贵）；换来的是卡片可读 + 模型不用先选 `action` 字段再选参数。用户已知情并要求拆。
+**代价，写在这里不要藏（落地后实测，不再是估算）**：14 份 schema 每轮都进请求 =
+**1389 tokens / 5555 字符**（拆分前单工具是 ~180 token）。首版把同一段行为边界贴满 13 颗时是
+**2411 tokens / 9641 字符**，几乎是本条估算区间（~1000–1400）的两倍；收口成「边界只贴在会改页面
+的那三颗（`browser_click`/`browser_type`/`browser_select`）+ 族级一句」之后是
+**1323 tokens / 5291 字符**，加上多标签那三处新增（`new_tab`、`browser_tabs`、
+`browser_page_info` 的标签数）回到 **1389**。天花板钉在 **1400**
+（`BrowserToolsTest.theWholeFamilyStaysWithinTheSchemaBudget`）—— 要往上涨必须先在 PORTING 点名。
+换来的是卡片可读 + 模型不用先选 `action` 字段再选参数。用户已知情并要求拆。
 
 ### 12.1 十三颗工具（+ 一颗 `browser_tabs`）（名字 / 参数 / 图标）
 
@@ -224,8 +232,13 @@ selector 只在 JS 内部用来从快照取回同一个节点。
 - 模型侧**默认永远只碰活动标签**，唯一能改活动标签的是 `browser_open(new_tab=true)`。
   再加一颗 `browser_tabs`（`list` / `select(index)` / `close(index)`，图标 `Lucide.Layers`）——
   它是第 14 颗：模型可用，但提示词不引导它（主要给用户接管时对齐界面上的标签条）。
-- 接管遮罩：顶部标签条（可点切换、可关），地址栏（显示当前 URL、可编辑、回车跳转 =
+- 接管遮罩：顶部标签条（可点切换、可关、可加），地址栏（显示当前 URL、可编辑、回车跳转 =
   `loadUrl`，只允许 https，与非 https 拦截同一道闸）。
+- **落地形态（写死，免得后来人按字面猜）**：
+  `MAX_TABS = 5`（每枚是一个真 WebView）；代次**由会话发号**（`BrowserSession.nextEpoch`），
+  不在各标签自增 —— 各标签自己 `++` 迟早同号，模型拿着 A 标签的 index 就会点到 B 标签，
+  切标签必然发新号；`target=_blank` / `window.open` → 新标签并设为活动（`NEW_TAB_OPENED` 记账），
+  到上界才拒；关掉单个标签**不清** cookie/WebStorage，清只发生在 `BrowserSession.close()`。
 - 关闭标签与关会话都要清凭据（沿用 `close()` 那套；单标签关闭**不**清全局 cookie，否则会把别的
   标签登录态一起干掉 —— 清 cookie 只发生在 `closeAll()`／换会话，这条要在实现里写死为注释）。
 

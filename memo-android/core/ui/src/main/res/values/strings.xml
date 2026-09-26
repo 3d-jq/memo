@@ -2955,6 +2955,13 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="browser_overlay_title">Browser</string>
     <string name="browser_overlay_hand_back">Hand back</string>
     <string name="browser_overlay_clear_close">Clear and close</string>
+    <string name="browser_tab_new">New tab</string>
+    <string name="browser_tab_close">Close tab</string>
+    <string name="browser_address_hint">Type an address (https only)</string>
+    <string name="browser_address_go">Go</string>
+    <string name="browser_address_blocked">Only https addresses can be opened</string>
+    <string name="browser_js_confirm">OK</string>
+    <string name="browser_js_cancel">Cancel</string>
     <!-- Agent 浏览器那一族 13 颗工具的卡片标题（spec §12.1 拆工具的全部理由：
          一颗动作一行标题，看得出模型这一轮到底做了什么）。 -->
     <string name="chat_message_widget_browser_open">Open web page</string>
@@ -2970,4 +2977,5 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="chat_message_widget_browser_wait">Wait for web page</string>
     <string name="chat_message_widget_browser_page_info">Web page info</string>
     <string name="chat_message_widget_browser_reload">Reload web page</string>
+    <string name="chat_message_widget_browser_tabs">Manage browser tabs</string>
 </resources>

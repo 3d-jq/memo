@@ -1,44 +1,42 @@
 package com.psyche.memo.provider.browser
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Color
+import android.os.Looper
 import android.os.Message
-import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
-import android.webkit.JsPromptResult
+import android.net.Uri
 import android.webkit.JsResult
-import android.webkit.PermissionRequest
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebStorage
 import android.webkit.WebView
-import android.webkit.WebViewClient
-import java.io.ByteArrayOutputStream
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
+import android.webkit.WebStorage
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * 一次会话 = 一个离屏 WebView。
+ * 一次会话 = **N 个标签（[BrowserTab]），其中恰有一个是活动标签**（spec §12.2）。
  *
- * 为什么按会话而不是全局单例：登录态与「模型正在操作哪个页面」都是会话语境，换会话
- * 必须干净；而原生侧只有一份全局 cookie jar，所以**同时只允许一个活动实例**
- * （见 [BrowserSessionStore]），关的时候就地清干净。
+ * 会话负责的事，标签自己不管：
+ * - **发号器**（[nextEpoch]）：会话内所有标签共用一个单调递增计数器。代次不在各标签里自增，
+ *   否则「A 标签的第 5 号」和「B 标签的第 5 号」会在切标签之后撞车，模型拿着旧 index 点到
+ *   另一个页面上去 —— 那正是 index+代次 这套契约存在的理由所反对的事。换活动标签必然发新号，
+ *   所以模型手上下发过的任何号在切换之后一律失效（只会多一次「请重新 find」，不会错点）。
+ * - **动作串行**（[actionLock]）：一颗 `Mutex` 罩住整会话，含标签的开/关/切（spec §8）。
+ * - **凭据什么时候清**：只有 [close]（换会话 / 清空并关闭）。关掉单个标签**绝不**清 cookie，
+ *   理由写在 [BrowserTab.destroy]。
+ * - **接管态**（[userControls] / [isMounted]）与那两笔「交给用户」的请求（JS 弹窗、文件选择）。
  *
- * 三条硬边界（spec §2）：只允许 https、不注入 JS 桥、不渲染文件与 content URI。
+ * 为什么按会话而不是全局单例：登录态与「模型正在操作哪个页面」都是会话语境，换会话必须干净；
+ * 而原生侧只有一份全局 cookie jar，所以**同时只允许一个活动实例**（见 [BrowserSessionStore]）。
+ *
+ * 三条硬边界照 v1（spec §2）：只允许 https、不注入 JS 桥、不渲染文件与 content URI。
  */
-// 注解放类上才有覆盖力：javaScriptEnabled = true 在 init 块里，属性级 @SuppressLint
-// 罩不住它（lint 实测如此）。
-@SuppressLint("SetJavaScriptEnabled")
 class BrowserSession private constructor(private val appContext: Context) : BrowserGateway {
 
     companion object {
@@ -49,22 +47,25 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         const val SHOT_TIMEOUT_MS = 5_000L
         const val MAX_PNG_BYTES = 4 * 1024 * 1024
 
-        // close() 解 pendingScript 的哨兵：evaluateJavascript 的回调永远给 JSON（字符串结果
-        // 至少带一层引号），这种裸词不可能与真返回值撞车。
-        private const val SCRIPT_CLOSED = "MEMO_SESSION_CLOSED"
-
         /**
-         * notice 累积的上界（条数与总长都要封）：只有 drainNotice() 会清，而 drain 是每颗
-         * 工具调用一次 —— 接管期间页面循环弹 alert / 反复 window.open 时没人清，不封顶这串
-         * 就按每条 ≤160 无上界增长、最后整串进信封给模型。超出丢最旧，丢的条数折进串尾
-         * `…(+N)` 计数（各来源的条目在调用点已被 take(120/160) 封过，单条不可能顶破总长）。
+         * 标签上界。每一枚是一个真 WebView（几十 MB 级），模型若被网页诱导着「每个链接都开一个」
+         * 就会把手机按死 —— 到顶之后 `browser_open(new_tab=true)` 回 `TAB_LIMIT`，
+         * `window.open` 被拒并记账，**都不静默**。取 5：够「原来那页 + 两三个候选」，又远不到
+         * 能让低内存机型崩掉的量。
          */
+        const val MAX_TABS = 5
+
+        // notice 累积的上界（条数与总长都要封）：只有 drainNotice() 会清，而 drain 是每颗
+        // 工具调用一次 —— 接管期间页面循环弹 alert / 反复 window.open 时没人清，不封顶这串
+        // 就按每条 ≤160 无上界增长、最后整串进信封给模型。超出丢最旧，丢的条数折进串尾
+        // `…(+N)` 计数（各来源的条目在调用点已被 take(120/160) 封过，单条不可能顶破总长）。
         private const val NOTICE_MAX_ENTRIES = 3
         private const val NOTICE_MAX_CHARS = 480
 
         /**
          * WebView 必须在**主线程**创建 —— 下面的 `check` 判的就是 Main，不是泛泛的
-         * 「有 Looper 的线程」（后台线程即使有 Looper 也不行）。
+         * 「有 Looper 的线程」（后台线程即使有 Looper 也不行）。会话在构造的那一刻就建第一枚
+         * 标签的 WebView，所以这道闸管的是整个会话。
          *
          * 两个入口分开是**必需的**：suspend 那版内部 `withContext(Dispatchers.Main)`，而
          * Robolectric 的测试线程就是主 Looper 线程 —— Compose UI 测试（不能用
@@ -73,7 +74,7 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
          * [createOnMain]，后台调用方用 [create]。
          */
         fun createOnMain(appContext: Context): BrowserSession {
-            check(android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            check(Looper.myLooper() == Looper.getMainLooper()) {
                 "WebView 必须在主线程创建"
             }
             return BrowserSession(appContext)
@@ -83,37 +84,73 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             withContext(Dispatchers.Main) { createOnMain(appContext) }
     }
 
-    val view: WebView = WebView(
-        // 裸 application context 没有主题，WebView 内部要读 attr。
-        android.view.ContextThemeWrapper(
-            appContext,
-            android.R.style.Theme_DeviceDefault_Light_NoActionBar,
-        ),
-    )
+    private val tabs = ArrayList<BrowserTab>()
+    private var activeIndex = 0
 
-    private var generationState = 0
-    private var snapshotState: BrowserPageSnapshot? = null
+    /** 会话级发号器：见类头那条「代次不在各标签里自增」。只在主线程读写（所有 WebView 动作都在 Main）。 */
+    private var epoch = 0
+
     private var userControlsState = false
-    private var urlState = ""
-    private var navigation: CompletableDeferred<String>? = null
-    private var pendingScript: CompletableDeferred<String>? = null
+    private var hostContainer: ViewGroup? = null
+
     /**
-     * notice 的累积本体 + 被上界挤掉（丢最旧）的条数，见 NOTICE_MAX_* 两个常量。
-     * 写入全在 WebView 回调（主线程），drain 由工具层取走 —— 与改造前的单槽 `notice` 同一
-     * 线程模型，没有新增共享状态。
+     * notice 累积本体 + 被上界挤掉（丢最旧）的条数，见 NOTICE_MAX_* 两个常量。
+     * 写入全在 WebView 回调（主线程，各标签都会往这一份里记），drain 由工具层取走。
+     * **按会话一份**，不是每标签一份：否则封顶变成 N×480 字符一起进信封。
      */
     private val notices = ArrayList<String>()
     private var noticesDropped = 0
+
     // @Volatile：isClosed 承诺任意线程可读（见属性注释），写发生在 Main，读方有非 Main 的。
     @Volatile private var closed = false
 
-    /** 同一会话的动作串行（spec §8）：模型并行发两颗调用时不许互相踩。 */
+    /** 整会话一颗锁：动作（含标签增删切）串行是 spec §8 的承诺，模型并行发两颗调用时不许互相踩。 */
     private val actionLock = Mutex()
 
-    override val generation: Int get() = generationState
-    override val url: String get() = urlState
+    private val tabsState = MutableStateFlow<List<BrowserTabInfo>>(emptyList())
+
+    /**
+     * 标签清单的**可观察**版本，给接管遮罩的标签条。写入点全在主线程（WebView 回调与标签操作），
+     * 所以不需要额外的线程处理。
+     */
+    val tabsSnapshot: StateFlow<List<BrowserTabInfo>> = tabsState.asStateFlow()
+
+    private val jsDialogState = MutableStateFlow<BrowserJsDialog?>(null)
+
+    /** 接管态正等用户回答的 JS 弹窗（spec §12.4）；无头时永远是 null（那一支直接 cancel 掉）。 */
+    val jsDialog: StateFlow<BrowserJsDialog?> = jsDialogState.asStateFlow()
+
+    private val fileRequestState = MutableStateFlow<BrowserFileRequest?>(null)
+
+    /** 接管态正等用户挑文件的请求（spec §12.4）；**模型永远拿不到这一支**，无头直接被拒。 */
+    val fileRequest: StateFlow<BrowserFileRequest?> = fileRequestState.asStateFlow()
+
+    init {
+        tabs.add(BrowserTab(this, appContext))
+        tabsState.value = renderTabs()
+    }
+
+    private val activeTab: BrowserTab get() = tabs[activeIndex]
+
+    /** 界面诊断与单测用：活动标签那个 WebView。**界面挂视图请走 [attachTo]**，别直接拿它。 */
+    internal val activeWebView: WebView get() = activeTab.view
+
+    /**
+     * 「有没有挂在界面上」：JS 弹窗与文件选择要不要交给用户的判据。
+     *
+     * 用挂载而不是 [userControls] 是因为遮罩正在拆的那一拍旗标还是 true、却已经没人收集请求了 ——
+     * 那时候把 `JsResult` / 文件回调交出去，就是一次没人应答的永久卡死（两个对象内部都只有一次
+     * 生效的保护，见 [BrowserJsDialog] 与 [BrowserFileRequest]）。
+     */
+    internal val isMounted: Boolean get() = hostContainer != null
+
+    /** 会话内唯一发号：见类头。 */
+    internal fun nextEpoch(): Int = ++epoch
+
+    override val generation: Int get() = activeTab.generation
+    override val url: String get() = activeTab.url
     override val userControls: Boolean get() = userControlsState
-    override val snapshot: BrowserPageSnapshot? get() = snapshotState
+    override val snapshot: BrowserPageSnapshot? get() = activeTab.snapshot
 
     /**
      * 纯读字段，任意线程安全：[closed] 标了 @Volatile，非 Main 的读方（store 的 `peek`、
@@ -121,107 +158,255 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
      */
     override val isClosed: Boolean get() = closed
 
-    init {
-        view.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            allowFileAccess = false
-            allowContentAccess = false
-            // 两条 FileURLs 旗标自 API 30 起废弃（平台恒 false），显式关闭 + 注释掉
-            // 废弃告警：万一低版本 WebView 内核仍读它们，这道防线还在（spec §2）。
-            @Suppress("DEPRECATION")
-            allowFileAccessFromFileURLs = false
-            @Suppress("DEPRECATION")
-            allowUniversalAccessFromFileURLs = false
-            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-            cacheMode = WebSettings.LOAD_DEFAULT
+    // ------------------------------------------------------------------ 标签清单
+
+    override fun tabInfos(): List<BrowserTabInfo> = renderTabs()
+
+    private fun renderTabs(): List<BrowserTabInfo> =
+        tabs.mapIndexed { i, tab -> BrowserTabInfo(i, tab.title, tab.url, i == activeIndex) }
+
+    /** 标签的 url/标题落地、标签增删切之后都要让界面看见新清单（主线程调用）。 */
+    internal fun tabsChanged() {
+        if (!closed) tabsState.value = renderTabs()
+    }
+
+    private fun requireMain() {
+        check(Looper.myLooper() == Looper.getMainLooper()) { "WebView 操作必须在主线程" }
+    }
+
+    /** 建一枚新标签并设为活动。**主线程**、**不加锁**：调用方自己决定走 [actionLock] 还是界面点击。 */
+    private fun addTabLocked(): BrowserTab {
+        requireMain()
+        val tab = BrowserTab(this, appContext)
+        tabs.add(tab)
+        activate(tabs.lastIndex)
+        return tab
+    }
+
+    /**
+     * 把第 [index] 标签设为活动：新活动标签挂到当前宿主（没宿主就只是「活动但离屏」），
+     * 其余标签一律摘下来并还原离屏视口。
+     *
+     * **必然换代次并作废旧快照** —— 这是跨标签 index 别名的唯一解，见类头的发号器一段。
+     *
+     * 「摘旧」按**是不是当前挂着的那一枚**判，不按旧 `activeIndex` 判：[closeTabLocked] 删掉
+     * 一枚之后再进来时，旧下标可能已经指向另一枚标签（前面删了一格）甚至越界（关的就是最后一枚）。
+     * 层级上永远只挂着一枚，按身份判既简单又不依赖调用方把下标修对。
+     */
+    private fun activate(index: Int) {
+        requireMain()
+        check(index in tabs.indices) { "活动标签编号越界" }
+        activeIndex = index
+        tabs[index].bumpGenerationAndDropSnapshot()
+        val container = hostContainer
+        if (container != null) {
+            tabs.forEach { if (it !== tabs[index]) it.detach() }
+            tabs[index].attachTo(container)
         }
-        view.setBackgroundColor(Color.WHITE)
-        // 离屏也要有确定尺寸：否则 1280 宽的桌面版页面按手机宽度渲染。
-        applyOffscreenViewport()
-        view.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(webView: WebView, request: WebResourceRequest): Boolean =
-                !isAllowedUrl(request.url.toString())
+        tabsChanged()
+    }
 
-            override fun onPageFinished(webView: WebView, finishedUrl: String?) {
-                urlState = finishedUrl.orEmpty()
-                // 页面落地：之前的 index 全部作废。
-                bumpGenerationAndDropSnapshot()
-                navigation?.complete("ok")
-            }
-
-            // 用旧的 4 参回调是为了它的触发条件：只在**主框架**加载失败时回调，
-            // 免掉新回调（onReceivedError(request, error)）还要自己过 request.isForMainFrame。
-            @Suppress("OVERRIDE_DEPRECATION")
-            override fun onReceivedError(
-                webView: WebView,
-                errorCode: Int,
-                description: String?,
-                failingUrl: String?,
-            ) {
-                navigation?.complete("NAV_FAILED:$errorCode")
-            }
+    /**
+     * 关第 [index] 标签。主线程。
+     *
+     * **不清凭据**（见 [BrowserTab.destroy]）。关掉最后一个标签时补一枚空白标签：会话「恰有一个
+     * 活动标签」这条不变量是整个网关委托的前提，`activeTab` 一旦可能越界，14 颗动作的入口都要
+     * 各写一遍判空 —— 那才是真事故的来源。
+     */
+    private fun closeTabLocked(index: Int): Boolean {
+        requireMain()
+        if (closed || index !in tabs.indices) return false
+        val activeBefore = tabs[activeIndex]
+        val dying = tabs.removeAt(index)
+        dying.destroy()
+        if (tabs.isEmpty()) tabs.add(BrowserTab(this, appContext))
+        if (dying === activeBefore) {
+            // 活动的那枚被关了：继任者取同位的后一枚，没有就前一枚。走 activate（换代次 + 重挂），
+            // 因为用户和模型看到的页面确实换了一页。
+            activate(index.coerceAtMost(tabs.lastIndex))
+        } else {
+            // 活动标签还是**同一枚**，只是前面删掉一格让它左移了。这里只修下标，绝不走
+            // activate：页面根本没变，换代次等于把模型手上那把 index 无端作废。
+            activeIndex = tabs.indexOf(activeBefore)
+            tabsChanged()
         }
-        /**
-         * 无头执行必须**自己吃掉**弹窗与权限请求。`onJsAlert` 返回 false 会让 WebView 去弹
-         * 它自己的对话框 —— 那正是不该出现的；所以这里是「取消 + 记一笔 + 返回 true」，
-         * 再由 [drainNotice] 把「本机挡掉了什么」交给工具层写进信封。spec §7.3 要的是
-         * 「拒绝要说明」这件事，不是字面上的 return false。
-         */
-        view.webChromeClient = object : WebChromeClient() {
-            override fun onJsAlert(
-                webView: WebView, url: String?, message: String?, result: JsResult?,
-            ): Boolean {
-                appendNotice("JS_ALERT_SUPPRESSED:" + message.orEmpty().take(160))
-                result?.cancel()
-                return true
-            }
+        return true
+    }
 
-            override fun onJsConfirm(
-                webView: WebView, url: String?, message: String?, result: JsResult?,
-            ): Boolean {
-                appendNotice("JS_CONFIRM_SUPPRESSED:" + message.orEmpty().take(160))
-                result?.cancel()
-                return true
-            }
-
-            override fun onJsPrompt(
-                webView: WebView,
-                url: String?,
-                message: String?,
-                defaultValue: String?,
-                result: JsPromptResult?,
-            ): Boolean {
-                appendNotice("JS_PROMPT_SUPPRESSED:" + message.orEmpty().take(160))
-                result?.cancel()
-                return true
-            }
-
-            override fun onPermissionRequest(request: PermissionRequest) {
-                appendNotice("PERMISSION_DENIED:" + request.resources.joinToString().take(120))
-                request.deny()
-            }
-
-            /**
-             * 新窗口一律不开：Memo 没有多标签（spec §1 的非目标），开了就是丢页面。
-             * 拒绝也要在信封里说明（spec §7.3），否则模型收到 `ok` 会以为页面还在。
-             */
-            override fun onCreateWindow(
-                webView: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?,
-            ): Boolean {
-                // 回调签名里没有目标 URL；hit test 是唯一能顺到链接地址的地方，拿不到就只报码。
-                val target = view.hitTestResult?.extra
-                appendNotice(if (target == null) "NEW_WINDOW_REFUSED" else "NEW_WINDOW_REFUSED:" + target.take(120))
-                return false
-            }
-        }
-        view.setDownloadListener { url, _, contentDisposition, _, _ ->
-            // contentDisposition 是服务端任意串：这里必须自己封一道（其余来源在各自回调点已 take），
-            // 否则 NOTICE_MAX_CHARS 的「每条有界」前提在这条来源上不成立。
-            appendNotice("DOWNLOAD_REFUSED:" + url.take(120) +
-                (if (contentDisposition.isNullOrBlank()) "" else "|" + contentDisposition.take(80)))
+    override suspend fun openTab(url: String): Result<Unit> = actionLock.withLock {
+        withContext(Dispatchers.Main) {
+            if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
+            if (tabs.size >= MAX_TABS) return@withContext Result.failure(IllegalStateException("TAB_LIMIT"))
+            addTabLocked().navigate(url)
         }
     }
+
+    override suspend fun selectTab(index: Int): Result<Unit> = actionLock.withLock {
+        withContext(Dispatchers.Main) {
+            if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
+            if (index !in tabs.indices) return@withContext Result.failure(IllegalStateException("TAB_INDEX_INVALID"))
+            if (index != activeIndex) activate(index)
+            Result.success(Unit)
+        }
+    }
+
+    override suspend fun closeTab(index: Int): Result<Unit> = actionLock.withLock {
+        withContext(Dispatchers.Main) {
+            if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
+            if (index !in tabs.indices) return@withContext Result.failure(IllegalStateException("TAB_INDEX_INVALID"))
+            if (!closeTabLocked(index)) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
+            Result.success(Unit)
+        }
+    }
+
+    // ------------------------------------------------------------------ 界面入口（主线程、不取锁）
+
+    /**
+     * 标签条点第 [index] 个。
+     *
+     * **不取 [actionLock]**：点击回调是主线程同步代码，它不可能在两个挂起点之间插进来，
+     * 而会话里所有会改页面的动作都必须在 Main 才动手 —— 于是它天然排他。唯一能并发的是
+     * 「模型那一次 `evaluateJavascript` 还挂着、用户切了标签」：那一回的回调落到已经离屏的
+     * 标签上，之后工具侧那次换代次换代的是新活动标签，结果是**多作废一次把手**（安全方向），
+     * 不是把动作点到错的页面上。
+     */
+    fun selectTabFromUi(index: Int): Boolean {
+        requireMain()
+        if (closed || index !in tabs.indices || index == activeIndex) return false
+        activate(index)
+        return true
+    }
+
+    /** 标签条那颗 ×。 */
+    fun closeTabFromUi(index: Int): Boolean {
+        requireMain()
+        return !closed && closeTabLocked(index)
+    }
+
+    /** 标签条那颗 +（空白标签；地址栏在空白标签上输入即可）。到上界回 false。 */
+    fun newTabFromUi(): Boolean {
+        requireMain()
+        if (closed || tabs.size >= MAX_TABS) return false
+        addTabLocked()
+        return true
+    }
+
+    /**
+     * 地址栏回车 / 「前往」：在**活动标签**上导航（[isAllowedUrl] 那道闸照用，界面已经补过
+     * `https://`，这里不二次猜用户意图）。
+     */
+    suspend fun navigateFromUi(raw: String): Result<Unit> = actionLock.withLock {
+        withContext(Dispatchers.Main) {
+            if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
+            activeTab.navigate(raw)
+        }
+    }
+
+    // ------------------------------------------------------------------ 接管态交给用户的两笔
+
+    internal fun takeJsDialog(
+        kind: BrowserJsKind,
+        message: String?,
+        result: JsResult?,
+        defaultValue: String? = null,
+    ): Boolean {
+        if (result == null) return true
+        val shown = !closed && isMounted
+        if (shown) {
+            jsDialogState.value = BrowserJsDialog(kind, message.orEmpty(), defaultValue, result)
+        } else {
+            result.cancel()
+        }
+        appendNotice(
+            "JS_" + kind.name + "_" + (if (shown) "SHOWN" else "SUPPRESSED") + ":" +
+                message.orEmpty().take(160),
+        )
+        return true
+    }
+
+    /** 用户按了「确定 / 取消」。`text` 只有 prompt 用得上。**主线程**（`JsResult` 的要求）。 */
+    fun answerJsDialog(accept: Boolean, text: String? = null) {
+        requireMain()
+        jsDialogState.value?.answer(accept, text)
+        jsDialogState.value = null
+    }
+
+    /** 遮罩销毁时兜底：还挂着没人回答的弹窗就 cancel 掉，否则那一页的 JS 永远卡在弹窗上。 */
+    internal fun dropPendingJsDialog() {
+        jsDialogState.value?.answer(false, null)
+        jsDialogState.value = null
+    }
+
+    internal fun takeFileChooser(
+        callback: ValueCallback<Array<Uri>>?,
+        params: WebChromeClient.FileChooserParams?,
+    ): Boolean {
+        if (callback == null) return true
+        val types = filePickerMimeTypes(params?.acceptTypes?.toList().orEmpty())
+        if (closed || !isMounted) {
+            callback.onReceiveValue(null)
+            appendNotice("FILE_CHOOSER_NEEDS_USER:" + types.joinToString().take(80))
+            return true
+        }
+        fileRequestState.value = BrowserFileRequest(callback, types, params?.title?.toString())
+        return true
+    }
+
+    /** 系统选择器回来了（空列表 = 用户取消）。**主线程**（回调本体是 WebView 的）。 */
+    fun submitFiles(uris: List<Uri>) {
+        requireMain()
+        fileRequestState.value?.submit(uris)
+        fileRequestState.value = null
+    }
+
+    /** 遮罩销毁 / 用户取消：必须把回调了结，否则那个 `<input type=file>` 永远按不动。 */
+    internal fun dropPendingFileRequest() {
+        fileRequestState.value?.cancel()
+        fileRequestState.value = null
+    }
+
+    /**
+     * 遮罩离开组合时的**一处**兜底：把两笔「等用户应答」的请求一次了结。
+     *
+     * 合成一颗给界面调用而不是让它连着调两个内部方法 —— 将来再加第三笔（比如地理授权请求）时，
+     * 漏掉兜底的那一支就是「页面卡死且无声」，而这条路径单测很难自然覆盖到。
+     */
+    fun dropPendingInteractions() {
+        dropPendingJsDialog()
+        dropPendingFileRequest()
+    }
+
+    /**
+     * `target=_blank` / `window.open` 开成新标签（spec §12.2）。拿不到 transport 或已到上界就拒，
+     * 并记账让模型/用户知道（spec §7.3）。
+     */
+    internal fun openTabForWindow(resultMsg: Message?): Boolean {
+        if (closed) return false
+        val transport = resultMsg?.obj as? WebView.WebViewTransport
+        if (transport == null) {
+            appendNotice("NEW_WINDOW_REFUSED")
+            return false
+        }
+        if (tabs.size >= MAX_TABS) {
+            appendNotice("NEW_WINDOW_REFUSED:tab_limit")
+            return false
+        }
+        val tab = addTabLocked()
+        transport.webView = tab.view
+        resultMsg?.sendToTarget()
+        appendNotice("NEW_TAB_OPENED")
+        return true
+    }
+
+    // ------------------------------------------------------------------ 动作委托（全部经活动标签 + 串行锁）
+
+    fun takeOver() { userControlsState = true }
+
+    fun release() { userControlsState = false }
+
+    override fun publishSnapshot(snapshot: BrowserPageSnapshot?) { activeTab.publishSnapshot(snapshot) }
+
+    override fun bumpGenerationAndDropSnapshot() = activeTab.bumpGenerationAndDropSnapshot()
 
     /**
      * 累积一笔「本机挡掉了什么」：单槽会让五种来源互相覆盖 —— 一轮里先弹 alert
@@ -230,7 +415,7 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
      * 上界（NOTICE_MAX_*）：条数超限或**渲染后总长**超限都丢最旧，丢的条数折进串尾
      * `…(+N)`；至少留最新一条（每条在来源处已 take(≤160)，单条顶不穿总长）。
      */
-    private fun appendNotice(raw: String) {
+    internal fun appendNotice(raw: String) {
         notices.add(raw)
         while (notices.size > NOTICE_MAX_ENTRIES ||
             (notices.size > 1 && renderedNoticeLength() > NOTICE_MAX_CHARS)
@@ -255,226 +440,108 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         return text
     }
 
-    fun takeOver() { userControlsState = true }
-
-    fun release() { userControlsState = false }
-
-    override fun publishSnapshot(snapshot: BrowserPageSnapshot?) { snapshotState = snapshot }
-
-    override fun bumpGenerationAndDropSnapshot() {
-        generationState++
-        snapshotState = null
+    /**
+     * 把**活动标签**挂到界面上（先从别处摘下来）。必须在主线程（Compose 里就是）。
+     *
+     * 记住宿主是必需的：标签条上换标签时 `activate` 要把新活动标签挂进**同一个**容器，
+     * 否则用户点第二个标签会看到一片空白（视图还挂在旧容器上）。
+     *
+     * **closed 闸**：已关的会话一律不挂。销毁后的 WebView 再 `addView` 回层级真机必炸，
+     * 而这条路径是真实存在的 —— 遮罩还挂着的时候本会话实例可能被别的会话 `sessionFor`
+     * 抢走并销毁（见 [BrowserSessionStore]），那一拍的重组就会走到这里。
+     */
+    fun attachTo(container: ViewGroup) {
+        requireMain()
+        if (closed) return
+        hostContainer = container
+        activeTab.attachTo(container)
     }
 
-    /** 把同一个实例挂到界面上（先从别处摘下来）。必须在主线程（Compose 里就是）。 */
-    fun attachTo(container: ViewGroup) {
-        (view.parent as? ViewGroup)?.removeView(view)
-        if (view.parent == null) {
-            // 尺寸契约写明白：铺满宿主。之前靠「默认 LayoutParams 恰好是 MATCH_PARENT」的隐式约定。
-            container.addView(
-                view,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ),
-            )
+    /**
+     * 只在这个容器**就是当前宿主**时落宿主并摘视图。给 [androidx.compose.ui.viewinterop.AndroidView]
+     * 的 `onRelease` 用：换标签会让那个节点整枚重建（见遮罩里的 `key(session, 活动下标)`），
+     * 而 Compose 不保证「旧节点释放」与「新节点建立」的先后 —— 无条件 `detach()` 的那一种顺序会把
+     * 刚挂上去的新标签又摘下来、并把宿主清成 null，之后每次切标签都只剩一片白。
+     * 按容器身份判，两种顺序都收敛到「宿主 = 新容器，活动标签挂在上面」。
+     */
+    fun detachFrom(container: ViewGroup) {
+        requireMain()
+        if (hostContainer === container) {
+            hostContainer = null
+            tabs.getOrNull(activeIndex)?.detach()
         }
     }
 
     /**
-     * 摘下来之后必须把布局尺寸**还原回离屏视口**：接管期间真布局把 WebView 重排成了手机
-     * 尺寸，而 removeView 不会自己弹回去 —— 不还原的话 [userControls] 已交还、模型以为
-     * 世界照旧，但 `screenshotPng` 截到手机尺寸、`window.innerWidth` 变了、`find` 的
-     * bounds 与模型回传的 x/y 全体错位。主线程调用（measure/layout 的要求）。
+     * 摘下来之后必须把布局尺寸**还原回离屏视口**（还原在 [BrowserTab.detach] 里）：接管期间真
+     * 布局把 WebView 重排成了手机尺寸，而 removeView 不会自己弹回去 —— 不还原的话
+     * [userControls] 已交还、模型以为世界照旧，但 `screenshotPng` 截到手机尺寸、
+     * `window.innerWidth` 变了、`find` 的 bounds 与模型回传的 x/y 全体错位。
      *
      * **closed 闸**：close() 之后仍会有 detach 进来 —— 换会话时是 `sessionFor` 关掉上一枚，
-     * 而 `close()` 里 `detach()` 之前已经置了 `closed`，那条路径由 store 的 `mutex` 排在
-     * `withContext(Main)` 之后；另一条是界面被拆掉时 `onDispose`/`onRelease` 补发 detach，
-     * 与销毁没有先后保证。平台契约是「destroy() 之后不得再调用本类的任何其它方法」，
-     * measure 在无 provider 时直接 IllegalStateException。闸放这里而不是 detach() 开头：
-     * close() 自己调的 detach **必须**保留 removeView（destroy 前必须先把视图从层级里摘掉），
-     * 要拦的只是视口还原那两发 —— 且此刻实例已弃用，还原本身毫无意义。
+     * 而 `close()` 里 `detach()` 之前已经置了 `closed`；另一条是界面被拆掉时
+     * `onDispose`/`onRelease` 补发 detach，与销毁没有先后保证。平台契约是「destroy() 之后不得
+     * 再调用 WebView 的任何其它方法」，measure 在无 provider 时直接 IllegalStateException。
+     * 闸放在 [BrowserTab.applyOffscreenViewport] 开头而不是这里：close() 自己调的 detach
+     * **必须**保留 removeView（destroy 前必须先把视图从层级里摘掉），要拦的只是视口还原那两发。
+     *
+     * 这里对**每一枚**标签都 detach 一次：非活动标签本来就没挂着（removeView 对无父视图是
+     * no-op），但它们的离屏视口要在「曾经挂过又被切走」的路径上被还原，全量走一遍最省心。
      */
-    private fun applyOffscreenViewport() {
-        if (closed) return
-        view.measure(
-            View.MeasureSpec.makeMeasureSpec(VIEWPORT_WIDTH, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(VIEWPORT_HEIGHT, View.MeasureSpec.EXACTLY),
-        )
-        view.layout(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-    }
-
-    /**
-     * 解套路径上的 stopLoading（超时支与取消支）。`withContext` 会把这块**重新 post 回
-     * Main**，中间 close() 可能插进来（它自己就带 stopLoading+destroy）—— destroy 之后
-     * 再调 view 的任何方法都违反平台契约（Finding 1 的同源两处），而加载本来就该停的
-     * 也已经停了，跳过就是正确行为。
-     */
-    private suspend fun stopLoadingUnlessClosed() {
-        withContext(NonCancellable) { if (!closed) view.stopLoading() }
-    }
-
     fun detach() {
-        (view.parent as? ViewGroup)?.removeView(view)
-        applyOffscreenViewport()
+        requireMain()
+        hostContainer = null
+        tabs.forEach { it.detach() }
     }
 
     override suspend fun navigate(url: String): Result<Unit> = actionLock.withLock {
-        withContext(Dispatchers.Main) {
-            if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
-            if (!isAllowedUrl(url)) return@withContext Result.failure(IllegalStateException("BLOCKED_SCHEME"))
-            val done = CompletableDeferred<String>()
-            navigation = done
-            view.loadUrl(url)
-            // 用「带原因的完成」而不是异常完成：`await()` 就不会抛，外层取消（用户点停止）
-            // 仍是唯一能让它抛的东西 —— 那必须透传，不能被读成「导航失败」（spec §8）。
-            // try/finally 统一归还 deferred：六条路径各写一遍清线迟早漏一条，
-            // 挂在外面的那枚会被下一次导航的 onPageFinished「串台」完成掉。
-            val verdict = try {
-                withTimeoutOrNull(NAV_TIMEOUT_MS) { done.await() }
-            } catch (e: CancellationException) {
-                // 取消那次加载还在飞：不 stopLoading，它照样 onPageFinished，而那时
-                // 字段里很可能已是下一颗 navigate 的 deferred —— 下一次导航会被提前报成功。
-                stopLoadingUnlessClosed()
-                throw e
-            } finally {
-                if (navigation === done) navigation = null
-            }
-            when (verdict) {
-                null -> {
-                    stopLoadingUnlessClosed()
-                    Result.failure(IllegalStateException("NAV_TIMEOUT"))
-                }
-                "ok" -> {
-                    // await 排回 Main 的窗口里 close() 可能插队（deferred 已被真 onPageFinished
-                    // 解套成 "ok"，destroy 却先落地）：view.url 同属「destroy 后不得再调」的
-                    // 其它方法（Finding 1 的同源第三处）。这个结果不再可信，报 RENDERER_GONE。
-                    if (closed) Result.failure(IllegalStateException("RENDERER_GONE"))
-                    else {
-                        urlState = view.url.orEmpty()
-                        Result.success(Unit)
-                    }
-                }
-                else -> Result.failure(IllegalStateException(verdict))
-            }
-        }
+        withContext(Dispatchers.Main) { activeTab.navigate(url) }
     }
 
     override suspend fun goBack(): Boolean = actionLock.withLock {
-        withContext(Dispatchers.Main) {
-            if (closed || !view.canGoBack()) return@withContext false
-            view.goBack()
-            bumpGenerationAndDropSnapshot()
-            true
-        }
+        withContext(Dispatchers.Main) { activeTab.goBack() }
     }
 
-    /**
-     * 历史前进：与 [goBack] **逐字同形状**（判 `canGoForward` → 走 → 换代次并作废快照），
-     * 差别只有方向。同样**不等加载完成** —— 前进过去之后 `onPageFinished` 自己会再 bump 一次，
-     * 工具侧再叠一层就是每跳两颗（spec §3 的代次契约）。
-     */
     override suspend fun goForward(): Boolean = actionLock.withLock {
-        withContext(Dispatchers.Main) {
-            if (closed || !view.canGoForward()) return@withContext false
-            view.goForward()
-            bumpGenerationAndDropSnapshot()
-            true
-        }
+        withContext(Dispatchers.Main) { activeTab.goForward() }
     }
 
     override suspend fun reload(): Result<Unit> = actionLock.withLock {
-        withContext(Dispatchers.Main) {
-            if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
-            val done = CompletableDeferred<String>()
-            navigation = done
-            view.reload()
-            val verdict = try {
-                withTimeoutOrNull(NAV_TIMEOUT_MS) { done.await() }
-            } catch (e: CancellationException) {
-                // 同 navigate：被放弃的加载照样会 onPageFinished，必须停掉，
-                // 否则它去 complete 下一颗动作的 deferred。
-                stopLoadingUnlessClosed()
-                throw e
-            } finally {
-                if (navigation === done) navigation = null
-            }
-            bumpGenerationAndDropSnapshot()
-            when (verdict) {
-                null -> {
-                    stopLoadingUnlessClosed()
-                    Result.failure(IllegalStateException("NAV_TIMEOUT"))
-                }
-                // 与 navigate 同口径：**只有 "ok" 算成功**（Finding 3，fix round 2）。
-                // close() 注入的 "RENDERER_GONE" 与 onReceivedError 的 "NAV_FAILED:<code>"
-                // 过去走 else 被读成「重载成功」——被放弃/失败的加载替下一次动作报成功，
-                // 正是裁决 3 要消灭的那类口径。
-                "ok" -> Result.success(Unit)
-                else -> Result.failure(IllegalStateException(verdict))
-            }
-        }
+        withContext(Dispatchers.Main) { activeTab.reload() }
     }
 
     override suspend fun run(script: String, timeoutMs: Long): Pair<Boolean, String> =
-        actionLock.withLock { withContext(Dispatchers.Main) {
-            if (closed) return@withContext false to "RENDERER_GONE"
-            val deferred = CompletableDeferred<String>()
-            pendingScript = deferred
-            view.evaluateJavascript(script) { value -> deferred.complete(value ?: "null") }
-            // 取消（用户点停止）= **结果未知**：点了的鼠标事件可能已经生效。停掉加载、
-            // 原样上抛，让 ToolRunner 去回那句「不要假设成功、不要盲目重试」（spec §8）。
-            val raw = try {
-                withTimeoutOrNull(timeoutMs) { deferred.await() }
-            } catch (e: CancellationException) {
-                stopLoadingUnlessClosed()
-                throw e
-            } finally {
-                pendingScript = null
-            }
-            if (raw == null) {
-                stopLoadingUnlessClosed()
-                return@withContext false to "SCRIPT_TIMEOUT"
-            }
-            // close() 以值解套的那次唤醒：把码原样交出去，别把哨兵喂给 unwrap 变成 BAD_JSON。
-            if (raw == SCRIPT_CLOSED) return@withContext false to "CANCELLED"
-            BrowserScripts.unwrap(raw)
-        } }
+        actionLock.withLock { withContext(Dispatchers.Main) { activeTab.run(script, timeoutMs) } }
 
-    /** 原尺寸截图（不缩放：缩放会让小字不可读）。主线程画位图。上锁同 navigate：串行是 spec §8 的承诺。 */
     override suspend fun screenshotPng(): ByteArray = actionLock.withLock {
-        withContext(Dispatchers.Main) {
-            if (closed) return@withContext ByteArray(0)
-            val out = ByteArrayOutputStream()
-            val bmp = Bitmap.createBitmap(
-                maxOf(1, view.width),
-                maxOf(1, view.height),
-                Bitmap.Config.ARGB_8888,
-            )
-            val canvas = android.graphics.Canvas(bmp)
-            canvas.drawColor(Color.WHITE)
-            view.draw(canvas)
-            bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
-            bmp.recycle()
-            out.toByteArray()
-        }
+        withContext(Dispatchers.Main) { activeTab.screenshotPng() }
     }
 
-    /** 不在 [BrowserGateway] 上：只有 [BrowserSessionStore]（换会话 / closeAll）需要关它。 */
+    /**
+     * 关整会话：销毁每一枚标签，然后清凭据。不在 [BrowserGateway] 上 —— 只有
+     * [BrowserSessionStore]（换会话 / closeAll）需要关它。
+     *
+     * **清 cookie / WebStorage 只发生在这一条路径上**：原生那份 jar 是 app 全局的，
+     * 「每会话隔离」靠的就是「关会话时就地清」（spec §2），而单标签关闭必须不动它
+     * （见 [BrowserTab.destroy]）。
+     */
     suspend fun close() = withContext(Dispatchers.Main) {
         if (closed) return@withContext
         closed = true
-        // 两枚在飞的 deferred 都**以值解套**而不是异常：completeExceptionally 会一路抛到
-        // ToolRunner 被归成 tool_crashed，RENDERER_GONE/CANCELLED 这两个码就到不了信封；
-        // 以带原因的值完成，await 侧走正常失败通道，也不会留未处理的异常完成。
-        // 不解锁的话被抢会话的 navigate 要干等满 NAV_TIMEOUT_MS（25 s，几乎吃光这族工具
-        // 那颗 30 s 的外层 deadline，见 BrowserTools.TIMEOUT_MS）。
-        navigation?.complete("RENDERER_GONE")
-        navigation = null
-        pendingScript?.complete(SCRIPT_CLOSED)
-        pendingScript = null
-        detach()
-        view.stopLoading()
-        view.destroy()
+        // 两枚在飞的 deferred 都由 destroyTab 以**值**解套，而不是异常完成：
+        // completeExceptionally 会一路抛到 ToolRunner 被归成 tool_crashed，RENDERER_GONE/CANCELLED
+        // 这两个码就到不了信封；以带原因的值完成，await 侧走正常失败通道，也不会留未处理的异常完成。
+        // 不解套的话被抢会话的 navigate 要干等满 NAV_TIMEOUT_MS（25 s，几乎吃光这族工具那颗 30 s
+        // 的外层 deadline，见 BrowserTools.TIMEOUT_MS）。
+        dropPendingJsDialog()
+        dropPendingFileRequest()
+        tabs.forEach { it.destroy() }
+        // **不清空 `tabs`**：close 之后仍会有 `detach()` / 读 `activeWebView` 进来（AndroidView 的
+        // onRelease 与 DisposableEffect 的 onDispose 都不与销毁排序），留一枚已销毁的标签在列表里
+        // 是「所有入口都被 closed 闸挡住」；清空它则那些入口直接 IndexOutOfBounds —— 后者是崩溃，
+        // 前者是被闸掉。钉在 BrowserSessionStoreTest.detachingAfterCloseMustNotResetTheViewportAgain。
+        hostContainer = null
+        tabsState.value = emptyList()
         // 凭据是 app 全局的：会话结束只能靠「清」来隔离。
         // `WebStorage.getInstance()` 就是唯一入口：公开 android.jar（35/36/37）里
         // 从来没有带 Context 的重载（那是 CookieManager 的 API 形状），无从分流。

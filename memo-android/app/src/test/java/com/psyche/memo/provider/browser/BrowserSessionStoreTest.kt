@@ -98,13 +98,13 @@ class BrowserSessionStoreTest {
     @Test
     fun detachingAfterCloseMustNotResetTheViewportAgain() = runBlocking {
         fun dirtyPhoneViewport(session: BrowserSession) {
-            session.view.measure(
+            session.activeWebView.measure(
                 View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(640, View.MeasureSpec.EXACTLY),
             )
             // 非空闸：measure 的效果必须真能被观测到，否则后面的断言全是恒真
-            assertEquals(360, session.view.measuredWidth)
-            assertEquals(640, session.view.measuredHeight)
+            assertEquals(360, session.activeWebView.measuredWidth)
+            assertEquals(640, session.activeWebView.measuredHeight)
         }
 
         val session = store().sessionFor("c1")
@@ -115,7 +115,7 @@ class BrowserSessionStoreTest {
         session.detach()
         assertEquals(
             "closed 之后 detach 不许再重设离屏视口（destroy 后的 measure/layout 真机直接炸）",
-            360, session.view.measuredWidth,
+            360, session.activeWebView.measuredWidth,
         )
 
         // 路径 ②：attachTo 临时容器再 detach（AndroidView.onRelease）——removeView 是父容器
@@ -124,10 +124,10 @@ class BrowserSessionStoreTest {
         session.attachTo(host)
         dirtyPhoneViewport(session)
         session.detach()
-        assertNull("detach 仍要把视图从父容器摘掉（被闸掉的只是 measure/layout）", session.view.parent)
+        assertNull("detach 仍要把视图从父容器摘掉（被闸掉的只是 measure/layout）", session.activeWebView.parent)
         assertEquals(
             "closed 之后 detach 不许再重设离屏视口",
-            360, session.view.measuredWidth,
+            360, session.activeWebView.measuredWidth,
         )
     }
 

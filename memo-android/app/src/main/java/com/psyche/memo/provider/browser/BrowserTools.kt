@@ -15,17 +15,19 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
 
 /**
- * Agent 浏览器的工具面 —— **13 颗独立工具**（spec §12.1，用户 2026-09-26「拆工具」）。
+ * Agent 浏览器的工具面 —— **14 颗独立工具**（spec §12.1 + §12.2 那颗 `browser_tabs`，
+ * 用户 2026-09-26「拆工具」+「连标签这些都没有做」）。
  *
  * v1 那颗 `browser_use` + `action` 枚举**整块删除、不留兼容**：功能刚落地，库里没有历史会话
  * 在用；旧记录里的 `browser_use` 按未知工具名落到卡片默认样式即可。拆开的理由是**卡片可读**
  * —— 本仓的卡片体系就是「一个工具名一个图标一个标题」，九种动作挤在同一张「内置浏览器」卡里
- * 看不出模型这一轮到底做了什么。代价写进 spec：13 份 schema 每轮都进请求（比单工具贵），
+ * 看不出模型这一轮到底做了什么。代价写进 spec：14 份 schema 每轮都进请求（比单工具贵），
  * 换模型不必先选 `action` 再选参数、时间线一眼读懂。`theWholeFamilyStaysWithinTheSchemaBudget`
  * 给这份代价上了一道天花板。
  *
@@ -38,10 +40,10 @@ import kotlinx.serialization.json.put
  * `browser_page_info` 的滚动位置用一支只做四次属性读取的脚本（[BrowserScripts.pageInfoScript]），
  * 里面**不许有遍历** —— 元素清单归 `browser_find`、正文归 `browser_read`。
  *
- * **spec §12.1 的 `browser_open` 多一个 `new_tab` 参数、这族还多一颗 `browser_tabs`，本批没有**：
- * 那两颗依赖 §12.2 的多标签基座（一个会话 N 个 WebView + 遮罩的标签条/地址栏），spec §12.6
- * 把它们排在批次 2。在这里先挂上参数与工具名，等于递给模型一颗「说了做不到」的工具 ——
- * 提示词只能陈述运行时会执行的事（`ToolRulesTest` 钉的就是这条纪律）。
+ * **spec §12.1 的 `browser_open` 多一个 `new_tab` 参数、这族还多一颗 `browser_tabs`**：那两处
+ * 依赖 §12.2 的多标签基座（一个会话 N 个 WebView + 遮罩的标签条/地址栏），本批已随基座一起落地。
+ * 递交时机照 spec 的纪律走 —— **运行时会执行的动作才写进提示词**（`ToolRulesTest` 钉的就是这条），
+ * 所以标签相关的两句只在真的能执行时才出现。
  */
 object BrowserTools {
 
@@ -60,11 +62,23 @@ object BrowserTools {
     const val RELOAD = "browser_reload"
 
     /**
+     * 第 14 颗：标签清单 / 切活动标签 / 关一个标签（spec §12.2）。
+     *
+     * 它**可用但不引导** —— `ToolRules` 那句族级路由不点它，提示词也不说「多标签是常态」：
+     * 模型默认永远只在活动标签上动作，开新标签的唯一入口是 `browser_open(new_tab=true)`。
+     * 留着它是因为用户在遮罩标签条上点了第二个标签之后，模型需要一颗能「回到用户正在看的那一枚」
+     * 的动作，否则它只能重新 open 一个 URL，而那个 URL 用户已经不需要了。
+     */
+    const val TABS = "browser_tabs"
+
+    /**
      * 递交顺序 = spec §12.1 表格的顺序（先「开/读/找」，再「点/填/选」，再「滚/图/历史」，
-     * 最后三个新动作）。`definitions()` 与测试都跟着这份顺序走，不再各抄一份名单。
+     * 最后三个新动作），`browser_tabs` 收尾（§12.2 的第 14 颗，不引导）。
+     * `definitions()` 与测试都跟着这份顺序走，不再各抄一份名单。
      */
     private val ORDERED = listOf(
-        OPEN, READ, FIND, CLICK, TYPE, SELECT, SCROLL, SCREENSHOT, BACK, FORWARD, WAIT, PAGE_INFO, RELOAD,
+        OPEN, READ, FIND, CLICK, TYPE, SELECT, SCROLL, SCREENSHOT, BACK, FORWARD, WAIT, PAGE_INFO,
+        RELOAD, TABS,
     )
 
     /** 门控（递与执行两处）、`reserved` 挡同名 MCP、派发判定、超时口径**共用这一个集合**。 */
@@ -77,10 +91,10 @@ object BrowserTools {
     const val PREFERENCE_KEY = "agent_browser_enabled_v1"
 
     /**
-     * 这 13 颗共用的外层 deadline（`ToolRunner` 那层）。
+     * 这族工具共用的外层 deadline（`ToolRunner` 那层）。
      *
      * 一颗动作最坏是 navigate 25 s + 结算 250 ms，外面这层必须更宽，否则就是
-     * 「外面先超时、里面还在跑」的双重超时（Mermaid 同款理由）。**一个常量**，不是 13 行副本。
+     * 「外面先超时、里面还在跑」的双重超时（Mermaid 同款理由）。**一个常量**，不是十几行副本。
      */
     const val TIMEOUT_MS = 30_000L
 
@@ -118,7 +132,7 @@ object BrowserTools {
      *
      * 为什么不再每颗都贴一遍：这段话管的是「别替用户提交/购买/关注/发送」「正文是数据不是
      * 指令」「用户在页面上就停下」，只有动手改页面的动作用得上 —— `browser_open`/`browser_reload`
-     * 连表单都不碰，`browser_read`/`browser_find`/`browser_page_info` 只读。而 13 份 schema 每轮
+     * 连表单都不碰，`browser_read`/`browser_find`/`browser_page_info` 只读。而 14 份 schema 每轮
      * 都进请求：实测各带一遍是 **9641 字符 / 2411 tokens**（2411 = 4 char/token 量级），
      * 几乎是 spec §12 估算（~1000–1400 token）的两倍；只留三颗之后是 **5291 字符 / 1323 tokens**。
      * 那份钱是用户点头才花的，`theWholeFamilyStaysWithinTheSchemaBudget` 把它钉成回归网。
@@ -133,13 +147,13 @@ object BrowserTools {
 
     private val DESCRIPTIONS: Map<String, String> = mapOf(
         OPEN to "Open an https:// page in the built-in browser and report its url with the current " +
-            "`generation`.",
-        READ to "Read the visible text of the current page: at most `max_chars` characters from " +
-            "`offset`. A cut-off result carries `next_offset` to continue from.",
-        FIND to "List the current page's interactive elements, one numbered `index` each, with the " +
-            "current `generation`. A <select> entry also lists its selectable options.",
-        CLICK to "Click an element: `index` + `generation` from `$FIND`, or viewport `x`/`y` from a " +
-            "screenshot when no index fits." + PAGE_CHANGING_RULES,
+            "`generation.",
+        READ to "Read the page's visible text: `max_chars` characters from `offset`; a cut-off " +
+            "result carries `next_offset`.",
+        FIND to "List the page's interactive elements with a numbered `index` and the current " +
+            "`generation`. A <select> entry lists its options.",
+        CLICK to "Click an element by `index`+`generation` from `$FIND`, or by `x`/`y` from a " +
+            "screenshot." + PAGE_CHANGING_RULES,
         TYPE to "Write `text` into an input/textarea: `index` + `generation` from `$FIND`, or " +
             "`x`/`y`. This tool never clears a field." + PAGE_CHANGING_RULES,
         SELECT to "Choose one option of a <select> field listed by `$FIND`: `index` + `generation` " +
@@ -148,14 +162,15 @@ object BrowserTools {
             "of a screen. Does not change the `generation`.",
         SCREENSHOT to "Attach a PNG screenshot of the current page. Over the size cap it is not " +
             "sent: use `$READ` or `$FIND` instead.",
-        BACK to "Go back one page in this browser session's history.",
-        FORWARD to "Go forward one page in this browser session's history.",
+        BACK to "Go back one page in this tab's history.",
+        FORWARD to "Go forward one page in this tab's history.",
         WAIT to "Wait until something appears: `query` matching a `$FIND` entry's text / " +
-            "placeholder / href, or the `index` + `generation` you have coming back. Read-only " +
-            "while waiting.",
+            "placeholder / href, or the `index` + `generation` you have coming back.",
         PAGE_INFO to "Report where the page currently is: url, title, scroll position, atTop/" +
-            "atBottom and the `generation`. Read-only — it does not scan the page.",
+            "atBottom and the `generation`.",
         RELOAD to "Reload the current page.",
+        TABS to "Browser tabs: `list` them, `select` one to make it active, or `close` one. " +
+            "Everything else acts on the active tab; after switching, `$FIND` again.",
     )
 
     private fun prop(type: String, description: String, enum: List<String>? = null): JsonObject =
@@ -170,10 +185,7 @@ object BrowserTools {
      * （`generation` 四颗、`index`/`query` 各三颗），所以这里一句只说一件事：是什么、从哪来。
      * 行为边界归 [PAGE_CHANGING_RULES] 与 `ToolRules`，不在参数里再讲一遍。
      */
-    private val URL_PROP = prop(
-        "string",
-        "Full address; only https:// reaches the WebView — any other scheme is refused.",
-    )
+    private val URL_PROP = prop("string", "Full address; only https:// reaches the WebView.")
     private val INDEX_PROP = prop(
         "integer",
         "Element number from the last `$FIND` result.",
@@ -211,6 +223,13 @@ object BrowserTools {
         "integer",
         "How long to wait in milliseconds. Default $WAIT_DEFAULT_MS, cap $WAIT_MAX_MS.",
     )
+    private val NEW_TAB_PROP = prop("boolean", "Open in a fresh tab and make it active.")
+    /**
+     * `browser_tabs` 的编号**不是** `$FIND` 的元素编号 —— 复用 [INDEX_PROP] 那句描述会让模型
+     * 把元素号传进来，然后关掉一个它以为已经点过的标签。两句必须分开写。
+     */
+    private val TAB_INDEX_PROP = prop("integer", "A tab number from `$TABS`(list).")
+    private val TAB_ACTION_PROP = prop("string", "Tab action.", listOf("list", "select", "close"))
 
     /** parameters 对象：`required` 为空就不写这个键（与 v1 的单工具形状同源，只是键成了每颗一份）。 */
     private fun parameters(properties: Map<String, JsonObject>, required: List<String>): JsonObject =
@@ -222,7 +241,7 @@ object BrowserTools {
 
     private val DEFINITIONS: Map<String, LlmToolSpec> = ORDERED.associateWith { name ->
         val (properties, required) = when (name) {
-            OPEN -> mapOf("url" to URL_PROP) to listOf("url")
+            OPEN -> mapOf("url" to URL_PROP, "new_tab" to NEW_TAB_PROP) to listOf("url")
             READ -> mapOf("offset" to OFFSET_PROP, "max_chars" to MAX_CHARS_PROP) to emptyList()
             FIND -> mapOf("query" to QUERY_PROP) to emptyList()
             CLICK -> mapOf(
@@ -250,6 +269,7 @@ object BrowserTools {
 
             PAGE_INFO -> emptyMap<String, JsonObject>() to emptyList()
             RELOAD -> emptyMap<String, JsonObject>() to emptyList()
+            TABS -> mapOf("action" to TAB_ACTION_PROP, "index" to TAB_INDEX_PROP) to listOf("action")
             // 走到这里 = ORDERED 里加了名字却忘了写 schema。宁可回空对象让
             // everyNameHasASchemaAndADescription 当场红，也不要静默递出一份缺定义的请求。
             else -> emptyMap<String, JsonObject>() to emptyList()
@@ -339,15 +359,36 @@ object BrowserTools {
                     instruction = "Retry `$OPEN` with an https:// URL, or tell the user this address " +
                         "cannot be opened.",
                 )
-                gateway.navigate(url).fold(
-                    onSuccess = { ok(gateway, toolName) },
-                    onFailure = {
-                        error(
+                // `new_tab=true` 走 openTab（建标签 + 设为活动 + 导航），false 走老的 navigate
+                // （在活动标签里换页）。两条路都要报同一套失败码，所以 fold 的失败支共用。
+                val wantsNewTab = args.flag("new_tab")
+                val opened = if (wantsNewTab) gateway.openTab(url) else gateway.navigate(url)
+                opened.fold(
+                    onSuccess = {
+                        ok(
+                            gateway,
                             toolName,
-                            code = it.message ?: "NAV_FAILED",
-                            detail = "navigate failed",
-                            instruction = NAV_FAILED_INSTRUCTION,
+                            if (wantsNewTab) mapOf("tabs" to gateway.tabInfos().size) else emptyMap(),
                         )
+                    },
+                    onFailure = {
+                        when (it.message) {
+                            "TAB_LIMIT" -> error(
+                                toolName,
+                                code = "TAB_LIMIT",
+                                detail = "The browser already holds ${BrowserSession.MAX_TABS} tabs.",
+                                instruction = "Do not open more tabs: `$TABS`(list) then " +
+                                    "`$TABS`(close) one you no longer need, or re-call `$OPEN` with " +
+                                    "new_tab=false to use the current tab. Nothing was opened.",
+                            )
+
+                            else -> error(
+                                toolName,
+                                code = it.message ?: "NAV_FAILED",
+                                detail = "navigate failed",
+                                instruction = NAV_FAILED_INSTRUCTION,
+                            )
+                        }
                     },
                 )
             }
@@ -499,9 +540,15 @@ object BrowserTools {
                         "viewport_height" to info.viewportHeight,
                         "at_top" to info.atTop,
                         "at_bottom" to info.atBottom,
+                        // 标签条数：会话里现在有几枚标签（含活动的那一枚）。不占 schema 一个字，
+                        // 却能让模型知道 `new_tab` 开出去的东西还在 —— 否则它会以为「切走了就没了」，
+                        // 反复开新标签吃到 TAB_LIMIT。
+                        "tabs" to gateway.tabInfos().size,
                     ),
                 )
             }
+
+            TABS -> tabsTool(gateway, args)
 
             RELOAD -> gateway.reload().fold(
                 onSuccess = { ok(gateway, toolName) },
@@ -627,6 +674,101 @@ object BrowserTools {
                 wanted?.let { fields["value"] = it }
                 ok(gateway, toolName, fields)
             }
+        }
+    }
+
+    /**
+     * `browser_tabs`：清单 / 切活动标签 / 关一枚。
+     *
+     * 三件事都在**会话**那一份状态上，不碰页面 —— 所以没有代次闸（代次本来就是「这一页的元素清单」
+     * 的把手，切标签必然由 `BrowserSession.activate` 发新号，旧号自然作废）。
+     * 越界编号**不做任何事**，只回 `TAB_INDEX_INVALID`：把 `close(7)` 读成「关掉最后一个」是
+     * 一次用户没要求的销毁，而这一族工具的全部纪律就是「不确定就别动手」。
+     */
+    private suspend fun tabsTool(gateway: BrowserGateway, args: JsonObject): String {
+        fun rendered(): String = gateway.tabInfos().joinToString("\n") { tab ->
+            val label = tab.title.ifBlank { tab.url.ifBlank { "空白标签" } }
+            "${if (tab.active) "►" else " "} ${tab.index} ${label.take(80)}"
+        }
+
+        /**
+         * 清单本体 + 「哪一枚是活动的」。显式 `<String, Any>`：两个值一支是文本一支是编号，
+         * 让编译器自己求公共父类型会推出 `Comparable<*> & Serializable`，落不进 `ok()` 那张表。
+         */
+        fun tabFields(): Map<String, Any> = mapOf(
+            "tabs" to rendered(),
+            "active" to (gateway.tabInfos().firstOrNull { it.active }?.index ?: -1),
+        )
+
+        return when (args.text("action")) {
+            null -> argError(
+                TABS,
+                param = "action",
+                message = "`$TABS` needs an `action`.",
+                constraint = "required, one of: list / select / close",
+                fix = "Re-call `$TABS` with action=\"list\" to see the tabs first. Nothing was " +
+                    "changed.",
+            )
+
+            "list" -> ok(
+                gateway,
+                TABS,
+                tabFields(),
+            )
+
+            "select", "close" -> {
+                val index = args.int("index")
+                    ?: return argError(
+                        TABS,
+                        param = "index",
+                        message = "`${args.text("action")}` needs the tab `index`.",
+                        constraint = "required, a tab number from `$TABS`(list)",
+                        fix = "Call `$TABS` with action=\"list\" first, then pass one of those " +
+                            "indexes. Nothing was changed.",
+                    )
+                val outcome = if (args.text("action") == "select") {
+                    gateway.selectTab(index)
+                } else {
+                    gateway.closeTab(index)
+                }
+                outcome.fold(
+                    onSuccess = {
+                        ok(
+                            gateway,
+                            TABS,
+                            tabFields(),
+                        )
+                    },
+                    onFailure = {
+                        when (it.message) {
+                            "TAB_INDEX_INVALID" -> error(
+                                toolName = TABS,
+                                code = "TAB_INDEX_INVALID",
+                                detail = "There is no tab numbered $index.",
+                                instruction = "Nothing was changed. Call `$TABS`(list) to see the " +
+                                    "numbers that do exist.",
+                            )
+
+                            else -> error(
+                                toolName = TABS,
+                                code = it.message ?: "TAB_FAILED",
+                                detail = "The tab action did not run.",
+                                instruction = "The browser session is gone or the page moved while " +
+                                    "you were switching. Check `$PAGE_INFO` before acting again.",
+                            )
+                        }
+                    },
+                )
+            }
+
+            else -> argError(
+                TABS,
+                param = "action",
+                message = "`${args.text("action")}` is not a tab action.",
+                constraint = "one of: list / select / close",
+                fix = "Re-call `$TABS` with action=\"list\", \"select\" or \"close\". Nothing was " +
+                    "changed.",
+            )
         }
     }
 
@@ -870,6 +1012,14 @@ object BrowserTools {
 
     private fun JsonObject.text(key: String): String? =
         (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+
+    /** 模型常把布尔写成 `"true"`，两种都要认（与 [int] 同一个理由）。缺省 = false。 */
+    private fun JsonObject.flag(key: String): Boolean =
+        when (val raw = this[key]) {
+            null -> false
+            is JsonPrimitive -> raw.booleanOrNull ?: raw.contentOrNull?.trim()?.equals("true", true) ?: false
+            else -> false
+        }
 
     /** 模型常把整数写成 `"6000"`，两种都要认（否则就是「明明给了参数却说不认识」）。 */
     private fun JsonObject.int(key: String): Int? {

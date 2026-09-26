@@ -45,6 +45,9 @@ class BrowserToolsTest {
         private val shotBytes: Int = 8,
         private val forwardAvailable: Boolean = false,
         private val backAvailable: Boolean = false,
+        private val initialTabs: List<BrowserTabInfo> = listOf(
+            BrowserTabInfo(0, "示例", "https://example.com", active = true),
+        ),
     ) : BrowserGateway {
         override val url = "https://example.com"
         override val isClosed = false
@@ -129,6 +132,68 @@ class BrowserToolsTest {
 
         var notice: String? = null
         override fun drainNotice(): String? = notice.also { notice = null }
+
+        // ------------------------------------------------------------ 标签（spec §12.2）
+        //
+        // 替身照 `BrowserSession` 那三处的**真语义**写，不图省事：
+        // - 切到另一枚标签**必然换代次**（真身在 `activate` 里发新号，这是跨标签 index 别名的
+        //   唯一解）；切到**已经是活动的那一枚**不换代次（什么都没变）；
+        // - 关掉活动标签 → 继任者被 activate（换代次）；关掉非活动的那枚 → 活动标签还是同一枚，
+        //   只是下标左移，**不许**换代次；
+        // - 关到空 → 补一枚空白标签（会话恰有一个活动标签这条不变量）。
+        var tabCap: Int = BrowserSession.MAX_TABS
+        val tabList = initialTabs.toMutableList()
+        var openedTabs: List<String> = emptyList()
+        var closedTabs: List<Int> = emptyList()
+
+        private val activeTabIndex: Int get() = tabList.indexOfFirst { it.active }
+
+        override fun tabInfos(): List<BrowserTabInfo> = tabList.toList()
+
+        override suspend fun openTab(url: String): Result<Unit> {
+            if (tabList.size >= tabCap) return Result.failure(IllegalStateException("TAB_LIMIT"))
+            if (!url.startsWith("https://")) return Result.failure(IllegalStateException("BLOCKED_SCHEME"))
+            openedTabs = openedTabs + url
+            tabList.replaceAll { it.copy(active = false) }
+            tabList.add(BrowserTabInfo(tabList.size, "第 ${tabList.size + 1} 页", url, active = true))
+            bumpBySession()
+            return Result.success(Unit)
+        }
+
+        override suspend fun selectTab(index: Int): Result<Unit> {
+            if (index !in tabList.indices) {
+                return Result.failure(IllegalStateException("TAB_INDEX_INVALID"))
+            }
+            if (index == activeTabIndex) return Result.success(Unit)
+            tabList.replaceAll { it.copy(active = it.index == index) }
+            bumpBySession()
+            return Result.success(Unit)
+        }
+
+        override suspend fun closeTab(index: Int): Result<Unit> {
+            if (index !in tabList.indices) {
+                return Result.failure(IllegalStateException("TAB_INDEX_INVALID"))
+            }
+            closedTabs = closedTabs + index
+            val wasActive = tabList[index].active
+            tabList.removeAt(index)
+            if (tabList.isEmpty()) {
+                tabList.add(BrowserTabInfo(0, "空白标签", "", active = true))
+                bumpBySession()
+                return Result.success(Unit)
+            }
+            if (wasActive) {
+                val next = index.coerceAtMost(tabList.lastIndex)
+                tabList.replaceAll { it.copy(active = it.index == next) }
+                bumpBySession()
+            } else {
+                // 活动的那一枚还在，只是被挤了一格：按下标重建，代次**不动**（页面根本没换）。
+                val rebuilt = tabList.mapIndexed { i, tab -> tab.copy(index = i) }
+                tabList.clear()
+                tabList.addAll(rebuilt)
+            }
+            return Result.success(Unit)
+        }
     }
 
     private fun obj(raw: String): JsonObject = Json.parseToJsonElement(raw).jsonObject
@@ -798,6 +863,136 @@ class BrowserToolsTest {
         val result = obj(BrowserTools.execute(BrowserTools.SCROLL, gateway, argsOf("\"direction\":\"down\"")) {})
         assertEquals("JS_ALERT_SUPPRESSED:please enter email", result["page_notice"]!!.jsonPrimitive.content)
         assertNull("取走即清空，不许下一颗调用还带着它", gateway.drainNotice())
+    }
+
+    // ------------------------------------------------------------------ 标签（spec §12.2）
+
+    /**
+     * `new_tab=true` 走的是 [BrowserGateway.openTab]，**不是** `navigate`：后者在当前活动标签里
+     * 换页，前者建新标签并把它设为活动。两条路走错一条，用户看到的「原页面」就被顶掉了 ——
+     * 而模型以为它开了个新标签。
+     */
+    @Test
+    fun openInANewTabGoesThroughTheTabPathNotTheCurrentPage() = runBlocking {
+        val gateway = FakeGateway()
+        val result = obj(
+            BrowserTools.execute(
+                BrowserTools.OPEN, gateway,
+                argsOf("\"url\":\"https://b.example\"", "\"new_tab\":true"),
+            ) {},
+        )
+        assertNull("活动标签里换页那条路一步都不许走", gateway.navigatedTo)
+        assertEquals(listOf("https://b.example"), gateway.openedTabs)
+        assertEquals("2", result["tabs"]!!.jsonPrimitive.content)
+        assertTrue("信封照样带 generation（新标签是新号）", result["generation"] != null)
+    }
+
+    @Test
+    fun plainOpenStillReplacesTheCurrentPageWithoutTouchingTabs() = runBlocking {
+        val gateway = FakeGateway()
+        BrowserTools.execute(BrowserTools.OPEN, gateway, argsOf("\"url\":\"https://b.example\"")) {}
+        assertEquals("https://b.example", gateway.navigatedTo)
+        assertTrue("没要求新标签就不许多造一枚", gateway.openedTabs.isEmpty())
+    }
+
+    @Test
+    fun tabLimitRefusesWithoutTouchingAnyPage() = runBlocking {
+        val gateway = FakeGateway()
+        gateway.tabCap = 1
+        val result = obj(
+            BrowserTools.execute(
+                BrowserTools.OPEN, gateway,
+                argsOf("\"url\":\"https://b.example\"", "\"new_tab\":\"true\""),
+            ) {},
+        )
+        assertEquals("TAB_LIMIT", result["error"]!!.jsonPrimitive.content)
+        assertNull("被拒的动作不许半执行：既没导航，也没新标签", gateway.navigatedTo)
+        assertTrue("必须告诉下一步（换一枚标签还是就地打开）", result["instruction"] != null)
+    }
+
+    @Test
+    fun tabsListReportsEveryTabAndMarksTheActiveOne() = runBlocking {
+        val gateway = FakeGateway(
+            initialTabs = listOf(
+                BrowserTabInfo(0, "第一页", "https://a", active = true),
+                BrowserTabInfo(1, "第二页", "https://b", active = false),
+            ),
+        )
+        val result = obj(
+            BrowserTools.execute(BrowserTools.TABS, gateway, argsOf("\"action\":\"list\"")) {},
+        )
+        val block = result["tabs"]!!.jsonPrimitive.content
+        assertTrue("两枚都要列出来：$block", block.contains("第一页") && block.contains("第二页"))
+        assertTrue("活动的那一枚要标出来：$block", block.contains("►"))
+        assertEquals("0", result["active"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * 切标签**必然**换代次：模型拿着 A 标签的第 5 号去点 B 标签，是这套 index 契约唯一
+     * 还没防住的别名（各标签自己 `++` 时两枚迟早同号）。真身的解法是会话级发号器
+     * （`BrowserSession.nextEpoch`，证据在 `BrowserTabsTest`），替身这边必须同样表现，
+     * 否则这条回归在工具面是隐形的。
+     */
+    @Test
+    fun switchingTabsIssuesAFreshGeneration() = runBlocking {
+        val gateway = FakeGateway(
+            initialTabs = listOf(
+                BrowserTabInfo(0, "第一页", "https://a", active = true),
+                BrowserTabInfo(1, "第二页", "https://b", active = false),
+            ),
+        )
+        val before = gateway.generation
+        val switched = obj(
+            BrowserTools.execute(BrowserTools.TABS, gateway, argsOf("\"action\":\"select\"", "\"index\":1")) {},
+        )
+        assertEquals("1", switched["active"]!!.jsonPrimitive.content)
+        assertTrue(
+            "切完的代次必须是新号（切之前是 $before）",
+            switched["generation"]!!.jsonPrimitive.content != "$before",
+        )
+        assertNull("活动标签换人了 ⇒ 交给模型的清单必须作废", gateway.snapshot)
+    }
+
+    @Test
+    fun closingTheIdleTabKeepsTheGenerationAndOutOfRangeChangesNothing() = runBlocking {
+        val gateway = FakeGateway(
+            initialTabs = listOf(
+                BrowserTabInfo(0, "第一页", "https://a", active = false),
+                BrowserTabInfo(1, "第二页", "https://b", active = true),
+            ),
+        )
+        val epoch = gateway.generation
+        val closed = obj(
+            BrowserTools.execute(BrowserTools.TABS, gateway, argsOf("\"action\":\"close\"", "\"index\":0")) {},
+        )
+        assertEquals("关的是没在看的那一枚 ⇒ 页面没换 ⇒ 代次不动", "$epoch", closed["generation"]!!.jsonPrimitive.content)
+        assertEquals(listOf(0), gateway.closedTabs)
+
+        val outOfRange = obj(
+            BrowserTools.execute(BrowserTools.TABS, gateway, argsOf("\"action\":\"close\"", "\"index\":7")) {},
+        )
+        assertEquals("TAB_INDEX_INVALID", outOfRange["error"]!!.jsonPrimitive.content)
+        assertEquals("越界那一次不许真的关掉任何东西", listOf(0), gateway.closedTabs)
+        assertTrue(outOfRange["instruction"] != null)
+    }
+
+    @Test
+    fun tabActionsAreTheThreeDeclaredOnesOnly() = runBlocking {
+        val gateway = FakeGateway()
+        val unknown = obj(
+            BrowserTools.execute(BrowserTools.TABS, gateway, argsOf("\"action\":\"merge\"", "\"index\":0")) {},
+        )
+        assertEquals("invalid_arguments", unknown["error"]!!.jsonPrimitive.content)
+        assertTrue("越界动作不落任何状态", gateway.closedTabs.isEmpty() && gateway.openedTabs.isEmpty())
+
+        val noIndex = obj(BrowserTools.execute(BrowserTools.TABS, gateway, argsOf("\"action\":\"select\"")) {})
+        assertEquals("invalid_arguments", noIndex["error"]!!.jsonPrimitive.content)
+        assertEquals(
+            "缺 index 也必须点名是哪个参数",
+            "index",
+            ((noIndex["violations"] as? JsonArray)?.firstOrNull()?.jsonObject?.get("param"))
+                ?.jsonPrimitive?.content,
+        )
     }
 
     // ------------------------------------------------------------------ 截图

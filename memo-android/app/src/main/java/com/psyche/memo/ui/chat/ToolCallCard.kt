@@ -97,6 +97,7 @@ import com.composables.icons.lucide.Image
 import com.composables.icons.lucide.Video
 import com.composables.icons.lucide.HeartPulse
 import com.composables.icons.lucide.Link
+import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.ListPlus
 import com.composables.icons.lucide.ListTodo
 import com.composables.icons.lucide.Lucide
@@ -299,6 +300,7 @@ private fun browserIconFor(name: String): ImageVector = when (name) {
     com.psyche.memo.provider.browser.BrowserTools.WAIT -> Lucide.Timer
     com.psyche.memo.provider.browser.BrowserTools.PAGE_INFO -> Lucide.Info
     com.psyche.memo.provider.browser.BrowserTools.RELOAD -> Lucide.RefreshCw
+    com.psyche.memo.provider.browser.BrowserTools.TABS -> Lucide.Layers
     else -> Lucide.Wrench
 }
 
@@ -321,6 +323,7 @@ internal val BROWSER_TITLE_RES: Map<String, Int> = mapOf(
     com.psyche.memo.provider.browser.BrowserTools.WAIT to UiR.string.chat_message_widget_browser_wait,
     com.psyche.memo.provider.browser.BrowserTools.PAGE_INFO to UiR.string.chat_message_widget_browser_page_info,
     com.psyche.memo.provider.browser.BrowserTools.RELOAD to UiR.string.chat_message_widget_browser_reload,
+    com.psyche.memo.provider.browser.BrowserTools.TABS to UiR.string.chat_message_widget_browser_tabs,
 )
 
 /** chat_message_widget.dart _localToolIconFor。 */

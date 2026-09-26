@@ -3,13 +3,19 @@ package com.psyche.memo.ui.chat
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.psyche.memo.provider.browser.BrowserSession
 import org.junit.Assert.assertEquals
@@ -154,5 +160,77 @@ class BrowserOverlayTest {
         assertEquals("清理动作必须委托给调用方（容器作用域），不在遮罩里自己关", 1, clearCalls)
         assertEquals(1, backCalls)
         assertFalse("清空并关闭之后模型不再被挡", session.userControls)
+    }
+
+    /**
+     * 标签条（spec §12.2/§12.3）：一枚标签一张芯片，点芯片 = 换活动标签。
+     *
+     * 这条钉的是「界面与模型看的是同一份状态」：用户点第二张芯片之后，会话那边的活动标签必须
+     * **真的**换过去（`tabsSnapshot` 里 active 的那一条跟着变），否则用户在界面上翻到第二页、
+     * 模型还在替他操作第一页 —— 接管功能最不能出现的分裂就是这个。
+     * 界面读的是 StateFlow，所以不需要像标题那条一样手动摘挂一次来逼重组。
+     */
+    @Test
+    fun tabStripSwitchesTheActiveTabTheSessionIsDriving() {
+        val session = newSession()
+        assertTrue("先造出第二枚标签", session.newTabFromUi())
+        open = true
+        mountOverlay(session)
+
+        // 空白标签没有标题也没有 url ⇒ 芯片落到序号上（1 / 2）。
+        //
+        // **performOnClick 而不是 performClick**：Robolectric 的文本度量是退化的（字形宽度按 0 算），
+        // 指针注入落在芯片几何中心 —— 那正是 × 的位置，测出来的是「关掉这枚标签」而不是「切到
+        // 这一枚」。手指落点的几何关系在 JVM 上证不了（真机验收里有一条就是它）；这里钉的是接线：
+        // 芯片的点击必须送到 `selectTabFromUi`。`clickable` 会把子节点的文本合并进自己的语义，
+        // 所以 `onNodeWithText` 找到的就是那颗可点的芯片本体。
+        compose.onNode(hasClickAction() and hasText("2")).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+
+        assertEquals(
+            "点第二张芯片必须把会话的活动标签也换过去",
+            1,
+            session.tabsSnapshot.value.first { it.active }.index,
+        )
+        assertEquals("切换不许顺带关掉任何标签", 2, session.tabInfos().size)
+
+        // × 那颗送到 `closeTabFromUi`：关掉第一枚之后只剩第二枚，且它仍然顶着新的下标 0。
+        compose.onAllNodesWithContentDescription("Close tab")[0].performClick()
+        compose.waitForIdle()
+        assertEquals(1, session.tabInfos().size)
+        assertEquals(0, session.tabInfos().single().index)
+    }
+
+    /**
+     * 地址栏被挡下时要**在界面上说**（spec §12.3）。
+     *
+     * Robolectric 里 `WebView` 是 shadow，导航不会真落地，所以这两条只能断言「拦截判据 + 提示」
+     * 这一半；「真按 https:// 输入的地址会不会跳」归真机验收（spec §12.6 第 4 步），不在这里假称。
+     */
+    @Test
+    fun addressBarBlocksPlainHttpAndSaysWhy() {
+        val session = newSession()
+        open = true
+        mountOverlay(session)
+
+        compose.onNode(hasSetTextAction()).performTextInput("http://example.com")
+        compose.onNodeWithText("Go").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Only https addresses can be opened").assertIsDisplayed()
+    }
+
+    /** 用户输入 `example.com` 是想访问这个站，不是想报错：没写协议就补 https（主流浏览器一致）。 */
+    @Test
+    fun addressBarTreatsABareHostAsHttps() {
+        val session = newSession()
+        open = true
+        mountOverlay(session)
+
+        compose.onNode(hasSetTextAction()).performTextInput("example.com")
+        compose.onNodeWithText("Go").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Only https addresses can be opened").assertDoesNotExist()
     }
 }

@@ -85,6 +85,9 @@ class ToolRulesTest {
             com.psyche.memo.provider.browser.BrowserTools.OPEN,
             com.psyche.memo.provider.browser.BrowserTools.READ,
             com.psyche.memo.provider.browser.BrowserTools.FIND,
+            // 句子里点名了它（`new_tab` 与切/关标签），就必须真的在 requires 里 ——
+            // 模型被告知一件本机不会递给它的动作，比少一句引导更糟。
+            com.psyche.memo.provider.browser.BrowserTools.TABS,
         ).forEach { name ->
             assertTrue("路由句里缺了 $name", block.contains(name))
         }
@@ -95,7 +98,7 @@ class ToolRulesTest {
     }
 
     /**
-     * `browser_*` 那一族 13 颗是 **app 级**工具，永远不许进 `LocalToolNames.all`。那条名单是「助手
+     * `browser_*` 那一族 14 颗是 **app 级**工具，永远不许进 `LocalToolNames.all`。那条名单是「助手
      * 勾了才执行」的双闸（`ToolHandler.handle` 的本地工具两支都读
      * `assistant.localToolIds.contains(name)`），塞进去就等于要求每个助手先勾一遍浏览器 ——
      * 正是 spec §4「浏览器是设备能力，不是人设能力」要避免的那条路径；而它们一旦落进那两支，

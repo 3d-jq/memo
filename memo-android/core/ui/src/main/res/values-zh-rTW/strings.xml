@@ -2957,6 +2957,13 @@
     <string name="browser_overlay_title">瀏覽器</string>
     <string name="browser_overlay_hand_back">交還給助手</string>
     <string name="browser_overlay_clear_close">清空並關閉</string>
+    <string name="browser_tab_new">新分頁</string>
+    <string name="browser_tab_close">關閉分頁</string>
+    <string name="browser_address_hint">輸入網址（僅 https）</string>
+    <string name="browser_address_go">前往</string>
+    <string name="browser_address_blocked">只允許開啟 https 網址</string>
+    <string name="browser_js_confirm">確定</string>
+    <string name="browser_js_cancel">取消</string>
     <!-- Agent 瀏覽器那一族 13 顆工具的卡片標題（spec §12.1 拆工具的全部理由：
          一顆動作一行標題，看得出模型這一輪到底做了什麼）。 -->
     <string name="chat_message_widget_browser_open">開啟網頁</string>
@@ -2972,4 +2979,5 @@
     <string name="chat_message_widget_browser_wait">等待網頁變化</string>
     <string name="chat_message_widget_browser_page_info">網頁資訊</string>
     <string name="chat_message_widget_browser_reload">重新載入網頁</string>
+    <string name="chat_message_widget_browser_tabs">管理瀏覽器分頁</string>
 </resources>

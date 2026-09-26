@@ -2453,7 +2453,7 @@ MCP 工具编辑页的「需要审批」开关与 `McpToolConfig.needsApproval` 
 （可回看），而**"填好了、由你自己点"是提示词层面的行为边界而不是弹窗**。这条改动同时是
 Agent 浏览器与手机控制的前置：那两个功能的工具面直接沿用"无审批 + 全程可见可停"的形状。
 
-## 5.69 Agent 浏览器（`browser_use`）：内嵌 WebView + 用户接管遮罩（2026-09-25 spec/计划，2026-09-26 代码收口）
+## 5.69 Agent 浏览器（14 颗 `browser_*` + 多标签 + 用户接管遮罩）：内嵌 WebView（2026-09-25 spec/计划；2026-09-26 v1 收口，同日 v2 拆工具+补标签）
 
 > **尚未真机验收**：计划 Task 8 Step 6 那 7 条（真导航、视口、selector 不外泄、旧代次拒执行、
 > 截图上行、接管/交还、跨会话隔离）一条都还没在设备上跑过 —— 下面「测试与验证边界」列的五类
@@ -2463,8 +2463,15 @@ Agent 浏览器与手机控制的前置：那两个功能的工具面直接沿�
 `web_fetch`、服务端 `search_web`）。唯一的参照实现是 **Eta**（本机 `D:\program\.eta-ref`），它是
 **PolyForm Noncommercial 1.0** 许可 ⇒ **只借架构、一行代码都不搬**。
 spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`docs/superpowers/plans/2026-09-25-agent-browser.md`。
-落地：`provider/browser/{BrowserSession,BrowserSessionStore,BrowserGateway,BrowserPageSnapshot,BrowserScripts,BrowserTool}.kt`
-+ `ui/chat/BrowserOverlay.kt` + 设置页 `ui/AgentCapabilitySettingsScreen.kt`。
+落地：`provider/browser/{BrowserSession,BrowserTab,BrowserSessionStore,BrowserGateway,BrowserPageSnapshot,BrowserScripts,BrowserTakeover,BrowserTools}.kt`
++ `ui/chat/BrowserOverlay.kt` + 设置页 `ui/AgentCapabilitySettingsScreen.kt` + `ui/BottomToolsSheet.kt` 那一行入口。
+**v2 的两处形状变更（用户 2026-09-26 点名，别按 v1 的字面读）**：① 单工具 `browser_use` + `action` 枚举**整块删除**、
+拆成 14 颗独立工具（`browser_open/read/find/click/type/select/scroll/screenshot/back/forward/wait/page_info/reload/tabs`），
+每颗自己的图标与标题（`ToolCallCard.browserIconFor` / `BROWSER_TITLES`，三份 strings.xml 各 14 条）——理由是本仓卡片体系
+就是「一个工具名一个图标一个标题」，九种动作挤在同一张「内置浏览器」卡里看不出模型做了什么；② `BrowserSession` 从
+「1 会话 1 个 WebView」变成「**1 会话 N 个标签、恰 1 个活动**」（`BrowserTab` 是被剥出来的 WebView 本体，上限 `MAX_TABS = 5`）。
+**代价实测**：14 份 schema 每轮进请求 = **1389 tokens / 5555 字符**（单工具时 ~180），天花板 1400 由
+`BrowserToolsTest.theWholeFamilyStaysWithinTheSchemaBudget` 钉住；行为边界话只留在会改页面的那三颗 + `ToolRules` 族级一句。
 
 **① 寻址＝index + `generation`，不是 CSS selector**（与 Eta 最大的偏离，也是这条设计的核心）。
 每次 `navigate`/`read`/`find` 给 DOM 的"可寻址快照"记一个自增代次；`click`/`type` 必须把上一次拿到的
@@ -2472,20 +2479,24 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 `scroll` 不换）。代次不是当前值 ⇒ `STALE_GENERATION`，**不执行**；index 越界/元素没了 ⇒
 `TARGET_NOT_FOUND`。**模型永远看不到 selector**（selector 只在注入的 JS 内部用来取回同一节点），
 因为 Eta 那个坑是"页面一变，同一条 selector 静默点到另一个元素"——静默点错比报错严重得多。
-守卫：`BrowserPageSnapshotTest` + `BrowserToolTest`。
+守卫：`BrowserPageSnapshotTest` + `BrowserToolsTest`。
+**多标签之后代次改由会话发号**（`BrowserSession.nextEpoch`）：各标签自己 `++` 迟早同号，模型拿着 A 标签的第 5 号
+就会点到 B 标签的第 5 个元素——那正是这套契约要杀的东西。所以**切活动标签必然发新号并作废旧快照**，而关掉一枚
+**非活动**标签不作废（页面根本没换）。钉在 `BrowserTabsTest`（真身）+ `BrowserToolsTest.switchingTabsIssuesAFreshGeneration`（替身）。
 
 **②「同时只一个活动实例」不是取舍，是原生 cookie jar 逼出来的硬约束**。Android 的
 `CookieManager` / `WebStorage` 是 **app 全局单例**，做不到"两个会话各留一套登录态"，只能做到
 "新会话看不到上一个会话留下的东西"⇒ 隔离靠**关时就地清**：`BrowserSessionStore` 只留一枚 `holder`，
-换会话时先 `close()`（`removeView` → `stopLoading` → `destroy` → `removeAllCookies` + `flush`
-→ `WebStorage.deleteAllData`）再建新的。`sessionFor` 全程过 `mutex`（`close()` 内部要切 Main 会让出，
+换会话时先 `close()`（解套在飞的 deferred → 逐枚标签 `removeView` → `stopLoading` → `destroy` → `removeAllCookies` + `flush`
+→ `WebStorage.deleteAllData`）再建新的。**清凭据只在这一条路径上**：关掉单个标签绝不动 cookie jar，否则用户关一个
+标签页，别的标签全退登（`BrowserTab.destroy` 里写死了这条）。`sessionFor` 全程过 `mutex`（`close()` 内部要切 Main 会让出，
 不锁就有两枚活 WebView 并存、被顶掉那枚再没人关，而 jar 仍是同一份）；`peek()` 过滤 `isClosed`
 ⇒ 界面拿不到尸体。
 
 **③ 默认开，且把关只剩四件事（没有审批）**。键 `agent_browser_enabled_v1`，**缺键＝开**（用户
 2026-09-25 复核 spec 时拍板「改成默认开着的」）。读法唯一入口 `ui/DisplayPrefs.kt` 的
 `browserEnabled(container)`，三处消费同一支：`ChatViewModel.offeredTools()`（**递不递**）、
-`ToolHandler` 浏览器分支建会话**之前**的 `BrowserTool.rejectIfDisabled(...)`（**跑不跑**）、
+`ToolHandler` 浏览器分支建会话**之前**的 `BrowserTools.rejectIfDisabled(...)`（**跑不跑**）、
 设置页那行开关。**递与执行两处都查**是必需的：`offeredTools()` 只是不再递，而模型照旧发它是一条
 现实路径——最合理的来源就是被污染的网页正文在指挥它；光靠不递，用户明确关掉开关之后这颗工具照样
 能拿到一个真 WebView、用户的 cookie jar 和出网能力。关开关顺带 `browserSessions.closeAll()`。
@@ -2511,14 +2522,24 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 那一族的既有口径（带 `violations` 清单，PE3/§5.64），全仓没有第二家用大写那条，跟实现。
 每条错误必带 `instruction`；`CANCELLED` 说"结果未知"而不是"失败"。
 
-**⑥ 本机挡掉的东西必须说出来**。`WebChromeClient` 的 `onJsAlert`/`onJsConfirm`/`onJsPrompt` 一律
-「cancel + 记一笔 + **return true**」（返回 false 会让 WebView 去弹它自己的系统对话框，那正是无头
-执行里不该出现的东西）；`onPermissionRequest` 一律 `deny()`；`setDownloadListener` 记账并拒掉；
-`onCreateWindow` 一律拒绝（Memo 没有多标签，开了就是丢页面），并尽力用 `hitTestResult` 把目标 URL
-一起报出来。五种来源攒进同一个 `notices` 队列（上界 3 条 / 480 字符，超了丢最旧、丢的条数折进
+**⑥ 本机替用户做的决定必须说出来，而接管态要把决定交回给人**（v2 按 spec §12.4 改过）。
+`WebChromeClient` 的 `onJsAlert`/`onJsConfirm`/`onJsPrompt`：**无头**时「cancel + 记账 + **return true**」
+（返回 false 会让 WebView 去弹它自己的系统对话框，那正是无头执行里不该出现的东西）；**用户正看着这一页**
+（判据是 `BrowserSession.isMounted` 而不是 `userControls`——遮罩正在拆的那一拍旗标还是 true、却已经没人
+收集请求了）时把弹窗交给遮罩画的那一层，`confirm/prompt` 的结果**回填**给页面，取消即 `cancel()`。
+文件上传（`onShowFileChooser`）**只给用户手动**：挂着时借 `ActivityResultContracts.OpenMultipleDocuments`
+开系统选择器，无头一律 `onReceiveValue(null)` + 记 `FILE_CHOOSER_NEEDS_USER`——**模型不许上传文件**，
+这条不放开。`onPermissionRequest` 一律 `deny()`；`setDownloadListener` 记账并拒掉；
+`onCreateWindow` 在 v2 **改成开新标签**（`supportMultipleWindows = true`，到 `MAX_TABS` 才拒并记
+`NEW_WINDOW_REFUSED:tab_limit`）。⚠️ 副作用：模型 `browser_click` 点到 `_blank` 链接也可能真开出一个标签
+并换掉活动标签（换标签必然换代次 ⇒ 它手上的 index 全废），方向是安全的（只会多一次「重新 find」），
+`NEW_TAB_OPENED` 会随信封说明。两笔「等用户」的请求在遮罩销毁时必须一次了结（`dropPendingInteractions`），
+否则那一页的 JS 永远卡在弹窗上、那个 `<input type=file>` 永远按不动——**Robolectric 证不了这一半**
+（shadow 不会回调 `onJsAlert`），归真机验收。五种来源攒进**同一份**会话级 `notices` 队列（上界 3 条 / 480 字符，超了丢最旧、丢的条数折进
 `…(+N)` 尾计数），下一次工具调用 `drainNotice()` 把它以 **`page_notice`** 键随结果上行
-（`BrowserTool.kt` 的 `put("page_notice", …)`）——否则模型收到 `ok` 会以为页面照旧。钉它的测试：
-`BrowserToolTest.suppressedJsDialogRidesAlongInTheResult`。
+（`BrowserTools.kt` 的 `put("page_notice", …)`）——否则模型收到 `ok` 会以为页面照旧。钉它的测试：
+`BrowserToolsTest.suppressedJsDialogRidesAlongInTheResult`。队列按会话一份而不是每标签一份：按标签各存一份
+就是 5×480 字符一起进信封。
 
 **⑦ 截图 >4 MiB 不发时也必须给下一步**。`screenshot` 用 `View.draw(Canvas)` 原尺寸出 PNG（不缩放，
 对齐 Eta 的"不降质"口径）：空图 ⇒ `NO_PAGE`；超过 `MAX_PNG_BYTES`（4 MiB）⇒ **不发图**，结果里带
@@ -2533,8 +2554,11 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
   `browserOverlayOpen`。**不是 `Dialog`**——§5.31 那次「一点就闪退」的根因就是 `Dialog` 拿不到
   window token（`MainActivity` 是纯 `ComponentActivity`，ViewTree owner 只装在 activity-compose
   自己那棵树上）。
-- 挂进来的是会话**那一个** WebView（`attachTo`/`detach`）：新建一个就是另一个页面，用户看到的和
-  模型操作的就成了两回事。`attachTo` **没有 `closed` 闸**（那是给工具侧的入口留的），所以界面只许
+- 挂进来的是会话**那一枚活动标签**的 WebView（`attachTo`/`detach`/`detachFrom`）：另建一枚就是另一个页面，
+  用户看到的和模型操作的就成了两回事。标签条上切标签 = `AndroidView` 节点按 `key(session, 活动下标)` 整枚重建，
+  于是 `onRelease` 走的是 `detachFrom(frame)` 而**不是** `detach()`——Compose 不保证「旧节点释放」与「新节点
+  建立」的先后，无条件落宿主会把刚挂上去的新标签又摘下来（之后每次切标签只剩一片白）。按容器身份判，两种顺序
+  都收敛。`attachTo` **带 `closed` 闸**（v2 起：已关会话直接 return），但界面仍只许
   从 `container.browserSessions.peek(conversationId)` **同步取、同步挂**，绝不跨挂起点持有实例引用
   再去挂——把已 `destroy()` 的 WebView `addView` 回去真机必炸；`peek` 为 null 时那颗旗标就地落回去。
 - **成对性**：`DisposableEffect` 进 `takeOver()`、出 `detach() + release()`；两颗按钮都只走 `onBack`，
@@ -2553,6 +2577,12 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 - 网页正文「只是数据」这条（spec §7.2）**不靠工具自己消毒**：`BrowserTool` 故意不调
   `PromptFrames.sanitize`，靠的是 `ChatViewModel` 对本轮**所有** tool 消息那一个咽喉
   （写回处 `:2387` 与 `resumeAfterToolAnswer` 的 `:2517`）。那个咽喉哪天被搬走，这里会**静默失守**。
+- 遮罩在 v2 长成了**三件套**（spec §12.2/§12.3）：标签条（一枚标签一张芯片，点=切、×=关、+=新建，
+  `widthIn(min=32.dp)` 把名称区和 × 隔开——Robolectric 里实测过「点标签名误触成关标签」）+ 地址栏
+  （显示当前 URL、可编辑、回车/「前往」跳转；**没写协议补 `https://`**，补完仍过 `isAllowedUrl`——
+  用户明确写的 `http://` 不替他升级；那条由 `BrowserTakeoverTest` 钉住：曾经用 `Regex.matches` 判协议
+  是全串匹配，把 `http://example.com` 改写成 `https://http://example.com`）+ 弹窗那一层（**同屏 scrim +
+  卡片，不是 `Dialog`**，理由同上面那段旧注释）。标签清单与两笔请求都是 `StateFlow`，写入点全在主线程。
 - 入口**不在工具卡里**（用户 2026-09-26，spec §12.5）：浏览器页面是**整会话共享**的，不属于某一条
   消息，工具卡还会滚走。统一重做输入区之前（跟踪在 task #130），「查看页面」临时落在输入区的
   **「+」面板**——`ui/BottomToolsSheet.kt` 那一行，判据 `BrowserSessionStore.hasLiveSession(conversationId)`
@@ -2565,6 +2595,10 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
   旗标 + `BrowserOverlay(...)` 那一层原样）。
 
 **测试与验证边界**：Robolectric 的 `WebView` 是 shadow ⇒ 真导航、视口是否真 1280 CSS px、cookie 是否
-真被清、`window.open` 信封里的 URL 是否真拿得到、被污染的正文是否真被当数据，这五类**只能真机验收**
-（计划 Task 8 Step 6 那 7 条）。同一会话的动作由 `actionLock` 串行（spec §8）。
+真被清、`window.open` 会不会真开出标签、JS 弹窗交给用户之后**页面 JS 是否真的解套**、文件选择回填能否
+被站点接受、被污染的正文是否真被当数据，这七类**只能真机验收**（v1 那 7 条 + v2 新增的标签/地址栏/
+弹窗/上传）。JVM 侧覆盖到的是：14 颗工具的定义与信封（`BrowserToolsTest`，含 `browser_tabs` 三条动作与
+`TAB_LIMIT`/`TAB_INDEX_INVALID`）、多标签基座的会话级语义（`BrowserTabsTest`，含「关到空补一枚空白」、
+`MAX_TABS` 上界、已关会话挂不上视图）、接管态两支纯逻辑（`BrowserTakeoverTest`）、遮罩的成对性与标签条
+接线（`BrowserOverlayTest`）。同一会话的动作由 `actionLock` 串行（spec §8）。
 
