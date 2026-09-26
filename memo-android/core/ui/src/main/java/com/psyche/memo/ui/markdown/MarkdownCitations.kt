@@ -1,4 +1,4 @@
-﻿package com.psyche.memo.ui.markdown
+package com.psyche.memo.ui.markdown
 
 import androidx.compose.material3.Text
 import com.psyche.memo.ui.R

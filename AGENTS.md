@@ -15,7 +15,7 @@ Gradle 8.14 / Kotlin 2.2.20，minSdk 26 / target 35），位于 `memo-android/`�
 模块：`app`（UI/nav/container/工具执行）、`core:common`（压缩/技能/日志纯逻辑）、
 `core:ui`（主题+三份 strings.xml+markdown+iOS 风控件）、`core:data`（SQLite DAO/偏好/备份/
 第三方导入）、`core:llm`（OkHttp SSE；OpenAI/Responses/Claude/Gemini 四客户端）、
-`core:workspace`（proot 沙箱+PTY）、`feature:*`（骨架）。
+`core:workspace`（proot 沙箱+PTY）。
 
 - **品牌化**：任何用户可见字符串、标识、资源键、资产不得出现 kelivo 字样/链接/端点；
   更新端点用 `https://github.com/3d-jq/memo`。

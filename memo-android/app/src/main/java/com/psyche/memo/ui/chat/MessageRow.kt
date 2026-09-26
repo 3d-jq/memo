@@ -885,10 +885,10 @@ internal fun MessageRow(
                                         when (ttsAction) {
                                             com.psyche.memo.ui.chat.MessageTtsAction.STOP ->
                                                 com.psyche.memo.ui.chat.TtsPlayer.stop()
-    
+
                                             com.psyche.memo.ui.chat.MessageTtsAction.RESUME ->
                                                 com.psyche.memo.ui.chat.TtsPlayer.togglePause()
-    
+
                                             com.psyche.memo.ui.chat.MessageTtsAction.SPEAK ->
                                                 com.psyche.memo.ui.chat.TtsPlayer.speakAssistantReply(context, msg.content, ownerId = msg.id)
                                         }
@@ -1033,4 +1033,3 @@ private val TIME_FORMATTER: java.time.format.DateTimeFormatter =
 
 internal fun timeStr(millis: Long): String =
     TIME_FORMATTER.format(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()))
-

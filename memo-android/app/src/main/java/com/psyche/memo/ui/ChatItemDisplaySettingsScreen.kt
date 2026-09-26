@@ -215,5 +215,3 @@ fun ChatItemDisplaySettingsScreen(
         }
     }
 }
-
-

@@ -426,4 +426,3 @@ internal class BrowserTab(
         view.destroy()
     }
 }
-

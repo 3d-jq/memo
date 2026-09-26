@@ -1,4 +1,4 @@
-﻿package com.psyche.memo.ui.markdown
+package com.psyche.memo.ui.markdown
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background

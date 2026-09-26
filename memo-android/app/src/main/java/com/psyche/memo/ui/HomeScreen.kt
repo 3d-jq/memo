@@ -720,4 +720,3 @@ private fun Modifier.drawerDragGesture(
         }
     }
 }
-

@@ -10,6 +10,10 @@ plugins {
 
 android {
     namespace = "com.psyche.memo"
+    // compileSdk 36 = 用最新 API 编译；targetSdk 仍留在 35，这是**有意的**：
+    // 每个 targetSdk 大版都会开一批新的系统行为变更（Android 16 起对
+    // edge-to-edge / 定向 intent / 后台限制收得更紧），要单独一次发版来验。
+    // 编译与目标分家不是疏忽，别「顺手统一」。
     compileSdk = 36
 
     // 签名只在 keystore.properties 存在时启用：那是本机密钥，CI 和别人克隆后都没有，
@@ -109,10 +113,6 @@ dependencies {
     implementation(project(":core:llm"))
     // 沙箱工作区：proot 二进制 + 工作区核心（见 core/workspace/build.gradle.kts）
     implementation(project(":core:workspace"))
-    implementation(project(":feature:chat"))
-    implementation(project(":feature:assistant"))
-    implementation(project(":feature:utility"))
-    implementation(project(":feature:settings"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

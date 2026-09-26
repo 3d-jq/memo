@@ -14,7 +14,6 @@
 | `core:data` | SQLite DAO（schema 由 `tools/drift_schema_to_sql.py` 生成，门禁校验零 diff）、偏好、备份/恢复/合并、Cherry & Chatbox 导入、schema 迁移闸门 |
 | `core:llm` | OkHttp SSE；OpenAI Chat Completions / Responses / Claude / Gemini 四客户端 + 重试策略 |
 | `core:workspace` | proot 沙箱：文件系统 / rootfs 安装 / PTY（`termux_pty.cpp`，构建需 NDK） |
-| `feature:*` | 骨架（助手/聊天/设置/工具域） |
 
 ## 2. 运行时要点（改动前必读）
 

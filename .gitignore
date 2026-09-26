@@ -81,3 +81,7 @@ memo-android/**/*.apk
 memo-android/tools/qg15_errors*.txt
 /android/build/
 memo-android/**/.cxx/
+
+# 2026-09-04 一次 .git 损坏的应急备份被误提交进基线（c0ecbcf），87 个文件 8.2MB。
+# 已 git rm --cached 取消跟踪（内容仍在历史里可查），这里挡住它再回来。
+/.git.broken-*/
