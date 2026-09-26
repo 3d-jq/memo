@@ -11,9 +11,13 @@
 **目标**：模型在自己那一轮生成里，能用一个工具打开网页、读正文、找到可交互元素、点击/输入/滚动、
 截图看效果；用户在需要登录/验证码时**一键把同一个页面接管过去**，交还后模型继续。
 
-**非目标（第一版明确不做）**：多标签页、地址栏、书签、历史列表、文件上传下载、`<select>` 与
-iframe 内元素、JS `alert/confirm/prompt`、User-Agent 伪装与反爬、跨会话共享登录态、
-并发多个活动浏览器会话、把浏览器暴露给"不存在的助手"（无助手时仍然没有任何工具，现状不变）。
+**非目标（第一版明确不做）**：书签、历史列表、iframe 内元素、User-Agent 伪装与反爬、
+跨会话共享登录态、并发多个活动浏览器会话、把浏览器暴露给"不存在的助手"（无助手时仍然没有任何
+工具，现状不变）。
+
+> **2026-09-26 修订（用户「都做吧，现在直接做完整」）**：多标签页、地址栏 + 手输 URL、
+> `<select>`、文件上传、JS 弹窗**不再是**非目标 —— 全部纳入，具体形状与边界见 §12。
+> 上面那行"非目标"从本日起只对**书签 / 历史 / iframe / 反爬 / 跨会话共享**有效。
 
 ## 2. 内核：`BrowserSession`
 
@@ -40,7 +44,11 @@ iframe 内元素、JS `alert/confirm/prompt`、User-Agent 伪装与反爬、跨�
 里调 `container.closeBrowserSession(conversationId)`。**不新增浏览器页的导航路由、不新增数据库表**（接管用遮罩，见 §6；§4 的「Agent 能力」是设置页里
 的一行，走既有设置页导航，不是浏览器路由）。
 
-## 3. 工具面：`browser_use`
+## 3. 工具面：~~`browser_use` 单工具 + `action` 枚举~~ → **已作废，见 §12.1**
+
+> 本节保留为**历史记录**（它是 v1 的实现依据，代码与测试都按它做过一遍并被验收）。
+> 工具面从 2026-09-26 起改成 **12 颗独立工具**，动作表在 §12.1；表格里的
+> **索引契约 / 代次换号规则 / 文本量 / 统一信封 / 错误码**全部继续有效，不因拆分而变。
 
 单工具 + `action` 枚举，与 Eta 的"一次调用一个动作"一致，但**动作面收窄**（Eta 13 个，这里 9 个）：
 
@@ -162,3 +170,96 @@ selector 只在 JS 内部用来从快照取回同一个节点。
 4. 截图上行（含 `ToolImageBytes` 提取）
 5. 接管遮罩 + 「清空并关闭」
 6. 真机验收 → PORTING 点名 → 版本号与发布
+
+## 12. v2 修订（2026-09-26 用户拍板）—— 拆工具、标签页、地址栏、`<select>`、上传、弹窗
+
+用户原话与判断依据：`browser_use` 单工具在我们现有的工具卡渲染里，**九种动作全都显示成同一张
+「内置浏览器」卡**，看不出模型这一轮到底做了什么（「非常不好看」）。本仓**已有两处先例支持拆开**：
+工作区（`workspace_read_file`/`write_file`/`edit_file`/`shell`/`list`/`glob`/`grep`）与记忆族
+（`memory_read`/`update`/`search_profile`…，用户 2026-09-23 还专门要求"一个动作一个图标"）。
+参照实现 Eta 用的是单工具 + 14 action，**它的可读性靠的是卡片按 action 出标题**
+（`AgentTraceFormatter.browserActionLabel()`），不是靠拆工具 —— 但既然本仓的卡片体系就是
+"一个工具名一个图标一个标题"，跟着本仓的形状走比跟着参照实现走对。
+
+**代价，写在这里不要藏**：14 份 schema 每轮都进请求（估 ~1000–1400 token，比单工具的
+~180 token 贵）；换来的是卡片可读 + 模型不用先选 `action` 字段再选参数。用户已知情并要求拆。
+
+### 12.1 十三颗工具（+ 一颗 `browser_tabs`）（名字 / 参数 / 图标）
+
+`provider/browser/BrowserTools.kt`（复数，替换 v1 的 `BrowserTool.kt`）统一出定义与分派。
+全部沿用 `ToolResults.ok/error`、`ToolRunner.run` 的 deadline、以及 v1 的代次契约。
+
+| 工具名 | 参数 | 图标 | 说明 |
+|---|---|---|---|
+| `browser_open` | `url`(必填 https) `new_tab?`(默认 false) | `Lucide.Globe` | 在活动标签打开；`new_tab=true` 开新标签并设为活动 |
+| `browser_read` | `offset?` `max_chars?` | `Lucide.Menu`（v1 已用形状则沿用） | 可见正文，与 v1 完全一致 |
+| `browser_find` | `query?` | `Lucide.Search` | 可交互元素清单 + `generation` |
+| `browser_click` | `index` `generation` 或 `x` `y` `generation` | `Lucide.MousePointer2` | 点击；之后代次 +1 |
+| `browser_type` | `index` `generation` `text` 或 `x` `y` `generation` `text` | `Lucide.TextCursorInput` | 只写入，绝不提交（v1 边界不变） |
+| `browser_select` | `index` `generation` `value` | `Lucide.ListChecks` | **新增**：`<select>` 选值并派发 `change` |
+| `browser_scroll` | `direction` `amount?` | `Lucide.ArrowUpDown` | 不换代次（§3 契约） |
+| `browser_screenshot` | — | `Lucide.Camera` | §5 上行规则不变 |
+| `browser_back` | — | `Lucide.ArrowLeft` | 历史回退 |
+| `browser_forward` | — | `Lucide.ArrowRight` | **新增**：历史前进 |
+| `browser_wait` | `query?` `index?` `generation?` `timeout_ms?`(≤8000) | `Lucide.Timer` | **新增**：等元素/文本出现，替代 Eta 的 `wait_for_selector`（**不吃 CSS selector**，只吃 `find` 的 index 或文本子串） |
+| `browser_page_info` | — | `Lucide.Info` | **新增**：`url`/`title`/滚动位置与 `atTop`/`atBottom`/标签列表/`generation` |
+| `browser_reload` | — | `Lucide.RefreshCw` | 重新加载活动页 |
+
+- 图标全部**逐图标 import**（`icons-lucide` 是文件级扩展属性），并把这 14 个名字全加进
+  `ToolIconCoverageTest.mustHaveOwnIcon`；`toolIconFor` 按**工具名**（不再看 args）出图标。
+- `offeredTools()` 一次加 14 颗、`reserved` 加这 14 个名字；`ToolRules` 那条路由句改成点名
+  代表几颗（`browser_open` / `browser_read` / `browser_find`）+ 一句"这些是同一个内置浏览器的
+  动作"，别写 12 行。基线 `-Pgolden.bless=1` 重写并核 diff。
+- `browser_use` 这个名字**不留兼容**：库里没有历史会话在用（功能今天刚落地），旧会话里若有
+  `browser_use` 记录，卡片按未知工具名回落到默认样式即可。
+- 门控、错误码、`USER_CONTROLS_PAGE`、`page_notice`、`READ_STALLED` 语义全部照 v1。
+
+### 12.2 标签页
+
+`BrowserSession` 从"1 个 WebView"变成 **1 会话 N 个标签、1 个活动标签**：
+
+- 每个标签一个 `WebView`（同一 `BrowserSession` 内），共享同一份 cookie / WebStorage（本来原生侧就是
+  app 全局，拆标签不改变隔离模型）。
+- 代次（`generation`）**按标签**记：`session.generation(activeTab)`；`find`/`click` 只作用于活动标签。
+- 模型侧**默认永远只碰活动标签**，唯一能改活动标签的是 `browser_open(new_tab=true)`。
+  再加一颗 `browser_tabs`（`list` / `select(index)` / `close(index)`，图标 `Lucide.Layers`）——
+  它是第 14 颗：模型可用，但提示词不引导它（主要给用户接管时对齐界面上的标签条）。
+- 接管遮罩：顶部标签条（可点切换、可关），地址栏（显示当前 URL、可编辑、回车跳转 =
+  `loadUrl`，只允许 https，与非 https 拦截同一道闸）。
+- 关闭标签与关会话都要清凭据（沿用 `close()` 那套；单标签关闭**不**清全局 cookie，否则会把别的
+  标签登录态一起干掉 —— 清 cookie 只发生在 `closeAll()`／换会话，这条要在实现里写死为注释）。
+
+### 12.3 用户接管的界面边界
+
+- 遮罩不再是"只有两颗钮"：`MemoTopBar`(标题=当前页 title) + 标签条 + 地址栏 + 页面 + 底部
+  「交还给助手」/「清空并关闭」（**清空仍走 `container.appScope.launch { browserSessions.closeAll() }`**，
+  遮罩不许自己 `session.close()`）。
+- 系统返回 = 交还（`OverlayBackHandler`），不销毁实例。
+
+### 12.4 上传与 JS 弹窗的边界（安全，不放开到模型）
+
+- **文件上传只给用户手动**：`WebChromeClient.onShowFileChooser` 在 `userControls==true` 时走
+  系统选择器（`ActivityResultContracts`，只有界面手里有 registry，照 `LocationPermissionService`
+  那根挂起通道的形状）；无头模式直接 `onReceiveValue(null)` 拒掉，并在 `page_notice` 里写
+  `FILE_CHOOSER_NEEDS_USER` —— **模型不许上传文件**（这条不放开）。
+- **JS 弹窗**：接管中 `alert/confirm/prompt` **弹给用户提供 Memo 对话框**（confirm/prompt 需要
+  结果回填，取消即 `cancel()`）；无头时仍自动 `cancel()` + 记账（v1 行为）。两条路径都要记账，
+  只是接管时多问用户一次。
+- `<select>` 由 `browser_select` 处理（模型可操作），派发 `change` 但不提交表单 —— 与 `type` 同一纪律。
+
+### 12.5 「查看页面」入口先落到 `+` 面板（临时）
+
+用户 2026-09-26：入口**不该在工具卡里**（浏览器页面是整会话共享的，不属于某一条消息，工具卡还会
+滚走）。统一重做输入区之前，先临时放到 **`+` 面板**：`BottomToolsSheet` 一行「查看页面」，
+**只在本会话有活动浏览器实例时出现**（`container.browserSessions.peek(conversationId) != null`）。
+工具卡里那颗钮与它的全部管道（`onOpenBrowser` 逐层透传、`canTakeOverBrowser`）一起删净，不留死参数。
+统一方案（附件方格 / 能力胶囊 / 活动胶囊）尚未定稿：草案页 `D:\DevCache\design-mock\memo-input-ux.html`，
+待用户拍板后单独开一份计划（跟踪在 task #130）。
+
+### 12.6 落地顺序（v2）
+
+1. §12.5 入口搬家 + 拆 14 颗工具（含 `browser_select`/`forward`/`wait`/`page_info` 的真实实现与测试）
+2. §12.2 多标签 + 遮罩地址栏/标签条（含 `browser_tabs`）
+3. §12.4 上传与弹窗的接管态处理
+4. 门禁 + 真机验收（v1 那 7 条 + 新增：多标签隔离、地址栏只吃 https、select 选值、上传需用户、弹窗回填）
+5. PORTING §5.69 改写 + AGENTS 那行同步
