@@ -29,7 +29,8 @@ workspace 140 < 用户注入 900；未登记的 source **直接抛**），原先
 UI 只读 `PromptVariableCatalog`，两边一致性由 `PromptVariableCatalogTest` 钉住。
 
 **落点**：① 任何进模型的东西（工具描述、系统提示词、记忆规则）里**不得出现硬编码颜色/尺寸/模型名**；
-② 纪律文档之间只留链接，不留副本 —— `AGENTS.md`（有意偏离清单）↔ `docs/PORTING.md`（细节）↔
+② 纪律文档之间只留链接，不留副本 —— `AGENTS.md`（工作规则与产品决策）↔
+`docs/ARCHITECTURE.md` / `docs/DESIGN.md`（架构与设计口径）↔
 `.workbuddy/memory/`（工作日志）三者**不重复同一句事实**；③ 顺序带照 dsh 固定下来：
 **身份/产品 → 助手 persona/系统提示词 → 记忆规则 → 技能块 → 工具指导**（工具指导永远在最后）。
 
@@ -41,7 +42,7 @@ UI 只读 `PromptVariableCatalog`，两边一致性由 `PromptVariableCatalogTes
 
 **原则**：dsh 要求「配置错在最早可解析点就抛」，空 `catch` 必须写明**吞了什么、为什么别的东西到不了**。
 
-**我们的同源坑**（全部已修，细节见 PORTING §5.24）：`orient="auto-start-reverse"` → AndroidSVG 抛异常 →
+**我们的同源坑**（全部已修，判据用 git 历史查）：`orient="auto-start-reverse"` → AndroidSVG 抛异常 →
 **空白卡片**；自闭合标签写重复 → 非法 XML → 一张都渲染不出来；工具结果没有 `status` → 模型自己判成「失败」；
 导航回调 `= {}` 默认值 → 点击被静默吞掉。
 
@@ -113,14 +114,14 @@ session log」。光「都记下来了」不够，**日志里的那份必须与�
 | 规则 | 类型 | 事故 |
 |---|---|---|
 | `C1` 工具描述里禁止 `#RRGGBB` 字面量 | 硬（=0） | 主题一变描述就成了谎话（2026-09-18）→ 颜色改由主题经 `withThemeNote` 在**请求时注入** |
-| `C3` 导航回调参数禁用 `= {}` 默认值 | **棘轮**（存量 32，只许减少） | 漏传时点击被静默吞掉（PORTING §5.11） |
+| `C3` 导航回调参数禁用 `= {}` 默认值 | **棘轮**（存量 32，只许减少） | 漏传时点击被静默吞掉 |
 | `C4` 禁止一行空 `catch` | 硬（=0） | 「渲染不出来」系列事故的共同形状；已把 18 处补上「吞了什么」 |
 | `C5` 应用代码禁用 `android.widget.Toast` | 硬（=0） | 统一走 `SnackbarManager`/`AppSnackBarOverlay`；**Dialog 内要自挂 overlay**（2026-09-18） |
 | `C6` 改动文件无行尾空白、以一个换行结尾 | 硬 | 照抄 dsh（`git diff --check`） |
 
 > `C2`（禁止把卡片底 `lerp` 到 `Color.White`）**没有进脚本**：同一形状的 `lerp(…, Color.White, …)`
 > 在别处是合法的（思考卡的扫光高光，`ChainOfThoughtCard.kt`），grep 无法不误报。
-> 照 dsh 的「narrow, justified exceptions」：它留在评审清单里（判据见 PORTING §5.22），不进自动门禁。
+> 照 dsh 的「narrow, justified exceptions」：它留在评审清单里（判据用 git 历史查），不进自动门禁。
 
 用法：`bash tools/invariant_checks.sh`（提交前，与 §3 的相关面检查一起跑）；
 `bash tools/invariant_checks.sh --self-test` 证明每条规则都能拒绝反例。
@@ -130,14 +131,16 @@ session log」。光「都记下来了」不够，**日志里的那份必须与�
 
 ---
 
-## §6 任务记录制度（对到我们的 PORTING.md）
+## §6 任务记录制度
 
-dsh 要求「**非平凡改动必须在同一个 PR 里附 Agent Note**」（`.agents/notes/`：feature/architecture/bug-fix，
-已实现的归档后**冻结不可改**）。我们的对应物就是 `docs/PORTING.md` 与 `.workbuddy/memory/`：
+dsh 要求「**非平凡改动必须在同一个 PR 里附 Agent Note**」（feature/architecture/bug-fix，
+已实现的归档后**冻结不可改**）。我们的对应物（2026-09-26 起，原 `PORTING.md` 已退役删档，
+历史细节用 git 查）：
 
-- **非平凡改动**（新功能、架构选择、修掉一个非显然的 bug）→ 追加 PORTING 条目（含判据、踩坑、留账）；
-- **归档冻结**：PORTING 里已定稿的条目只增不改；要改就在新条目里写明「覆盖 §x.y」；
-- **日志不重复**：memory 记过程与决策现场，PORTING 记结论与口径，两者不互抄。
+- **非平凡改动**（新功能、架构选择、修掉一个非显然的 bug）→ 写进 `CHANGELOG.md`（面向用户，
+  对应 `versionName`）；涉及功能设计口径的，在 `docs/superpowers/specs|plans/` 落 spec/计划并冻结；
+- **归档冻结**：CHANGELOG 已发布条目与已定稿 spec 只增不改；要改就开新条目写明「覆盖哪条」；
+- **日志不重复**：memory 记过程与决策现场，CHANGELOG/docs 记结论与口径，两者不互抄。
 
 **机器检查**：无（纪律条款）。评审时看「这个改动有没有对应条目」。
 
@@ -167,4 +170,4 @@ dsh 的 AGENTS.md 有一条 *Editing these instructions*：指令本身可修订
 高层细节用链接、能压缩就压缩」。
 
 **落点**：本文的修订只做两件事——**收紧条款**或**新增可检规则**；新增规则必须同时进
-`invariant_checks.sh`（含反例）。条款若与 `AGENTS.md` 冲突，以 `AGENTS.md` 的「有意偏离清单」为准。
+`invariant_checks.sh`（含反例）。条款若与 `AGENTS.md` 冲突，以 `AGENTS.md` 的「产品决策」为准。
