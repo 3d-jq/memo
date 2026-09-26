@@ -19,8 +19,8 @@ class BrowserTakeoverTest {
             true,
             isAllowedUrl(addressInputToUrl("example.com/a?b=1")!!),
         )
-        // 用户明确写了协议 ⇒ 不替他改：把它升级成 https 会静默打开**另一个**站点，
-        // 而那条地址本机根本不受理，报「只允许 https」才是诚实的。
+        // 用户明确写了协议 ⇒ 不替他改：把 http 悄悄升级成 https 会静默打开**另一个**站点。
+        // （http 本身从 §15 起是允许的；这里只钉"不替他改写"。）
         assertEquals("http://example.com", addressInputToUrl("http://example.com"))
         assertEquals("javascript:alert(1)", addressInputToUrl("javascript:alert(1)"))
         assertNull("空输入没什么可提交", addressInputToUrl("   "))
@@ -28,8 +28,12 @@ class BrowserTakeoverTest {
 
     @Test
     fun blockedSchemesStayBlockedAfterThePrefix() {
-        listOf("http://x", "file:///sdcard/a", "content://m/text", "javascript:alert(1)")
+        listOf("file:///sdcard/a", "content://m/text", "javascript:alert(1)", "data:text/html,hi")
             .forEach { assertEquals("$it 不该放行", false, isAllowedUrl(addressInputToUrl(it)!!)) }
+        // §15（2026-09-26）：明文 http 收 —— 内网与老站开不了的话，自动化就是空谈。
+        listOf("http://x", "https://x").forEach {
+            assertEquals("$it 该放行", true, isAllowedUrl(addressInputToUrl(it)!!))
+        }
     }
 
     @Test

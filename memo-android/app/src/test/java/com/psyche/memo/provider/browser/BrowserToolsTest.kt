@@ -82,8 +82,10 @@ class BrowserToolsTest {
         var backs = 0
         var forwards = 0
 
+        // scheme 判据**调生产那条** `isAllowedUrl`：替身自己抄一份 `startsWith("https://")`
+        // 的话，§15 放开 http 之后这条闸门在测试里就是假的。
         override suspend fun navigate(url: String): Result<Unit> =
-            if (url.startsWith("https://")) {
+            if (isAllowedUrl(url)) {
                 navigatedTo = url
                 Result.success(Unit)
             } else {
@@ -162,7 +164,7 @@ class BrowserToolsTest {
 
         override suspend fun openTab(url: String): Result<Unit> {
             if (tabList.size >= tabCap) return Result.failure(IllegalStateException("TAB_LIMIT"))
-            if (!url.startsWith("https://")) return Result.failure(IllegalStateException("BLOCKED_SCHEME"))
+            if (!isAllowedUrl(url)) return Result.failure(IllegalStateException("BLOCKED_SCHEME"))
             openedTabs = openedTabs + url
             tabList.replaceAll { it.copy(active = false) }
             tabList.add(BrowserTabInfo(tabList.size, "第 ${tabList.size + 1} 页", url, active = true))
@@ -287,7 +289,10 @@ class BrowserToolsTest {
         )
         pageChangingTools.forEach { name ->
             val description = specs.first { it.name == name }.description
-            assertTrue("$name: 要说「绝不提交/购买/关注/发送」", description.contains("never submit"))
+            // 2026-09-26 用户拍板：提交/发送不再是禁令（spec §14，留着它「把消息发出去」就做不成）。
+            // 换钉这两条：允许真的把事办完 + 做了要说清做了什么。
+            assertTrue("$name: 要允许它提交/发送", description.contains("submitting or sending"))
+            assertTrue("$name: 要说清填了什么、按了哪颗", description.contains("say what you filled"))
             assertTrue("$name: 要说「用户接管中就停」",
                 description.contains("take over") || description.contains("has the page open"))
         }
@@ -398,14 +403,32 @@ class BrowserToolsTest {
 
     // ------------------------------------------------------------------ open / read / find
 
+    /**
+     * §15（2026-09-26 用户「不要弄很高的安全，你看看人家 Eta」）之后，被挡的不再是明文 http，
+     * 而是**本地与代码类 scheme**：那几样炸的是用户手机里的文件，放开对自动化一点用也没有。
+     */
     @Test
-    fun nonHttpsNeverReachesTheWebView() = runBlocking {
+    fun localAndCodeSchemesNeverReachTheWebView() = runBlocking {
+        listOf("file:///sdcard/a", "content://m/text", "javascript:alert(1)", "data:text/html,hi", "memo://x")
+            .forEach { url ->
+                val gateway = FakeGateway()
+                val result = obj(
+                    BrowserTools.execute(BrowserTools.OPEN, gateway, argsOf("\"url\":\"$url\"")) {},
+                )
+                assertEquals("$url 必须是 BLOCKED_SCHEME", "BLOCKED_SCHEME", result["error"]!!.jsonPrimitive.content)
+                assertEquals("$url 不许 loadUrl", null, gateway.navigatedTo)
+            }
+    }
+
+    /** 明文 http 现在收（内网/老站/纯明文站都要能被自动化打开）。 */
+    @Test
+    fun plainHttpNowReachesTheWebView() = runBlocking {
         val gateway = FakeGateway()
         val result = obj(
             BrowserTools.execute(BrowserTools.OPEN, gateway, argsOf("\"url\":\"http://e.com\"")) {},
         )
-        assertEquals("BLOCKED_SCHEME", result["error"]!!.jsonPrimitive.content)
-        assertEquals("https 之外不许 loadUrl", null, gateway.navigatedTo)
+        assertEquals("http://e.com", gateway.navigatedTo)
+        assertNull("不许再报 BLOCKED_SCHEME", result["error"])
     }
 
     /** 参数错误 ≠ scheme 拒绝（B8：缺哪个参数就点名哪个）。 */

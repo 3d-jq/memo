@@ -2959,9 +2959,9 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="browser_overlay_clear_close">Clear and close</string>
     <string name="browser_tab_new">New tab</string>
     <string name="browser_tab_close">Close tab</string>
-    <string name="browser_address_hint">Type an address (https only)</string>
+    <string name="browser_address_hint">Type an address (http or https)</string>
     <string name="browser_address_go">Go</string>
-    <string name="browser_address_blocked">Only https addresses can be opened</string>
+    <string name="browser_address_blocked">Only http and https addresses can be opened</string>
     <string name="browser_js_confirm">OK</string>
     <string name="browser_js_cancel">Cancel</string>
     <!-- Agent 浏览器那一族 13 颗工具的卡片标题（spec §12.1 拆工具的全部理由：

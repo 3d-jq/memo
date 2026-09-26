@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -133,7 +134,13 @@ fun BrowserOverlay(session: BrowserSession, onBack: () -> Unit, onClearAndClose:
         modifier = Modifier
             .fillMaxSize()
             .background(cs.surface)
-            .statusBarsPadding(),
+            .statusBarsPadding()
+            // **必须有这一发**：`MainActivity` 走 `enableEdgeToEdge()`，窗口不会随键盘缩小，
+            // 于是系统改去 pan 整个窗口 —— 结果就是用户实测的「点击浏览器怎么会弹出选择模型的
+            // sheet」：地址栏被顶到状态栏那个位置，点下去命中的是聊天页顶栏那颗模型选择器。
+            // 自己让位（照仓里 AsrServicesEditorScreen:247 / ChatSelectionUi:71 那一套）之后，
+            // 键盘只吃掉页面高度，顶栏与标签条原地不动。
+            .imePadding(),
     ) {
         MemoTopBar(
             // 标题优先取**活动标签**的标题（StateFlow，随导航实时更新），退到 find 快照里的标题，
@@ -232,26 +239,27 @@ private fun TabStrip(session: BrowserSession, tabs: List<BrowserTabInfo>) {
                         RoundedCornerShape(MemoRadius.PILL_DP.dp),
                     )
                     .clickable { session.selectTabFromUi(tab.index) }
-                    .padding(start = 8.dp, end = 2.dp, top = 3.dp, bottom = 3.dp),
+                    .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = label.take(14),
-                    style = MaterialTheme.typography.labelMedium,
+                    text = label.take(16),
+                    style = MaterialTheme.typography.labelLarge,
                     color = if (tab.active) cs.onPrimaryContainer else cs.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     // 名称区给个下界：空白标签的名字只有「1」这么宽，紧贴着 × 就会让
                     // 「点标签名切换」误触成「关掉这个标签」。
-                    modifier = Modifier.widthIn(min = 20.dp, max = 96.dp),
+                    modifier = Modifier.widthIn(min = 32.dp, max = 120.dp),
                 )
-                // × 是一颗 20dp 圆钮，不是 TextButton —— 后者带 48dp 最小触摸目标，
-                // 会把整枚胶囊顶到 48dp 高（用户 2026-09-26「这个标签胶囊太大了呀」量的就是这一截，
-                // 那颗 + 同理）。标题条一共只该占一行的高度，页面才是主角。
+                // × 是一颗 26dp 的圆钮，**不是** TextButton：后者自带 48dp 最小触摸目标，
+                // 会把整枚胶囊顶到 48dp 高（用户「这个标签胶囊太大了呀」量的就是那一版）；
+                // 但我上一版一路收到 20dp，又小到按不准（同日「改的又有点太小了」）。
+                // 26dp 钮 + 上下 6dp = 约 38dp 一行：够按，又不吃掉半屏页面。
                 Box(
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(26.dp)
                         .clip(CircleShape)
                         .clickable { session.closeTabFromUi(tab.index) },
                     contentAlignment = Alignment.Center,
@@ -259,7 +267,7 @@ private fun TabStrip(session: BrowserSession, tabs: List<BrowserTabInfo>) {
                     Icon(
                         Lucide.X,
                         contentDescription = stringResource(UiR.string.browser_tab_close),
-                        modifier = Modifier.size(12.dp),
+                        modifier = Modifier.size(15.dp),
                         tint = cs.onSurfaceVariant,
                     )
                 }
@@ -268,7 +276,7 @@ private fun TabStrip(session: BrowserSession, tabs: List<BrowserTabInfo>) {
         if (tabs.size < BrowserSession.MAX_TABS) {
             Box(
                 modifier = Modifier
-                    .size(24.dp)
+                    .size(30.dp)
                     .clip(CircleShape)
                     .clickable { session.newTabFromUi() },
                 contentAlignment = Alignment.Center,
@@ -276,7 +284,7 @@ private fun TabStrip(session: BrowserSession, tabs: List<BrowserTabInfo>) {
                 Icon(
                     Lucide.Plus,
                     contentDescription = stringResource(UiR.string.browser_tab_new),
-                    modifier = Modifier.size(14.dp),
+                    modifier = Modifier.size(17.dp),
                     tint = cs.onSurfaceVariant,
                 )
             }

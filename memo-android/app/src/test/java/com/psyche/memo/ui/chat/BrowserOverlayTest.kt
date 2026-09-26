@@ -213,14 +213,15 @@ class BrowserOverlayTest {
         open = true
         mountOverlay(session)
 
-        compose.onNode(hasSetTextAction()).performTextInput("http://example.com")
+        compose.onNode(hasSetTextAction()).performTextInput("file:///sdcard/secret.txt")
         compose.onNodeWithText("Go").performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithText("Only https addresses can be opened").assertIsDisplayed()
+        compose.onNodeWithText("Only http and https addresses can be opened").assertIsDisplayed()
     }
 
-    /** 用户输入 `example.com` 是想访问这个站，不是想报错：没写协议就补 https（主流浏览器一致）。 */
+    /** 用户输入 `example.com` 是想访问这个站，不是想报错：没写协议就补 https（主流浏览器一致）。
+     *  被挡的那条现在是 `file://` / `javascript:` 这类本地与代码 scheme（spec §15：明文 http 放开了）。 */
     @Test
     fun addressBarTreatsABareHostAsHttps() {
         val session = newSession()
@@ -231,6 +232,6 @@ class BrowserOverlayTest {
         compose.onNodeWithText("Go").performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithText("Only https addresses can be opened").assertDoesNotExist()
+        compose.onNodeWithText("Only http and https addresses can be opened").assertDoesNotExist()
     }
 }

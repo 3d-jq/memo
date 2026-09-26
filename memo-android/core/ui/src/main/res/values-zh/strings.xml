@@ -2961,9 +2961,9 @@
     <string name="browser_overlay_clear_close">清空并关闭</string>
     <string name="browser_tab_new">新建标签</string>
     <string name="browser_tab_close">关闭标签</string>
-    <string name="browser_address_hint">输入网址（仅 https）</string>
+    <string name="browser_address_hint">输入网址（http 或 https）</string>
     <string name="browser_address_go">前往</string>
-    <string name="browser_address_blocked">只允许打开 https 地址</string>
+    <string name="browser_address_blocked">只能打开 http / https 网址</string>
     <string name="browser_js_confirm">确定</string>
     <string name="browser_js_cancel">取消</string>
     <!-- Agent 浏览器那一族 13 颗工具的卡片标题（spec §12.1 拆工具的全部理由：

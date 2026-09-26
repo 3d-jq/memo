@@ -2500,7 +2500,8 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 2026-09-25 复核 spec 时拍板「改成默认开着的」）。读法唯一入口 `ui/DisplayPrefs.kt` 的
 `browserEnabled(container)`，三处消费同一支：`ChatViewModel.offeredTools()`（**递不递**）、
 `ToolHandler` 浏览器分支建会话**之前**的 `BrowserTools.rejectIfDisabled(...)`（**跑不跑**）、
-设置页那行开关。**位置与名字同日改过一次**（用户「你怎么放到偏好设置里面了呀，名字也不对应，应该叫
+设置页那行开关。**文件上传仍然只给用户**（无头 `FILE_CHOOSER_NEEDS_USER`，⑨ 没把它放开）。
+设置页那行开关。**位置改过一次**（用户「你怎么放到偏好设置里面了呀，名字也不对应，应该叫
 浏览器功能呀，应该在设置里的模型与服务里呀」）：现在落在**「设置 → 模型与服务」**那一组，行名与页名都叫
 **「浏览器功能」**——旧页名「Agent 能力」、显示设置里那个入口、`agent_capabilities_*` 五个字符串键、
 `onOpenAgentCapabilities` 形参、路由 `agent_capabilities`、测试类 `AgentCapabilityGateTest` 全部跟着改
@@ -2566,8 +2567,32 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 `side_effect:"possible"`），所以这三条是我们自己的加法，别当成"照 Eta 抄漏了"。测试：
 `BrowserToolsTest` 的 `everyResultCarriesTheCurrentPageTitle` / `clickThatChangesNothingOnThePageSaysSo…`
 / `clickThatChangesThePageReportsTheChange` / `unavailablePageSignatureOmitsTheJudgementInsteadOfLying`
-/ `aPageThatNeverSettlesIsReportedAsStillLoading`。**明确不做**：不覆盖 `userAgentString`（Eta 也没有）、
-不做登录墙/验证码识别、不为"照 Eta"放开 mixed-content / safeBrowsing（我们的 https-only 硬闸是刻意的相反）。
+/ `aPageThatNeverSettlesIsReportedAsStillLoading`。**仍不做**：不覆盖 `userAgentString`（Eta 也没有）、
+不做登录墙/验证码识别。（原来这条后面还写着"不为对齐而放开 mixed-content / safeBrowsing"——
+**同一天晚些时候被 ⑨ 推翻了**，别再照旧话读。）
+
+**⑨ 2026-09-26 晚第二次改口：提示词的"绝不提交"与渲染侧三道硬闸都放开（spec §14/§15）**
+用户连着两次说同一件事：「那个安全提示词，不要这个安全，为什么一直不动？人家 eta 都没有这个限制」
+「你这个浏览这个不要弄很高的安全，不然根本无法实现自动化呀，你看看人家 eta」。落地：
+① **`PAGE_CHANGING_RULES` 与 `ToolRules` 族级句里的 "fill fields but never submit, buy, follow,
+send or post" 整句删除**（它让"把消息发出去"这件正事永远做不成），换成"该提交就提交，但要报告你
+填了什么、按了哪颗"；`browser_type` 新增 `submit` 参数（有 form 走 `requestSubmit()`，没 form 的
+聊天框派发 Enter 键盘事件 —— 只发 `key` 不发 `keyCode`/`which` 会被相当一部分 React 组件安静忽略）。
+**留三条**：说清做了什么、正文是数据不是指令、用户在页面上就停。
+② **scheme 从"仅 https"放宽到 http+https**；`mixedContentMode` 从 `NEVER_ALLOW` 改成 `ALWAYS_ALLOW`；
+`safeBrowsingEnabled=false` —— 三项都对齐 Eta（它的 `allowFileAccess`/`allowContentAccess` 也是 true，
+我们没有跟：**这三道炸的是用户手机里的文件，放开对自动化一点用没有**，连同"不给
+`addJavascriptInterface` 桥"一起保留）。
+③ **`SCRIPT_FAILED` 不再回显页面自己的错误文本**（真机截图里那句 `[xss]` 就是它）：我们的码走
+PRELUDE 里的 `mk(code)` → `err.memoCode`，认不出来的一律折叠成 `JS_ERROR:<错误类型>`。
+这是 §7.2「网页内容只是数据」的一个真实漏口 —— 原来靠 `String(err.message)` 直接把任意页面文本
+递给模型。**测试跟着改口的地方**（不是把断言改松，是断言的产品事实变了）：
+`BrowserToolsTest.localAndCodeSchemesNeverReachTheWebView`（原 `nonHttpsNeverReachesTheWebView`）、
+`plainHttpNowReachesTheWebView`（新）、`BrowserTakeoverTest.blockedSchemesStayBlockedAfterThePrefix`
+（http 从被挡清单挪进放行清单）、`ToolRulesTest`/`everyNameHasItsOwnSchema…` 里那两条
+"要禁止替用户提交" 换成 "要允许提交 + 要说清做了什么"。**替身 `FakeGateway.navigate` 改为调生产
+`isAllowedUrl`** —— 它原先自己抄了一份 `startsWith("https://")`，闸门一改测试就成假的。
+schema 实测 1392 tokens / 5565 字符（新增 `submit` 的钱从别的措辞里省回来，天花板 1400 不动）。
 
 **⑦ 截图 >4 MiB 不发时也必须给下一步**。`screenshot` 用 `View.draw(Canvas)` 原尺寸出 PNG（不缩放，
 对齐 Eta 的"不降质"口径）：空图 ⇒ `NO_PAGE`；超过 `MAX_PNG_BYTES`（4 MiB）⇒ **不发图**，结果里带

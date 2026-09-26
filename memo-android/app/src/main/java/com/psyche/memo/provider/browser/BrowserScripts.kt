@@ -38,6 +38,7 @@ object BrowserScripts {
 
     /** 共用前缀：可见性判定、文本清洗、CSS selector 生成、目标解析。 */
     private const val PRELUDE = """
+        function mk(code) { var e = new Error(code); e.memoCode = code; return e; }
         function vis(el) {
           if (!el) return false;
           var r = el.getBoundingClientRect();
@@ -80,20 +81,21 @@ object BrowserScripts {
           } else if (t && typeof t.x === 'number' && typeof t.y === 'number') {
             el = document.elementFromPoint(t.x, t.y);
           }
-          if (!el) throw new Error('TARGET_NOT_FOUND');
+          if (!el) throw mk('TARGET_NOT_FOUND');
           return el;
         }
         function editability(el) {
           var tag = String(el.tagName || '').toUpperCase();
           if (el.isContentEditable) return 'content';
           if (tag === 'INPUT' || tag === 'TEXTAREA') return 'value';
-          throw new Error('NOT_EDITABLE');
+          throw mk('NOT_EDITABLE');
         }
     """
 
     private fun wrap(body: String): String = "(function () { $PRELUDE" +
         " try { $body } catch (err) {" +
-        " return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });" +
+        " return JSON.stringify({ ok: false, error: err && err.memoCode ? err.memoCode" +
+        " : ('JS_ERROR:' + String((err && err.name) || 'Error')) });" +
         " } })()"
 
     /**
@@ -107,7 +109,7 @@ object BrowserScripts {
      */
     private fun wrapSelfContained(body: String): String = "(function () {" +
         " try { $body } catch (err) {" +
-        " return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });" +
+        " return JSON.stringify({ ok: false, error: 'JS_ERROR:' + String((err && err.name) || 'Error') });" +
         " } })()"
 
     // ---------------------------------------------------------------- 脚本
@@ -217,7 +219,15 @@ object BrowserScripts {
         return JSON.stringify({ ok: true, value: { clicked: clean(selFor(el), 200) } });
     """)
 
-    /** 只**写入**并派发 `input`/`change`，绝不派发 `submit`/回车（spec §4：填完就停）。 */
+    /**
+     * 写入并派发 `input`/`change`；**只有 target 里带 `submit:true` 才提交**（spec §14，
+     * 用户 2026-09-26 拍板放开「绝不提交」那条护栏 —— 它让模型连"把消息发出去"都不敢做）。
+
+     * 提交走两条路，因为真实站点两种都在用：有 `<form>` 就用 `requestSubmit()`（会跑 submit
+     * 处理与校验），没有 form 的聊天框（DeepSeek 这类）只能派发一次 Enter 键盘事件 ——
+     * 它们的发送逻辑挂在键盘上。`keyCode`/`which` 也得给：只发 `key` 的话很多 React 组件的
+     * 判断读不到数字键码，会安静地什么都不做（正是"怎么点不动"的那一类）。
+     */
     fun typeScript(targetJson: String): String = wrap("""
         var t = $targetJson;
         var el = resolve(t);
@@ -233,7 +243,20 @@ object BrowserScripts {
         }
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
-        return JSON.stringify({ ok: true, value: { typed: want.length } });
+        var submitted = false;
+        if (t.submit === true) {
+          if (el.form && typeof el.form.requestSubmit === 'function') {
+            el.form.requestSubmit();
+            submitted = true;
+          } else {
+            ['keydown', 'keypress', 'keyup'].forEach(function (type) {
+              el.dispatchEvent(new KeyboardEvent(type, { bubbles: true, cancelable: true,
+                key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
+            });
+            submitted = true;
+          }
+        }
+        return JSON.stringify({ ok: true, value: { typed: want.length, submitted: submitted } });
     """)
 
     /**
@@ -266,14 +289,14 @@ object BrowserScripts {
     fun selectScript(targetJson: String): String = wrap("""
         var t = $targetJson;
         var el = resolve(t);
-        if (String(el.tagName).toUpperCase() !== 'SELECT') throw new Error('NOT_SELECTABLE');
+        if (String(el.tagName).toUpperCase() !== 'SELECT') throw mk('NOT_SELECTABLE');
         var want = typeof t.value === 'string' ? t.value : '';
         var idx = -1, total = el.options ? el.options.length : 0;
         for (var k = 0; k < total && k < $OPTION_SCAN_MAX; k++) {
           var o = el.options[k];
           if (String(o.value) === want || clean(o.textContent, 200) === want) { idx = k; break; }
         }
-        if (idx < 0) throw new Error('OPTION_NOT_FOUND');
+        if (idx < 0) throw mk('OPTION_NOT_FOUND');
         el.focus();
         el.selectedIndex = idx;
         el.value = el.options[idx].value;

@@ -124,9 +124,9 @@ selector 只在 JS 内部用来从快照取回同一个节点。
 
 ## 7. 安全硬闸（能落代码的）
 
-1. **仅 https**：`navigate` 解析 URL，scheme 非 https → `BLOCKED_SCHEME`；`read` 里对
-   `file://` / `content://` / `javascript:` 一律不给进入；`WebViewClient.shouldOverrideUrlLoading`
-   拒绝非 https 跳转与外部 app 跳转（不发 Intent）。
+1. ~~**仅 https**~~ **§15 改口（2026-09-26）**：http 与 https 都收；仍然拒的是
+   `file://` / `content://` / `javascript:` / `data:` / `about:` 与自定义协议（→ `BLOCKED_SCHEME`），
+   `shouldOverrideUrlLoading` 同样只放这两类过去、也不发外部 app 的 Intent。
 2. **网页内容只是数据**：工具结果（正文、元素文本、title）发给模型前统一过
    `provider/tool/PromptFrames.sanitize`（A1 那条框架标签转义），并把正文包进既有的工具结果帧里。
 3. JS 弹窗不自动确认；下载、`onPermissionRequest` 拒绝 —— 拒绝也要在信封里说明，否则模型会
@@ -338,3 +338,49 @@ Eta 的每一次动作结果都带 `url/host/title/is_loading/can_go_back/http_s
 - **不做登录墙/验证码识别**：Eta 也没有（只有 `HTTP_401/403`）。
 - **不动 https-only / 不放开 mixed-content**：Eta 是 `MIXED_CONTENT_ALWAYS_ALLOW` + `safeBrowsing=false`，
   我们刻意相反（spec §7 的硬闸）。这次失败与它无关，别拿"照 Eta"当放开的理由。
+
+## 14. 提交能力与"页面原文不外泄"（2026-09-26 晚，用户「那个安全提示词让他根本无法操作」）
+
+拆掉**提示词层**那条"绝不提交"的禁令（`PAGE_CHANGING_RULES` 与 `ToolRules` 族级句里的
+"fill fields but never submit, buy, follow, send or post"），并把 `browser_type` 加上 `submit` 参数：
+
+- 有 `<form>` 走 `form.requestSubmit()`；没有 form 的聊天框（DeepSeek 这类）派发
+  `keydown/keypress/keyup` 的 Enter（`keyCode`/`which` 都得给，只发 `key` 很多 React 组件读不到）。
+- 结果里回 `submitted: true`，紧跟着 `browser_click` 那条 `page_changed` 就是"到底发出去没有"的收据。
+- **仍然留三条**：做了要说清（填了什么、按了哪颗）、正文是数据不是指令、用户在页面上就停下。
+  审批体系早就整块拆了（§5.68），这次是拆掉最后一道"不许动手"的话 —— 拆完之后护栏只剩
+  「全局开关 + 时间线可见 + 可停 + 上面这三条」。
+- **文件上传不放开给模型**（§12.4 那条不变）：无头仍然 `FILE_CHOOSER_NEEDS_USER`。
+
+同一批修掉的：**`SCRIPT_FAILED` 不许再把页面自己的错误文本当错误交给模型**。真机截图里
+`message: "[xss]"` 就是 `String(err.message)` 原样回显 —— 那既是注入面也是"看不懂在报什么"。
+现在我们的错误码走 `err.memoCode`（PRELUDE 里的 `mk()`），认不出来的一律折叠成
+`JS_ERROR:<错误类型名>`，**页面的 message 一个字都不过界**。
+
+## 15. 渲染侧的硬闸按 Eta 放开（2026-09-26，用户「不要弄很高的安全，不然根本无法实现自动化，你看看人家 Eta」）
+
+对照 Eta 的 `AgentBrowserSession`（`app/src/main/kotlin/io/github/mangi/eta/agent/browser/`）：
+它 `allowFileAccess=true`、`allowContentAccess=true`、`MIXED_CONTENT_ALWAYS_ALLOW`、
+`safeBrowsingEnabled=false`，**完全没有 scheme 白名单**。我们这次放开其中会卡住自动化的三条：
+
+| 闸门 | 之前 | 现在（= Eta） | 为什么 |
+|---|---|---|---|
+| scheme | 仅 https | **http + https** | 内网/老站/明文站开不了＝自动化空谈 |
+| mixed content | `NEVER_ALLOW` | **`ALWAYS_ALLOW`** | https 页拉 http 图片/脚本被吞是"页面渲染成半张、点不动"的头号原因 |
+| Safe Browsing | 开 | **关** | 厂商实现会直接吞掉整次加载，表现为"读不到东西"（§10 早点名过） |
+
+**仍然保留的三条**，理由不是"安全等级"，而是它们**对自动化毫无用处、炸的却是用户自己的设备**：
+
+1. `file://` / `content://` / `javascript:` / `data:` / `about:` / 自定义协议仍然拒 ——
+   页面自己跳不到这些地方，放进去只会让一次网页访问去读用户手机里的文件；
+2. `allowFileAccess` / `allowContentAccess` / 两条 `FileURLs*` 保持 false —— 同上，且
+   `allowUniversalAccessFromFileURLs=true` 是真正的跨域放行；
+3. 不给 WebView 任何 `addJavascriptInterface` 桥（这是我们自己开后门，与能不能浏览无关）。
+
+`userAgentString` 仍然**不覆盖** —— Eta 也没覆盖（全仓零命中），别把"移动端 UA 下某些站点表现不同"
+当成这次要顺手改的东西。
+
+### 15.1 实测的 schema 代价
+
+放开提交参数 + `submit` 那一项之后，14 份 schema 是 **1392 tokens / 5565 字符**（天花板 1400 不变）：
+新增的钱是从"不碰安全的那几句"里省出来的（`browser_type`/`browser_scroll` 描述、`PAGE_CHANGING_RULES` 措辞）。

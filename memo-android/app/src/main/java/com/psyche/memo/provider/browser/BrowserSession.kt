@@ -549,5 +549,16 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
     }
 }
 
-/** 只允许 https（明文 http 也拒：升级是站点的事，不是替模型开洞）。 */
-fun isAllowedUrl(raw: String): Boolean = raw.trim().lowercase().startsWith("https://")
+/**
+ * 一条地址能不能进 WebView。
+ *
+ * **2026-09-26 改（spec §15）**：原来只收 https（"明文 http 也拒：升级是站点的事"），但真机结果
+ * 是内网/老站/纯明文站全都开不了、自动化直接废掉，用户据此拍板「不要弄很高的安全」。现在
+ * **http 与 https 都收**；仍然拒的是 `file://` / `content://` / `javascript:` / `data:` /
+ * `about:` 与任何自定义协议 —— 那几样炸的不是网页，是**用户手机里的文件和自己 app 的入口**，
+ * 放开它对自动化一点用没有（页面自己跳不到那里面）。
+ */
+fun isAllowedUrl(raw: String): Boolean {
+    val v = raw.trim().lowercase()
+    return v.startsWith("https://") || v.startsWith("http://")
+}
