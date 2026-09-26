@@ -63,6 +63,9 @@ cd memo-android && ./gradlew <task>
 - 唯一生成物：SQLite DDL（`tools/drift_schema_to_sql.py`）；三份 strings.xml / 色板 / 偏好键手维。
 - 真机：OPPO PKB110，serial `SKIBZ955INZXDYEY`，adb 在 `D:\Android\Sdk\platform-tools\adb.exe`；
   装机后核 `dumpsys package com.psyche.memo | grep lastUpdateTime`。
+  **日常装机装 release 变体**（`:app:assembleRelease`，签名走本仓 `keystore.properties`）——
+  debug 变体的 applicationId 带 `.dev` 后缀，会装成并列的第二个 app（用户手机上的正主是
+  release 的 `com.psyche.memo`）。
 
 ## 5. 质量约定
 
