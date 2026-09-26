@@ -2583,8 +2583,15 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 - 网页正文「只是数据」这条（spec §7.2）**不靠工具自己消毒**：`BrowserTool` 故意不调
   `PromptFrames.sanitize`，靠的是 `ChatViewModel` 对本轮**所有** tool 消息那一个咽喉
   （写回处 `:2387` 与 `resumeAfterToolAnswer` 的 `:2517`）。那个咽喉哪天被搬走，这里会**静默失守**。
-- 遮罩在 v2 长成了**三件套**（spec §12.2/§12.3）：标签条（一枚标签一张芯片，点=切、×=关、+=新建，
-  `widthIn(min=32.dp)` 把名称区和 × 隔开——Robolectric 里实测过「点标签名误触成关标签」）+ 地址栏
+- 遮罩在 v2 长成了**三件套**（spec §12.2/§12.3）：标签条（一枚标签一张芯片，点=切、×=关、+=新建）+ 地址栏
+  - **尺寸这两条都是用户 2026-09-26 第二轮实测点的**：「标签胶囊太大了呀」的根因是 × 与 + 那两颗
+    用了 `TextButton` —— 它带 48dp 最小触摸目标，把整枚胶囊顶到 48dp 高；换成 20dp／24dp 的圆钮
+    （`Box` + `clip(CircleShape)` + `clickable`）之后标签条约 34dp。名称区留 `widthIn(min = 20.dp,
+    max = 96.dp)` 是为「点标签名误触成关标签」（Robolectric 里真撞过一次，别把 × 再贴回文字边上）。
+    「输入这个没有加圆角呀」：地址栏那颗 `OutlinedTextField` 漏了 `shape`，落成 M3 默认的 4dp 方角
+    —— 现在走 `MemoRadius.SMALL_DP`（紧凑输入档）+ `semantic.surfaceCardFill` 填充 + 非焦点无边框，
+    **与 `AssistantEditCustomRequestTab` 那套输入框同一个写法**，圆角一律走 token（`RadiusTokenGuardTest`
+    拦字面值）。
   （显示当前 URL、可编辑、回车/「前往」跳转；**没写协议补 `https://`**，补完仍过 `isAllowedUrl`——
   用户明确写的 `http://` 不替他升级；那条由 `BrowserTakeoverTest` 钉住：曾经用 `Regex.matches` 判协议
   是全串匹配，把 `http://example.com` 改写成 `https://http://example.com`）+ 弹窗那一层（**同屏 scrim +

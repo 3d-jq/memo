@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Card
@@ -38,10 +40,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.composables.icons.lucide.Lucide
@@ -53,6 +58,7 @@ import com.psyche.memo.provider.browser.BrowserTabInfo
 import com.psyche.memo.provider.browser.addressInputToUrl
 import com.psyche.memo.provider.browser.isAllowedUrl
 import com.psyche.memo.ui.MemoTopBar
+import com.psyche.memo.ui.theme.LocalSemanticColors
 import com.psyche.memo.ui.theme.MemoRadius
 import com.psyche.memo.ui.OverlayBackHandler
 import com.psyche.memo.ui.R as UiR
@@ -218,50 +224,59 @@ private fun TabStrip(session: BrowserSession, tabs: List<BrowserTabInfo>) {
     ) {
         tabs.forEach { tab ->
             val label = tab.title.ifBlank { tab.url }.ifBlank { "${tab.index + 1}" }
-            Card(
-                // 圆角走 token（`RadiusTokenGuardTest` 会拦字面值）：芯片是全圆胶囊，与输入区那些胶囊同一档。
-                shape = RoundedCornerShape(MemoRadius.PILL_DP.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (tab.active) cs.primaryContainer else cs.surfaceContainerHigh,
-                ),
-                modifier = Modifier.clickable { session.selectTabFromUi(tab.index) },
-            ) {
-                Row(
-                    modifier = Modifier.padding(start = 10.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = label.take(18),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (tab.active) cs.onPrimaryContainer else cs.onSurface,
-                        // 名称区给个下界：空白标签的名字只有「1」这么宽，紧贴着 × 就会让
-                        // 「点标签名切换」误触成「关掉这个标签」。两颗钮各自的目标都该 ≥ 一指尖。
-                        modifier = Modifier.widthIn(min = 32.dp),
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(MemoRadius.PILL_DP.dp))
+                    .background(
+                        if (tab.active) cs.primaryContainer else cs.surfaceContainerHigh,
+                        RoundedCornerShape(MemoRadius.PILL_DP.dp),
                     )
-                    TextButton(
-                        onClick = { session.closeTabFromUi(tab.index) },
-                        contentPadding = PaddingValues(6.dp),
-                    ) {
-                        Icon(
-                            Lucide.X,
-                            contentDescription = stringResource(UiR.string.browser_tab_close),
-                            modifier = Modifier.size(14.dp),
-                            tint = cs.onSurfaceVariant,
-                        )
-                    }
+                    .clickable { session.selectTabFromUi(tab.index) }
+                    .padding(start = 8.dp, end = 2.dp, top = 3.dp, bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = label.take(14),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (tab.active) cs.onPrimaryContainer else cs.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // 名称区给个下界：空白标签的名字只有「1」这么宽，紧贴着 × 就会让
+                    // 「点标签名切换」误触成「关掉这个标签」。
+                    modifier = Modifier.widthIn(min = 20.dp, max = 96.dp),
+                )
+                // × 是一颗 20dp 圆钮，不是 TextButton —— 后者带 48dp 最小触摸目标，
+                // 会把整枚胶囊顶到 48dp 高（用户 2026-09-26「这个标签胶囊太大了呀」量的就是这一截，
+                // 那颗 + 同理）。标题条一共只该占一行的高度，页面才是主角。
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .clickable { session.closeTabFromUi(tab.index) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Lucide.X,
+                        contentDescription = stringResource(UiR.string.browser_tab_close),
+                        modifier = Modifier.size(12.dp),
+                        tint = cs.onSurfaceVariant,
+                    )
                 }
             }
         }
         if (tabs.size < BrowserSession.MAX_TABS) {
-            TextButton(
-                onClick = { session.newTabFromUi() },
-                contentPadding = PaddingValues(6.dp),
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .clickable { session.newTabFromUi() },
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     Lucide.Plus,
                     contentDescription = stringResource(UiR.string.browser_tab_new),
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(14.dp),
                     tint = cs.onSurfaceVariant,
                 )
             }
@@ -283,6 +298,7 @@ private fun AddressBar(
     onSubmit: (String) -> Boolean,
 ) {
     val cs = MaterialTheme.colorScheme
+    val semantic = LocalSemanticColors.current
     var draft by remember(session, active?.index) { mutableStateOf("") }
     var blocked by remember(session) { mutableStateOf(false) }
     val shown = draft.ifBlank { active?.url.orEmpty() }
@@ -297,6 +313,13 @@ private fun AddressBar(
             },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
+            shape = RoundedCornerShape(MemoRadius.SMALL_DP.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = semantic.surfaceCardFill,
+                unfocusedContainerColor = semantic.surfaceCardFill,
+                focusedBorderColor = cs.primary.copy(alpha = 0.4f),
+                unfocusedBorderColor = Color.Transparent,
+            ),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Go,
@@ -304,7 +327,11 @@ private fun AddressBar(
             keyboardActions = KeyboardActions(onGo = { go() }, onDone = { go() }),
             placeholder = { Text(stringResource(UiR.string.browser_address_hint)) },
             trailingIcon = {
-                TextButton(onClick = go) {
+                // 「前往」也压成紧凑内边距：默认那颗会把输入框顶胖。
+                TextButton(
+                    onClick = go,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                ) {
                     Text(stringResource(UiR.string.browser_address_go))
                 }
             },
