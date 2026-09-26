@@ -4,13 +4,11 @@ import android.content.Context
 import android.os.Looper
 import android.os.Message
 import android.view.ViewGroup
-import android.webkit.CookieManager
 import android.net.Uri
 import android.webkit.JsResult
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
-import android.webkit.WebStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -149,6 +147,8 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
 
     override val generation: Int get() = activeTab.generation
     override val url: String get() = activeTab.url
+    override val title: String get() = activeTab.title
+    override val loading: Boolean get() = !closed && activeTab.loading
     override val userControls: Boolean get() = userControlsState
     override val snapshot: BrowserPageSnapshot? get() = activeTab.snapshot
 
@@ -518,12 +518,16 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
     }
 
     /**
-     * 关整会话：销毁每一枚标签，然后清凭据。不在 [BrowserGateway] 上 —— 只有
-     * [BrowserSessionStore]（换会话 / closeAll）需要关它。
+     * 关整会话：只销毁每一枚标签。**不动凭据**（2026-09-26 改）。
      *
-     * **清 cookie / WebStorage 只发生在这一条路径上**：原生那份 jar 是 app 全局的，
-     * 「每会话隔离」靠的就是「关会话时就地清」（spec §2），而单标签关闭必须不动它
-     * （见 [BrowserTab.destroy]）。
+     * 原来这里跟着清 `removeAllCookies` + `WebStorage.deleteAllData`，理由是 spec §2 的
+     * 「每会话隔离靠关时就地清」。真机反馈把这条设计打穿了：换到别的对话再回来 ⇒ 站点登录态
+     * 全没了，用户让助手「给 DeepSeek 发条消息」永远被弹回登录页（「他说老是返回登录状态」）。
+     * 参照实现 Eta 的做法是**登录态全局持久**，清只有一处：用户手动「清空浏览器数据」。
+     * 现在照它 —— 清数据挪到 [BrowserSessionStore.closeAll] 的 `clearSiteData` 参数上，
+     * 只有「清空并关闭」与「关掉全局开关」会传到那里。
+     *
+     * 单标签关闭同样从不清（见 [BrowserTab.destroy]）。
      */
     suspend fun close() = withContext(Dispatchers.Main) {
         if (closed) return@withContext
@@ -542,14 +546,6 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         // 前者是被闸掉。钉在 BrowserSessionStoreTest.detachingAfterCloseMustNotResetTheViewportAgain。
         hostContainer = null
         tabsState.value = emptyList()
-        // 凭据是 app 全局的：会话结束只能靠「清」来隔离。
-        // `WebStorage.getInstance()` 就是唯一入口：公开 android.jar（35/36/37）里
-        // 从来没有带 Context 的重载（那是 CookieManager 的 API 形状），无从分流。
-        CookieManager.getInstance().apply {
-            removeAllCookies(null)
-            flush()
-        }
-        WebStorage.getInstance().deleteAllData()
     }
 }
 

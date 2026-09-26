@@ -20,7 +20,8 @@ import org.robolectric.annotation.Config
 
 /**
  * 只钉策略：**同时只有一个活动实例**（Android 的 CookieManager / WebStorage 是 app 全局，
- * 两个会话并发各留一套登录态在原生侧做不到），换会话时上一个必须被关掉并清凭据。
+ * 两个会话并发各留一套登录态在原生侧做不到），换会话时上一个必须被关掉 —— 但**不清凭据**（2026-09-26 改口：清只发生在
+ * `closeAll`，也就是用户明确按下的「清空并关闭 / 关掉总开关」；换会话清登录态会把用户直接锁在门外）。
  *
  * Robolectric 下 `WebView` 是 shadow，`evaluateJavascript` 不会回调，所以这里不测导航。
  * cookie 断言能落地是因为 Robolectric 的 `CookieManager.getInstance()` 返回的
@@ -50,14 +51,23 @@ class BrowserSessionStoreTest {
         val second = s.sessionFor("c2")
         assertNotSame("换会话必须换新实例", first, second)
         assertTrue("上一个会话的实例真的被关掉了", first.isClosed)
-        assertFalse("换会话必须把 app 全局 cookie 清掉",
-            cookies.getCookie("https://a/").orEmpty().contains("k=v"))
+        // 2026-09-26 改口（用户「让他给 DeepSeek 发信息，他说老是返回登录状态」）：
+        // **换会话只销毁 WebView，绝不清登录态**。原生那份 jar 是 app 全局的，"就地清"
+        // 换不来"每会话各留一套登录"，只会把所有对话的登录一起抹掉，用户永远停在登录页。
+        assertTrue(
+            "换会话之后登录态必须还在（清只发生在 closeAll）",
+            cookies.getCookie("https://a/").orEmpty().contains("k=v"),
+        )
         assertNull("上一个会话不再可寻", s.peek("c1"))
         assertSame(second, s.peek("c2"))
 
         s.closeAll()
         assertNull(s.peek("c2"))
         assertTrue("closeAll 也是真关实例，不只是摘引用", second.isClosed)
+        assertFalse(
+            "closeAll 默认连凭据一起清 —— 这是用户那两颗钮（「清空并关闭」/ 关掉总开关）唯一的清点",
+            cookies.getCookie("https://a/").orEmpty().contains("k=v"),
+        )
     }
 
     /**

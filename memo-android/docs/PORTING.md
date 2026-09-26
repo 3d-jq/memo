@@ -2487,9 +2487,12 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 **②「同时只一个活动实例」不是取舍，是原生 cookie jar 逼出来的硬约束**。Android 的
 `CookieManager` / `WebStorage` 是 **app 全局单例**，做不到"两个会话各留一套登录态"，只能做到
 "新会话看不到上一个会话留下的东西"⇒ 隔离靠**关时就地清**：`BrowserSessionStore` 只留一枚 `holder`，
-换会话时先 `close()`（解套在飞的 deferred → 逐枚标签 `removeView` → `stopLoading` → `destroy` → `removeAllCookies` + `flush`
-→ `WebStorage.deleteAllData`）再建新的。**清凭据只在这一条路径上**：关掉单个标签绝不动 cookie jar，否则用户关一个
-标签页，别的标签全退登（`BrowserTab.destroy` 里写死了这条）。`sessionFor` 全程过 `mutex`（`close()` 内部要切 Main 会让出，
+换会话时先 `close()`（解套在飞的 deferred → 逐枚标签 `removeView` → `stopLoading` → `destroy`）再建新的。
+**2026-09-26 晚：`close()` 不再清凭据**（spec §13.1）—— 原来这里跟着 `removeAllCookies` + `deleteAllData`，
+症状是「让助手给 DeepSeek 发消息，永远被弹回登录页」：那份 jar 是 app 全局的，就地清换不来"每对话一套登录"，
+只会把所有对话的登录一起抹掉。现在**登录态跨会话持久**，清只有一处入口 ——
+`BrowserSessionStore.closeAll(clearSiteData = true)`，即用户按下的「清空并关闭」与「关掉总开关」；
+换会话走的是 `sessionFor` 里那句 `close()`，**不清**。关掉单个标签也从来不清（`BrowserTab.destroy`）。`sessionFor` 全程过 `mutex`（`close()` 内部要切 Main 会让出，
 不锁就有两枚活 WebView 并存、被顶掉那枚再没人关，而 jar 仍是同一份）；`peek()` 过滤 `isClosed`
 ⇒ 界面拿不到尸体。
 
@@ -2546,6 +2549,25 @@ spec＝`docs/superpowers/specs/2026-09-25-agent-browser-design.md`，计划＝`d
 （`BrowserTools.kt` 的 `put("page_notice", …)`）——否则模型收到 `ok` 会以为页面照旧。钉它的测试：
 `BrowserToolsTest.suppressedJsDialogRidesAlongInTheResult`。队列按会话一份而不是每标签一份：按标签各存一份
 就是 5×480 字符一起进信封。
+
+**⑧ 每颗调用都要交回"页面现在长什么样"的证据，尤其是点击**（2026-09-26 晚，spec §13.2/§13.3）。
+用户那句「他怎么老是出现自己说做了，根本没有调用工具」对着的不是模型幻觉，是**信封里没有收据**：
+过去动作类结果只有 `url` + `generation` + 模型自己传进来的把手。三条补齐：
+① `BrowserGateway` 多两个只读事实 `title`（`onReceivedTitle` 维护，零额外 JS）与 `loading`
+（`onProgressChanged` progress<100），**所有**结果统一注入 `title`；② 动作后先等页面停下再作废旧号
+（250 ms + 轮询 `loading`，上限 3 s，比参照实现的 10 s 刻意取短，等不到就老实写 `still_loading: true`；
+**导航那三颗只等不叠第二层换代次** —— `goBack`/`goForward`/`reload` 的会话实现自己已经换过，
+这条被 `navigationActionsNeverBumpTheGenerationThemselves` 抓过一次，是我这次自己写破的）；
+③ `browser_click` 派发的是合成事件（`isTrusted=false`），挂着"只认真实手势"的按钮会安静地什么都不做，
+所以点前点后各取一次**页面指纹**（`pageSignatureScript`：url|title|scrollY|scrollHeight|body.childElementCount
+五个标量，不许有遍历），一样就回 `page_changed:false` + `note`（明说"不许告诉用户成功了，先 find/read
+或交给用户点"）。**取不到指纹就不写这个键**：宁可少一张收据，也不许把"不知道"说成"没变化"，
+而取证失败永远不许把已经执行的动作倒过来报成失败。参照实现 Eta 在这条上**也没解决**（它只回写死的
+`side_effect:"possible"`），所以这三条是我们自己的加法，别当成"照 Eta 抄漏了"。测试：
+`BrowserToolsTest` 的 `everyResultCarriesTheCurrentPageTitle` / `clickThatChangesNothingOnThePageSaysSo…`
+/ `clickThatChangesThePageReportsTheChange` / `unavailablePageSignatureOmitsTheJudgementInsteadOfLying`
+/ `aPageThatNeverSettlesIsReportedAsStillLoading`。**明确不做**：不覆盖 `userAgentString`（Eta 也没有）、
+不做登录墙/验证码识别、不为"照 Eta"放开 mixed-content / safeBrowsing（我们的 https-only 硬闸是刻意的相反）。
 
 **⑦ 截图 >4 MiB 不发时也必须给下一步**。`screenshot` 用 `View.draw(Canvas)` 原尺寸出 PNG（不缩放，
 对齐 Eta 的"不降质"口径）：空图 ⇒ `NO_PAGE`；超过 `MAX_PNG_BYTES`（4 MiB）⇒ **不发图**，结果里带

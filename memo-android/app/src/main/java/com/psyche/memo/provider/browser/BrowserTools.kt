@@ -312,6 +312,21 @@ object BrowserTools {
     private const val CAPPED_NOTE = "注意：清单可能不完整 —— 这一页太大，扫描在预算内被截停了。" +
         "要找的东西不在里面时，先 scroll 再重新 find。"
 
+    /**
+     * 动作之后「等页面真的停下手」的节拍与上限（照参照实现的口径：先给一帧，再轮询
+     * `onProgressChanged` 的 progress<100）。上限取 3 s 而不是参照实现那 10 s：外层每颗工具
+     * 只有 [TIMEOUT_MS]=30 s，而 `navigate` 自己最坏就要 25 s，等待再长就是把预算花在等上。
+     * 等不到不等于失败 —— 那时信封带 `still_loading: true`，让模型知道这页还没渲染完。
+     */
+    private const val SETTLE_POLL_MS = 200L
+    private const val SETTLE_MAX_MS = 3_000L
+
+    /**
+     * 取证那一发（[BrowserScripts.pageSignatureScript]）的超时。它**只是证据**：拿不到就当不知道，
+     * 绝不因为取证失败把已经执行的动作报成失败（那会让模型以为"没点"，而实际可能已经点了）。
+     */
+    private const val SIG_TIMEOUT_MS = 1_500L
+
     /** 跳转类动作（open/reload）失败后的补救：页面现在是什么**谁都不知道**。 */
     private const val NAV_FAILED_INSTRUCTION =
         "Nothing is known about the page now: read it with `$FIND` before acting on it, " +
@@ -375,10 +390,14 @@ object BrowserTools {
                 val opened = if (wantsNewTab) gateway.openTab(url) else gateway.navigate(url)
                 opened.fold(
                     onSuccess = {
+                        val settled = gateway.settle()
                         ok(
                             gateway,
                             toolName,
-                            if (wantsNewTab) mapOf("tabs" to gateway.tabInfos().size) else emptyMap(),
+                            buildMap<String, Any> {
+                                if (wantsNewTab) put("tabs", gateway.tabInfos().size)
+                                if (!settled) put("still_loading", true)
+                            },
                         )
                     },
                     onFailure = {
@@ -512,7 +531,7 @@ object BrowserTools {
             }
 
             BACK -> if (gateway.goBack()) {
-                ok(gateway, toolName)
+                ok(gateway, toolName, settleFields(gateway))
             } else {
                 error(
                     toolName,
@@ -523,7 +542,7 @@ object BrowserTools {
             }
 
             FORWARD -> if (gateway.goForward()) {
-                ok(gateway, toolName)
+                ok(gateway, toolName, settleFields(gateway))
             } else {
                 error(
                     toolName,
@@ -561,7 +580,7 @@ object BrowserTools {
             TABS -> tabsTool(gateway, args)
 
             RELOAD -> gateway.reload().fold(
-                onSuccess = { ok(gateway, toolName) },
+                onSuccess = { ok(gateway, toolName, settleFields(gateway)) },
                 onFailure = {
                     error(
                         toolName,
@@ -669,10 +688,14 @@ object BrowserTools {
                     TYPE -> BrowserScripts.typeScript(target)
                     else -> BrowserScripts.selectScript(target)
                 }
+                // 点击是唯一「可能什么都不会发生」的那颗：派发的是合成事件（isTrusted=false），
+                // 挂着「只认真实手势」判断的按钮会安静地什么都不做。所以点之前先取一次页面指纹。
+                val beforeSig = if (toolName == CLICK) pageSignature(gateway) else null
                 val (ran, payload) = gateway.run(script, SCRIPT_TIMEOUT_MS)
                 if (!ran) return jsError(toolName, payload)
-                // 点、填、选都可能改页面（选下拉框常会重排_dependent_控件）：旧 index 一律作废。
-                gateway.settleAfterAction()
+                // 点、填、选都可能改页面（选下拉框常会重排_dependent_控件）：先等它落地，
+                // 再把旧 index 一律作废。
+                val settled = gateway.settleAndBump()
                 // **不回显 JS 的返回**：`clickScript` 的 value 是 `{clicked: selFor(el)}`
                 // —— 那是一枚 CSS selector，把它递给模型等于教它「selector 也可寻址」，而 index+
                 // 代次 这套契约存在的理由恰恰是杀掉「同一枚 selector 在页面变化后静默点到另一个
@@ -682,6 +705,25 @@ object BrowserTools {
                 val fields = linkedMapOf<String, Any>("target" to handle)
                 typed?.let { fields["chars"] = it.length }
                 wanted?.let { fields["value"] = it }
+                if (!settled) fields["still_loading"] = true
+                if (toolName == CLICK) {
+                    val afterSig = pageSignature(gateway)
+                    if (beforeSig != null && afterSig != null) {
+                        val changed = beforeSig != afterSig
+                        fields["page_changed"] = changed
+                        if (!changed) {
+                            // **这一条就是"它自己说做了"的解药**：动作在协议上成功了，
+                            // 但页面没有任何可观测变化 —— 必须把这句话原样递给模型，
+                            // 并禁止它把这一下当成"发出去了/点开了"。
+                            fields["note"] =
+                                "Nothing observable changed after this click (same url, title, " +
+                                "scroll position and page size). A scripted click is often ignored " +
+                                "by buttons that only trust real gestures. Do NOT tell the user it " +
+                                "worked: call `$FIND` or `$READ` to see what is actually on the " +
+                                "page, try another element, or hand it to the user to tap."
+                        }
+                    }
+                }
                 ok(gateway, toolName, fields)
             }
         }
@@ -781,6 +823,14 @@ object BrowserTools {
             )
         }
     }
+
+    /**
+     * 历史/重载那三颗：只**等页面停下**，绝不在这里叠第二层换代次 —— `goBack`/`goForward`/`reload`
+     * 的会话实现自己就已经换过一次号（`navigateActionsNeverBumpTheGenerationThemselves` 钉的
+     * 就是"工具侧不许再叠一层"，这次差点被我自己写破）。等不到就在信封里写 `still_loading`。
+     */
+    private suspend fun settleFields(gateway: BrowserGateway): Map<String, Any> =
+        if (gateway.settle()) emptyMap() else mapOf("still_loading" to true)
 
     /**
      * `browser_wait`：每 [WAIT_POLL_MS] 重跑一次**只读**的 `findScript` 比对，到点报
@@ -927,15 +977,44 @@ object BrowserTools {
      * goBack/goForward）里推进，这里再叠一层等于每跳两颗，模型看到的 generation 就和页面
      * 落地那次对不上了。`scroll`/`read`/`find`/`wait`/`page_info` 不换代次（spec §3 契约）。
      */
-    private suspend fun BrowserGateway.settleAfterAction() {
-        delay(250)
+    private suspend fun BrowserGateway.settleAfterAction(): Boolean = settleAndBump()
+
+    /**
+     * 等页面停下手，再把代次推进、旧快照作废。**顺序有意义**：先等再作废，模型下一发 `find`
+     * 才是在"已经落地的页面"上取号；反过来做，它 find 到的是加载中途的半张页。
+     */
+    private suspend fun BrowserGateway.settleAndBump(): Boolean {
+        val settled = settle()
         bumpGenerationAndDropSnapshot()
+        return settled
     }
+
+    /** @return true = 页面自己说它不加载了；false = 等到 [SETTLE_MAX_MS] 还在加载（调用方把它写进信封）。 */
+    private suspend fun BrowserGateway.settle(): Boolean {
+        delay(250)
+        val until = System.currentTimeMillis() + SETTLE_MAX_MS
+        while (loading && System.currentTimeMillis() < until) delay(SETTLE_POLL_MS)
+        return !loading
+    }
+
+    /**
+     * 取一次「页面指纹」。取证失败（脚本超时 / 页面被导航走 / 结构不是我们预期的样子）一律
+     * 回 null = **不知道**，调用方就干脆不写 `page_changed` 那个键：宁可少一张收据，也不许把
+     * "取不到证据"说成"页面没变化"。
+     */
+    private suspend fun pageSignature(gateway: BrowserGateway): String? =
+        gateway.run(BrowserScripts.pageSignatureScript(), SIG_TIMEOUT_MS)
+            .takeIf { it.first }
+            ?.let { BrowserScripts.parsePageSignature(it.second) }
 
     /**
      * 成功形状：`{"type":"tool_result","status":"ok","tool":"browser_read",…}`。
      *
-     * `url` 与 `generation` 由这里统一注入 —— 模型的下一颗 `click`/`type`/`select` 要回传
+     * `url` / `title` / `generation` 由这里统一注入。标题为什么也常带：用户 2026-09-26 实测
+     * 「它自己说做了，其实什么都没发生」——过去动作类结果只有 url + 代次 + 它自己传进来的把手，
+     * 模型**看不到任何页面状态**，下一步只能凭想象写。标题取的是 `onReceivedTitle` 实时维护的那一份，
+     * 零成本（不多跑 JS），却是"这一页还是不是我以为那一页"最便宜的一张收据。
+     * 模型的下一颗 `click`/`type`/`select` 要回传
      * generation（spec §3），少一条路径漏写它就会出现「工具成功了、模型却拿不到代次」。
      * v1 那个 `action` 键不再写：工具名本身已经说明了是哪颗动作（`tool` 键）。
      */
@@ -943,10 +1022,11 @@ object BrowserTools {
         gateway: BrowserGateway,
         toolName: String,
         fields: Map<String, Any> = emptyMap(),
-    ): String = ToolResults.ok(
+    ) = ToolResults.ok(
         tool = toolName,
         fields = buildJsonObject {
             put("url", JsonPrimitive(gateway.url))
+            put("title", JsonPrimitive(gateway.title))
             put("generation", JsonPrimitive(gateway.generation))
             // 本机挡掉的东西（JS 弹窗/下载/权限）必须说出来，否则模型以为一切正常（spec §7.3）。
             gateway.drainNotice()?.let { put("page_notice", JsonPrimitive(it)) }

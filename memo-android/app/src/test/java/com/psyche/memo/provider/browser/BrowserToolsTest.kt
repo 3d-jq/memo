@@ -43,6 +43,7 @@ class BrowserToolsTest {
         elements: BrowserPageSnapshot? = null,
         var runResult: Pair<Boolean, String> = false to "NOT_IN_TESTS",
         private val shotBytes: Int = 8,
+        private val pageTitle: String = "示例页",
         private val forwardAvailable: Boolean = false,
         private val backAvailable: Boolean = false,
         private val initialTabs: List<BrowserTabInfo> = listOf(
@@ -50,6 +51,15 @@ class BrowserToolsTest {
         ),
     ) : BrowserGateway {
         override val url = "https://example.com"
+
+        /** 信封里那条 `title` 的来源。真身是 `onReceivedTitle` 维护的，替身给一个常量就够。 */
+        override val title: String = pageTitle
+
+        /**
+         * 「页面还在加载吗」的替身。**用 var 暴露**：`still_loading` 那条断言要能把
+         * 「等满上限还在加载」这个状态摆出来（真身读的是 `onProgressChanged`）。
+         */
+        override var loading: Boolean = false
         override val isClosed = false
         override var generation: Int = initialGeneration
             private set
@@ -557,7 +567,17 @@ class BrowserToolsTest {
             ) {},
         )
         assertEquals("tool_result", result["type"]!!.jsonPrimitive.content)
-        assertTrue("内联的目标必须是快照里的 selector", gateway.lastScript.contains("body > a:nth-of-type(2)"))
+        // 点击之后还会再跑两发**取证**脚本（页面指纹），所以 lastScript 不是点击那一发 ——
+        // 断言改成「整串里有一发带着快照里的 selector」，并顺手钉住前后各取了一次指纹。
+        assertTrue(
+            "内联的目标必须是快照里的 selector",
+            gateway.scripts.any { it.contains("body > a:nth-of-type(2)") },
+        )
+        assertEquals(
+            "点击要留下「能不能观察到变化」的证据 ⇒ 点前点后各一发指纹",
+            2,
+            gateway.scripts.count { it.contains("childElementCount") },
+        )
         assertEquals("点完要把代次推进、旧 index 作废（只推进一次）", 1, gateway.bumps)
         // 信封里的 `generation` 是模型下一颗动作的**入场券**（`ok()` 在 `settleAfterAction()`
         // 之后读 `gateway.generation`）：作废已发生，回给它的就必须是推进后的那一代。
@@ -863,6 +883,91 @@ class BrowserToolsTest {
         val result = obj(BrowserTools.execute(BrowserTools.SCROLL, gateway, argsOf("\"direction\":\"down\"")) {})
         assertEquals("JS_ALERT_SUPPRESSED:please enter email", result["page_notice"]!!.jsonPrimitive.content)
         assertNull("取走即清空，不许下一颗调用还带着它", gateway.drainNotice())
+    }
+
+    // ------------------------------------------------------------------ 动作后的证据（2026-09-26 真机反馈）
+
+    /** 每颗调用的信封都带 `title`：模型看不到页面状态时，它就只会凭想象写下一步。 */
+    @Test
+    fun everyResultCarriesTheCurrentPageTitle() = runBlocking {
+        val gateway = FakeGateway(
+            elements = elementSnapshot(),
+            runResult = findPayloadOf("""{"text":"正文","truncated":false}"""),
+        )
+        val open = obj(
+            BrowserTools.execute(BrowserTools.OPEN, gateway, argsOf("\"url\":\"https://x\"")) {},
+        )
+        assertEquals("示例页", open["title"]!!.jsonPrimitive.content)
+        val read = obj(BrowserTools.execute(BrowserTools.READ, gateway, argsOf()) {})
+        assertEquals("示例页", read["title"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * 点击什么都没变 ⇒ 必须**明说什么都没变**，并禁止它向用户报成功。
+     *
+     * 这条对着的就是用户那句「他怎么老是出现自己说做了」。派发的是合成事件（`isTrusted=false`），
+     * 挂着"只认真实手势"判断的按钮会安静地什么都不做 —— 那时候协议上一句 `ok` 等于替模型把谎圆了。
+     */
+    @Test
+    fun clickThatChangesNothingOnThePageSaysSoAndForbidsClaimingSuccess() = runBlocking {
+        val sig = """{"sig":"https://x|登录|0|900|3"}"""
+        val gateway = FakeGateway(elements = elementSnapshot())
+        gateway.queued.add(true to sig)
+        gateway.queued.add(true to """{"clicked":true}""")
+        gateway.queued.add(true to sig)
+        val result = obj(
+            BrowserTools.execute(
+                BrowserTools.CLICK, gateway, argsOf("\"index\":1", "\"generation\":4"),
+            ) {},
+        )
+        assertEquals("页面什么都没变，就得说什么都没变", "false", result["page_changed"]!!.jsonPrimitive.content)
+        val note = result["note"]!!.jsonPrimitive.content
+        assertTrue("必须禁止它把这下当成成功：$note", note.contains("Do NOT tell the user"))
+        assertTrue("要给出下一步（先看清页面，别猜）：$note", note.contains(BrowserTools.FIND))
+    }
+
+    /** 页面真的变了 ⇒ 报 true，且不许带上那句"别报成功"。 */
+    @Test
+    fun clickThatChangesThePageReportsTheChange() = runBlocking {
+        val gateway = FakeGateway(elements = elementSnapshot())
+        gateway.queued.add(true to """{"sig":"https://x|登录|0|900|3"}""")
+        gateway.queued.add(true to """{"clicked":true}""")
+        gateway.queued.add(true to """{"sig":"https://x|登录|0|900|7"}""")
+        val result = obj(
+            BrowserTools.execute(
+                BrowserTools.CLICK, gateway, argsOf("\"index\":1", "\"generation\":4"),
+            ) {},
+        )
+        assertEquals("true", result["page_changed"]!!.jsonPrimitive.content)
+        assertNull("页面变了就不该再教育一句", result["note"])
+    }
+
+    /** 取不到指纹（脚本超时 / 结构不对）⇒ **不写这个键**：宁可少一张收据，也不许把"不知道"说成"没变"。 */
+    @Test
+    fun unavailablePageSignatureOmitsTheJudgementInsteadOfLying() = runBlocking {
+        val gateway = FakeGateway(
+            elements = elementSnapshot(),
+            // find 的形状当返回值：里面没有 `sig` 这个键，等于"取不到指纹"。
+            runResult = findPayloadOf("""{"url":"https://x","title":"t","elements":[]}"""),
+        )
+        val result = obj(
+            BrowserTools.execute(
+                BrowserTools.CLICK, gateway, argsOf("\"index\":1", "\"generation\":4"),
+            ) {},
+        )
+        assertNull("判不了就别判", result["page_changed"])
+        assertEquals("取证失败不许把动作本身报成失败", "ok", result["status"]!!.jsonPrimitive.content)
+    }
+
+    /** 等满上限还在加载 ⇒ 老实带 `still_loading`，别让模型把半张页读成完整页。 */
+    @Test
+    fun aPageThatNeverSettlesIsReportedAsStillLoading() = runBlocking {
+        val gateway = FakeGateway(runResult = findPayloadOf("""{"url":"https://x","title":"t","elements":[]}"""))
+        gateway.loading = true
+        val result = obj(
+            BrowserTools.execute(BrowserTools.OPEN, gateway, argsOf("\"url\":\"https://x\"")) {},
+        )
+        assertEquals("true", result["still_loading"]!!.jsonPrimitive.content)
     }
 
     // ------------------------------------------------------------------ 标签（spec §12.2）

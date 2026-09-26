@@ -79,6 +79,13 @@ internal class BrowserTab(
         private set
 
     /**
+     * 主框架还在加载（`onProgressChanged` 的 progress<100）。给工具侧「动作之后等一等」用：
+     * `onPageFinished` 只代表这一跳的骨架落地，SPA 的第二跳（列表、聊天窗）常常还在飞。
+     */
+    var loading: Boolean = false
+        private set
+
+    /**
      * 本标签是否已销毁。**只有会话级 close() 才清凭据**，销毁单个标签不动 cookie（否则关掉
      * 一个登录态标签，会把别的标签的登录态一起干掉 —— spec §12.2 点名要写死这条）。
      */
@@ -117,6 +124,7 @@ internal class BrowserTab(
                 !isAllowedUrl(request.url.toString())
 
             override fun onPageFinished(webView: WebView, finishedUrl: String?) {
+                loading = false
                 url = finishedUrl.orEmpty()
                 // 页面落地：这个标签之前的 index 全部作废。
                 bumpGenerationAndDropSnapshot()
@@ -153,6 +161,11 @@ internal class BrowserTab(
              * 是什么」，而 `browser_find` 是模型的动作 —— 用户接管时也许根本没人 find 过。
              * SPA 改 `document.title` 也会回调这里，所以列表是跟着实时变的。
              */
+            /** 加载进度：<100 就是"这页还在动"，动作后的等待判据读它（照参照实现的口径）。 */
+            override fun onProgressChanged(webView: WebView, newProgress: Int) {
+                loading = newProgress < 100
+            }
+
             override fun onReceivedTitle(webView: WebView, pageTitle: String?) {
                 title = pageTitle.orEmpty()
                 owner.tabsChanged()

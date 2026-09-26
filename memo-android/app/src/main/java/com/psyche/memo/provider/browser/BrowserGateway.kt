@@ -14,6 +14,22 @@ package com.psyche.memo.provider.browser
 interface BrowserGateway {
     val generation: Int
     val url: String
+
+    /**
+     * 当前页标题 —— **每颗工具调用的信封都带它**。
+     *
+     * 理由不是"好看"：用户 2026-09-26 实测「模型自己说做了，其实什么都没发生」。动作类调用的结果
+     * 过去只有 `url` + `generation` + 一个它自己传进来的把手，模型**看不到任何页面状态**，
+     * 于是它只能凭想象写下一步。标题是 `WebChromeClient.onReceivedTitle` 实时维护的，取它零成本
+     * （不再多跑一支 JS），却是"这一页到底还是不是我以为的那一页"最便宜的一张收据。
+     */
+    val title: String
+
+    /**
+     * 页面**还在加载吗**（`WebChromeClient.onProgressChanged` 里 progress<100 就是 true）。
+     * 动作之后要等它落下来再回话，否则 SPA 的第二跳还没渲染完就报"成功"，模型读到的是半张页面。
+     */
+    val loading: Boolean
     val userControls: Boolean
     val snapshot: BrowserPageSnapshot?
 

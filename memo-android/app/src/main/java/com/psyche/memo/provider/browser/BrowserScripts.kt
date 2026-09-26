@@ -283,6 +283,30 @@ object BrowserScripts {
     """)
 
     /**
+     * 一支**只做五个属性读取**的「页面指纹」，给动作前后对比用（`browser_click` 的 `page_changed`）。
+     *
+     * 存在的理由是用户 2026-09-26 实测的那条「它自己说做了，根本没调用工具」：我们的 `click` 派发的是
+     * `dispatchEvent` 造的合成事件，`isTrusted=false` —— 现代站点的按钮上很常见地挂着「只认真实手势」
+     * 的判断，那时候**点了什么也不会发生**，而工具回一句 `ok` 就等于替模型把谎圆了。参照实现 Eta
+     * 也没管这件事（它的 click 只回 `matched_element` 加一个写死的 `side_effect:"possible"`），
+     * 所以这条是我们自己补的：**能不能保证成功不能，至少不许假装成功**。
+     *
+     * 便宜是硬要求：只读标量，不许有遍历（同 [pageInfoScript] 那条纪律）；一次点击多付两发（点前、点后）。
+     * 指纹里带 `scrollHeight` 与 `body.childElementCount` 这两项，是因为 SPA 最常见的"点了有反应"
+     * 就是弹出/插入了一块 DOM，标题和 url 都不动。
+     */
+    fun pageSignatureScript(): String = wrapSelfContained("""
+        var doc = document.scrollingElement || document.documentElement;
+        var body = document.body;
+        return JSON.stringify({ ok: true, value: {
+          sig: String(location.href).slice(0, 200) + '|' +
+            String(document.title || '').replace(/\s+/g, ' ').trim().slice(0, 80) + '|' +
+            Math.round(window.scrollY || doc.scrollTop || 0) + '|' +
+            Math.round(doc.scrollHeight || 0) + '|' +
+            (body ? body.childElementCount : 0) } });
+    """)
+
+    /**
      * 页面几何信息（spec §12.1 的 `browser_page_info`，本工程新增）。
      *
      * **只做四次属性读取**：滚动位置/总高/视口高/标题。这里不许出现任何遍历
@@ -404,6 +428,10 @@ object BrowserScripts {
 
     fun readNextOffset(json: String): Int =
         Json.parseToJsonElement(json).jsonObject["nextOffset"].intOr(0)
+
+    /** 动作前后那一次「页面指纹」；取不到（缺键 / 空串 / 脚本没跑成）一律 null = **不知道**。 */
+    fun parsePageSignature(json: String): String? =
+        Json.parseToJsonElement(json).jsonObject["sig"].textOrNull()?.takeIf { it.isNotBlank() }
 
     /**
      * find 的扫描是否被节点预算/截止时间截停。为真时清单**可能不完整**，Task 6 必须把这句话
