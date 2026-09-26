@@ -3,7 +3,7 @@ package com.psyche.memo.ui
 import androidx.test.core.app.ApplicationProvider
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.MainDispatcherRule
-import com.psyche.memo.provider.browser.BrowserTool
+import com.psyche.memo.provider.browser.BrowserTools
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -23,7 +23,7 @@ import org.robolectric.annotation.Config
  * `DisplayPrefs.browserEnabled` 进，`default` 不在测试里出现，它是被测对象的一部分
  * （scratch 翻成 false 后 `missingKeyMeansOn` 实测会红，见 task-7-report 的 Fix round 1）。
  *
- * 第二条从键名 `BrowserTool.PREFERENCE_KEY` 直接写、从入口读 —— 钉「读写落在同一个键」：
+ * 第二条从键名 `BrowserTools.PREFERENCE_KEY` 直接写、从入口读 —— 钉「读写落在同一个键」：
  * 生产写入已收口进 `DisplayPrefs.writeBrowserEnabled`，哪天读侧换键名，这条立刻红。
  * 写值用 `"0"`（裸串）：与 `DisplayPrefs.writeBool` 的落库字节逐字一致（同
  * `BrowserGateTest` 的写法），不是 JSON 引号形态。
@@ -51,7 +51,7 @@ class AgentCapabilityGateTest {
     /** 键上落了生产写入形态的 `"0"` ⇒ 入口必须认成关。 */
     @Test
     fun writtenOffReadsBackOff() {
-        container.preferenceRepository.writeJson(BrowserTool.PREFERENCE_KEY, "0")
+        container.preferenceRepository.writeJson(BrowserTools.PREFERENCE_KEY, "0")
         assertFalse(DisplayPrefs.browserEnabled(container))
     }
 }

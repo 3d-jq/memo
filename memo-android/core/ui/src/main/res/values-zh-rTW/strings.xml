@@ -2950,11 +2950,26 @@
     <string name="world_book_unnamed_entry">未命名條目</string>
     <string name="agent_capabilities_title">Agent 能力</string>
     <string name="agent_capabilities_browser_title">內建瀏覽器</string>
-    <string name="agent_capabilities_browser_desc">開啟後所有助手都能用 browser_use 瀏覽並操作網頁；網頁內文只是資料，不會被當成指令。</string>
+    <string name="agent_capabilities_browser_desc">開啟後所有助手都能用內建瀏覽器工具開啟、讀取並操作網頁；網頁內文只是資料，不會被當成指令。</string>
     <string name="agent_capabilities_data_title">瀏覽器資料</string>
     <string name="agent_capabilities_clear">清空瀏覽器資料</string>
     <string name="browser_view_page">檢視頁面</string>
     <string name="browser_overlay_title">瀏覽器</string>
     <string name="browser_overlay_hand_back">交還給助手</string>
     <string name="browser_overlay_clear_close">清空並關閉</string>
+    <!-- Agent 瀏覽器那一族 13 顆工具的卡片標題（spec §12.1 拆工具的全部理由：
+         一顆動作一行標題，看得出模型這一輪到底做了什麼）。 -->
+    <string name="chat_message_widget_browser_open">開啟網頁</string>
+    <string name="chat_message_widget_browser_read">讀取網頁</string>
+    <string name="chat_message_widget_browser_find">尋找頁面元素</string>
+    <string name="chat_message_widget_browser_click">點擊頁面元素</string>
+    <string name="chat_message_widget_browser_type">填寫頁面輸入框</string>
+    <string name="chat_message_widget_browser_select">選擇頁面下拉項</string>
+    <string name="chat_message_widget_browser_scroll">滾動網頁</string>
+    <string name="chat_message_widget_browser_screenshot">網頁截圖</string>
+    <string name="chat_message_widget_browser_back">網頁後退</string>
+    <string name="chat_message_widget_browser_forward">網頁前進</string>
+    <string name="chat_message_widget_browser_wait">等待網頁變化</string>
+    <string name="chat_message_widget_browser_page_info">網頁資訊</string>
+    <string name="chat_message_widget_browser_reload">重新載入網頁</string>
 </resources>

@@ -25,7 +25,9 @@ class BrowserScriptsTest {
             BrowserScripts.readScript(6000, 0),
             BrowserScripts.clickScript("""{"selector":"body > a"}"""),
             BrowserScripts.typeScript("""{"selector":"#q","text":"hi"}"""),
+            BrowserScripts.selectScript("""{"selector":"select#city","value":"上海"}"""),
             BrowserScripts.scrollScript("down", 800),
+            BrowserScripts.pageInfoScript(),
         ).joinToString("\n")
         assertTrue("只做求值，不注入桥", !all.contains("addJavascriptInterface"))
         assertTrue("绝不把模型给的东西当 HTML 写进页面", !all.contains("innerHTML"))
@@ -36,10 +38,117 @@ class BrowserScriptsTest {
     @Test
     fun textIsCarriedAsJsonSoQuotesCannotBreakTheScript() {
         val js = BrowserScripts.typeScript(
-            BrowserScripts.targetJsonWithText("#q", "a\"b\\c\n d"),
+            BrowserScripts.targetJsonFor("#q", mapOf("text" to JsonPrimitive("a\"b\\c\n d"))),
         )
         assertTrue("双引号/反斜杠/换行都要在 JSON 层转义掉", js.contains("\\\"b\\\\c\\nd") || js.contains("\\\"b\\\\c"))
         assertFalse("文本不许被拼成 JS 字符串字面量", js.contains("var want = '"))
+    }
+
+    /** 同一道转义闸对**新动作的附加字段**（`browser_select` 的 value）也必须成立。 */
+    @Test
+    fun theSelectValueGoesThroughTheSameJsonEncodingAsTypedText() {
+        val target = BrowserScripts.targetJsonFor(
+            "select#city",
+            mapOf("value" to JsonPrimitive("a\"b\\c\n d")),
+        )
+        val js = BrowserScripts.selectScript(target)
+        assertTrue("value 也要在 JSON 层转义", js.contains("\\\"b\\\\c"))
+        assertFalse("不许退化成 JS 字符串拼接", js.contains("var want = '"))
+        // 坐标寻址那支同理（extras 走同一份组装，两条路径只有一条记得转义=无从产生）。
+        assertTrue(
+            "坐标寻址那支也带同一份 extras",
+            BrowserScripts.targetJsonForPoint(10, 20, mapOf("text" to JsonPrimitive("x")))
+                .contains("\"text\":\"x\""),
+        )
+    }
+
+    /**
+     * `browser_select` 的纪律与 `type` 同源：**派发 input/change，绝不提交**。
+     * 很多站点的下拉框 change 会自动搜/自动买，`submit` 必须在这儿就进不了脚本。
+     */
+    @Test
+    fun selectDispatchesChangeButNeverSubmits() {
+        val js = BrowserScripts.selectScript("""{"selector":"select#city","value":"上海"}""")
+        assertTrue("要真的赋值 selectedIndex", js.contains("el.selectedIndex = idx"))
+        assertTrue("要派发 change 让站点联动", js.contains("new Event('change'"))
+        assertTrue("也要派发 input（受控组件读它）", js.contains("new Event('input'"))
+        assertFalse("绝不调 requestSubmit", js.contains("requestSubmit"))
+        assertFalse("绝不派发 submit 事件", js.contains("'submit'"))
+        assertFalse("不许 form.submit()", Regex("""form\s*\.\s*submit""").containsMatchIn(js))
+        assertTrue("非 select 元素要抛新错误码 NOT_SELECTABLE", js.contains("NOT_SELECTABLE"))
+        assertTrue("值对不上要抛 OPTION_NOT_FOUND", js.contains("OPTION_NOT_FOUND"))
+    }
+
+    /**
+     * `browser_page_info` 的全部意义是「便宜」：只读几何四项，**整支脚本里没有 PRELUDE**
+     * （`vis`/`selFor`/`resolve` 那些会强制布局或遍历 DOM 的助手根本不在文本里）。
+     */
+    @Test
+    fun pageInfoReadsGeometryAndNeverWalksTheDom() {
+        val js = BrowserScripts.pageInfoScript()
+        listOf(
+            "querySelectorAll" to "选元素",
+            "getComputedStyle" to "算样式（强制布局）",
+            "TreeWalker" to "遍历文本",
+            "getBoundingClientRect" to "量盒子",
+            "elementFromPoint" to "按坐标取元素",
+            "createTreeWalker" to "遍历文本",
+        ).forEach { (token, why) ->
+            assertFalse("page_info 里不许出现「$token」（$why）：$js", js.contains(token))
+        }
+        assertTrue("要读滚动位置", js.contains("window.scrollY"))
+        assertTrue("要读总高与视口高（atBottom 的算法原料）", js.contains("scrollHeight") && js.contains("innerHeight"))
+        // 递给 unwrap 的必须是**真回包的形状**：脚本 return 的是 `{ok:true,value:…}` 这个信封，
+        // evaluateJavascript 再把它编码成一层 JSON 字符串。直接喂裸 value 会让 unwrap 回
+        // ok=false —— 那不是被测代码的错，是夹具少了信封（上一版就是这样红成一条裸 AssertionError）。
+        val envelope = """{"ok":true,"value":{"url":"https://a","title":"标 题","scrollY":120,""" +
+            """"scrollHeight":900,"viewportHeight":600,"atTop":false,"atBottom":false}}"""
+        val (ok, payload) = BrowserScripts.unwrap(JsonPrimitive(envelope).toString())
+        assertTrue("page_info 的信封要能剥开（剥不开看 payload=$payload）", ok)
+        val info = BrowserScripts.parsePageInfo(payload)
+        assertEquals("滚动位置要按 number 解出来", 120, info.scrollY)
+        assertEquals("标题里的连续空白要在解析端折成一个空格", "标 题", info.title)
+        assertEquals("总高与视口高是 atBottom 的原料", 900, info.scrollHeight)
+        assertEquals("视口高", 600, info.viewportHeight)
+        assertFalse("y=120 不是顶部", info.atTop)
+        assertFalse("120+600 < 900 不是底部", info.atBottom)
+    }
+
+    /**
+     * 页面**自己控制**的容器字段可以是 JSON null（`findScript` 对每个非 `<select>` 元素都回
+     * `"options": null`），解析端读成数组时必须认这一形 —— `?.jsonArray` 在 `JsonNull` 上是
+     * **抛** `IllegalArgumentException`，一次普通的 `browser_find` 会把整颗工具炸掉
+     * （`BrowserToolsTest.everyDeclaredToolIsImplemented` 第一次红就是这个原因）。
+     */
+    @Test
+    fun aNullContainerFromThePageIsAbsentNotACrash() {
+        val js = """{"url":"https://a","title":"t","capped":null,"elements":[
+            |{"index":1,"tag":"input","role":null,"text":"","placeholder":null,"type":"text",
+            | "href":null,"selector":"#q","options":null,"optionTotal":null,
+            | "bounds":null}]}""".trimMargin()
+        val snapshot = BrowserScripts.parseElements(js, 7)
+        assertEquals("一条元素", 1, snapshot.elements.size)
+        assertEquals("options:null = 没有可选项，不是异常", emptyList<SelectOption>(), snapshot.elements[0].options)
+        assertEquals("optionTotal 为 null 时退回实际条数", 0, snapshot.elements[0].optionTotal)
+        assertEquals("bounds 为 null 时是零盒子", Bounds(0, 0, 0, 0), snapshot.elements[0].bounds)
+        assertFalse("capped:null = 没被截停", BrowserScripts.findCapped(js))
+        // 整份 elements 缺失（页面回了 null）同样不许炸。
+        assertTrue(
+            "elements:null 视作空清单",
+            BrowserScripts.parseElements("""{"url":"u","title":"t","elements":null}""", 1).elements.isEmpty(),
+        )
+    }
+
+    /**
+     * `find` 要把 `<select>` 的可选值带出来（模型看不见就没法 select），但**一条最多 12 个**，
+     * 总数另记在 optionTotal —— 几百项的下拉框整份塞进清单，等于把 20 条元素的可读性换掉。
+     */
+    @Test
+    fun findListsOptionsOfASelectBoundedByTheSharedLimit() {
+        val js = BrowserScripts.findScript()
+        assertTrue("列 option 的上限与 Kotlin 侧同一个常量", js.contains("k < $SELECT_OPTION_LIST_LIMIT"))
+        assertTrue("总数要单独报出来（超了才写「…共 N 项」）", js.contains("optionTotal: optTotal"))
+        assertTrue("只有 select 才付这份枚举", js.contains("tag === 'select' && el.options"))
     }
 
     /** evaluateJavascript 会把 JS 的字符串返回值再编码一层 —— 忘了剥就是处处 BAD_JSON。 */

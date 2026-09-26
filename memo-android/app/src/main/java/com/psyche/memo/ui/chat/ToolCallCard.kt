@@ -63,9 +63,20 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.composables.icons.lucide.ArrowLeft
+import com.composables.icons.lucide.ArrowRight
+import com.composables.icons.lucide.ArrowUpDown
 import com.composables.icons.lucide.BookDashed
 import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.BookPlus
+import com.composables.icons.lucide.Camera
+import com.composables.icons.lucide.Info
+import com.composables.icons.lucide.ListChecks
+import com.composables.icons.lucide.Menu
+import com.composables.icons.lucide.MousePointer2
+import com.composables.icons.lucide.RefreshCw
+import com.composables.icons.lucide.TextCursorInput
+import com.composables.icons.lucide.Timer
 import com.composables.icons.lucide.Calculator
 import com.composables.icons.lucide.Calendar
 import com.composables.icons.lucide.CalendarPlus
@@ -236,9 +247,11 @@ fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
         "update_user_profile" -> Lucide.UserPen
         "chat_search", "builtin_search" -> Lucide.Search
         "search_web" -> Lucide.Earth
-        // Agent 浏览器（app 级工具，本工程新增）：Globe = 「真在开一个网页」，与
-        // search_web 那个「查一次搜索结果」区分开。
-        com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME -> Lucide.Globe
+        // Agent 浏览器（app 级那一族 13 颗，本工程新增）：**一颗动作一个图标**，按工具名出、
+        // 不看 args（spec §12.1）。这正是拆工具的动机 —— 九种动作全落在同一个 Globe 上就
+        // 看不出模型这一轮做了什么，与工作区/记忆族「一个动作一个图标」同一强度
+        // （用户 2026-09-22「图标都用一样的」、2026-09-23「很多也一样呀」）。
+        in com.psyche.memo.provider.browser.BrowserTools.ALL_TOOL_NAMES -> browserIconFor(name)
         // 生成工具（自研功能）：与设置里两个入口同一个图标语言。
         com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE -> Lucide.Image
         com.psyche.memo.provider.generation.GenerationTools.GENERATE_VIDEO -> Lucide.Video
@@ -263,6 +276,52 @@ fun toolIconFor(name: String, args: JsonObject? = null): ImageVector {
         else -> Lucide.Wrench
     }
 }
+
+/**
+ * 浏览器族的图标表（spec §12.1 那份表逐行照抄）。
+ *
+ * `icons-lucide` 的图标是**文件级扩展属性**，13 支都得在本文件里逐个 import，
+ * 少一支就是 unresolved reference。族内**两两不同图标**由
+ * `ToolIconCoverageTest.theBrowserFamilyHasOneIconPerAction` 钉住 —— 重复图标等于
+ * 把拆工具换来的可读性又还回去了。
+ */
+private fun browserIconFor(name: String): ImageVector = when (name) {
+    com.psyche.memo.provider.browser.BrowserTools.OPEN -> Lucide.Globe
+    com.psyche.memo.provider.browser.BrowserTools.READ -> Lucide.Menu
+    com.psyche.memo.provider.browser.BrowserTools.FIND -> Lucide.Search
+    com.psyche.memo.provider.browser.BrowserTools.CLICK -> Lucide.MousePointer2
+    com.psyche.memo.provider.browser.BrowserTools.TYPE -> Lucide.TextCursorInput
+    com.psyche.memo.provider.browser.BrowserTools.SELECT -> Lucide.ListChecks
+    com.psyche.memo.provider.browser.BrowserTools.SCROLL -> Lucide.ArrowUpDown
+    com.psyche.memo.provider.browser.BrowserTools.SCREENSHOT -> Lucide.Camera
+    com.psyche.memo.provider.browser.BrowserTools.BACK -> Lucide.ArrowLeft
+    com.psyche.memo.provider.browser.BrowserTools.FORWARD -> Lucide.ArrowRight
+    com.psyche.memo.provider.browser.BrowserTools.WAIT -> Lucide.Timer
+    com.psyche.memo.provider.browser.BrowserTools.PAGE_INFO -> Lucide.Info
+    com.psyche.memo.provider.browser.BrowserTools.RELOAD -> Lucide.RefreshCw
+    else -> Lucide.Wrench
+}
+
+/**
+ * 浏览器族的标题表（与 [browserIconFor] 对着 spec §12.1 那份名单各自一条，三份 strings.xml
+ * 都有）。`internal` 只为让 `ToolIconCoverageTest` 能钉「每个名字都有自己的标题」——
+ * 漏一条不会崩，但那张卡会落到默认的「调用工具 browser_click」，正是拆工具要消灭的东西。
+ */
+internal val BROWSER_TITLE_RES: Map<String, Int> = mapOf(
+    com.psyche.memo.provider.browser.BrowserTools.OPEN to UiR.string.chat_message_widget_browser_open,
+    com.psyche.memo.provider.browser.BrowserTools.READ to UiR.string.chat_message_widget_browser_read,
+    com.psyche.memo.provider.browser.BrowserTools.FIND to UiR.string.chat_message_widget_browser_find,
+    com.psyche.memo.provider.browser.BrowserTools.CLICK to UiR.string.chat_message_widget_browser_click,
+    com.psyche.memo.provider.browser.BrowserTools.TYPE to UiR.string.chat_message_widget_browser_type,
+    com.psyche.memo.provider.browser.BrowserTools.SELECT to UiR.string.chat_message_widget_browser_select,
+    com.psyche.memo.provider.browser.BrowserTools.SCROLL to UiR.string.chat_message_widget_browser_scroll,
+    com.psyche.memo.provider.browser.BrowserTools.SCREENSHOT to UiR.string.chat_message_widget_browser_screenshot,
+    com.psyche.memo.provider.browser.BrowserTools.BACK to UiR.string.chat_message_widget_browser_back,
+    com.psyche.memo.provider.browser.BrowserTools.FORWARD to UiR.string.chat_message_widget_browser_forward,
+    com.psyche.memo.provider.browser.BrowserTools.WAIT to UiR.string.chat_message_widget_browser_wait,
+    com.psyche.memo.provider.browser.BrowserTools.PAGE_INFO to UiR.string.chat_message_widget_browser_page_info,
+    com.psyche.memo.provider.browser.BrowserTools.RELOAD to UiR.string.chat_message_widget_browser_reload,
+)
 
 /** chat_message_widget.dart _localToolIconFor。 */
 private fun localToolIconFor(name: String, args: JsonObject?): ImageVector? =
@@ -308,11 +367,16 @@ fun toolTitleFor(name: String, args: JsonObject?, isResult: Boolean): String {
         "chat_search" -> stringResource(UiR.string.chat_message_widget_chat_search)
         "create_memory" -> stringResource(UiR.string.chat_message_widget_create_memory)
         "search_web" -> stringResource(UiR.string.chat_message_widget_web_search, args?.str("query").orEmpty())
-        // Agent 浏览器（本工程新增，上游没有这颗工具）：给一个像样的标题，别落到默认的
-        // 「调用工具 browser_use」——用户看到的应该是在开网页，而不是某个匿名内部函数。
-        com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME -> stringResource(
-            UiR.string.agent_capabilities_browser_title,
-        )
+        // Agent 浏览器（本工程新增，上游没有这一族工具）：**一颗动作一行标题**，别落到默认的
+        // 「调用工具 browser_click」——用户看到的应该是「在点页面」，而不是某个匿名内部函数
+        // （spec §12.1 拆工具的动机就在这张卡上）。
+        in com.psyche.memo.provider.browser.BrowserTools.ALL_TOOL_NAMES ->
+            BROWSER_TITLE_RES[name]?.let { stringResource(it) }
+                ?: stringResource(
+                    if (isResult) UiR.string.chat_message_widget_tool_result
+                    else UiR.string.chat_message_widget_tool_call,
+                    if (name.isEmpty()) "tool" else name,
+                )
         // 生成工具：标题带提示词（照 search_web 带 query 的写法）。
         com.psyche.memo.provider.generation.GenerationTools.GENERATE_IMAGE -> stringResource(
             UiR.string.chat_message_widget_generate_image,

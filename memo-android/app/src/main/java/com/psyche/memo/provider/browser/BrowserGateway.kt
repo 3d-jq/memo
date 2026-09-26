@@ -1,7 +1,7 @@
 package com.psyche.memo.provider.browser
 
 /**
- * `BrowserTool` 面向的执行端：真身是 [BrowserSession]，单测里换成替身。
+ * [BrowserTools] 面向的执行端：真身是 [BrowserSession]，单测里换成替身。
  *
  * 属性一律 `val` + `publishSnapshot(...)` 而不是 `var`：实现方（Session）要用私有
  * setter 守状态，接口给写入器最省事。
@@ -21,6 +21,9 @@ interface BrowserGateway {
     suspend fun run(script: String, timeoutMs: Long): Pair<Boolean, String>
     suspend fun screenshotPng(): ByteArray
     suspend fun goBack(): Boolean
+
+    /** 历史前进 —— 与 [goBack] 同形状：没有下一页就 false，成功那一次换代次（spec §12.1 的新动作）。 */
+    suspend fun goForward(): Boolean
     suspend fun reload(): Result<Unit>
     fun publishSnapshot(snapshot: BrowserPageSnapshot?)
 

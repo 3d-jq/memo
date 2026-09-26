@@ -1,6 +1,7 @@
 package com.psyche.memo.provider.browser
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -8,7 +9,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -27,6 +27,14 @@ object BrowserScripts {
     private const val NODE_BUDGET = 12_000
     private const val DEADLINE_MS = 500L
     private const val READ_HARD_MAX_CHARS = 20_000
+
+    /**
+     * `browser_select` 在 JS 里最多扫多少个 option 来找匹配值。
+     * 匹配只读 `value`/`textContent`，不量盒子、不强制重排，所以这里可以比
+     * [SELECT_OPTION_LIST_LIMIT]（**递给模型**的条数）宽得多：模型没在清单里看到的
+     * 第 13 项，只要它把 value 说对了照样选得到。
+     */
+    private const val OPTION_SCAN_MAX = 2_000
 
     /** 共用前缀：可见性判定、文本清洗、CSS selector 生成、目标解析。 */
     private const val PRELUDE = """
@@ -88,6 +96,20 @@ object BrowserScripts {
         " return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });" +
         " } })()"
 
+    /**
+     * 同一个信封，但**不前置 PRELUDE**。
+     *
+     * 只给「一行属性读取」这种自足的脚本用：PRELUDE 里装着 `vis()`（`getComputedStyle`）、
+     * `selFor()` / `resolve()`（`querySelectorAll`）这些会强制布局/遍历的助手，
+     * [pageInfoScript] 一支都不许碰。把它们从脚本里整个拿掉，"这一页没被遍历" 才成为
+     * 对**全文**成立的断言（`BrowserToolsTest.pageInfoReportsGeometryWithoutScanningThePage`），
+     * 而不是「定义了但没调用」那种一有人顺手加一句就失效的口头纪律。
+     */
+    private fun wrapSelfContained(body: String): String = "(function () {" +
+        " try { $body } catch (err) {" +
+        " return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });" +
+        " } })()"
+
     // ---------------------------------------------------------------- 脚本
 
     /**
@@ -116,6 +138,22 @@ object BrowserScripts {
           if (!interactive) continue;
           var r = el.getBoundingClientRect();
           n++;
+          // select 要把**能选什么**一起带出来（browser_select 的 value 照着这里填）。
+          // 一条 select 最多列 SELECT_OPTION_LIST_LIMIT 项，总数另写在 optionTotal 上 ——
+          // 几百项的下拉框整份塞进清单，等于把 20 条元素的可读性换掉。
+          var optTotal = 0, optList = null;
+          if (tag === 'select' && el.options) {
+            optTotal = el.options.length;
+            optList = [];
+            for (var k = 0; k < optTotal && k < $SELECT_OPTION_LIST_LIMIT; k++) {
+              var o = el.options[k];
+              optList.push({
+                value: clean(o.value, 60),
+                text: clean(o.textContent, 60),
+                selected: o.selected === true
+              });
+            }
+          }
           out.push({
             index: n, tag: tag, role: role,
             text: clean(el.innerText || el.value || el.textContent, $TEXT_CHARS),
@@ -123,6 +161,7 @@ object BrowserScripts {
             type: clean(el.getAttribute('type'), 20),
             href: el.href ? String(el.href).slice(0, 200) : null,
             selector: selFor(el),
+            options: optList, optionTotal: optTotal,
             bounds: { x: Math.round(r.left), y: Math.round(r.top),
                       width: Math.round(r.width), height: Math.round(r.height) }
           });
@@ -213,19 +252,79 @@ object BrowserScripts {
             (doc.scrollHeight || 0) - 2 } });
     """)
 
+    /**
+     * `<select>` 选值（spec §12.1 的 `browser_select`，本工程新增）。
+     *
+     * 与 `typeScript` 同一条纪律：**派发 `input`/`change`，绝不提交表单**（不 dispatch
+     * `submit`、不调 `form.requestSubmit()`）—— 很多站点的下拉框 change 会自动提交搜索，
+     * 那一次「购买/关注/发送」就是从这里溜出去的，所以宁可只改值。
+     *
+     * 匹配 `value` 或可见文本任一即可（模型在 `find` 清单里看到的常常是人话那半）。
+     * **不回显 option 文本**：返回的是索引与总数这两个数字，页面自己控制的字符串不未经
+     * 过滤地进上下文（同 `clickScript` 那条纪律）。
+     */
+    fun selectScript(targetJson: String): String = wrap("""
+        var t = $targetJson;
+        var el = resolve(t);
+        if (String(el.tagName).toUpperCase() !== 'SELECT') throw new Error('NOT_SELECTABLE');
+        var want = typeof t.value === 'string' ? t.value : '';
+        var idx = -1, total = el.options ? el.options.length : 0;
+        for (var k = 0; k < total && k < $OPTION_SCAN_MAX; k++) {
+          var o = el.options[k];
+          if (String(o.value) === want || clean(o.textContent, 200) === want) { idx = k; break; }
+        }
+        if (idx < 0) throw new Error('OPTION_NOT_FOUND');
+        el.focus();
+        el.selectedIndex = idx;
+        el.value = el.options[idx].value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return JSON.stringify({ ok: true, value: { selectedIndex: idx, options: total } });
+    """)
+
+    /**
+     * 页面几何信息（spec §12.1 的 `browser_page_info`，本工程新增）。
+     *
+     * **只做四次属性读取**：滚动位置/总高/视口高/标题。这里不许出现任何遍历
+     * （querySelectorAll / TreeWalker / getComputedStyle 都不许有）—— 元素清单归 `find`、
+     * 正文归 `read`，这颗工具的作用就是让模型花最少的钱问一句「我在哪、滚到哪了」；
+     * 一旦在里面加遍历，它就变成又一个每页几百毫秒的主线程活。
+     * 所以走 [wrapSelfContained]：PRELUDE 里那些会强制布局的助手**整块不在脚本里**，
+     * 标题的空白折叠就地写一句（与 PRELUDE 的 `clean()` 同一个正则）。
+     */
+    fun pageInfoScript(): String = wrapSelfContained("""
+        var doc = document.scrollingElement || document.documentElement;
+        var y = Math.round(window.scrollY || doc.scrollTop || 0);
+        var total = Math.round(doc.scrollHeight || 0);
+        var vh = Math.round(window.innerHeight || 0);
+        var title = String(document.title || '').replace(/\s+/g, ' ').trim().slice(0, $TEXT_CHARS);
+        return JSON.stringify({ ok: true, value: {
+          url: String(location.href).slice(0, 300),
+          title: title,
+          scrollY: y, scrollHeight: total, viewportHeight: vh,
+          atTop: y <= 0, atBottom: total - (y + vh) <= 2 } });
+    """)
+
     // ------------------------------------------------------------ 参数生成
 
-    fun targetJsonFor(selector: String): String =
-        JsonObject(mapOf("selector" to JsonPrimitive(selector))).toString()
+    /**
+     * `target` 字面量：`{"selector":"…"}` + 这颗动作要额外带的字段（`type` 的 `text`、
+     * `browser_select` 的 `value`）。
+     *
+     * 附加字段走 [extras] 而不是各建一支函数：转义永远交给 kotlinx，
+     * 「两条路径只有一条记得转义」这种口子就无从产生（纪律 1）。
+     */
+    fun targetJsonFor(
+        selector: String,
+        extras: Map<String, JsonElement> = emptyMap(),
+    ): String = JsonObject(mapOf("selector" to JsonPrimitive(selector)) + extras).toString()
 
-    fun targetJsonForPoint(x: Int, y: Int, text: String? = null): String = buildMap<String, JsonElement> {
-        put("x", JsonPrimitive(x)); put("y", JsonPrimitive(y))
-        text?.let { put("text", JsonPrimitive(it)) }
-    }.let(::JsonObject).toString()
-
-    fun targetJsonWithText(selector: String, text: String): String = JsonObject(
-        mapOf("selector" to JsonPrimitive(selector), "text" to JsonPrimitive(text)),
-    ).toString()
+    /** 坐标寻址的 `target`（`{"x":n,"y":n}` + [extras]），语义同 [targetJsonFor]。 */
+    fun targetJsonForPoint(
+        x: Int,
+        y: Int,
+        extras: Map<String, JsonElement> = emptyMap(),
+    ): String = JsonObject(mapOf("x" to JsonPrimitive(x), "y" to JsonPrimitive(y)) + extras).toString()
 
     // ---------------------------------------------------------------- 解析
 
@@ -248,11 +347,30 @@ object BrowserScripts {
         }
     }
 
+    /**
+     * 解析**页面控制的**容器字段一律走这两个 `as?`，不许用 `?.jsonArray` / `?.jsonObject`。
+     *
+     * 那两条扩展函数遇到 `JsonNull` 是**抛** `IllegalArgumentException`（"Element class JsonNull
+     * is not a JsonArray"），而 `findScript` 对每个非 select 元素都回 `"options": null` —— 于是
+     * 一次普通的 `browser_find` 会把整颗工具调用炸掉（`everyDeclaredToolIsImplemented` 拿
+     * 真实形状的 find 回包喂进来，第一次就抓到了它）。缺键与 JSON null 在这里是同一件事：
+     * 「页面没给这个容器」。
+     */
     fun parseElements(json: String, generation: Int): BrowserPageSnapshot {
         val obj = Json.parseToJsonElement(json).jsonObject
-        val elements = obj["elements"]?.jsonArray?.map { node ->
+        val elements = (obj["elements"] as? JsonArray)?.map { node ->
             val e = node.jsonObject
-            val b = e["bounds"]?.jsonObject
+            val b = e["bounds"] as? JsonObject
+            // option 条数在 JS 侧已经过 SELECT_OPTION_LIST_LIMIT；这里再 take 一次是**解析端
+            // 的第二道闸**（与 textOrNull 的空白折叠同一理由：页面的东西不许原样进上下文）。
+            val options = (e["options"] as? JsonArray)?.map { o ->
+                val item = o.jsonObject
+                SelectOption(
+                    value = item["value"].text(),
+                    text = item["text"].text(),
+                    selected = (item["selected"] as? JsonPrimitive)?.booleanOrNull == true,
+                )
+            }.orEmpty().take(SELECT_OPTION_LIST_LIMIT)
             BrowserElement(
                 index = e["index"].intOr(0),
                 tag = e["tag"].text(),
@@ -266,6 +384,8 @@ object BrowserScripts {
                     x = b?.get("x").intOr(0), y = b?.get("y").intOr(0),
                     width = b?.get("width").intOr(0), height = b?.get("height").intOr(0),
                 ),
+                options = options,
+                optionTotal = e["optionTotal"].intOr(options.size),
             )
         }.orEmpty()
         return BrowserPageSnapshot(
@@ -292,6 +412,20 @@ object BrowserScripts {
     fun findCapped(json: String): Boolean =
         Json.parseToJsonElement(json).jsonObject["capped"]?.jsonPrimitive?.booleanOrNull == true
 
+    /** `browser_page_info` 的那一小包几何信息（[pageInfoScript] 的 value）。 */
+    fun parsePageInfo(json: String): BrowserPageInfo {
+        val obj = Json.parseToJsonElement(json).jsonObject
+        return BrowserPageInfo(
+            url = obj["url"].text(),
+            title = obj["title"].text(),
+            scrollY = obj["scrollY"].intOr(0),
+            scrollHeight = obj["scrollHeight"].intOr(0),
+            viewportHeight = obj["viewportHeight"].intOr(0),
+            atTop = obj["atTop"]?.jsonPrimitive?.booleanOrNull == true,
+            atBottom = obj["atBottom"]?.jsonPrimitive?.booleanOrNull == true,
+        )
+    }
+
     /** JS 抛出的错误码 → 枚举；不认识的（真·JS 异常）返回 null。 */
     fun parseJsErrorCode(payload: String): BrowserJsError? =
         BrowserJsError.values().firstOrNull { it.code == payload }
@@ -317,4 +451,10 @@ object BrowserScripts {
 enum class BrowserJsError(val code: String) {
     TARGET_NOT_FOUND("TARGET_NOT_FOUND"),
     NOT_EDITABLE("NOT_EDITABLE"),
+
+    /** `browser_select` 打到了非 `<select>` 元素上（新动作，spec §12.1）。 */
+    NOT_SELECTABLE("NOT_SELECTABLE"),
+
+    /** `browser_select` 的 `value` 在这个下拉框里既不对不上 value、也不对上文本。 */
+    OPTION_NOT_FOUND("OPTION_NOT_FOUND"),
 }

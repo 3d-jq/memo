@@ -3,7 +3,7 @@ package com.psyche.memo.ui.chat
 import androidx.test.core.app.ApplicationProvider
 import com.psyche.memo.AppContainerImpl
 import com.psyche.memo.MainDispatcherRule
-import com.psyche.memo.provider.browser.BrowserTool
+import com.psyche.memo.provider.browser.BrowserTools
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -21,11 +21,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * 全局开关在**执行侧**的那道复查（裁决 2）。
+ * 全局开关在**执行侧**的那道复查（裁决 2），对浏览器那一族 13 颗工具整体生效。
  *
- * `ChatViewModel.offeredTools()` 只负责「不再递这颗工具」；模型照旧发它是最现实的一条路径
- * （被污染的网页正文指挥它调 `browser_use` —— spec §4/§9 记的正是这个残余风险）。光靠不递，
- * 用户明确关掉开关之后那颗工具**照样能拿到一个真 WebView、用户的 cookie jar 和出网能力**。
+ * `ChatViewModel.offeredTools()` 只负责「不再递这族工具」；模型照旧发它们是最现实的一条路径
+ * （被污染的网页正文指挥它调 `browser_open` —— spec §4/§9 记的正是这个残余风险）。光靠不递，
+ * 用户明确关掉开关之后这族工具**照样能拿到一个真 WebView、用户的 cookie jar 和出网能力**。
  *
  * 拦的地方必须在 `sessionFor` **之前** —— 那一句才是建实例的地方，所以这里断言的是
  * 「回了拒绝 + `peek()` 仍然是 null」，不只是回了个错误码。
@@ -52,8 +52,8 @@ class BrowserGateTest {
      * 门控 ⇒ `sessionFor` 原地建出实例（`peek` 非空 —— 本测试这条 `assertNull` 与下一条
      * `assertNotNull` 观测的正是同一件事，互为镜像），`execute` 毫秒级回 `invalid_arguments`，
      * 先红的是 `assertEquals(browser_disabled)`（它排在 `assertNull(peek)` 之前，方法当场
-     * 失败；两条断言都在这条回归的判据路径上）。探针因此用未知动作 `teleport` 而不是
-     * `read`（与下一条测试同源）：换之前删门控的红实测要 **30.2 s** 才轮到断言 —— `read`
+     * 失败；两条断言都在这条回归的判据路径上）。探针因此用少了 url 的 `browser_open` 而不是
+     * `browser_read`（与下一条测试同源）：换之前删门控的红实测要 **30.2 s** 才轮到断言 —— `read`
      * 的脚本递进 shadow 后永不回 callback（那颗 8 秒脚本超时落在测试调度器的虚拟时钟上
      * 没人拨），要等 `ToolRunner` 外层 30 秒 cap 放行、清场异常被归一成 `tool_crashed`。
      * 换探针后那 30 秒彻底消失（scratch 删门控实测红 0.314 s，见 task-6-report 的
@@ -80,13 +80,11 @@ class BrowserGateTest {
 
     @Test
     fun offSwitchRefusesWithoutOpeningABrowserSession() = runBlocking {
-        container.preferenceRepository.writeJson(BrowserTool.PREFERENCE_KEY, "0")
-        // 探针 = 未知动作：绿路径上它根本走不到执行侧（门控先回拒绝，断言一字不变）；
+        container.preferenceRepository.writeJson(BrowserTools.PREFERENCE_KEY, "0")
+        // 探针 = `browser_open` 少 url：绿路径上它根本走不到执行侧（门控先回拒绝，断言一字不变）；
         // 红路径（哪天门控被删）它在任何脚本递进页面之前就回 invalid_arguments —— 毫秒级，
-        // 不像 `read` 那样在 shadow 里干等 `ToolRunner` 的 30 秒 cap（见类注释）。
-        val content = handler("conv-off").handle(
-            BrowserTool.TOOL_NAME, obj("""{"action":"teleport"}"""), "call-1",
-        )
+        // 不像 `browser_read` 那样在 shadow 里干等 `ToolRunner` 的 30 秒 cap（见类注释）。
+        val content = handler("conv-off").handle(BrowserTools.OPEN, obj("{}"), "call-1")
         val result = obj(content)
         assertEquals("tool_error", result["type"]!!.jsonPrimitive.content)
         assertEquals("browser_disabled", result["error"]!!.jsonPrimitive.content)
@@ -102,7 +100,7 @@ class BrowserGateTest {
     }
 
     /**
-     * 产品事实：**偏好行不存在（全新安装、用户从没碰过开关）时，`handle` 不许拒绝这颗工具**。
+     * 产品事实：**偏好行不存在（全新安装、用户从没碰过开关）时，`handle` 不许拒绝这族工具**。
      *
      * 旧形状 `missingPreferenceDefaultsToOn` 是 `assertEquals(true, readBool(container, KEY,
      * default = true))` —— `default` 是测试自己传进去的，行缺失时 readBool 原样返回它，
@@ -111,15 +109,13 @@ class BrowserGateTest {
      * `default` 不再出现在测试里，它是被测对象的一部分（scratch 翻成 false 实测会红，
      * 见 task-6-report 的 Fix round 2）。
      *
-     * 探针动作用未知动作 `teleport`：它照样过门控、过 `sessionFor`（「放行」这件事由
-     * `peek` 非空观测到，与上一条测试的 assertNull 正好镜像），但在任何脚本递进页面之前
-     * 就以 `invalid_arguments` 返回 —— 毫秒级，不等 8 秒脚本超时、不碰网络。
+     * 探针 = `browser_open` 少 url：它照样过门控、过 `sessionFor`（「放行」这件事由 `peek`
+     * 非空观测到，与上一条测试的 assertNull 正好镜像），但在任何脚本递进页面之前就以
+     * `invalid_arguments` 返回 —— 毫秒级，不等 8 秒脚本超时、不碰网络。
      */
     @Test
     fun missingPreferenceRowDoesNotRefuseTheTool() = runBlocking {
-        val content = handler("conv-default").handle(
-            BrowserTool.TOOL_NAME, obj("""{"action":"teleport"}"""), "call-2",
-        )
+        val content = handler("conv-default").handle(BrowserTools.OPEN, obj("{}"), "call-2")
         val result = obj(content)
         assertEquals(
             "开关缺失 = 默认开：派发点不许回 browser_disabled，要一路放行到执行侧的参数校验",

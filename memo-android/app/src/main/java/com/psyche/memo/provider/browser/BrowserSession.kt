@@ -369,6 +369,20 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         }
     }
 
+    /**
+     * 历史前进：与 [goBack] **逐字同形状**（判 `canGoForward` → 走 → 换代次并作废快照），
+     * 差别只有方向。同样**不等加载完成** —— 前进过去之后 `onPageFinished` 自己会再 bump 一次，
+     * 工具侧再叠一层就是每跳两颗（spec §3 的代次契约）。
+     */
+    override suspend fun goForward(): Boolean = actionLock.withLock {
+        withContext(Dispatchers.Main) {
+            if (closed || !view.canGoForward()) return@withContext false
+            view.goForward()
+            bumpGenerationAndDropSnapshot()
+            true
+        }
+    }
+
     override suspend fun reload(): Result<Unit> = actionLock.withLock {
         withContext(Dispatchers.Main) {
             if (closed) return@withContext Result.failure(IllegalStateException("RENDERER_GONE"))
@@ -452,7 +466,8 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         // 两枚在飞的 deferred 都**以值解套**而不是异常：completeExceptionally 会一路抛到
         // ToolRunner 被归成 tool_crashed，RENDERER_GONE/CANCELLED 这两个码就到不了信封；
         // 以带原因的值完成，await 侧走正常失败通道，也不会留未处理的异常完成。
-        // 不解锁的话被抢会话的 navigate 要干等满 NAV_TIMEOUT_MS（25 s，几乎吃光 browser_use 的 30 s）。
+        // 不解锁的话被抢会话的 navigate 要干等满 NAV_TIMEOUT_MS（25 s，几乎吃光这族工具
+        // 那颗 30 s 的外层 deadline，见 BrowserTools.TIMEOUT_MS）。
         navigation?.complete("RENDERER_GONE")
         navigation = null
         pendingScript?.complete(SCRIPT_CLOSED)

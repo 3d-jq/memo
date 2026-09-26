@@ -16,8 +16,8 @@ import java.time.ZonedDateTime
  * tool_handler_service.dart buildToolCallHandler 的 Native 分派：本地工具
  * （[com.psyche.memo.provider.LocalToolExecutors]）→ ask_user 交互服务 →
  * 上游那道"审批门"按用户 2026-09-25 的指示整块拆除，这里不再挂起等人批准。
- * Agent 浏览器（[com.psyche.memo.provider.browser.BrowserTool]，app 级：不要求助手绑定
- * 任何东西，执行侧自己复查全局开关，且排在 MCP 之前、不进 `LocalToolNames`）→
+ * Agent 浏览器（[com.psyche.memo.provider.browser.BrowserTools] 那一族 13 颗，app 级：不要求助手
+ * 绑定任何东西，执行侧自己复查全局开关，且排在 MCP 之前、不进 `LocalToolNames`）→
  * MCP 透传（[com.psyche.memo.provider.mcp]）→ 兜底 execution_error。
  * 到这里没被接住的只有两种情况：模型编出不存在的工具名，或该工具在本机没有执行器
  * （iOS-only 的定位/天气/健康/提醒，以及未移植的 STDIO MCP）——如实回 execution_error
@@ -172,28 +172,31 @@ class ToolHandler(
                 }
             }
 
-            // Agent 浏览器（BrowserTool）：app 级工具，只看全局开关，不要求助手绑定任何东西。
-            // 必须在 MCP 分支之前 —— 同名 MCP 工具不该顶掉它（offeredTools 那边也留了名）。
-            if (name == com.psyche.memo.provider.browser.BrowserTool.TOOL_NAME && container != null) {
+            // Agent 浏览器（BrowserTools 那一族 13 颗）：app 级工具，只看全局开关，不要求助手
+            // 绑定任何东西。必须在 MCP 分支之前 —— 同名 MCP 工具不该顶掉它们（offeredTools 那边
+            // 也留了名）。
+            if (name in com.psyche.memo.provider.browser.BrowserTools.ALL_TOOL_NAMES &&
+                container != null
+            ) {
                 // **执行侧复查开关**（与上面搜索那支复查 `assistant?.searchEnabled` 同口径）：
-                // `offeredTools()` 只是不再递这颗工具，模型照旧发它是现实路径（被污染的网页正文
+                // `offeredTools()` 只是不再递这族工具，模型照旧发它们是现实路径（被污染的网页正文
                 // 指挥它 —— spec §4/§9 记的残余风险）。必须排在 `sessionFor` **之前**：那一句才
                 // 是建实例的地方，排在它后面就等于用户关了开关还送出真 WebView + cookie jar。
                 // 这是一句**拒绝**，不是审批（用户 2026-09-25 明令整块拆除，PORTING §5.68）：
                 // 不弹确认、不挂起等人。
-                com.psyche.memo.provider.browser.BrowserTool.rejectIfDisabled(
+                com.psyche.memo.provider.browser.BrowserTools.rejectIfDisabled(
                     com.psyche.memo.ui.DisplayPrefs.browserEnabled(container),
                 )?.let { return it }
                 val gateway = container.browserSessions.sessionFor(conversationId ?: "")
                 // 走 ToolRunner.run 而不是裸 cap：异常归一 + 超时口径与所有本地工具一致
                 // （取消由下面 `catch (e: CancellationException)` 那支透传，不再靠这里绕）。
                 return com.psyche.memo.provider.tool.ToolRunner.run(tool = name) {
-                    com.psyche.memo.provider.browser.BrowserTool.execute(gateway, args) { bytes ->
+                    com.psyche.memo.provider.browser.BrowserTools.execute(name, gateway, args) { bytes ->
                         persistToolImage(bytes)?.let(onImage)
                     }
                 } ?: toolError(
                     // 可空性接缝：`run` 的返回是 `String?`（null = 该工具无人负责，继续派发），
-                    // 而 BrowserTool.execute 永远回话 ⇒ 这一支到不了。超时不是这里：超时由 `run`
+                    // 而 BrowserTools.execute 永远回话 ⇒ 这一支到不了。超时不是这里：超时由 `run`
                     // 自己回 tool_timeout。留着只为让编译器相信「一定有写给模型的东西」。
                     error = "browser_unavailable",
                     message = "The browser session returned nothing.",
