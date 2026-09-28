@@ -590,18 +590,18 @@ const val VOICE_WAVEFORM_TAG = "voice_waveform"
  * （`.rikkahub-ref/ui/components/ui/RabbitLoading.kt:16-43`）：那边放的是**自家 app 图标**
  * 的 AnimatedVectorDrawable（兔子会眨眼），28dp，当"正在跑"的标记用。
  *
- * 我们的是 PNG（`ic_launcher_foreground`：便签 + 那点蓝光），没有现成动图，就用
- * **呼吸式缩放**让它活起来。用户 2026-09-23「人家一直是那样的，直接一比一改成他那样」——
- * 之前那版是文字扫光 + 底板，形态上和 RikkaHub 不是一回事。
+ * 我们的是 PNG，没有现成动图，就用**射线绽放**让它活起来（形状＝应用图标本体那 8 条
+ * 放射线，中心留白固定、射线向外舒展再收回）。用户 2026-09-23「人家一直是那样的，
+ * 直接一比一改成他那样」——之前那版是文字扫光 + 底板，形态上和 RikkaHub 不是一回事。
  */
 @Composable
 fun MemoLoadingIndicator(modifier: Modifier = Modifier) {
-    // 观感换成**呼吸星形**（形状＝品牌图标那颗星，动画照 Agora `GenerationActivityDot`）：
-    // 12dp、颜色跟随主题 primary、scale 0.55⇄1.30 @1s Reverse。用户 2026-09-23
-    // 「用它这个吧，颜色跟着主题走，他这个又好看又没有任何问题」取代此前 28dp 的 app 图标；
-    // 2026-09-25 又点名把圆点换成品牌图标里的星。
-    // 尺寸由星形自身固定（调用方不要再传 size，否则把它放大）。
-    GenerationActivityStar(modifier = modifier)
+    // 观感＝**呼吸放射线**（形状＝应用图标那 8 条，动画＝绽放）：
+    // 14dp、颜色跟随主题 primary、外扩 700ms / 回收 1100ms。
+    // 历史：2026-09-23 先用 12dp 呼吸星形取代 28dp 的 app 图标，2026-09-25 点名换成
+    // 品牌图标里的四角星，2026-09-28 再换成图标本体的放射线并把动画改成绽放。
+    // 尺寸由指示器自身固定（调用方不要再传 size，否则把它放大）。
+    GenerationActivityBurst(modifier = modifier)
 }
 
 /**

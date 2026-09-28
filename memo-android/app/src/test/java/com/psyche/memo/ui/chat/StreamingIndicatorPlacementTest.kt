@@ -28,8 +28,8 @@ class StreamingIndicatorPlacementTest {
 
         val row = File(chatDir, "MessageRow.kt").readText()
         assertTrue(
-            "助手消息尾部应当渲染呼吸星形（GenerationActivityStar）",
-            row.contains("GenerationActivityStar("),
+            "助手消息尾部应当渲染呼吸放射线（GenerationActivityBurst）",
+            row.contains("GenerationActivityBurst("),
         )
         assertFalse(
             "消息行里不该再渲染扫光提示（回到消息内部就会在工具调用时跳动）",

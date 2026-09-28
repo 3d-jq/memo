@@ -850,8 +850,8 @@ internal fun MessageRow(
                     // ⇒ 结束时没有任何高度跳变（用户 2026-09-24「最后那排复制出现时不要那样一下」）。
                     if (msg.isStreaming) {
                         Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.CenterStart) {
-                            // 呼吸星形（品牌图标那颗；颜色跟随主题 primary，自带渐显）。
-                            com.psyche.memo.ui.chat.GenerationActivityStar()
+                            // 呼吸放射线（应用图标本体那 8 条；颜色跟随主题 primary，自带渐显）。
+                            com.psyche.memo.ui.chat.GenerationActivityBurst()
                         }
                     } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {
