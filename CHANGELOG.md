@@ -2,7 +2,7 @@
 
 Memo（Kotlin / Jetpack Compose 原生版）的显著变更。版本号对应 `app/build.gradle.kts` 的 `versionName`。
 
-## [Unreleased]
+## [1.0.24] — 2026-09-28
 
 ### 改进
 
