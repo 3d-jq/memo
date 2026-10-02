@@ -1752,8 +1752,8 @@ class ChatViewModel(
                 // （context_log_models.dart 的 `_kelivo_ctx_segments`），请求前由
                 // ContextLogAssembler 切片写盘。历史轮次不带标签，读取时按 role 推断。
                 val tagContextLog = com.psyche.memo.logging.ContextLogger.isEnabled
-                val history = rawMessages
-                    .mapIndexedNotNull { index, msg ->
+                val history = buildList {
+                    rawMessages.forEachIndexed { index, msg ->
                         val carriesMemory = msg.id == lastUserMessageId && memoryPrefix.isNotEmpty()
                         // 压缩检查点整条替换成 opencode 的 <conversation-checkpoint> user 轮次
                         // （to-llm-message.ts 的 compaction 分支）。
@@ -1773,8 +1773,13 @@ class ChatViewModel(
                         } else {
                             emptyList()
                         }
-                        if (finalBody.isEmpty() && attachments.isEmpty()) null
-                        else LlmMessage(
+                        // 工具调用 + 结果的历史回放（上游 buildApiMessages
+                        // includeToolMessages=true 的对位）。压缩检查点消息不播
+                        // （它整条已被摘要替换）。**任何一条消息有 tool part 就必须
+                        // 播**，否则技能正文/搜索结果在下一轮全部消失（用户实测）。
+                        val replay = if (checkpoint == null) replayToolCallHistory(msg) else emptyList()
+                        if (finalBody.isEmpty() && attachments.isEmpty() && replay.isEmpty()) return@forEachIndexed
+                        val plain = LlmMessage(
                             role = msg.role,
                             content = finalBody.ifEmpty { null },
                             parts = attachments,
@@ -1796,8 +1801,11 @@ class ChatViewModel(
                                 emptyList()
                             },
                         )
+                        // 上游顺序：正文消息（若有）在前，assistant(tool_calls)+tool 组在后。
+                        if (finalBody.isNotEmpty() || attachments.isNotEmpty()) add(plain)
+                        addAll(replay)
                     }
-                    .toMutableList()
+                }.toMutableList()
                 // System prompt injection (message_builder_service.dart L167-189):
                 // 助手提示词 + 记忆规则 + 搜索引用块 + 指令注入，按序拼进系统消息；
                 // 世界书随后 wrap 在它外面。每段带来源标签供上下文日志使用。
@@ -2517,19 +2525,25 @@ class ChatViewModel(
                 // （chat_completions_api.dart _buildAssistantToolCallMessage 形状）。
                 // 压缩检查点按发送链路同样的语义展开（检查点置前、boundary 之前的
                 // 消息不再发送），避免把摘要正文当成一条普通 user 发言。
-                val history = compactionWindow(_messages.value.takeWhile { it.id != messageId })
-                    .mapNotNull { msg ->
-                        val checkpoint = msg.checkpointPart()
-                        val content = if (checkpoint != null) {
-                            com.psyche.memo.common.SessionCompaction
-                                .checkpointText(checkpoint.summary, checkpoint.recent)
-                        } else {
-                            msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+                val history = buildList {
+                    compactionWindow(_messages.value.takeWhile { it.id != messageId })
+                        .forEach { msg ->
+                            val checkpoint = msg.checkpointPart()
+                            val content = if (checkpoint != null) {
+                                com.psyche.memo.common.SessionCompaction
+                                    .checkpointText(checkpoint.summary, checkpoint.recent)
+                            } else {
+                                msg.parts.filterIsInstance<TextPart>().joinToString("") { it.text }
+                            }
+                            // 工具调用 + 结果同样要回放（与主发送路径同口径，见
+                            // replayToolCallHistory）：续答路径若丢了工具结果，模型会
+                            // 忘掉自己刚做过的工具调用。
+                            val replay = if (checkpoint == null) replayToolCallHistory(msg) else emptyList()
+                            if (content.isEmpty() && replay.isEmpty()) return@forEach
+                            if (content.isNotEmpty()) add(LlmMessage(role = msg.role, content = content))
+                            addAll(replay)
                         }
-                        if (content.isEmpty()) null
-                        else LlmMessage(role = msg.role, content = content)
-                    }
-                    .toMutableList()
+                }.toMutableList()
                 history.add(
                     LlmMessage(
                         role = "assistant",
@@ -3358,4 +3372,58 @@ class ChatViewModel(
             messageOrder = messageOrder ?: m.messageOrder,
         )
     }
+}
+
+/**
+ * 把一条助手消息的**工具调用与结果**回放进请求历史（OpenAI 形状）。
+ *
+ * 对位上游 `message_builder_service.dart` `buildApiMessages(includeToolMessages: true)`
+ * （openai/claude/google 三族都开）。Memo 移植时整段丢失：历史重建只发 TextPart，
+ * 于是**每次新发送**，之前所有的工具调用连同结果从上下文里消失 —— 模型看不到自己
+ * 上一轮加载过的技能正文 / 搜索结果 / 工作区文件 / MCP 结果（用户 2026-10-02
+ * 实测「明明加载了 PPT skill，问模型它说没有加载」）。
+ *
+ * 上游口径照搬：
+ *  - 形状：`assistant(content="\n\n", tool_calls=[...])` 一条 + 每颗调用一条
+ *    `tool` 消息（tool_call_id/name/content）；消息自身有正文时正文消息照常在前，
+ *    本组回放在其后（上游 out.add 顺序）。
+ *  - **任一调用没有结果（content == null）就整组不播** —— 残缺 tool_calls 会让
+ *    OpenAI 直接 400（上游注释原话："only valid once every call has a result"）。
+ *  - id 为空的调用用 `call_<消息id前8位>_i` 兜底（上游 synthetic id 同规则），
+ *    tool 消息的 tool_call_id 必须与之一致。
+ */
+internal fun replayToolCallHistory(msg: ChatViewModel.UiMessage): List<LlmMessage> {
+    if (msg.role != "assistant") return emptyList()
+    val toolParts = msg.parts.filterIsInstance<com.psyche.memo.data.model.ToolCallPart>()
+    if (toolParts.isEmpty()) return emptyList()
+    val payloads = toolParts.mapNotNull {
+        com.psyche.memo.data.model.ToolCallPart.decode(it.payloadJson)
+    }
+    if (payloads.isEmpty()) return emptyList()
+    if (payloads.any { it.content == null }) return emptyList()
+    val ids = payloads.mapIndexed { index, payload ->
+        payload.id.ifEmpty { "call_${msg.id.take(8)}_$index" }
+    }
+    val out = ArrayList<LlmMessage>(payloads.size + 1)
+    out += LlmMessage(
+        role = "assistant",
+        content = "\n\n",
+        toolCalls = payloads.mapIndexed { index, payload ->
+            LlmToolCall(
+                id = ids[index],
+                name = payload.name,
+                argumentsJson = payload.arguments.ifEmpty { "{}" },
+            )
+        },
+    )
+    payloads.forEachIndexed { index, payload ->
+        out += LlmMessage(
+            role = "tool",
+            toolCallId = ids[index],
+            toolName = payload.name,
+            content = com.psyche.memo.provider.tool.PromptFrames
+                .sanitize(payload.content.orEmpty()),
+        )
+    }
+    return out
 }

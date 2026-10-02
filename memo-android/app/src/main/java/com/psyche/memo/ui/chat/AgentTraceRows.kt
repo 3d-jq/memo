@@ -53,13 +53,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.ChevronRight
-import com.composables.icons.lucide.LoaderCircle
 import com.composables.icons.lucide.Lucide
 import com.psyche.memo.ui.ChatStyleSpec
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.AppFontWeights
 import kotlin.math.ceil
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -192,7 +192,15 @@ fun AgentTraceBlock(
             }
         }
     }
-    val startedAtValue = if (phaseStart != Long.MAX_VALUE) phaseStart else turnStartedAt
+    // 阶段起点 = **轮次起点**（ZCode header.startedAt 口径：turn 开始，不是首个步骤）。
+    // 用消息时间兜底还有个关键收益：空窗期兜底头与真阶段块交接时计时基数一致，
+    // 不会出现「0秒→3秒→跳回0秒」的二次渲染观感（用户实测反馈）。
+    val startedAtValue = when {
+        phaseStart != Long.MAX_VALUE && turnStartedAt != null ->
+            min(phaseStart, turnStartedAt)
+        phaseStart != Long.MAX_VALUE -> phaseStart
+        else -> turnStartedAt
+    }
     val hasStart = startedAtValue != null
     // ZCode 口径：workStatus.state = running 指**整轮生成还在跑**（正文流式中也算），
     // 不是「有步骤没收口」。否则工具一跑完、正文开始流，头部就变「已工作」、跳秒停了。
