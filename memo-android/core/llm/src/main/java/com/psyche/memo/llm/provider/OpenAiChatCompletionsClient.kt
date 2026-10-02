@@ -41,6 +41,14 @@ import okio.BufferedSource
 import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import com.psyche.memo.llm.client.PROTECTED_BODY_KEYS
+
+/**
+ * custom body 不许覆盖的键（P2）：流式开关、消息历史与模型 id。用户把
+ * `stream:false` 覆盖进来会让非 SSE 响应体进 SSE 解析器（静默空流），覆盖
+ * `messages` 会替换整段请求历史。这两个键在 provider 客户端合并 extraBody 时
+ * 直接丢弃。
+ */
 
 /**
  * OpenAI Chat Completions client (also covers OpenAI-compatible hosts).
@@ -48,6 +56,7 @@ import kotlin.coroutines.resumeWithException
  * /chat/completions path, Authorization Bearer auth and SSE streaming.
  */
 class OpenAiChatCompletionsClient(
+
     private val httpClient: OkHttpClient,
     private val retryOptionsProvider: () -> AutoRetryOptions = { AutoRetryOptions() },
 
@@ -321,9 +330,13 @@ class OpenAiChatCompletionsClient(
                 })
                 put("tool_choice", "auto")
             }
+            // P2：custom body 的**保护键**。用户把 stream:false 或 messages 覆盖进来
+            // 会让非 SSE 响应体进 SSE 解析器（静默空流）、或整段历史被替换。这两类
+            // 键直接丢弃（其余键仍可覆盖）。
             request.extraBodyJson?.let {
                 val extra = json.parseToJsonElement(it).jsonObject
                 for (entry in extra.entries) {
+                    if (entry.key in PROTECTED_BODY_KEYS) continue
                     put(entry.key, entry.value) // custom body override wins below
                 }
             }

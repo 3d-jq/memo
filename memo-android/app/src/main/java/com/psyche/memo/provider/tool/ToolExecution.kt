@@ -5,7 +5,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 
 /**
  * 工具执行的统一骨架 —— 照 deepseek-harness 的 execute() 契约
@@ -102,22 +105,52 @@ object ToolRunner {
         }
     }
 
-    /** 结果上限：截断并**标明**截断（不许把截断后的结果当成完整结果）。 */
+    private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * 结果上限：截断并**标明**截断（不许把截断后的结果当成完整结果）。
+     *
+     * P2：**错误信封不进这个改写**。旧实现对超长错误载荷一律覆写成
+     * `status:"ok_truncated"`，原 error/instruction 全丢 —— 失败被显示成成功
+     * （ToolCallCard 的判据就是 status=="error"）。超过上限的错误只截 message，
+     * 保住 error/instruction 两个键。
+     */
     fun cap(result: String): String {
         if (result.length <= MAX_RESULT_CHARS) return result
         val kept = result.take(MAX_RESULT_CHARS)
+        val errorCode = runCatching {
+            val obj = json.parseToJsonElement(result).jsonObject
+            if ((obj["status"] as? JsonPrimitive)?.contentOrNull == "error") {
+                obj["error"]?.let { (it as? JsonPrimitive)?.contentOrNull }
+            } else {
+                null
+            }
+        }.getOrNull()
         return buildJsonObject {
-            put("type", JsonPrimitive("tool_result_truncated"))
-            put("status", JsonPrimitive("ok_truncated"))
-            put("truncated", JsonPrimitive(true))
-            put("originalChars", JsonPrimitive(result.length))
-            put(
-                "message",
-                JsonPrimitive(
-                    "工具结果超过 $MAX_RESULT_CHARS 字符，已截断 —— 请缩小范围（更少的条目/更短的查询）后重试。",
-                ),
-            )
-            put("content", JsonPrimitive(kept))
+            if (errorCode != null) {
+                put("type", JsonPrimitive("tool_error"))
+                put("status", JsonPrimitive("error"))
+                put("truncated", JsonPrimitive(true))
+                put("error", JsonPrimitive(errorCode))
+                put("message", JsonPrimitive("工具结果超过 $MAX_RESULT_CHARS 字符，已截断"))
+                put("content", JsonPrimitive(kept))
+                put(
+                    "instruction",
+                    JsonPrimitive(ToolResults.REPORT_FAILURE),
+                )
+            } else {
+                put("type", JsonPrimitive("tool_result_truncated"))
+                put("status", JsonPrimitive("ok_truncated"))
+                put("truncated", JsonPrimitive(true))
+                put("originalChars", JsonPrimitive(result.length))
+                put(
+                    "message",
+                    JsonPrimitive(
+                        "工具结果超过 $MAX_RESULT_CHARS 字符，已截断 —— 请缩小范围（更少的条目/更短的查询）后重试。",
+                    ),
+                )
+                put("content", JsonPrimitive(kept))
+            }
         }.toString()
     }
 }

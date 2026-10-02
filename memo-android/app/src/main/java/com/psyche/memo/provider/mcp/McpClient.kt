@@ -181,7 +181,15 @@ class McpClient(
             if (contentType.contains("text/event-stream")) {
                 return readSseResponse(res, expectId)
             }
-            val text = res.body?.string().orEmpty()
+            // P2：读入前就限量。原来是整个响应体读进内存再 `.take(200)` 截断展示，
+            // 一个异常大的 MCP 响应（或恶意服务器）能直接 OOM。读够即止。
+            val source = res.body?.source() ?: throw McpException("MCP response has no body")
+            source.request(MAX_RESPONSE_BYTES)
+            val buffered = source.buffer
+            val text = buffered.snapshot(minOf(buffered.size, MAX_RESPONSE_BYTES).toInt()).utf8()
+            if (buffered.size > MAX_RESPONSE_BYTES) {
+                throw McpException("MCP response exceeds ${MAX_RESPONSE_BYTES} bytes")
+            }
             return runCatching { json.parseToJsonElement(text).jsonObject }
                 .getOrElse { throw McpException("Invalid MCP response: ${text.take(200)}") }
         }
@@ -302,7 +310,11 @@ class McpClient(
     private fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content
 
+
     companion object {
+        /** 单次 MCP 响应的读入上限（P2：防超大响应 OOM）。16 MiB 足够单一工具结果。 */
+        private const val MAX_RESPONSE_BYTES = 16L * 1024 * 1024
+
         const val PROTOCOL_VERSION = "2025-11-25"
         private const val SSE_ENDPOINT_TIMEOUT_SECONDS = 15L
 

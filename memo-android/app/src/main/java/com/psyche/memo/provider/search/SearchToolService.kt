@@ -103,8 +103,18 @@ When a statement in your answer is based on a search_web result, append a citati
                 result.answer?.let { put("answer", it) }
                 put("items", JsonArray(items.map { it.toJson() }))
             }.toString()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 取消透传：用户点停止不是搜索失败。
+            throw e
         } catch (e: Exception) {
-            buildJsonObject { put("error", "Search failed: $e") }.toString()
+            // 规范信封（与上面 service == null 分支同形状）：ToolCallCard 的失败判据
+            // 是 content 的 status=="error"，裸 {"error":…} 会被显示成成功。
+            com.psyche.memo.provider.tool.ToolResults.error(
+                code = "search_failed",
+                message = e.message ?: e.toString(),
+                tool = TOOL_NAME,
+                instruction = com.psyche.memo.provider.tool.ToolResults.REPORT_FAILURE,
+            )
         }
     }
 }

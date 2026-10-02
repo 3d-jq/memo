@@ -415,6 +415,12 @@ object MemoryTools {
             if (!assistant.allowPastConversationRecall) return null
             return try {
                 chatSearch(container, assistant, conversationId, args).also { finishToolTrace(trace, it) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 取消透传（P1-8）：别把「用户点停止」写成 memory_execution_error。
+                throw e
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // 取消透传（P1-8）：别把「用户点停止」写成 memory_execution_error。
+                throw e
             } catch (e: Exception) {
                 toolError(
                     error = "memory_execution_error",
@@ -454,6 +460,9 @@ object MemoryTools {
             }
             finishToolTrace(trace, result)
             result
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 取消透传（P1-8）：别把「用户点停止」写成 memory_execution_error。
+            throw e
         } catch (e: Exception) {
             val error = toolError(
                 error = "memory_execution_error",

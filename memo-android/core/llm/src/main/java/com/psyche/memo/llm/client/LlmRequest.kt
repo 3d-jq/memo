@@ -42,6 +42,13 @@ data class LlmToolCall(
 /** 一张待发送的图片：uri 可以是 http(s) / data: / 本地文件路径。 */
 data class LlmImage(val uri: String, val mime: String? = null)
 
+/**
+ * custom body 不许覆盖的键（P2）：流式开关、消息历史与模型 id。用户把
+ * `stream:false` 覆盖进来会让非 SSE 响应体进 SSE 解析器（静默空流），覆盖
+ * `messages` 会替换整段请求历史。provider 客户端合并 extraBody 时直接丢弃。
+ */
+val PROTECTED_BODY_KEYS = setOf("stream", "messages", "model")
+
 data class LlmToolSpec(
     val name: String,
     val description: String = "",

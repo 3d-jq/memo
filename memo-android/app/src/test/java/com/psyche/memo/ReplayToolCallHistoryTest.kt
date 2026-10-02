@@ -77,14 +77,36 @@ class ReplayToolCallHistoryTest {
     }
 
     @Test
-    fun `pending call without result skips the whole group`() {
-        // 残缺 tool_calls（有调用没结果）会让 OpenAI 直接 400 —— 上游同口径整组不播。
+    fun `pending call cuts the group at the round boundary`() {
+        // P1-7：用户在多轮工具批处理中途点停止 ⇒ 第二颗 content == null。
+        // 旧实现「整组不播」让之后每轮都丢全部工具结果（skill 现象复发）。
+        // 现在按轮次边界断开：已完成的前缀照常回放，未完成那颗及之后的丢弃。
         val replay = replayToolCallHistory(
             msg(
                 id = "abcdef12-3456",
                 parts = listOf(
-                    toolPart("call_1", "use_skill", "ok"),
-                    toolPart("call_2", "search_web", null), // 还在跑/被打断
+                    toolPart("call_1", "use_skill", "# skill body"),
+                    toolPart("call_2", "search_web", null), // 被打断
+                    toolPart("call_3", "workspace_read_file", null), // 没跑到的下一颗
+                ),
+            ),
+        )
+        assertEquals(2, replay.size) // assistant(tool_calls) + 1 条 tool 结果
+        assertEquals(1, replay[0].toolCalls.size)
+        assertEquals("use_skill", replay[0].toolCalls[0].name)
+        assertEquals("call_1", replay[1].toolCallId)
+        assertEquals("# skill body", replay[1].content)
+    }
+
+    @Test
+    fun `all pending replays nothing`() {
+        // 一颗都没完成才不播（全是未完成批次，没有可播内容）。
+        val replay = replayToolCallHistory(
+            msg(
+                id = "abcdef12-3456",
+                parts = listOf(
+                    toolPart("call_1", "use_skill", null),
+                    toolPart("call_2", "search_web", null),
                 ),
             ),
         )

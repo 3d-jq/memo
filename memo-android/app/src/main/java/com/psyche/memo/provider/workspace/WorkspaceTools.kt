@@ -620,6 +620,11 @@ object WorkspaceTools {
                 SHELL -> shell(repo, workspaceId, cwd, args)
                 else -> Outcome.Failure("unknown_tool", "Unknown workspace tool: $name")
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 用户点停止 ≠ 工具失败。CancellationException 是 IllegalStateException
+            // 子类，会被下面的 Exception 分支吞成 execution_error 并落库、下一轮回放
+            // 给模型（P1-8）。必须原样抛出。
+            throw e
         } catch (e: Exception) {
             Outcome.Failure("execution_error", e.message ?: e.toString())
         }
@@ -908,6 +913,27 @@ object WorkspaceTools {
             cwd = effectiveCwd,
             timeoutMillis = timeoutMillis(args),
         )
+        // P1-9：非零退出 / 超时按**失败**返回（与同族 rootfs 路径同口径 —— 那边
+        // 注释明写「超时/非零退出/截断都当失败讲给模型」）。旧实现一律 Success，
+        // 界面判据是 content 的 status=="error"，于是 exitCode:128 的 git push
+        // 在时间线上显示灰色「已执行」。成功路径仍带完整 exitCode/stdout/stderr。
+        if (result.timedOut) {
+            return Outcome.Failure(
+                "command_timeout",
+                "Command timed out" + (result.stderr.trim().takeIf { it.isNotEmpty() }?.let { ": $it" } ?: ""),
+            )
+        }
+        if (result.exitCode != 0) {
+            val message = result.stderr.ifBlank { result.stdout }.trim()
+            return Outcome.Failure(
+                "command_failed",
+                if (message.isBlank()) {
+                    "Command failed with exit code ${result.exitCode}"
+                } else {
+                    message
+                },
+            )
+        }
         return Outcome.Success(
             commandResultJson(
                 exitCode = result.exitCode,

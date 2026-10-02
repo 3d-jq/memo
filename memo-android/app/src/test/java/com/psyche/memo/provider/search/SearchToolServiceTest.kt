@@ -71,9 +71,14 @@ class SearchToolServiceTest {
     fun `engine failure becomes a search error payload`() = runBlocking {
         val engine = FakeEngine(error = SearchException("boom"))
         val payload = SearchToolService.executeSearch("q", engine, service, SearchCommonOptions())
-        assertTrue(payload.contains("\"error\""))
-        assertTrue(payload.contains("Search failed:"))
-        assertTrue(payload.contains("boom"))
+        val obj = Json.parseToJsonElement(payload) as JsonObject
+        // P2：引擎失败走**规范信封**（与 missing-service 分支同形状）。旧实现是裸
+        // {"error":"Search failed: …"}，ToolCallCard 的失败判据是 status=="error"，
+        // 于是引擎炸了在时间线上显示灰色「已执行」。
+        assertEquals("tool_error", obj["type"]!!.jsonPrimitive.content)
+        assertEquals("error", obj["status"]!!.jsonPrimitive.content)
+        assertEquals("search_failed", obj["error"]!!.jsonPrimitive.content)
+        assertTrue(obj["message"]!!.jsonPrimitive.content.contains("boom"))
     }
 
     @Test

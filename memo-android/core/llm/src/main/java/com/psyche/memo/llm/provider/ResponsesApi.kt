@@ -13,6 +13,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import com.psyche.memo.llm.client.PROTECTED_BODY_KEYS
 
 /**
  * OpenAI **Responses API** 请求体（移植 Flutter `sendOpenAIStream` 的
@@ -168,9 +169,14 @@ object ResponsesApi {
             }
             applyReasoning(request)
             // 自定义请求体最后覆盖（custom_request 三层合并的结果）。
+            // P2：保护键（stream/messages/model）丢弃 —— Responses 的对应键是
+            // instructions/input，同样不许被用户覆盖。
             request.extraBodyJson?.let { extra ->
                 val obj = runCatching { json.parseToJsonElement(extra).jsonObject }.getOrNull()
-                obj?.forEach { (key, value) -> put(key, value) }
+                obj?.forEach { (key, value) ->
+                    if (key in PROTECTED_BODY_KEYS) return@forEach
+                    put(key, value)
+                }
             }
         }
     }

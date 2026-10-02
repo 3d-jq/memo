@@ -3424,14 +3424,18 @@ class ChatViewModel(
  * 上一轮加载过的技能正文 / 搜索结果 / 工作区文件 / MCP 结果（用户 2026-10-02
  * 实测「明明加载了 PPT skill，问模型它说没有加载」）。
  *
- * 上游口径照搬：
- *  - 形状：`assistant(content="\n\n", tool_calls=[...])` 一条 + 每颗调用一条
- *    `tool` 消息（tool_call_id/name/content）；消息自身有正文时正文消息照常在前，
- *    本组回放在其后（上游 out.add 顺序）。
- *  - **任一调用没有结果（content == null）就整组不播** —— 残缺 tool_calls 会让
- *    OpenAI 直接 400（上游注释原话："only valid once every call has a result"）。
- *  - id 为空的调用用 `call_<消息id前8位>_i` 兜底（上游 synthetic id 同规则），
- *    tool 消息的 tool_call_id 必须与之一致。
+ * 形状：`assistant(content="\n\n", toolCalls)` 一条 + 每颗调用一条 `tool` 消息
+ * （tool_call_id/name/content）；消息自身有正文时正文消息照常在前，本组回放在其后
+ * （上游 out.add 顺序）；id 为空的调用用 `call_<消息id前8位>_i` 兜底（上游
+ * synthetic id 同规则），tool 消息的 tool_call_id 必须与之一致。
+ *
+ * **与上游的关键差异（P1-7）**：上游是「任一调用没有结果就整组不播」（它的历史
+ * 来自 DB，调用要么全 complete、要么整轮没落地）；Memo 的 `content == null` 是
+ * 常规产物——用户在多轮工具批处理中途点停止（CancellationException 原样落库）
+ * 或该流报错。整组不播会让之后**每一轮**都丢掉这条消息的全部工具结果，模型
+ * 重新说「我没有加载技能」。这里按**轮次边界**切组：第一颗未完成的调用处断开
+ * （它和它之后的调用属于没跑完的批次），已完成的前缀照常回放。loop 里同一批次
+ * 的调用顺序执行、逐颗 fold，所以切点不会混组。
  */
 internal fun replayToolCallHistory(msg: ChatViewModel.UiMessage): List<LlmMessage> {
     if (msg.role != "assistant") return emptyList()
@@ -3441,15 +3445,19 @@ internal fun replayToolCallHistory(msg: ChatViewModel.UiMessage): List<LlmMessag
         com.psyche.memo.data.model.ToolCallPart.decode(it.payloadJson)
     }
     if (payloads.isEmpty()) return emptyList()
-    if (payloads.any { it.content == null }) return emptyList()
-    val ids = payloads.mapIndexed { index, payload ->
+    // 轮次边界：第一颗 content == null（用户中途停止 / 该流失败）处断开，只回放
+    // 它之前**已完成**的前缀。防的是「一颗未完成杀死整组」——旧实现 return
+    // emptyList()，之后每轮都丢全部工具结果（skill 现象的复发路径）。
+    val complete = payloads.takeWhile { it.content != null }
+    if (complete.isEmpty()) return emptyList()
+    val ids = complete.mapIndexed { index, payload ->
         payload.id.ifEmpty { "call_${msg.id.take(8)}_$index" }
     }
     val out = ArrayList<LlmMessage>(payloads.size + 1)
     out += LlmMessage(
         role = "assistant",
         content = "\n\n",
-        toolCalls = payloads.mapIndexed { index, payload ->
+        toolCalls = complete.mapIndexed { index, payload ->
             LlmToolCall(
                 id = ids[index],
                 name = payload.name,
@@ -3457,7 +3465,7 @@ internal fun replayToolCallHistory(msg: ChatViewModel.UiMessage): List<LlmMessag
             )
         },
     )
-    payloads.forEachIndexed { index, payload ->
+    complete.forEachIndexed { index, payload ->
         out += LlmMessage(
             role = "tool",
             toolCallId = ids[index],

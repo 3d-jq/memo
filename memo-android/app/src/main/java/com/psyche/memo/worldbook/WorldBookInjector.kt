@@ -25,8 +25,13 @@ import com.psyche.memo.llm.client.LlmMessage
  *
  * The injector is a pure function: callers pass the active book id list and
  * the API messages, and get back a new list with the world-book content
- * spliced in. 5 MiB upper cap per the Dart `clamp(1, 200)` + sane
- * `scanDepth` defaults mirror the source.
+ * spliced in.
+ *
+ * **体积保护（P2）**：injector 自己的总量预算 [MAX_WORLDBOOK_CHARS]（128 KiB 字符）
+ * 与单条上限 [MAX_ENTRY_CHARS]（32 KiB）。上游 Dart 侧**没有**这个预算——
+ * 旧 KDoc 声称的「5 MiB cap per the Dart clamp(1, 200)」是句错话（`clamp(1, 200)`
+ * 钳的是 scanDepth），一本巨型世界书能把整个请求塞爆。这里按字符数硬钳：
+ * 触发集按序（priority desc, file order）吃到预算为止，超长的单条截断。
  */
 object WorldBookInjector {
 
@@ -36,6 +41,12 @@ object WorldBookInjector {
     private const val ROLE_SYSTEM = "system"
     private const val SCAN_DEPTH_CAP = 200
     private const val MAX_SCAN_DEPTH = 1
+
+    /** 一次注入的世界书总字符预算（P2，防巨型世界书塞爆请求）。 */
+    private const val MAX_WORLDBOOK_CHARS = 128 * 1024
+
+    /** 单条 entry 的字符上限（超出截断，保留其余条目）。 */
+    private const val MAX_ENTRY_CHARS = 32 * 1024
 
     /**
      * Returns a new list of [LlmMessage] with triggered world-book entries
@@ -83,10 +94,13 @@ object WorldBookInjector {
                 .thenBy { it.second }
         )
 
+        // 体积保护（P2）：单条截断 → 总量预算内按序截取（priority desc, file order 的
+        // ordered 收起）。上游没有这层，巨型世界书能把请求塞爆。
+        val budgeted = applyBudget(ordered.map { it.first })
+
         val result = apiMessages.toMutableList()
         val byPosition: Map<WorldBookInjectionPosition, List<WorldBookEntry>> =
-            ordered.groupBy { it.first.position }
-                .mapValues { (_, entries) -> entries.map { it.first } }
+            budgeted.groupBy { it.position }
 
         mergeSystemPrompt(result, byPosition, tagContextLog)
         insertTop(result, byPosition[WorldBookInjectionPosition.TOP_OF_CHAT].orEmpty(), tagContextLog)
@@ -335,6 +349,37 @@ object WorldBookInjector {
             idx--
         }
         return idx
+    }
+
+    /**
+     * 单条超限截断 + 总预算内截取。顺序即调用方给的优先级序，吃到预算为止——
+     * 优先级高的完整保留，尾部被丢的条目记一条 trace 供定位。
+     */
+    private fun applyBudget(entries: List<WorldBookEntry>): List<WorldBookEntry> {
+        val truncated = entries.map { entry ->
+            if (entry.content.length <= MAX_ENTRY_CHARS) {
+                entry
+            } else {
+                entry.copy(content = entry.content.take(MAX_ENTRY_CHARS))
+            }
+        }
+        var used = 0
+        val kept = ArrayList<WorldBookEntry>()
+        for (entry in truncated) {
+            val cost = entry.content.trim().length
+            if (kept.isNotEmpty() && used + cost > MAX_WORLDBOOK_CHARS) continue
+            kept += entry
+            used += cost
+            if (used >= MAX_WORLDBOOK_CHARS) break
+        }
+        if (kept.size < truncated.size) {
+            com.psyche.memo.common.logging.FlutterLogger.log(
+                "[WorldBook] budget kept ${kept.size}/${truncated.size} entries" +
+                    " ($used/$MAX_WORLDBOOK_CHARS chars)",
+                tag = "HomePage",
+            )
+        }
+        return kept
     }
 
     private fun joinContent(entries: List<WorldBookEntry>?): String =
