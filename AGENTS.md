@@ -33,8 +33,12 @@ Gradle 8.14 / Kotlin 2.2.20，minSdk 26 / target 35），位于 `memo-android/`�
 - **无工具审批**（审批面板/`requiresUserApproval`/Shield 状态位全拆）：把关 = 全局开关 +
   时间线可见 + 可停 + 提示词边界。工具清单唯一来源是各自 catalog（如
   `BrowserTools.catalogDefinitions()`），别抄第二份。
-- **流式等待提示＝扫光文字** `ThinkingShimmerText`，可自定义（字号/颜色/提示词，键
-  `display_thinking_indicator_*_v1`）——勿改回三点脉动；工具卡内小三点保留。
+- **AI 输出＝ZCode 桌面端样式**（2026-10-02 用户「完全按照 zcode 的 AI 输出样式来」，取代
+  2026-09-13 的扫光提示决策）：思考/工具调用都是无卡片紧凑行（`ui/chat/AgentTraceRows.kt`）。
+  思考行流式＝「正在思考」+滚动摘要、完成＝「思考 · 持续了 N 秒」自动折叠、展开纯文本限高滚动；
+  工具行＝图标+标题+状态词+计时（执行中跳秒/完成「· Ns」），点开行内展开详情（无弹层），
+  展开态收 `ChatViewModel.expandedToolRows`；工具 payload 带 `startedAt/finishedAt`（老消息
+  无键不显示时长）。勿改回卡片式思维链/详情弹层/扫光提示行；生成中呼吸星与压缩分隔线扫光保留。
 - **上下文压缩＝opencode 阈值机制**（`core/common/SessionCompaction.kt`）：同会话插入锚定
   摘要检查点（`CompactionPart`），分母 = 模型级 `contextWindow` − max(输出预算, buffer)；
   呈现只画分隔线、摘要不进导出/多选/标题。**勿改回「新建会话 + 摘要首消息」**；
