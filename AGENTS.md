@@ -34,11 +34,14 @@ Gradle 8.14 / Kotlin 2.2.20，minSdk 26 / target 35），位于 `memo-android/`�
   时间线可见 + 可停 + 提示词边界。工具清单唯一来源是各自 catalog（如
   `BrowserTools.catalogDefinitions()`），别抄第二份。
 - **AI 输出＝ZCode 桌面端样式**（2026-10-02 用户「完全按照 zcode 的 AI 输出样式来」，取代
-  2026-09-13 的扫光提示决策）：思考/工具调用都是无卡片紧凑行（`ui/chat/AgentTraceRows.kt`）。
-  思考行流式＝「正在思考」+滚动摘要、完成＝「思考 · 持续了 N 秒」自动折叠、展开纯文本限高滚动；
-  工具行＝图标+标题+状态词+计时（执行中跳秒/完成「· Ns」），点开行内展开详情（无弹层），
-  展开态收 `ChatViewModel.expandedToolRows`；工具 payload 带 `startedAt/finishedAt`（老消息
-  无键不显示时长）。勿改回卡片式思维链/详情弹层/扫光提示行；生成中呼吸星与压缩分隔线扫光保留。
+  2026-09-13 的扫光提示决策）：无卡片紧凑行（`ui/chat/AgentTraceRows.kt`）。
+  **一段连续思考+工具 = 一个工作阶段**：头部「工作中 {时长}」（运行中强制展开、每秒跳）/
+  「已工作 {时长}」（完成自动折叠整个阶段，时长=天/时/分/秒前两个非零单位）/「已停止」/
+  「已处理」（老消息无时刻）；展开态收 `ChatViewModel.expandedWorkPhases`（键 = 消息 id +
+  首步标识）。阶段内：思考行「正在思考」+滚动摘要 /「思考 · 持续了 N 秒」、展开纯文本限高
+  滚动；工具行图标+标题+状态词+计时（执行中跳秒/完成「· Ns」）、点开行内详情（无弹层）、
+  展开态收 `expandedToolRows`；工具 payload 带 `startedAt/finishedAt`（老消息无键不显示
+  时长）。勿改回卡片式思维链/详情弹层/扫光提示行；生成中呼吸星与压缩分隔线扫光保留。
 - **上下文压缩＝opencode 阈值机制**（`core/common/SessionCompaction.kt`）：同会话插入锚定
   摘要检查点（`CompactionPart`），分母 = 模型级 `contextWindow` − max(输出预算, buffer)；
   呈现只画分隔线、摘要不进导出/多选/标题。**勿改回「新建会话 + 摘要首消息」**；

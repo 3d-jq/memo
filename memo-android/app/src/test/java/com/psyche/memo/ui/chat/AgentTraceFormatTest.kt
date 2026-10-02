@@ -41,6 +41,23 @@ class AgentTraceFormatTest {
         assertEquals(12, traceDurationSeconds(11_999))
     }
 
+    // ---- workDurationUnits（ZCode formatConversationWorkDuration 口径：前两个非零单位）----
+
+    @Test
+    fun workDurationShowsTwoLargestUnitsLikeZCode() {
+        // 4 分 19 秒 = 259s
+        assertEquals(listOf(2 to 4, 3 to 19), workDurationUnits(259_000))
+        // 45 秒（不足一分钟只给秒）
+        assertEquals(listOf(3 to 45), workDurationUnits(45_000))
+        // 2 时 3 分（秒为 0 不上桌，但前两个单位已满）
+        assertEquals(listOf(1 to 2, 2 to 3), workDurationUnits(7_380_000))
+        // 1 天 0 时 →「1 天」（0 时不算，取到分 0 也不算 → 秒兜底？不：天>0、时=0 跳过、
+        // 分=0 跳过、秒=0 但 parts 非空 → 只剩「1 天」）
+        assertEquals(listOf(0 to 1), workDurationUnits(86_400_000))
+        // 不足 1 秒记 1 秒
+        assertEquals(listOf(3 to 1), workDurationUnits(200))
+    }
+
     // ---- sanitizeReasoning ----
 
     @Test

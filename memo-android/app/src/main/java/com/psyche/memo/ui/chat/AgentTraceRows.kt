@@ -8,9 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -50,30 +51,33 @@ import com.psyche.memo.ui.ChatStyleSpec
 import com.psyche.memo.ui.R as UiR
 import com.psyche.memo.ui.theme.AppFontWeights
 import kotlin.math.ceil
+import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
-import androidx.compose.runtime.snapshotFlow
 
 /**
- * AI 输出时间线 —— **ZCode 桌面端样式**（2026-09-26 用户「完全按照 zcode 的 AI 输出
- * 样式来」）。参照实现：`D:\ZCode\packages\ui\src\components\ai-elements\reasoning.tsx`
- * 与 `ToolCallBlocks` 目录（思考块衍生自 vercel/ai-elements，Apache-2.0；本工程只借形态、
- * 自绘 Compose，颜色全部走 Memo 主题）。
+ * AI 输出时间线 —— **ZCode 桌面端样式**（2026-10-02 用户「完全按照 zcode 的 AI 输出
+ * 样式来」+ 返修「人家原本有 已工作 4 分 19 秒 / 工作中 加时间 / 完成会折叠思考和工作」）。
+ * 参照实现：`D:\ZCode\packages\ui\src\v4\ConversationTurnGroup.tsx`
+ * （AssistantHistoryStatus / ConversationWorkSegmentFlow）、
+ * `conversationTurnWorkSegments.ts`（workStatus/duration）、
+ * `components/ai-elements/reasoning.tsx`（思考行）与 `ToolCallBlocks` 目录（工具行）。
+ * 只借形态自绘 Compose，颜色全部走 Memo 主题。
  *
- * 与旧 `ChainOfThoughtCard`（已删）的根本差异：
- * - **无卡片**：思考与工具调用都是与正文同列的**紧凑文字行**——图标 + 标签 + 摘要/
- *   时长 + chevron；展开的正文用左侧导线缩进，不再有 primaryContainer 底板。
- * - **思考行**：流式＝「正在思考」（accent + 扫光，[thinkingSheen]，ZCode
- *   `animated-gradient-text` 等价）+ `·` + **滚动摘要**（思考正文最后一个非空行，
- *   两端渐隐）；完成＝折叠成「思考 · 持续了 N 秒」（`chat.reasoning.durationSeconds`
- *   文案口径）。正文**纯文本**（ZCode 刻意不重跑 markdown 解析，长思考流式追加时
- *   每 chunk 重解析是真机卡顿源），限高 240dp 内部滚动 + 吸底跟随 + 上下渐隐。
- * - **工具行**：状态词（执行中/已执行/执行失败）+ **计时**（ZCode 工具行没有计时，
- *   这是用户点名「工作中和时间、完成后的已工作加时间」的超参照加法——数据层
- *   `ToolCallPart` payload 新增 `startedAt/finishedAt`）；点开行内展开
- *   摘要/图片条/参数/结果（原「详情弹层」内容全部收进展开态，弹层删除）。
- * - 展开态：思考沿用落库的 `ReasoningSegment.expanded`（[onToggleReasoning]）；
- *   工具行收在 `ChatViewModel.expandedToolRows`（LazyColumn 会销毁滑出视口的组合，
- *   本地 remember 会自己弹回折叠——CollapsibleUserBubble 同坑）。
+ * 结构（对应 ZCode 的 turn work segment）：
+ * - **一个 [AssistantBlock.Thinking] = 一段工作**（连续的思考 + 工具调用步骤）。
+ * - **阶段头部行**（[WorkPhaseHeader]）：运行中＝「工作中 {时长}」**强制展开**、无
+ *   chevron、时长每秒跳动；完成＝自动折叠成「已工作 {时长}」一行，chevron 展开看
+ *   全部步骤行；中断＝「已停止」；无任何起止时刻（老消息）＝「已处理」。头部下沿
+ *   一条 hairline（ZCode `border-b pb-2`）。
+ * - **时长口径**（照 `resolveConversationTurnWorkDurationMs`）：完成态 = 首步 start 到
+ *   末步 end；运行态 = now − start（每秒喂 now，绝不让历史时长继续增长）。
+ *   格式（`formatConversationWorkDuration`）：总秒数 max(1, round)，按 天/时/分/秒
+ *   取**前两个非零单位**拼空格 ⇒「4 分 19 秒」「45 秒」「2 时 3 分」。
+ * - **阶段内的步骤行**：思考行（Brain + 「思考 · 持续了 N 秒」/ 流式「正在思考」+ 滚动
+ *   摘要，展开为纯文本限高滚动）与工具行（图标 + 标题 + 状态词 + 计时，点开行内详情）。
+ *   各级展开态一律收 VM（LazyColumn 滑出即销毁组合，本地 remember 会弹回折叠）。
+ * - 无卡片、无底板；颜色全主题派生。
  */
 
 // ---------------------------------------------------------------------------
@@ -84,27 +88,56 @@ import androidx.compose.runtime.snapshotFlow
 fun reasoningLastLine(text: String): String? =
     text.split('\n').lastOrNull { it.isNotBlank() }?.trim()
 
-/**
- * 时长显示的秒数：向上取整、不足 1 秒记 1 秒（ZCode `Math.ceil` 口径；显示 0 秒
- * 观感像没干活）。
- */
+/** 工具/思考行的短时长秒数：向上取整、不足 1 秒记 1 秒（0 秒观感像没干活）。 */
 fun traceDurationSeconds(elapsedMs: Long): Int = ceil(elapsedMs / 1000.0).toInt().coerceAtLeast(1)
 
 /** `_sanitize`（CMW:5036）：去 \r、去首尾空白。 */
 fun sanitizeReasoning(text: String): String = text.replace("\r", "").trim()
 
+/**
+ * 阶段时长的单位拆分（ZCode `formatConversationWorkDuration`）：总秒数
+ * max(1, round(ms/1000))，产出 (单位下标, 数值) 列表——单位 0=天 1=时 2=分 3=秒，
+ * 只收非零单位、秒恒兜底（全零也要显示「0 秒」）、**最多取前两个**。
+ */
+fun workDurationUnits(durationMs: Long): List<Pair<Int, Int>> {
+    val totalSeconds = (durationMs / 1000.0).roundToInt().coerceAtLeast(1)
+    val days = totalSeconds / 86_400
+    val hours = (totalSeconds % 86_400) / 3_600
+    val minutes = (totalSeconds % 3_600) / 60
+    val seconds = totalSeconds % 60
+    val parts = ArrayList<Pair<Int, Int>>(4)
+    if (days > 0) parts.add(0 to days)
+    if (hours > 0) parts.add(1 to hours)
+    if (minutes > 0) parts.add(2 to minutes)
+    if (seconds > 0 || parts.isEmpty()) parts.add(3 to seconds)
+    return parts.take(2)
+}
+
+/** [workDurationUnits] 的单位文案键表（0=天 1=时 2=分 3=秒）。 */
+internal val WORK_DURATION_UNIT_KEYS = intArrayOf(
+    UiR.string.agent_trace_duration_day,
+    UiR.string.agent_trace_duration_hour,
+    UiR.string.agent_trace_duration_minute,
+    UiR.string.agent_trace_duration_second,
+)
+
 // ---------------------------------------------------------------------------
-// 块（一个 Thinking block == 连续的 reasoning/tool 步）
+// 块（一段工作 == 连续的 reasoning/tool 步）
 // ---------------------------------------------------------------------------
 
 @Composable
 fun AgentTraceBlock(
     steps: List<TimelineStep>,
     settings: ChatTimelineSettings,
-    conversationId: String? = null,
+    /** 阶段折叠态的键（msg.id + 首步标识），收在 [com.psyche.memo.ChatViewModel.expandedWorkPhases]。 */
+    phaseKey: String,
+    /** 生成被中断（msg.failed）→ 头部显示「已停止」。 */
+    messageFailed: Boolean = false,
+    onToggleReasoning: (segmentIndex: Int) -> Unit,
+    expandedPhases: Set<String> = emptySet(),
+    onTogglePhase: (String) -> Unit = {},
     askUser: AskUserInteractionService? = null,
     onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)? = null,
-    onToggleReasoning: (segmentIndex: Int) -> Unit,
     expandedToolRows: Set<String> = emptySet(),
     onToggleToolRow: (String) -> Unit = {},
 ) {
@@ -122,36 +155,212 @@ fun AgentTraceBlock(
     }
     if (filteredSteps.isEmpty()) return
 
+    // ---- 阶段状态（conversationTurnWorkSegments 口径）----
+    // start = 首个带时刻的步骤起点；end = 全部收口时的最大终点。
+    var phaseStart = Long.MAX_VALUE
+    var phaseEnd = 0L
+    var allEnded = true
+    for (step in filteredSteps) {
+        when (step) {
+            is TimelineStep.Reasoning -> {
+                step.startAt?.takeIf { it > 0 }?.let { if (it < phaseStart) phaseStart = it }
+                val end = step.finishedAt
+                if (end != null && end > 0) {
+                    if (end > phaseEnd) phaseEnd = end
+                } else {
+                    allEnded = false
+                }
+            }
+            is TimelineStep.Tool -> {
+                step.part.startedAt?.takeIf { it > 0 }?.let { if (it < phaseStart) phaseStart = it }
+                val end = step.part.finishedAt
+                if (end != null && end > 0) {
+                    if (end > phaseEnd) phaseEnd = end
+                } else {
+                    allEnded = false
+                }
+            }
+        }
+    }
+    val hasStart = phaseStart != Long.MAX_VALUE
+    val running = !allEnded
+    // 完成时长：end-start；无时刻数据 → durationMs undefined → 「已处理」。
+    val doneDurationMs = if (hasStart && allEnded) max(phaseEnd - phaseStart, 0L) else null
+
+    // 展开态：运行中强制展开（ZCode assistantHistoryDefaultOpen）；完成后默认折叠，
+    // 用户点开过的阶段记在 VM。中断（已停止）同样默认折叠、可展开回看。
+    val expanded = (running && !messageFailed) || phaseKey in expandedPhases
+    val elapsedMs = rememberWorkElapsed(
+        startAt = if (hasStart) phaseStart else null,
+        running = running,
+        doneDurationMs = doneDurationMs,
+    ).value
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        filteredSteps.forEachIndexed { index, step ->
-            if (index > 0) Spacer(Modifier.height(2.dp))
-            when (step) {
-                is TimelineStep.Reasoning -> ReasoningTraceRow(
-                    step = step,
-                    onToggle = if (step.hasToggle) {
-                        { onToggleReasoning(step.segmentIndex) }
-                    } else {
-                        null
-                    },
-                )
-                is TimelineStep.Tool -> ToolTraceRow(
-                    part = step.part,
-                    expanded = step.part.id in expandedToolRows,
-                    onToggleExpanded = { onToggleToolRow(step.part.id) },
-                    showToolResultSummary = settings.showToolResultSummary,
-                    hideToolResultImages = settings.hideToolResultImages,
-                    askUser = askUser,
-                    onSubmitAskUser = onRecoveredAnswer?.let { cb ->
-                        { result -> cb(step.part, result) }
-                    },
-                )
+        WorkPhaseHeader(
+            running = running && !messageFailed,
+            failed = messageFailed && !running,
+            hasStart = hasStart,
+            elapsedMs = elapsedMs,
+            doneDurationMs = doneDurationMs,
+            expanded = expanded,
+            toggleHidden = running && !messageFailed,
+            onToggle = if (running && !messageFailed) null else ({ onTogglePhase(phaseKey) }),
+        )
+        if (expanded) {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+                filteredSteps.forEachIndexed { index, step ->
+                    if (index > 0) Spacer(Modifier.height(2.dp))
+                    when (step) {
+                        is TimelineStep.Reasoning -> ReasoningTraceRow(
+                            step = step,
+                            onToggle = if (step.hasToggle) {
+                                { onToggleReasoning(step.segmentIndex) }
+                            } else {
+                                null
+                            },
+                        )
+                        is TimelineStep.Tool -> ToolTraceRow(
+                            part = step.part,
+                            expanded = step.part.id in expandedToolRows,
+                            onToggleExpanded = { onToggleToolRow(step.part.id) },
+                            showToolResultSummary = settings.showToolResultSummary,
+                            hideToolResultImages = settings.hideToolResultImages,
+                            askUser = askUser,
+                            onSubmitAskUser = onRecoveredAnswer?.let { cb ->
+                                { result -> cb(step.part, result) }
+                            },
+                        )
+                    }
+                }
             }
         }
     }
 }
 
+/**
+ * 阶段头部行（AssistantHistoryStatus 等价）：标签（工作中/已工作/已停止/已处理）+
+ * chevron；下沿 hairline（border-b pb-2）。运行中 toggle 隐藏（defaultOpen）。
+ */
+@Composable
+private fun WorkPhaseHeader(
+    running: Boolean,
+    failed: Boolean,
+    hasStart: Boolean,
+    elapsedMs: Long,
+    doneDurationMs: Long?,
+    expanded: Boolean,
+    toggleHidden: Boolean,
+    onToggle: (() -> Unit)?,
+) {
+    val fg = chatSurfaceFg()
+    val label = when {
+        failed -> stringResource(UiR.string.agent_trace_stopped)
+        running -> stringResource(
+            UiR.string.agent_trace_working,
+            if (hasStart) workDurationLabel(elapsedMs) else "",
+        )
+        doneDurationMs != null -> stringResource(
+            UiR.string.agent_trace_worked,
+            workDurationLabel(doneDurationMs),
+        )
+        else -> stringResource(UiR.string.agent_trace_worked_plain)
+    }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = 6.dp)
+                .then(
+                    if (onToggle != null) {
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onToggle,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
+            Text(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = TextStyle(
+                    fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (running) fg.accent else fg.muted,
+                ),
+                modifier = Modifier.weight(1f),
+            )
+            if (!toggleHidden) {
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    imageVector = Lucide.ChevronRight,
+                    contentDescription = null,
+                    tint = fg.muted,
+                    modifier = Modifier
+                        .size(14.dp)
+                        .graphicsLayer { rotationZ = if (expanded) 90f else 0f },
+                )
+            }
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(fg.divider.copy(alpha = 0.5f)),
+        )
+    }
+}
+
+/** 单位拼接：「4 分 19 秒」（ZCode parts.join(" ")）。 */
+@Composable
+private fun workDurationLabel(durationMs: Long): String {
+    // joinToString 不是 inline，lambda 里不能调 @Composable 的 stringResource——用循环拼。
+    val sb = StringBuilder()
+    var index = 0
+    for ((unit, value) in workDurationUnits(durationMs)) {
+        if (index > 0) sb.append(' ')
+        sb.append(stringResource(WORK_DURATION_UNIT_KEYS[unit], value))
+        index++
+    }
+    return sb.toString()
+}
+
+/**
+ * 阶段计时：运行中每秒重算 now − start（UI 每秒喂 now 的等价物）；完成态**定格**在
+ * doneDurationMs——绝不吃当前时钟（否则历史「已工作」会随时间增长，
+ * conversationTurnWorkSegments.ts:57-61 的注释原话）。
+ */
+@Composable
+private fun rememberWorkElapsed(
+    startAt: Long?,
+    running: Boolean,
+    doneDurationMs: Long?,
+): State<Long> {
+    val elapsed = remember(startAt) { mutableLongStateOf(doneDurationMs ?: 0L) }
+    LaunchedEffect(running, startAt) {
+        if (startAt == null || startAt <= 0) {
+            elapsed.value = doneDurationMs ?: 0L
+            return@LaunchedEffect
+        }
+        if (!running) {
+            elapsed.value = doneDurationMs ?: 0L
+            return@LaunchedEffect
+        }
+        while (true) {
+            elapsed.value = (System.currentTimeMillis() - startAt).coerceAtLeast(0L)
+            delay(1000)
+        }
+    }
+    return elapsed
+}
+
 // ---------------------------------------------------------------------------
-// 思考行
+// 阶段内的思考行
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -164,8 +373,7 @@ private fun ReasoningTraceRow(
     val fg = chatSurfaceFg()
     val display = sanitizeReasoning(step.text)
     val expanded = step.expanded
-    // 计时（reasoning.tsx）：流式中按 startAt 实时；结束冻结在 finishedAt-startAt。
-    val elapsedMs by rememberTraceElapsed(step.startAt, step.finishedAt, step.loading)
+    val elapsedMs by rememberRowElapsed(step.startAt, step.finishedAt, step.loading)
     // 流式摘要：收起态才显示（ZCode `isStreaming && !isOpen`）。
     val summary = if (step.loading && !expanded) reasoningLastLine(display) else null
 
@@ -193,8 +401,6 @@ private fun ReasoningTraceRow(
             modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(8.dp))
-        // 标签：流式＝「正在思考」accent+扫光；完成＝「思考」。有起止时刻才带时长
-        // （老 payload 无键省略）。整组靠左，不摊满（ZCode 触发行同构）。
         Text(
             text = stringResource(
                 if (step.loading) UiR.string.agent_trace_thinking else UiR.string.agent_trace_thought,
@@ -259,7 +465,6 @@ private fun ReasoningTraceRow(
             )
         }
     }
-    // 正文：展开才挂载；纯文本 + 限高滚动 + 吸底跟随 + 上下渐隐 + 左侧导线。
     if (expanded) {
         TraceIndentedBody {
             ReasoningTraceBody(text = display, loading = step.loading)
@@ -268,12 +473,11 @@ private fun ReasoningTraceRow(
 }
 
 /**
- * reasoning.tsx 计时移植：流式中每秒重算 `now - startAt`（「执行中 · Ns」在收起态
- * 也要跳）；结束冻结在 `finishedAt - startAt`。无起表时刻（老 payload）恒 0，
- * 显示端以 `startAt != null` 门控。
+ * 行级计时：流式中每秒重算 `now - startAt`；结束冻结在 `finishedAt - startAt`。
+ * 无起表时刻（老 payload）恒 0，显示端门控。
  */
 @Composable
-private fun rememberTraceElapsed(
+private fun rememberRowElapsed(
     startAt: Long?,
     finishedAt: Long?,
     running: Boolean,
@@ -351,7 +555,7 @@ private fun ReasoningTraceBody(
 }
 
 // ---------------------------------------------------------------------------
-// 工具行
+// 阶段内的工具行
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -369,7 +573,7 @@ internal fun ToolTraceRow(
     val fg = chatSurfaceFg()
     val isAskUser = part.toolName == com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.ASK_USER
     val loading = part.loading
-    val elapsedMs by rememberTraceElapsed(part.startedAt, part.finishedAt, loading)
+    val elapsedMs by rememberRowElapsed(part.startedAt, part.finishedAt, loading)
     var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
     // ask-user 保持旧行为：默认展开、可折叠（问询交互不可丢）。

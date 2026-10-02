@@ -242,6 +242,19 @@ class ChatViewModel(
         _expandedToolRows.value = if (id in current) current - id else current + id
     }
 
+    /**
+     * 哪些**工作阶段**（一段连续的思考+工具调用，AgentTraceBlock）被手动展开了
+     * （本工程新增，2026-10-02 ZCode 式阶段折叠）。运行中的阶段强制展开不在此列；
+     * 完成后默认折叠，用户点开过的记这里。键见 MessageRow 的 phaseKey。
+     */
+    private val _expandedWorkPhases = MutableStateFlow<Set<String>>(emptySet())
+    val expandedWorkPhases: StateFlow<Set<String>> = _expandedWorkPhases
+
+    fun toggleWorkPhaseExpanded(key: String) {
+        val current = _expandedWorkPhases.value
+        _expandedWorkPhases.value = if (key in current) current - key else current + key
+    }
+
     private var generationJob: Job? = null
 
     /** 在途翻译请求（messageId → Job），新请求顶掉旧的（TS _runs 语义）。 */

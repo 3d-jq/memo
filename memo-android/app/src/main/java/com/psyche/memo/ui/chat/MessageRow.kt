@@ -185,6 +185,9 @@ internal fun MessageRow(
     /** 已手动展开的工具行 id 集合（本工程新增，见 [AgentTraceBlock]；收在 VM 防 LazyColumn 重置）。 */
     expandedToolRows: Set<String> = emptySet(),
     onToggleToolRow: (String) -> Unit = {},
+    /** 已手动展开的工作阶段键集合（2026-10-02 ZCode 式阶段折叠）。 */
+    expandedWorkPhases: Set<String> = emptySet(),
+    onToggleWorkPhase: (String) -> Unit = {},
 ) {
     ChatRecompositionProbe.messageRows++
     val cs = MaterialTheme.colorScheme
@@ -711,17 +714,32 @@ internal fun MessageRow(
                                     }
                                 }
                             }
-                            is com.psyche.memo.ui.chat.AssistantBlock.Thinking ->
+                            is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> {
+                                // 阶段折叠键：消息 id + 首步标识（段序号/工具 id）——流式加步不改键，
+                                // 跨消息唯一（LazyColumn 重置坑，展开态必须收 VM）。
+                                val phaseKey = remember(msg.id, block.steps.firstOrNull()) {
+                                    val first = block.steps.firstOrNull()
+                                    val stepKey = when (first) {
+                                        is com.psyche.memo.ui.chat.TimelineStep.Reasoning -> "r${first.segmentIndex}"
+                                        is com.psyche.memo.ui.chat.TimelineStep.Tool -> "t${first.part.id}"
+                                        else -> "0"
+                                    }
+                                    "phase:$msg.id:$stepKey"
+                                }
                                 com.psyche.memo.ui.chat.AgentTraceBlock(
                                     steps = block.steps,
                                     settings = timelineSettings,
-                                    conversationId = conversationId,
+                                    phaseKey = phaseKey,
+                                    messageFailed = msg.failed,
+                                    onToggleReasoning = onToggleReasoning,
+                                    expandedPhases = expandedWorkPhases,
+                                    onTogglePhase = onToggleWorkPhase,
                                     askUser = askUserService,
                                     onRecoveredAnswer = onRecoveredAnswer,
-                                    onToggleReasoning = onToggleReasoning,
                                     expandedToolRows = expandedToolRows,
                                     onToggleToolRow = onToggleToolRow,
                                 )
+                            }
                         }
                         }
                     }

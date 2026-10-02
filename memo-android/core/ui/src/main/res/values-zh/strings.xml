@@ -65,6 +65,14 @@
     <string name="ask_user_card_something_else">其他</string>
     <string name="ask_user_card_submit">提交回答</string>
     <string name="ask_user_pending_reply">等待你的回复…</string>
+    <string name="agent_trace_working">工作中 %1$s</string>
+    <string name="agent_trace_worked">已工作 %1$s</string>
+    <string name="agent_trace_worked_plain">已处理</string>
+    <string name="agent_trace_stopped">已停止</string>
+    <string name="agent_trace_duration_day">天</string>
+    <string name="agent_trace_duration_hour">时</string>
+    <string name="agent_trace_duration_minute">分</string>
+    <string name="agent_trace_duration_second">秒</string>
     <string name="agent_trace_thinking">正在思考</string>
     <string name="agent_trace_thought">思考</string>
     <string name="agent_trace_duration_seconds">持续了 %1$d 秒</string>
