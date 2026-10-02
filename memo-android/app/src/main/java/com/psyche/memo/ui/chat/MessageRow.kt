@@ -601,44 +601,50 @@ internal fun MessageRow(
                     // addVisible 在相邻块之间插 8pt；每段文本各自一个气泡
                     // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs
                     // 打开时按段落再拆）。助手正文 15.7 / 行高 1.5×15.7。
-                    // ZCode：workStatus 由 isRunning 得出——哪怕一个 part 都还没到
-                    // （等首个 token 的空窗期），「工作中 N秒」也必须立刻亮出来。Memo 这边
-                    // 阶段头挂在思考块里，所以在零块窗口挂一个空阶段块兜底。
-                    if (msg.isStreaming && assistantBlocks.isEmpty()) {
-                        com.psyche.memo.ui.chat.AgentTraceBlock(
-                            steps = emptyList(),
-                            settings = timelineSettings,
-                            phaseKey = "phase:${msg.id}:turn",
-                            messageFailed = false,
-                            phaseRunning = true,
-                            turnStartedAt = msg.timestamp,
-                            expandedPhases = expandedWorkPhases,
-                            onTogglePhase = onToggleWorkPhase,
-                            expandedToolRows = expandedToolRows,
-                            onToggleToolRow = onToggleToolRow,
-                            onToggleReasoning = {},
-                        )
-                        Spacer(Modifier.height(10.dp))
+                    // 一轮一个工作段（ZCode workSegments 按轮切）+ **一个消息只挂一个
+                    // 阶段节点**：阶段块在 thinking 步骤到达**之前**就以空 steps 挂上
+                    // （ZCode：workStatus 由 isRunning 得出，空窗期也亮「工作中」），
+                    // 步骤从无到有只是**同一节点的重组**——不卸载、不重挂、入场动画
+                    // 不重播（旧实现用两个不同组合位点，思考一到就整体二次渲染）。
+                    val mergedSteps = remember(assistantBlocks) {
+                        assistantBlocks
+                            .filterIsInstance<com.psyche.memo.ui.chat.AssistantBlock.Thinking>()
+                            .flatMap { it.steps }
                     }
-                    // 一轮一个工作段（ZCode workSegments 按轮切）：把本消息所有思考/工具步
-                    // 并入**第一个** Thinking 块，后续 Thinking 块不再单独渲染阶段头。
                     val flowBlocks = remember(assistantBlocks) {
                         val merged = assistantBlocks
                             .filterIsInstance<com.psyche.memo.ui.chat.AssistantBlock.Thinking>()
                             .flatMap { it.steps }
-                        val out = ArrayList<com.psyche.memo.ui.chat.AssistantBlock>()
-                        var firstThinking = true
-                        for (b in assistantBlocks) {
-                            if (b is com.psyche.memo.ui.chat.AssistantBlock.Thinking) {
-                                if (firstThinking) {
-                                    out.add(com.psyche.memo.ui.chat.AssistantBlock.Thinking(merged))
-                                    firstThinking = false
-                                }
-                            } else {
-                                out.add(b)
-                            }
+                        // Thinking 块的步骤已全部并入上方的阶段节点，这里只留正文/媒体。
+                        assistantBlocks.filter { it !is com.psyche.memo.ui.chat.AssistantBlock.Thinking }
+                    }
+                    // 阶段节点：流式中**恒挂**（空 steps 也挂——ZCode 空窗期就亮「工作中」），
+                    // 完成后有步骤才挂。同一节点从空到满只是重组：无卸载/重挂/重播入场动画
+                    // ——旧实现两个位点（空窗期一个 + flowBlocks 里一个）才是二次渲染根因。
+                    if (mergedSteps.isNotEmpty() || msg.isStreaming) {
+                        Box(
+                            modifier = com.psyche.memo.ui.chat.generationAppearanceModifier(
+                                animationKey = "msg-${msg.id}-phase",
+                                animate = msg.isStreaming,
+                            ),
+                        ) {
+                            com.psyche.memo.ui.chat.AgentTraceBlock(
+                                steps = mergedSteps,
+                                settings = timelineSettings,
+                                phaseKey = "phase:${msg.id}:turn",
+                                messageFailed = msg.failed,
+                                phaseRunning = msg.isStreaming,
+                                turnStartedAt = msg.timestamp,
+                                onToggleReasoning = onToggleReasoning,
+                                expandedPhases = expandedWorkPhases,
+                                onTogglePhase = onToggleWorkPhase,
+                                askUser = askUserService,
+                                onRecoveredAnswer = onRecoveredAnswer,
+                                expandedToolRows = expandedToolRows,
+                                onToggleToolRow = onToggleToolRow,
+                            )
                         }
-                        out
+                        if (flowBlocks.isNotEmpty()) Spacer(Modifier.height(10.dp))
                     }
                     flowBlocks.forEachIndexed { index, block ->
                         // 一次性入场（graphicsLayer alpha+scale 420ms，不改布局高度）**只给卡片与
@@ -666,6 +672,8 @@ internal fun MessageRow(
                         if (index > 0) Spacer(Modifier.height(blockGap))
                         Box(modifier = blockAppearance) {
                         when (block) {
+                            // Thinking 块不在此渲染：步骤全部并入上方的阶段节点（一轮一段）。
+                            is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> Unit
                             is com.psyche.memo.ui.chat.AssistantBlock.Media -> {
                                 // 媒体块：与正文块同序（工具产出的图紧跟工具卡）。
                                 if (block.parts.any { it is ImagePart }) {
@@ -762,25 +770,6 @@ internal fun MessageRow(
                                         }
                                     }
                                 }
-                            }
-                            is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> {
-                                // 阶段键 = 消息级（一轮一段）：流式加步不改键；展开态必须收 VM
-                                // （LazyColumn 滑出即销毁组合，本地 remember 会弹回折叠）。
-                                com.psyche.memo.ui.chat.AgentTraceBlock(
-                                    steps = block.steps,
-                                    settings = timelineSettings,
-                                    phaseKey = "phase:${msg.id}:turn",
-                                    messageFailed = msg.failed,
-                                    phaseRunning = msg.isStreaming,
-                                    turnStartedAt = msg.timestamp,
-                                    onToggleReasoning = onToggleReasoning,
-                                    expandedPhases = expandedWorkPhases,
-                                    onTogglePhase = onToggleWorkPhase,
-                                    askUser = askUserService,
-                                    onRecoveredAnswer = onRecoveredAnswer,
-                                    expandedToolRows = expandedToolRows,
-                                    onToggleToolRow = onToggleToolRow,
-                                )
                             }
                         }
                         }
