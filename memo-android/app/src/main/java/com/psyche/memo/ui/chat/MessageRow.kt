@@ -741,6 +741,8 @@ internal fun MessageRow(
                                     settings = timelineSettings,
                                     phaseKey = phaseKey,
                                     messageFailed = msg.failed,
+                                    phaseRunning = msg.isStreaming,
+                                    turnStartedAt = msg.timestamp,
                                     onToggleReasoning = onToggleReasoning,
                                     expandedPhases = expandedWorkPhases,
                                     onTogglePhase = onToggleWorkPhase,
@@ -893,7 +895,7 @@ internal fun MessageRow(
                     if (msg.isStreaming) {
                         Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.CenterStart) {
                             // 呼吸放射线（应用图标本体那 8 条；颜色跟随主题 primary，自带渐显）。
-                            com.psyche.memo.ui.chat.GenerationActivityBurst()
+
                         }
                     } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {

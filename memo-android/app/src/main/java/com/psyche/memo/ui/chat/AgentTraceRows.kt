@@ -141,6 +141,10 @@ fun AgentTraceBlock(
     phaseKey: String,
     /** 生成被中断（msg.failed）→ 头部显示「已停止」。 */
     messageFailed: Boolean = false,
+    /** 整轮生成还在跑（msg.isStreaming）→ 头部「工作中」+每秒跳秒、强制展开（ZCode 口径）。 */
+    phaseRunning: Boolean = false,
+    /** 本轮起点兜底（msg.timestamp）：早期还没有任何步骤时，「工作中」也要带跳秒。 */
+    turnStartedAt: Long? = null,
     onToggleReasoning: (segmentIndex: Int) -> Unit,
     expandedPhases: Set<String> = emptySet(),
     onTogglePhase: (String) -> Unit = {},
@@ -161,8 +165,6 @@ fun AgentTraceBlock(
             }
         }
     }
-    if (filteredSteps.isEmpty()) return
-
     // ---- 阶段状态（conversationTurnWorkSegments 口径）----
     // start = 首个带时刻的步骤起点；end = 全部收口时的最大终点。
     var phaseStart = Long.MAX_VALUE
@@ -190,19 +192,28 @@ fun AgentTraceBlock(
             }
         }
     }
-    val hasStart = phaseStart != Long.MAX_VALUE
-    val running = !allEnded
+    val startedAtValue = if (phaseStart != Long.MAX_VALUE) phaseStart else turnStartedAt
+    val hasStart = startedAtValue != null
+    // ZCode 口径：workStatus.state = running 指**整轮生成还在跑**（正文流式中也算），
+    // 不是「有步骤没收口」。否则工具一跑完、正文开始流，头部就变「已工作」、跳秒停了。
+    val running = phaseRunning
     // 完成时长：end-start；无时刻数据 → durationMs undefined → 「已处理」。
-    val doneDurationMs = if (hasStart && allEnded) max(phaseEnd - phaseStart, 0L) else null
+    val doneDurationMs = if (hasStart && allEnded && startedAtValue != null) {
+        max(phaseEnd - startedAtValue, 0L)
+    } else {
+        null
+    }
 
     // 展开态：运行中强制展开（ZCode assistantHistoryDefaultOpen）；完成后默认折叠，
     // 用户点开过的阶段记在 VM。中断（已停止）同样默认折叠、可展开回看。
     val expanded = (running && !messageFailed) || phaseKey in expandedPhases
     val elapsedMs = rememberWorkElapsed(
-        startAt = if (hasStart) phaseStart else null,
+        startAt = startedAtValue,
         running = running,
         doneDurationMs = doneDurationMs,
     ).value
+
+    if (filteredSteps.isEmpty() && !running) return
 
     Column(modifier = Modifier.fillMaxWidth()) {
         WorkPhaseHeader(
@@ -216,10 +227,24 @@ fun AgentTraceBlock(
             onToggle = if (running && !messageFailed) null else ({ onTogglePhase(phaseKey) }),
         )
         if (expanded) {
+            // 生成中：阶段头部正下方 = 呼吸放射线（**Memo 自己的指示器**——用户定稿）。
+            // 早期还没有步骤时，整个阶段就这一行（工作中 + 呼吸星）。
+            if (running) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    GenerationActivityBurst(modifier = Modifier.size(26.dp))
+                }
+            }
             // ZCode 三层间距：hairline → pt-5(20px) 进折叠区 → 行间 gap-4(16px) →
             // 区外下一 item mt-5(20px，MessageRow 的 blockGap)。行自带 4dp 上下，
             // 所以这里 16/8 折算后视觉与 ZCode 一致。
-            Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = if (running) 8.dp else 16.dp)) {
                 filteredSteps.forEachIndexed { index, step ->
                     if (index > 0) Spacer(Modifier.height(8.dp))
                     when (step) {
@@ -302,7 +327,7 @@ private fun WorkPhaseHeader(
                 style = TextStyle(
                     fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
                     fontWeight = FontWeight.Medium,
-                    // ZCode 头部恒为 foreground-subtle：运行中不高亮，只靠 loader 与计时表示活性。
+                    // ZCode 头部恒为 foreground-subtle：运行中不高亮，活性由指示器与计时表达。
                     color = fg.muted,
                 ),
                 modifier = Modifier.weight(1f),
@@ -386,6 +411,9 @@ private fun ReasoningTraceRow(
     val display = sanitizeReasoning(step.text)
     val expanded = step.expanded
     val elapsedMs by rememberRowElapsed(step.startAt, step.finishedAt, step.loading)
+    // ZCode ReasoningRowView：`streaming && row.text.length === 0` 时整行不渲染——
+    // 流式刚开始还没有任何思考内容时别挂一行空标签。
+    if (step.loading && display.isEmpty()) return
     // 流式摘要：收起态才显示（ZCode `isStreaming && !isOpen`）。
     val summary = if (step.loading && !expanded) reasoningLastLine(display) else null
 
@@ -413,23 +441,26 @@ private fun ReasoningTraceRow(
             modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(8.dp))
+        // 标签三态照 ZCode ReasoningTrigger：streaming&&收起=扫光「正在思考」；
+        // streaming&&展开 或 完成=「思考」+实时/定格时长（非扫光）。
+        val showThinkingLabel = step.loading && !expanded
         Text(
             text = stringResource(
-                if (step.loading) UiR.string.agent_trace_thinking else UiR.string.agent_trace_thought,
+                if (showThinkingLabel) UiR.string.agent_trace_thinking else UiR.string.agent_trace_thought,
             ),
             maxLines = 1,
             style = TextStyle(
                 fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (step.loading) fg.accent else fg.muted,
+                color = if (showThinkingLabel) fg.accent else fg.muted,
             ),
-            modifier = if (step.loading) {
+            modifier = if (showThinkingLabel) {
                 Modifier.thinkingSheen(fg.accent, isDark)
             } else {
                 Modifier
             },
         )
-        if (!step.loading && step.startAt != null && step.startAt > 0) {
+        if (!showThinkingLabel && step.startAt != null && step.startAt > 0) {
             Spacer(Modifier.width(4.dp))
             Text(
                 text = "·",

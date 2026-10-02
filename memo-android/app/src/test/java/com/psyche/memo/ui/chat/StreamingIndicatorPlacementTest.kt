@@ -27,9 +27,12 @@ class StreamingIndicatorPlacementTest {
         )
 
         val row = File(chatDir, "MessageRow.kt").readText()
+        // 2026-10-02：生成中指示 = 呼吸放射线，位置在「工作阶段头部正下方」——
+        // 即 AgentTraceRows 内部、仍不长在列表级独立项 / 消息内部滚动区。
+        val rows = File(chatDir, "AgentTraceRows.kt").readText()
         assertTrue(
-            "助手消息尾部应当渲染呼吸放射线（GenerationActivityBurst）",
-            row.contains("GenerationActivityBurst("),
+            "生成中的呼吸放射线应当渲染在工作阶段头部下方（AgentTraceRows）",
+            rows.contains("GenerationActivityBurst("),
         )
         assertFalse(
             "消息行里不该再渲染扫光提示（回到消息内部就会在工具调用时跳动）",
