@@ -621,7 +621,17 @@ internal fun MessageRow(
                             )
                         }
                         Box(modifier = blockAppearance) {
-                        if (index > 0) Spacer(Modifier.height(8.dp))
+                        // 流 item 间距照 ZCode：工作段（思考+工具）与相邻块之间 mt-5（20dp），
+                        // 其余（正文↔媒体等）维持上游 8dp。
+                        val blockGap = if (index > 0 &&
+                            (block is com.psyche.memo.ui.chat.AssistantBlock.Thinking ||
+                                assistantBlocks[index - 1] is com.psyche.memo.ui.chat.AssistantBlock.Thinking)
+                        ) {
+                            20.dp
+                        } else {
+                            8.dp
+                        }
+                        if (index > 0) Spacer(Modifier.height(blockGap))
                         when (block) {
                             is com.psyche.memo.ui.chat.AssistantBlock.Media -> {
                                 // 媒体块：与正文块同序（工具产出的图紧跟工具卡）。
@@ -730,7 +740,7 @@ internal fun MessageRow(
                                         is com.psyche.memo.ui.chat.TimelineStep.Tool -> "t${first.part.id}"
                                         else -> "0"
                                     }
-                                    "phase:$msg.id:$stepKey"
+                                    "phase:${msg.id}:$stepKey"
                                 }
                                 com.psyche.memo.ui.chat.AgentTraceBlock(
                                     steps = block.steps,
