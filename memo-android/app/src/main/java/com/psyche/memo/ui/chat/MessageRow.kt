@@ -608,7 +608,7 @@ internal fun MessageRow(
                         com.psyche.memo.ui.chat.AgentTraceBlock(
                             steps = emptyList(),
                             settings = timelineSettings,
-                            phaseKey = "phase:$msg.id:live",
+                            phaseKey = "phase:${msg.id}:turn",
                             messageFailed = false,
                             phaseRunning = true,
                             turnStartedAt = msg.timestamp,
@@ -620,7 +620,27 @@ internal fun MessageRow(
                         )
                         Spacer(Modifier.height(10.dp))
                     }
-                    assistantBlocks.forEachIndexed { index, block ->
+                    // 一轮一个工作段（ZCode workSegments 按轮切）：把本消息所有思考/工具步
+                    // 并入**第一个** Thinking 块，后续 Thinking 块不再单独渲染阶段头。
+                    val flowBlocks = remember(assistantBlocks) {
+                        val merged = assistantBlocks
+                            .filterIsInstance<com.psyche.memo.ui.chat.AssistantBlock.Thinking>()
+                            .flatMap { it.steps }
+                        val out = ArrayList<com.psyche.memo.ui.chat.AssistantBlock>()
+                        var firstThinking = true
+                        for (b in assistantBlocks) {
+                            if (b is com.psyche.memo.ui.chat.AssistantBlock.Thinking) {
+                                if (firstThinking) {
+                                    out.add(com.psyche.memo.ui.chat.AssistantBlock.Thinking(merged))
+                                    firstThinking = false
+                                }
+                            } else {
+                                out.add(b)
+                            }
+                        }
+                        out
+                    }
+                    flowBlocks.forEachIndexed { index, block ->
                         // 一次性入场（graphicsLayer alpha+scale 420ms，不改布局高度）**只给卡片与
                         // 媒体**。正文块以前也吃这一套，于是观感变成「一坨一坨往外冒」、字还在
                         // 动画里缩放 —— Agora 里正文根本不走这条路，它做逐字淡入
@@ -638,7 +658,7 @@ internal fun MessageRow(
                         // **Spacer 必须是 Column 的直接子级** —— 之前放在 Box 里：Box 是层叠容器，
                         // 子元素互相叠放，Spacer 根本不产生垂直间距（60dp 试验因此「跑到底部」）。
                         val prevIsThinking = index > 0 &&
-                            assistantBlocks[index - 1] is com.psyche.memo.ui.chat.AssistantBlock.Thinking
+                            flowBlocks[index - 1] is com.psyche.memo.ui.chat.AssistantBlock.Thinking
                         val blockGap = when {
                             prevIsThinking || block is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> 10.dp
                             else -> 8.dp
@@ -744,21 +764,12 @@ internal fun MessageRow(
                                 }
                             }
                             is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> {
-                                // 阶段折叠键：消息 id + 首步标识（段序号/工具 id）——流式加步不改键，
-                                // 跨消息唯一（LazyColumn 重置坑，展开态必须收 VM）。
-                                val phaseKey = remember(msg.id, block.steps.firstOrNull()) {
-                                    val first = block.steps.firstOrNull()
-                                    val stepKey = when (first) {
-                                        is com.psyche.memo.ui.chat.TimelineStep.Reasoning -> "r${first.segmentIndex}"
-                                        is com.psyche.memo.ui.chat.TimelineStep.Tool -> "t${first.part.id}"
-                                        else -> "0"
-                                    }
-                                    "phase:${msg.id}:$stepKey"
-                                }
+                                // 阶段键 = 消息级（一轮一段）：流式加步不改键；展开态必须收 VM
+                                // （LazyColumn 滑出即销毁组合，本地 remember 会弹回折叠）。
                                 com.psyche.memo.ui.chat.AgentTraceBlock(
                                     steps = block.steps,
                                     settings = timelineSettings,
-                                    phaseKey = phaseKey,
+                                    phaseKey = "phase:${msg.id}:turn",
                                     messageFailed = msg.failed,
                                     phaseRunning = msg.isStreaming,
                                     turnStartedAt = msg.timestamp,
