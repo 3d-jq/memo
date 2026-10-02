@@ -601,6 +601,12 @@ internal fun MessageRow(
                     // addVisible 在相邻块之间插 8pt；每段文本各自一个气泡
                     // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs
                     // 打开时按段落再拆）。助手正文 15.7 / 行高 1.5×15.7。
+                    // 生成刚起步、还没任何块：先亮「工作中」指示行（ZCode 同款），
+                    // 首个思考/工具步骤一到就被阶段头部接管。
+                    if (msg.isStreaming && assistantBlocks.isEmpty()) {
+                        com.psyche.memo.ui.chat.WorkPhaseRunningPlaceholder()
+                        Spacer(Modifier.height(8.dp))
+                    }
                     assistantBlocks.forEachIndexed { index, block ->
                         // 一次性入场（graphicsLayer alpha+scale 420ms，不改布局高度）**只给卡片与
                         // 媒体**。正文块以前也吃这一套，于是观感变成「一坨一坨往外冒」、字还在

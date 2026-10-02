@@ -69,10 +69,11 @@
     <string name="agent_trace_worked">Worked for %1$s</string>
     <string name="agent_trace_worked_plain">Done</string>
     <string name="agent_trace_stopped">Stopped</string>
-    <string name="agent_trace_duration_day">d</string>
-    <string name="agent_trace_duration_hour">h</string>
-    <string name="agent_trace_duration_minute">m</string>
-    <string name="agent_trace_duration_second">s</string>
+    <string name="agent_trace_duration_day">%1$d 天</string>
+    <string name="agent_trace_duration_hour">%1$d h</string>
+    <string name="agent_trace_duration_minute">%1$d m</string>
+    <string name="agent_trace_duration_second">%1$d s</string>
+    <string name="agent_trace_working_plain">Working</string>
     <string name="agent_trace_thinking">Thinking</string>
     <string name="agent_trace_thought">Thought</string>
     <string name="agent_trace_duration_seconds">Lasted %1$ds</string>

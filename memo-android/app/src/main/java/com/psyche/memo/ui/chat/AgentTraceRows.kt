@@ -208,9 +208,9 @@ fun AgentTraceBlock(
             onToggle = if (running && !messageFailed) null else ({ onTogglePhase(phaseKey) }),
         )
         if (expanded) {
-            Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 filteredSteps.forEachIndexed { index, step ->
-                    if (index > 0) Spacer(Modifier.height(2.dp))
+                    if (index > 0) Spacer(Modifier.height(4.dp))
                     when (step) {
                         is TimelineStep.Reasoning -> ReasoningTraceRow(
                             step = step,
@@ -271,7 +271,7 @@ private fun WorkPhaseHeader(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 2.dp, bottom = 6.dp)
+                .padding(top = 4.dp, bottom = 8.dp)
                 .then(
                     if (onToggle != null) {
                         Modifier.clickable(
@@ -284,6 +284,16 @@ private fun WorkPhaseHeader(
                     },
                 ),
         ) {
+            // 运行中头部带活动指示器（ZCode「工作中」也配 loader；用 Memo 的点点点）。
+            if (running) {
+                LoadingDotsIndicator(
+                    color = fg.accent,
+                    dotDp = ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP,
+                    gapDp = ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP,
+                    heightDp = ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
             Text(
                 text = label,
                 maxLines = 1,
@@ -381,7 +391,7 @@ private fun ReasoningTraceRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(vertical = 4.dp)
             .then(
                 if (onToggle != null) {
                     Modifier.clickable(
@@ -589,7 +599,7 @@ internal fun ToolTraceRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
+            .padding(vertical = 4.dp)
             .clickable(
                 interactionSource = remember(part.id) { MutableInteractionSource() },
                 indication = null,
@@ -842,6 +852,39 @@ private fun TraceDetailSection(label: String, text: String, color: Color) {
                 }
             }
         }
+    }
+}
+
+/**
+ * 生成刚起步、还没有任何思考/工具步骤时的「工作中」占位行（点点点 + 标签）——
+ * ZCode 会先亮出工作中状态，我们在此刻只有尾部呼吸星，观感缺一块。首步一到
+ * 就被真正的阶段头部接管。
+ */
+@Composable
+fun WorkPhaseRunningPlaceholder(modifier: Modifier = Modifier) {
+    val fg = chatSurfaceFg()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        LoadingDotsIndicator(
+            color = fg.accent,
+            dotDp = ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP,
+            gapDp = ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP,
+            heightDp = ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = stringResource(UiR.string.agent_trace_working_plain),
+            maxLines = 1,
+            style = TextStyle(
+                fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
+                fontWeight = FontWeight.Medium,
+                color = fg.accent,
+            ),
+        )
     }
 }
 
