@@ -601,12 +601,6 @@ internal fun MessageRow(
                     // addVisible 在相邻块之间插 8pt；每段文本各自一个气泡
                     // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs
                     // 打开时按段落再拆）。助手正文 15.7 / 行高 1.5×15.7。
-                    // 生成刚起步、还没任何块：先亮「工作中」指示行（ZCode 同款），
-                    // 首个思考/工具步骤一到就被阶段头部接管。
-                    if (msg.isStreaming && assistantBlocks.isEmpty()) {
-                        com.psyche.memo.ui.chat.WorkPhaseRunningPlaceholder()
-                        Spacer(Modifier.height(8.dp))
-                    }
                     assistantBlocks.forEachIndexed { index, block ->
                         // 一次性入场（graphicsLayer alpha+scale 420ms，不改布局高度）**只给卡片与
                         // 媒体**。正文块以前也吃这一套，于是观感变成「一坨一坨往外冒」、字还在
@@ -620,25 +614,18 @@ internal fun MessageRow(
                                 animate = msg.isStreaming,
                             )
                         }
-                        Box(modifier = blockAppearance) {
-                        // 流 item 间距照 ZCode：工作段（思考+工具）与相邻块之间 mt-5（20dp），
-                        // 其余（正文↔媒体等）维持上游 8dp。hairline→正文取 28dp：ZCode 那边
-                        // 正文是裸文字（line 下 20px 即字），我们正文在气泡里，边到字还有
-                        // 内边距，气泡边距要放大才看得出 ZCode 的呼吸感（用户实测 20 太近）。
+                        // 流 item 间距照 ZCode：工作段（思考+工具）与相邻块之间加大（28dp，
+                        // ZCode mt-5=20px 且那边正文无气泡，我们补气泡内边距），其余维持上游 8dp。
+                        // **Spacer 必须是 Column 的直接子级** —— 之前放在 Box 里：Box 是层叠容器，
+                        // 子元素互相叠放，Spacer 根本不产生垂直间距（60dp 试验因此「跑到底部」）。
                         val prevIsThinking = index > 0 &&
                             assistantBlocks[index - 1] is com.psyche.memo.ui.chat.AssistantBlock.Thinking
                         val blockGap = when {
-                            index == 0 && block is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> 12.dp
-                            prevIsThinking && block is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> 20.dp
-                            prevIsThinking || block is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> 28.dp
+                            prevIsThinking || block is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> 10.dp
                             else -> 8.dp
                         }
                         if (index > 0) Spacer(Modifier.height(blockGap))
-                        if (index == 0 && block is com.psyche.memo.ui.chat.AssistantBlock.Thinking) {
-                            // 首块就是工作段（典型：思考→工具→正文）：名字行与「工作中/已工作」
-                            // 之间也留出 ZCode userInput→status 的呼吸感。
-                            Spacer(Modifier.height(12.dp))
-                        }
+                        Box(modifier = blockAppearance) {
                         when (block) {
                             is com.psyche.memo.ui.chat.AssistantBlock.Media -> {
                                 // 媒体块：与正文块同序（工具产出的图紧跟工具卡）。

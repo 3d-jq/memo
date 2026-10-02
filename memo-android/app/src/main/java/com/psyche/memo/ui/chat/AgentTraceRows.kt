@@ -21,6 +21,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -42,10 +48,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.composables.icons.lucide.Brain
 import com.composables.icons.lucide.ChevronRight
+import com.composables.icons.lucide.LoaderCircle
 import com.composables.icons.lucide.Lucide
 import com.psyche.memo.ui.ChatStyleSpec
 import com.psyche.memo.ui.R as UiR
@@ -287,16 +295,6 @@ private fun WorkPhaseHeader(
                     },
                 ),
         ) {
-            // 运行中头部带活动指示器（ZCode「工作中」也配 loader；用 Memo 的点点点）。
-            if (running) {
-                LoadingDotsIndicator(
-                    color = fg.accent,
-                    dotDp = ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP,
-                    gapDp = ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP,
-                    heightDp = ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP,
-                )
-                Spacer(Modifier.width(8.dp))
-            }
             Text(
                 text = label,
                 maxLines = 1,
@@ -304,7 +302,8 @@ private fun WorkPhaseHeader(
                 style = TextStyle(
                     fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (running) fg.accent else fg.muted,
+                    // ZCode 头部恒为 foreground-subtle：运行中不高亮，只靠 loader 与计时表示活性。
+                    color = fg.muted,
                 ),
                 modifier = Modifier.weight(1f),
             )
@@ -586,7 +585,6 @@ internal fun ToolTraceRow(
     val fg = chatSurfaceFg()
     val isAskUser = part.toolName == com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.ASK_USER
     val loading = part.loading
-    val elapsedMs by rememberRowElapsed(part.startedAt, part.finishedAt, loading)
     var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
 
     // ask-user 保持旧行为：默认展开、可折叠（问询交互不可丢）。
@@ -664,14 +662,6 @@ internal fun ToolTraceRow(
                 maxLines = 1,
                 style = TextStyle(fontSize = 12.sp, color = statusColor),
             )
-            if (part.startedAt != null && part.startedAt > 0) {
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = "· ${traceDurationSeconds(elapsedMs)}s",
-                    maxLines = 1,
-                    style = TextStyle(fontSize = 12.sp, color = fg.muted),
-                )
-            }
         }
         Spacer(Modifier.width(6.dp))
         Icon(
@@ -858,38 +848,6 @@ private fun TraceDetailSection(label: String, text: String, color: Color) {
     }
 }
 
-/**
- * 生成刚起步、还没有任何思考/工具步骤时的「工作中」占位行（点点点 + 标签）——
- * ZCode 会先亮出工作中状态，我们在此刻只有尾部呼吸星，观感缺一块。首步一到
- * 就被真正的阶段头部接管。
- */
-@Composable
-fun WorkPhaseRunningPlaceholder(modifier: Modifier = Modifier) {
-    val fg = chatSurfaceFg()
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-    ) {
-        LoadingDotsIndicator(
-            color = fg.accent,
-            dotDp = ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP,
-            gapDp = ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP,
-            heightDp = ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP,
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = stringResource(UiR.string.agent_trace_working_plain),
-            maxLines = 1,
-            style = TextStyle(
-                fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
-                fontWeight = FontWeight.Medium,
-                color = fg.accent,
-            ),
-        )
-    }
-}
 
 /** 展开态正文的最大高度（ZCode `max-h-60` = 240px 的 dp 直取）。 */
 internal const val TRACE_BODY_MAX_HEIGHT_DP = 240
