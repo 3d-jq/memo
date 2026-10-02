@@ -133,8 +133,27 @@ Rules:
     /** 会话窗口计算的输入：只保留 id / order / 是否检查点。 */
     data class WindowEntry(val id: String, val order: Int, val checkpoint: Checkpoint?)
 
-    /** opencode Token.estimate —— JSON 长度 / 4。 */
-    fun estimate(text: String): Int = max(0, (text.length / 4.0).roundToInt())
+    /**
+     * opencode Token.estimate 的**内容分流版**：opencode 按 JSON 长度 /4（对它主要
+     * 服务的英文内容够用）；Memo 的主语言是中文——中文大致一字一 token，/4 会把中文
+     * 低估约 4 倍，导致压缩触发远晚于真实占用（用户实测进度条爬到 90% 还不压缩）。
+     * 分流口径：CJK/假名/韩文按 1 token/字，其余仍 /4。
+     */
+    fun estimate(text: String): Int {
+        var cjk = 0
+        var other = 0
+        for (ch in text) {
+            if (isCjkChar(ch)) cjk++ else other++
+        }
+        return max(0, cjk + (other / 4.0).roundToInt())
+    }
+
+    /** CJK 统一表意 + 扩展A + 假名 + 韩文 + 兼容表意 + 全角区。 */
+    internal fun isCjkChar(ch: Char): Boolean = ch.code in 0x2E80..0x9FFF ||
+        ch.code in 0x3040..0x30FF ||
+        ch.code in 0xAC00..0xD7AF ||
+        ch.code in 0xF900..0xFAFF ||
+        ch.code in 0xFF00..0xFFEF
 
     /**
      * opencode `estimate({system, messages, tools})` —— 对请求的 JSON 文本估算
@@ -248,7 +267,12 @@ Rules:
         buffer: Int,
     ): Boolean {
         if (contextWindow <= 0) return false
-        return estimatedTokens > contextWindow - max(maxOutputTokens, buffer)
+        // 小窗口模型（用户把 contextWindow 填成 16384 而 buffer 默认 20000）会让阈值
+        // 变成负数 ⇒ 任何估算值都超限、每轮都压一次（压完下一轮还是超，循环烧钱）。
+        // 窗口放不下 max(输出, buffer) 时不该由自动压缩兜底。
+        val reserve = max(maxOutputTokens, buffer)
+        if (contextWindow <= reserve) return false
+        return estimatedTokens > contextWindow - reserve
     }
 
     /**

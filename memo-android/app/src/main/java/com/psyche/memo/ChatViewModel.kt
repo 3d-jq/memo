@@ -255,6 +255,15 @@ class ChatViewModel(
         _expandedWorkPhases.value = if (key in current) current - key else current + key
     }
 
+    /**
+     * 上一轮生成撞了「上下文超长」→ 下次发送前**强制压一次**再发（P1-4 兜底）。
+     *
+     * `isContextLengthError` 之前除测试外零调用点，估算再准也怕厂商口径差异；
+     * 这里把它接进真实链路：撞过一次，下一轮无视阈值先压缩。只强制一次
+     * （发送前即清），不会循环压缩。
+     */
+    private var pendingOverflowCompact = false
+
     private var generationJob: Job? = null
 
     /** 在途翻译请求（messageId → Job），新请求顶掉旧的（TS _runs 语义）。 */
@@ -836,9 +845,46 @@ class ChatViewModel(
     val compacting: kotlinx.coroutines.flow.StateFlow<Boolean> = _compacting
 
     /**
-     * 重算上下文占用 —— 与发送链路的估算同源：`estimate(系统提示词 + 窗口消息 + 工具
-     * 定义)`，分母是自动压缩阈值（窗口 − max(输出预算, buffer)）。消息走「消息自身正文」
-     * （不重算 OCR/文档/记忆注入，那些要真的发请求才有意义），因此是近似值。
+     * **请求形状**的上下文估算（P1-3 修法）：进度条、自动压缩触发器与真实请求
+     * 三者同源。逐消息镜像真实请求的组装：检查点 → checkpointText；否则正文 +
+     * [replayToolCallHistory] 的 tool 消息（旧触发器把检查点整条丢掉、且只算
+     * `assembledBody` 文本，工具参数与结果全漏算）。
+     */
+    private fun estimateRequestShape(
+        messages: List<UiMessage>,
+        systemParts: List<Pair<ContextSource, String>>,
+        tools: List<LlmToolSpec>,
+    ): Int {
+        val requestMessages = buildList {
+            for (msg in messages) {
+                val checkpoint = msg.checkpointPart()
+                if (checkpoint != null) {
+                    add(
+                        "user" to com.psyche.memo.common.SessionCompaction
+                            .checkpointText(checkpoint.summary, checkpoint.recent),
+                    )
+                    continue
+                }
+                val body = msg.parts
+                    .filterIsInstance<TextPart>()
+                    .joinToString("") { it.text }
+                if (body.isNotEmpty()) add(msg.role to body)
+                for (replay in replayToolCallHistory(msg)) {
+                    add(replay.role to replay.content.orEmpty())
+                }
+            }
+        }
+        return com.psyche.memo.common.SessionCompaction.estimateRequest(
+            system = com.psyche.memo.provider.prompt.assembleSystemPrompt(systemParts),
+            messages = requestMessages,
+            toolsJson = toolsJsonForEstimate(tools),
+        )
+    }
+
+    /**
+     * 重算上下文占用 —— 与发送链路/自动压缩触发器同源（[estimateRequestShape]，
+     * 请求形状：系统提示词 + 窗口消息正文 + 工具回放 + 工具定义），分母是自动压缩
+     * 阈值（窗口 − max(输出预算, buffer)）。
      */
     private suspend fun refreshContextUsage() {
         runCatching {
@@ -852,27 +898,14 @@ class ChatViewModel(
             val base = _messages.value
                 .filter { !it.isStreaming }
                 .filter { startOrder == null || it.messageOrder >= startOrder }
-            val window = compactionWindow(base).mapNotNull { msg ->
-                val checkpoint = msg.checkpointPart()
-                if (checkpoint != null) {
-                    "user" to com.psyche.memo.common.SessionCompaction
-                        .checkpointText(checkpoint.summary, checkpoint.recent)
-                } else {
-                    compactionEntry(msg)
-                        ?.let { it.role to com.psyche.memo.common.SessionCompaction.serialize(it) }
-                        ?.takeIf { (_, text) -> text.isNotEmpty() }
-                }
-            }
+            // P1-3：进度条与自动压缩触发器共用同一个请求形状估算（含检查点与工具回放），
+            // 不再各算一套——旧实现触发器丢掉检查点、只算正文，压缩过后永远少算一整块。
             val tools = offeredTools()
             val systemParts = buildSystemPromptParts(
                 assistant,
                 offeredToolNames = tools.map { it.name },
             )
-            val used = com.psyche.memo.common.SessionCompaction.estimateRequest(
-                system = com.psyche.memo.provider.prompt.assembleSystemPrompt(systemParts),
-                messages = window,
-                toolsJson = toolsJsonForEstimate(tools),
-            )
+            val used = estimateRequestShape(compactionWindow(base), systemParts, tools)
             _contextUsage.value = ContextUsage(
                 usedTokens = used,
                 thresholdTokens = com.psyche.memo.common.SessionCompaction.thresholdTokens(
@@ -1691,17 +1724,18 @@ class ChatViewModel(
                     selectedProviderId.value,
                     selectedModelId.value,
                 )
+                // 上一轮撞过上下文超长 → 本轮无视阈值先压一次（只强制一次，见字段注释）。
+                val forceOverflowCompact = pendingOverflowCompact
+                pendingOverflowCompact = false
                 if (compactionSettings.auto) {
-                    val estimates = com.psyche.memo.common.SessionCompaction.estimateRequest(
-                        system = com.psyche.memo.provider.prompt.assembleSystemPrompt(systemParts),
-                        messages = compactionWindow(rawMessages).mapNotNull { msg ->
-                            if (msg.checkpointPart() != null) return@mapNotNull null
-                            val body = assembledBody(msg, msg.id == lastUserMessageId && memoryPrefix.isNotEmpty())
-                            if (body.isEmpty()) null else msg.role to body
-                        },
-                        toolsJson = toolsJsonForEstimate(tools),
+                    // 与进度条、真实请求同源（P1-3）：含检查点与工具回放。
+                    val estimates = estimateRequestShape(
+                        compactionWindow(rawMessages),
+                        systemParts,
+                        tools,
                     )
                     if (
+                        forceOverflowCompact ||
                         com.psyche.memo.common.SessionCompaction.shouldCompact(
                             estimates,
                             compactionSettings.contextWindow,
@@ -1941,6 +1975,13 @@ class ChatViewModel(
                 )
             } catch (e: Exception) {
                 val segmentsJson = encodeSegments(allSegments)
+                // 上下文超长：给下一轮挂「强制压缩」（isContextLengthError 的消费点）。
+                // 用户取消（CancellationException）不算 —— 它也是 Exception 子类。
+                if (e !is kotlinx.coroutines.CancellationException &&
+                    com.psyche.memo.common.compaction.isContextLengthError(e.message)
+                ) {
+                    pendingOverflowCompact = true
+                }
                 val finalParts = markFailed(
                     assistantId,
                     com.psyche.memo.ui.chat.generationErrorDisplayText(container.appContext, e),

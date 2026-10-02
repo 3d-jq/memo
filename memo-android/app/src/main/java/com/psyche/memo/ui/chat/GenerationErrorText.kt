@@ -73,11 +73,11 @@ internal fun classifyGenerationError(text: String): GenerationErrorKind? {
         "$code server error",
     )
     return when {
-        has(
-            "context length", "maximum context", "context window", "context_length",
-            "too many tokens", "reduce the length", "reduce your prompt", "prompt is too long",
-            "input length",
-        ) || status(413) -> GenerationErrorKind.ContextLength
+        // 上下文超长走**唯一分类器** `isContextLengthError`（P1-4：这里原来维护着
+        // 第二份词表，和 ContextOverflowError 的那份已经漂移——中文词只在一边、
+        // 413 只在另一边）。HTTP 413 的状态码判定仍留在这里（分类器只认文本语义）。
+        com.psyche.memo.common.compaction.isContextLengthError(text) ||
+            status(413) -> GenerationErrorKind.ContextLength
 
         has("unsupported image", "invalid image", "image format", "uploaded an unsupported") ->
             GenerationErrorKind.UnsupportedImage

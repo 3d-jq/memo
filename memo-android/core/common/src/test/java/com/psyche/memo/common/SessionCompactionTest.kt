@@ -29,6 +29,18 @@ class SessionCompactionTest {
     }
 
     @Test
+    fun `estimate counts CJK per character`() {
+        // P1-4：中文大致一字一 token。旧口径 length/4 会把中文低估约 4 倍，
+        // 压缩触发远晚于真实占用（进度条 90% 也不压）。
+        assertEquals(10, SessionCompaction.estimate("你好世界呀谢谢大家好吗".take(10)))
+        // 中日韩 + 全角标点都按 CJK。
+        assertEquals(3, SessionCompaction.estimate("你好，"))
+        assertEquals(2, SessionCompaction.estimate("こんにちは".take(2)))
+        // 混合：英文仍 /4。
+        assertEquals(2 + 1, SessionCompaction.estimate("你好" + "abcd"))
+    }
+
+    @Test
     fun `request estimate wraps system messages and tools`() {
         val tokens = SessionCompaction.estimateRequest(
             system = "sys",
@@ -191,6 +203,19 @@ class SessionCompactionTest {
         assertTrue(SessionCompaction.shouldCompact(90_000, 128_000, 40_000, 20_000))
         // 窗口未知 → 不自动压缩（opencode `context === undefined` 分支）。
         assertFalse(SessionCompaction.shouldCompact(999_999, 0, 0, 20_000))
+    }
+
+    @Test
+    fun `shouldCompact refuses windows smaller than the reserve`() {
+        // P1-5：用户把 contextWindow 填成 16384 而 buffer 默认 20000 ⇒ 阈值 −3616，
+        // 任何估算值都超限、每轮压一次（压完下轮还是超，循环烧钱）。窗口放不下
+        // max(输出, buffer) 时不该由自动压缩兜底。
+        assertFalse(SessionCompaction.shouldCompact(1, 16_384, 4_096, 20_000))
+        assertFalse(SessionCompaction.shouldCompact(999_999, 16_384, 4_096, 20_000))
+        // 正好等于 reserve 也不压（没有余量）。
+        assertFalse(SessionCompaction.shouldCompact(1, 20_000, 4_096, 20_000))
+        // 略大于 reserve 才恢复阈值语义。
+        assertTrue(SessionCompaction.shouldCompact(20_002, 20_001, 4_096, 20_000))
     }
 
     @Test
