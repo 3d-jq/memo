@@ -25,7 +25,6 @@ class WireModelIdClientTest {
         var lastComplete: LlmRequest? = null
         var listModelsCalls = 0
 
-        override fun supports(providerId: String): Boolean = providerId == "openai"
         override fun streamChat(request: LlmRequest): Flow<StreamChunk> {
             lastStream = request
             return emptyFlow()
@@ -93,10 +92,9 @@ class WireModelIdClientTest {
     }
 
     @Test
-    fun listModelsAndSupportsDelegate() = runBlocking {
+    fun listModelsDelegate() = runBlocking {
         val delegate = Recorder()
         val client = WireModelIdClient(delegate) { "x" }
-        assertTrue(client.supports("openai"))
         client.listModels("https://example.test", "k")
         assertEquals(1, delegate.listModelsCalls)
     }

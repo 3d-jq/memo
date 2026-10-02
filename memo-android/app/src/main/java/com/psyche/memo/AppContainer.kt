@@ -693,14 +693,31 @@ class AppContainerImpl(context: Context) : com.psyche.memo.common.AppContainer {
         )
     }
 
-    val llmClients: List<LlmClient> = listOf(
-        OpenAiChatCompletionsClient(httpClient, { currentRetryOptions() }, cancellations),
-        ClaudeClient(httpClient, { currentRetryOptions() }, cancellations),
-        GeminiClient(httpClient, { currentRetryOptions() }, cancellations),
-    )
+    // 三个原生客户端按**供应商 kind** 分派（`classifiedKind()` 的 openai/anthropic/
+    // gemini 词汇表）。原来用 `supports()` + `firstOrNull` 的写法恒命中 OpenAI
+    // （它的 supports 恒 true 且排第一），Claude/Gemini 客户端是死代码 —— 原生
+    // anthropic/google 供应商的请求会以 OpenAI 格式发到 api.anthropic.com，404。
+    internal val openAiClient: LlmClient =
+        OpenAiChatCompletionsClient(httpClient, { currentRetryOptions() }, cancellations)
+    internal val claudeClient: LlmClient =
+        ClaudeClient(httpClient, { currentRetryOptions() }, cancellations)
+    internal val geminiClient: LlmClient =
+        GeminiClient(httpClient, { currentRetryOptions() }, cancellations)
+
+    /** 供应商 kind → 客户端。行 id 落到配置查 kind；查不到（如 FetchModelsSheet 直接传 kind）就按字符串认。 */
+    internal fun baseClientFor(providerId: String): LlmClient {
+        val kind = providerConfig(providerId)?.classifiedKind()
+            ?: providerId.takeIf { it == "anthropic" || it == "gemini" }
+            ?: "openai"
+        return when (kind) {
+            "anthropic" -> claudeClient
+            "gemini" -> geminiClient
+            else -> openAiClient
+        }
+    }
 
     fun clientFor(providerId: String): LlmClient {
-        val base = llmClients.firstOrNull { it.supports(providerId) } ?: llmClients.first()
+        val base = baseClientFor(providerId)
         // chat_api_helpers.dart:44-53 `apiModelId(cfg, modelId)`：模型覆盖里的
         // apiModelId 才是**出网**的模型 id，而且厂商启发式（Claude thinking、
         // Gemini 判定、GLM OCR…）也用它。包一层客户端在这里统一改写，覆盖聊天 /

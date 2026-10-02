@@ -57,7 +57,6 @@ class OpenAiChatCompletionsClient(
     /** Per-request read: the container supplies live settings (auto_retry_options). */
     private fun retryOptions(): AutoRetryOptions = retryOptionsProvider()
 
-    override fun supports(providerId: String): Boolean = true // default backend
 
     override fun streamChat(request: LlmRequest): Flow<StreamChunk> = flow {
         // Flutter retryingStream semantics: retry while the attempt yielded

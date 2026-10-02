@@ -31,8 +31,6 @@ internal class WireModelIdClient(
         return if (wire == modelId || wire.isEmpty()) stamped else stamped.copy(modelId = wire)
     }
 
-    override fun supports(providerId: String): Boolean = delegate.supports(providerId)
-
     override fun streamChat(request: LlmRequest): Flow<StreamChunk> =
         delegate.streamChat(request.mapped())
 

@@ -59,9 +59,6 @@ class GeminiClient(
     /** Per-request read: the container supplies live settings (auto_retry_options). */
     private fun retryOptions(): AutoRetryOptions = retryOptionsProvider()
 
-    override fun supports(providerId: String): Boolean =
-        providerId == "gemini" || providerId.contains("google")
-
     override fun streamChat(request: LlmRequest): Flow<StreamChunk> = flow {
         val maxRetries = if (retryOptions().enabled) retryOptions().maxRetries else 0
         var attemptCount = 0
@@ -273,6 +270,16 @@ class GeminiClient(
                 if (text.isNotEmpty()) {
                     out.add(if (isThought) StreamChunk.ReasoningDelta(text) else StreamChunk.TextDelta(text))
                 }
+                // functionCall 块 → ToolCallDelta（google_common.dart onToolCall 形状）。
+                // Gemini 的 functionCall 没有独立 id，用 name 充当 id（上层按序兜底）。
+                val fc = part["functionCall"]?.jsonObject
+                if (fc != null) {
+                    val name = (fc["name"] as? JsonPrimitive)?.contentOrNull ?: ""
+                    if (name.isNotEmpty()) {
+                        val args = fc["args"]?.let { if (it is JsonPrimitive) it.content else it.toString() }
+                        out.add(StreamChunk.ToolCallDelta(name, name, args ?: ""))
+                    }
+                }
             }
         }
         return out
@@ -312,19 +319,65 @@ class GeminiClient(
     private fun buildBody(request: LlmRequest): String {
         var systemInstruction: String? = null
         val contents = buildJsonArray {
+            // google_common.dart shape: assistant tool_calls -> model-role
+            // functionCall parts; tool messages -> user-role functionResponse parts
+            // (JSON-parseable content is used verbatim, else wrapped as result).
+            val pendingResponses = ArrayList<kotlinx.serialization.json.JsonObject>()
+            fun flushResponses() {
+                if (pendingResponses.isEmpty()) return
+                add(buildJsonObject {
+                    put("role", "user")
+                    put("parts", kotlinx.serialization.json.JsonArray(pendingResponses.toList()))
+                })
+                pendingResponses.clear()
+            }
             for (msg in request.messages) {
                 if (msg.role == "system") {
                     msg.content?.let { s ->
-                        systemInstruction = if (systemInstruction.isNullOrEmpty()) s else "$systemInstruction\n\n$s"
+systemInstruction = if (systemInstruction.isNullOrEmpty()) s else "$systemInstruction\n\n$s"
+                    }
+                } else if (msg.role == "tool") {
+                    val text = msg.content.orEmpty()
+                    val response = runCatching {
+                        json.parseToJsonElement(text).jsonObject
+                    }.getOrElse {
+                        buildJsonObject {
+                            put("result", if (text.trim().isEmpty()) "(no output)" else text)
+                        }
+                    }
+                    pendingResponses += buildJsonObject {
+                        putJsonObject("functionResponse") {
+                            put("name", msg.toolName ?: "")
+                            put("response", response)
+                        }
                     }
                 } else {
+                    flushResponses()
                     val role = if (msg.role == "assistant") "model" else "user"
+                    // geminiParts 返回的是不可变 JsonArray；要追加 functionCall 块，先摊成 MutableList。
+                    val parts = com.psyche.memo.llm.client.MessageContent.geminiParts(msg).toMutableList()
+                    if (msg.role == "assistant" && msg.toolCalls.isNotEmpty()) {
+                        for (call in msg.toolCalls) {
+                            parts.add(buildJsonObject {
+                                putJsonObject("functionCall") {
+                                    put("name", call.name)
+                                    put(
+                                        "args",
+                                        runCatching {
+                                            json.parseToJsonElement(call.argumentsJson.ifEmpty { "{}" }).jsonObject
+                                        }.getOrElse { kotlinx.serialization.json.JsonObject(emptyMap()) },
+                                    )
+                                }
+                            })
+                        }
+                    }
                     add(buildJsonObject {
                         put("role", role)
-                        put("parts", com.psyche.memo.llm.client.MessageContent.geminiParts(msg))
+                        put("parts", kotlinx.serialization.json.JsonArray(parts))
                     })
                 }
             }
+            flushResponses()
         }
         val generationConfig = buildJsonObject {
             request.temperature?.let { put("temperature", it) }
@@ -340,6 +393,30 @@ class GeminiClient(
         return buildJsonObject {
             put("contents", contents)
             if (generationConfig.isNotEmpty()) put("generationConfig", generationConfig)
+            // google_common.dart L650-672：OpenAI 形态 tools → functionDeclarations。
+            if (request.tools.isNotEmpty()) {
+                putJsonArray("tools") {
+                    add(buildJsonObject {
+                        putJsonArray("function_declarations") {
+                            for (tool in request.tools) {
+                                if (tool.name.isEmpty()) continue
+                                add(buildJsonObject {
+                                    put("name", tool.name)
+                                    put("description", tool.description)
+                                    put(
+                                        "parameters",
+                                        runCatching {
+                                            json.parseToJsonElement(tool.inputSchemaJson)
+                                        }.getOrElse {
+                                            kotlinx.serialization.json.JsonObject(emptyMap())
+                                        },
+                                    )
+                                })
+                            }
+                        }
+                    })
+                }
+            }
             systemInstruction?.let { si ->
                 if (si.isNotEmpty()) {
                     putJsonObject("systemInstruction") {

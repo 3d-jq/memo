@@ -11,9 +11,6 @@ data class LlmModelInfo(val id: String, val displayName: String)
  * decides the wire protocol (OpenAI chat completions / Claude / Gemini).
  */
 interface LlmClient {
-    /** True when this client handles the provider id / path style. */
-    fun supports(providerId: String): Boolean
-
     /** Streamed chat completion. [requestId] identifies cancellation. */
     fun streamChat(request: LlmRequest): Flow<StreamChunk>
 

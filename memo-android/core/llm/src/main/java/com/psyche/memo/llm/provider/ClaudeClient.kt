@@ -60,9 +60,6 @@ class ClaudeClient(
     /** Per-request read: the container supplies live settings (auto_retry_options). */
     private fun retryOptions(): AutoRetryOptions = retryOptionsProvider()
 
-    override fun supports(providerId: String): Boolean =
-        providerId == "anthropic" || providerId.contains("claude")
-
     override fun streamChat(request: LlmRequest): Flow<StreamChunk> = flow {
         val maxRetries = if (retryOptions().enabled) retryOptions().maxRetries else 0
         var attemptCount = 0
@@ -340,19 +337,97 @@ class ClaudeClient(
     }
 
     private fun buildBody(request: LlmRequest, stream: Boolean): String {
-        val messages = buildJsonArray {
-            for (m in request.messages) {
-                if (m.role == "system") continue // handled as system field
-                add(buildJsonObject {
-                    put("role", if (m.role == "assistant") "assistant" else "user")
-                    if (m.role == "user") {
-                        put("content", com.psyche.memo.llm.client.MessageContent.claudeContent(m))
-                    } else {
-                        put("content", m.content ?: "")
+        // claude_history.dart 形状：assistant 的 tool_calls 摊成 content 块
+        // （text + tool_use）；tool 消息**攒成 tool_result 块**，并进上一条 user
+        // 的 content（string 先摊成块数组），没有上条 user 就独立成条；空结果折成
+        // "(no output)" —— 没有配对的 tool_use 会被 API 判为畸形轮次。
+        val out = ArrayList<kotlinx.serialization.json.JsonObject>()
+        val pendingToolResults = ArrayList<kotlinx.serialization.json.JsonObject>()
+        fun flushToolResults() {
+            if (pendingToolResults.isEmpty()) return
+            val last = out.lastOrNull()
+            if (last != null && last["role"]?.jsonPrimitive?.contentOrNull == "user") {
+                val existing = last["content"]
+                val blocks = when (existing) {
+                    is kotlinx.serialization.json.JsonArray -> existing.toMutableList()
+                    is kotlinx.serialization.json.JsonPrimitive ->
+                        if (existing.contentOrNull.isNullOrEmpty()) {
+                            mutableListOf()
+                        } else {
+                            mutableListOf<kotlinx.serialization.json.JsonElement>(
+                                buildJsonObject {
+                                    put("type", "text")
+                                    put("text", existing.content)
+                                },
+                            )
+                        }
+                    else -> mutableListOf()
+                }
+                blocks.addAll(pendingToolResults)
+                out[out.lastIndex] = buildJsonObject {
+                    put("role", "user")
+                    put("content", kotlinx.serialization.json.JsonArray(blocks))
+                }
+            } else {
+                out += buildJsonObject {
+                    put("role", "user")
+                    put("content", kotlinx.serialization.json.JsonArray(pendingToolResults.toList()))
+                }
+            }
+            pendingToolResults.clear()
+        }
+        for (m in request.messages) {
+            if (m.role == "system") continue // handled as system field
+            if (m.role == "tool") {
+                val text = m.content.orEmpty()
+                pendingToolResults += buildJsonObject {
+                    put("type", "tool_result")
+                    put("tool_use_id", m.toolCallId ?: "")
+                    put("content", if (text.trim().isEmpty()) "(no output)" else text)
+                }
+                continue
+            }
+            flushToolResults()
+            if (m.role == "assistant" && m.toolCalls.isNotEmpty()) {
+                val blocks = ArrayList<kotlinx.serialization.json.JsonElement>()
+                val text = m.content.orEmpty()
+                // isNotBlank 已覆盖上游的占位正文判断（纯空白正文不进块）
+                if (text.isNotBlank()) {
+                    blocks += buildJsonObject {
+                        put("type", "text")
+                        put("text", text)
                     }
-                })
+                }
+                for (call in m.toolCalls) {
+                    blocks += buildJsonObject {
+                        put("type", "tool_use")
+                        put("id", call.id)
+                        put("name", call.name)
+                        put(
+                            "input",
+                            runCatching {
+                                json.parseToJsonElement(call.argumentsJson.ifEmpty { "{}" }).jsonObject
+                            }.getOrElse { JsonObject(emptyMap()) },
+                        )
+                    }
+                }
+                out += buildJsonObject {
+                    put("role", "assistant")
+                    put("content", kotlinx.serialization.json.JsonArray(blocks))
+                }
+                continue
+            }
+            out += buildJsonObject {
+                put("role", if (m.role == "assistant") "assistant" else "user")
+                if (m.role == "user") {
+                    put("content", com.psyche.memo.llm.client.MessageContent.claudeContent(m))
+                } else {
+                    put("content", m.content ?: "")
+                }
             }
         }
+        flushToolResults()
+        val messages = kotlinx.serialization.json.JsonArray(out)
         val system = request.messages.filter { it.role == "system" && !it.content.isNullOrBlank() }
             .joinToString("\n\n") { it.content!! }
         return buildJsonObject {
