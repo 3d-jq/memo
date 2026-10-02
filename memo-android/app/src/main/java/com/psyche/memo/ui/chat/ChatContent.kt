@@ -1067,7 +1067,13 @@ fun ChatContent(
         Column(modifier = Modifier.fillMaxSize()) {
         if (selecting) {
             // ChatSelectionAppBar：关闭 + 已选计数 + 反选 + 全选。
-            val selectable = messages.filter { it.role == "user" || it.role == "assistant" }
+            // P2-6：压缩检查点的 role 是 user（ChatViewModel 插检查点消息时写的），
+            // 只按 role 过滤会把**摘要本身**也框进可选集 —— 「全选」后 deleteVersion
+            // 会把检查点删掉，compactionWindow 从此找不到它 ⇒ 全量历史重新进请求、
+            // 窗口立刻又满。导出侧早就排了，这里补上同一道筛子。
+            val selectable = messages.filter {
+                (it.role == "user" || it.role == "assistant") && it.checkpointPart() == null
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
