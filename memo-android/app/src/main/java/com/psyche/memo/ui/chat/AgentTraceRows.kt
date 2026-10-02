@@ -227,24 +227,12 @@ fun AgentTraceBlock(
             onToggle = if (running && !messageFailed) null else ({ onTogglePhase(phaseKey) }),
         )
         if (expanded) {
-            // 生成中：阶段头部正下方 = 呼吸放射线（**Memo 自己的指示器**——用户定稿）。
-            // 早期还没有步骤时，整个阶段就这一行（工作中 + 呼吸星）。
-            if (running) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    GenerationActivityBurst(modifier = Modifier.size(26.dp))
-                }
-            }
+            // 指示器不在阶段内部 —— ZCode 的ChatLoading 在轮尾，Memo 的呼吸星同样在
+            // 消息尾部动作栏槽位（见 MessageRow）。阶段内部只有工作行本体。
             // ZCode 三层间距：hairline → pt-5(20px) 进折叠区 → 行间 gap-4(16px) →
             // 区外下一 item mt-5(20px，MessageRow 的 blockGap)。行自带 4dp 上下，
             // 所以这里 16/8 折算后视觉与 ZCode 一致。
-            Column(modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = if (running) 8.dp else 16.dp)) {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                 filteredSteps.forEachIndexed { index, step ->
                     if (index > 0) Spacer(Modifier.height(8.dp))
                     when (step) {

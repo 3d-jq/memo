@@ -601,6 +601,25 @@ internal fun MessageRow(
                     // addVisible 在相邻块之间插 8pt；每段文本各自一个气泡
                     // （_buildAssistantTextBubbles，assistantBubbleSplitParagraphs
                     // 打开时按段落再拆）。助手正文 15.7 / 行高 1.5×15.7。
+                    // ZCode：workStatus 由 isRunning 得出——哪怕一个 part 都还没到
+                    // （等首个 token 的空窗期），「工作中 N秒」也必须立刻亮出来。Memo 这边
+                    // 阶段头挂在思考块里，所以在零块窗口挂一个空阶段块兜底。
+                    if (msg.isStreaming && assistantBlocks.isEmpty()) {
+                        com.psyche.memo.ui.chat.AgentTraceBlock(
+                            steps = emptyList(),
+                            settings = timelineSettings,
+                            phaseKey = "phase:$msg.id:live",
+                            messageFailed = false,
+                            phaseRunning = true,
+                            turnStartedAt = msg.timestamp,
+                            expandedPhases = expandedWorkPhases,
+                            onTogglePhase = onToggleWorkPhase,
+                            expandedToolRows = expandedToolRows,
+                            onToggleToolRow = onToggleToolRow,
+                            onToggleReasoning = {},
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
                     assistantBlocks.forEachIndexed { index, block ->
                         // 一次性入场（graphicsLayer alpha+scale 420ms，不改布局高度）**只给卡片与
                         // 媒体**。正文块以前也吃这一套，于是观感变成「一坨一坨往外冒」、字还在
@@ -894,6 +913,9 @@ internal fun MessageRow(
                     // ⇒ 结束时没有任何高度跳变（用户 2026-09-24「最后那排复制出现时不要那样一下」）。
                     if (msg.isStreaming) {
                         Box(modifier = Modifier.height(28.dp), contentAlignment = Alignment.CenterStart) {
+                            // 生成中尾部指示 = Memo 自己的呼吸放射线（用户要原来的样式；
+                            // ZCode 同位置是 16px 旋转 loader）。槽位恒 28dp ⇒ 结束无跳变。
+                            com.psyche.memo.ui.chat.GenerationActivityBurst()
                             // 呼吸放射线（应用图标本体那 8 条；颜色跟随主题 primary，自带渐显）。
 
                         }

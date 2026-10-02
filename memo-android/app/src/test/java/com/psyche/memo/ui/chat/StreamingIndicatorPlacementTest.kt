@@ -27,12 +27,16 @@ class StreamingIndicatorPlacementTest {
         )
 
         val row = File(chatDir, "MessageRow.kt").readText()
-        // 2026-10-02：生成中指示 = 呼吸放射线，位置在「工作阶段头部正下方」——
-        // 即 AgentTraceRows 内部、仍不长在列表级独立项 / 消息内部滚动区。
-        val rows = File(chatDir, "AgentTraceRows.kt").readText()
+        // 2026-10-02 定稿：生成中指示 = Memo 自己的呼吸放射线，位置在助手消息尾部
+        // 动作栏槽位（ZCode 同位置是 16px 旋转 loader）；「工作中 N秒」阶段头在零块
+        // 空窗期也要立刻渲染（MessageRow 里以空 steps 的 AgentTraceBlock 兜底）。
         assertTrue(
-            "生成中的呼吸放射线应当渲染在工作阶段头部下方（AgentTraceRows）",
-            rows.contains("GenerationActivityBurst("),
+            "助手消息尾部应当渲染呼吸放射线（GenerationActivityBurst）",
+            row.contains("GenerationActivityBurst("),
+        )
+        assertTrue(
+            "等首个 token 的空窗期也要立刻出「工作中」阶段头",
+            row.contains("AgentTraceBlock("),
         )
         assertFalse(
             "消息行里不该再渲染扫光提示（回到消息内部就会在工具调用时跳动）",
