@@ -124,7 +124,11 @@ class StreamChunkHandler(
         val id = chunk.id ?: return
         val isNew = !toolBuffers.containsKey(id)
         val buffer = toolBuffers.getOrPut(id) { ToolBuffer() }
-        if (isNew) closeOpenSegment()
+        if (isNew) {
+            closeOpenSegment()
+            // 工具行计时（本工程新增）：首见即起表；增量重编码沿用同一起点。
+            buffer.startedAt = System.currentTimeMillis()
+        }
         if (chunk.name.isNotEmpty()) buffer.name += chunk.name
         if (chunk.arguments.isNotEmpty()) buffer.input.append(chunk.arguments)
         val arguments = buffer.arguments ?: tryDecode(buffer.input.toString())
@@ -135,6 +139,7 @@ class StreamChunkHandler(
             content = buffer.content,
             server = buffer.server,
             metadata = buffer.metadata,
+            startedAt = buffer.startedAt,
         )
         val existing = toolIndex[id]
         if (existing != null && folded[existing] is ToolCallPart) {
@@ -197,6 +202,9 @@ class StreamChunkHandler(
             server = payload.server,
             metadata = payload.metadata,
             images = images,
+            startedAt = payload.startedAt,
+            // 结果落卡即停表；已带 finishedAt（重投递/幂等）则保留原值。
+            finishedAt = payload.finishedAt ?: System.currentTimeMillis(),
         )
     }
 
@@ -207,6 +215,8 @@ class StreamChunkHandler(
         var content: JsonElement? = null
         var server = false
         var metadata: JsonObject? = null
+        /** 工具行计时（本工程新增）：首见起表，增量重编码沿用。 */
+        var startedAt: Long? = null
     }
 
     companion object {

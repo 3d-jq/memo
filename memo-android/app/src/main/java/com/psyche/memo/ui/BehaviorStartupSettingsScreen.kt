@@ -102,8 +102,6 @@ fun BehaviorStartupSettingsScreen(
         container.preferenceRepository.readJson(key)?.toIntOrNull() ?: default
 
     var autoCollapseThinking by remember { mutableStateOf(readBool("display_auto_collapse_thinking_v1", true)) }
-    // settings_provider.dart:4721 —— _collapseThinkingSteps = false。
-    var collapseThinkingSteps by remember { mutableStateOf(readBool("display_collapse_thinking_steps_v1", false)) }
     var showToolResultSummary by remember { mutableStateOf(readBool("display_show_tool_result_summary_v1", false)) }
     var hideToolResultImages by remember { mutableStateOf(readBool("display_hide_tool_result_images_v1", false)) }
     var insertSuggestionOnTapOnly by remember { mutableStateOf(readBool("suggestion_insert_on_tap_only_v1", false)) }
@@ -180,13 +178,6 @@ fun BehaviorStartupSettingsScreen(
                         stringResource(UiR.string.display_settings_page_auto_collapse_thinking_title),
                         value = autoCollapseThinking,
                         onToggle = { autoCollapseThinking = it; writeBool("display_auto_collapse_thinking_v1", it) },
-                    )
-                    SettingsIosDivider()
-                    SettingsSwitchRow(
-                        Lucide.ListTree,
-                        stringResource(UiR.string.display_settings_page_collapse_thinking_steps_title),
-                        value = collapseThinkingSteps,
-                        onToggle = { collapseThinkingSteps = it; writeBool("display_collapse_thinking_steps_v1", it) },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(

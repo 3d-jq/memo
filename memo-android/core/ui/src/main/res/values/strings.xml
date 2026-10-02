@@ -65,6 +65,12 @@
     <string name="ask_user_card_something_else">Something else</string>
     <string name="ask_user_card_submit">Submit answer</string>
     <string name="ask_user_pending_reply">Waiting for your reply…</string>
+    <string name="agent_trace_thinking">Thinking</string>
+    <string name="agent_trace_thought">Thought</string>
+    <string name="agent_trace_duration_seconds">Lasted %1$ds</string>
+    <string name="agent_trace_tool_running">Running</string>
+    <string name="agent_trace_tool_done">Done</string>
+    <string name="agent_trace_tool_failed">Failed</string>
     <string name="asr_services_add_action">Add</string>
     <string name="asr_services_add_title">Add Speech Recognition</string>
     <string name="asr_services_add_tooltip">Add speech recognition service</string>
@@ -566,8 +572,6 @@ Updating Memo first is the safer choice.</string>
     <string name="bottom_tools_sheet_save">Save</string>
     <string name="bottom_tools_sheet_upload">Upload</string>
     <string name="camera_permission_denied_message">Camera unavailable: permission not granted.</string>
-    <string name="chain_of_thought_collapse">Collapse</string>
-    <string name="chain_of_thought_expand_steps">Show %1$s more steps</string>
     <string name="chat_attachment_unreadable_skipped">Skipped %1$s attachment(s) that this device cannot read (unsupported image format).</string>
     <string name="chat_history_page_cancel">Cancel</string>
     <string name="chat_history_page_delete">Delete</string>
@@ -619,7 +623,6 @@ Updating Memo first is the safer choice.</string>
     <string name="chat_message_widget_citations_title">Citations (%1$s)</string>
     <string name="chat_message_widget_copied_to_clipboard">Copied to clipboard</string>
     <string name="chat_message_widget_create_memory">Create Memory</string>
-    <string name="chat_message_widget_deep_thinking">Deep Thinking</string>
     <string name="chat_message_widget_file_not_found">File not found: %1$s</string>
     <string name="chat_message_widget_generate_image">Generate image: %1$s</string>
     <string name="chat_message_widget_generate_video">Generate video: %1$s</string>
@@ -865,7 +868,6 @@ Updating Memo first is the safer choice.</string>
     <string name="display_settings_page_chat_model_icon_title">Chat Model Icon</string>
     <string name="display_settings_page_code_font_title">Code Font</string>
     <string name="display_settings_page_collapse_thinking_steps_subtitle">Show only the latest steps until expanded</string>
-    <string name="display_settings_page_collapse_thinking_steps_title">Collapse Thinking Steps</string>
     <string name="display_settings_page_edit_assistant_keep_thinking_tool_cards_subtitle">When off, the edited version keeps only the assistant text. Switching back still shows previous thinking and tool cards.</string>
     <string name="display_settings_page_edit_assistant_keep_thinking_tool_cards_title">Keep thinking and tool cards when editing assistant</string>
     <string name="display_settings_page_enable_assistant_markdown_title">Render assistant messages with Markdown</string>
@@ -875,7 +877,6 @@ Updating Memo first is the safer choice.</string>
     <string name="display_settings_page_enable_image_cropper_title">Enable Image Cropping</string>
     <string name="display_settings_page_enable_math_subtitle">Render LaTeX math (inline and block)</string>
     <string name="display_settings_page_enable_math_title">Math Formula Rendering</string>
-    <string name="display_settings_page_enable_reasoning_markdown_title">Render reasoning (thinking) with Markdown</string>
     <string name="display_settings_page_enable_user_markdown_title">Render user messages with Markdown</string>
     <string name="display_settings_page_enter_to_send_title">Enter Key to Send</string>
     <string name="display_settings_page_font_local_file_label">Local file</string>

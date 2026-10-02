@@ -68,6 +68,10 @@ class ToolCallPart(val payloadJson: String) : MessagePart() {
          * stream_chunk_handler.dart `_upsertTool` 339-347 — the payload is
          * always `{id, name, arguments, content, server}` plus `metadata`
          * when non-empty.
+         *
+         * `startedAt`/`finishedAt`（本工程新增，2026-09-26 ZCode 式工具行计时的
+         * 数据层）：epoch 毫秒；为 null 时**不写键**，老 payload 形状原样保持，
+         * 读取端缺失即 null（不显示时长）。
          */
         fun encode(
             id: String,
@@ -77,6 +81,8 @@ class ToolCallPart(val payloadJson: String) : MessagePart() {
             server: Boolean,
             metadata: JsonObject? = null,
             images: List<ToolImage> = emptyList(),
+            startedAt: Long? = null,
+            finishedAt: Long? = null,
         ): ToolCallPart {
             val root = LinkedHashMap<String, JsonElement>()
             root["id"] = JsonPrimitive(id)
@@ -85,6 +91,8 @@ class ToolCallPart(val payloadJson: String) : MessagePart() {
             root["content"] = content ?: JsonNull
             root["server"] = JsonPrimitive(server)
             metadata?.let { root["metadata"] = it }
+            startedAt?.let { root["startedAt"] = JsonPrimitive(it) }
+            finishedAt?.let { root["finishedAt"] = JsonPrimitive(it) }
             // 工具结果附带的图片（本工程新增，见 ToolImage 的注释）；为空时不写这个键，
             // 老 payload 的形状原样保持。
             if (images.isNotEmpty()) {
@@ -117,6 +125,8 @@ class ToolCallPart(val payloadJson: String) : MessagePart() {
                     val uri = image.string("uri") ?: return@mapNotNull null
                     ToolImage(uri = uri, mime = image.string("mime"))
                 }.orEmpty(),
+                startedAt = obj.long("startedAt"),
+                finishedAt = obj.long("finishedAt"),
             )
         } catch (e: Exception) {
             null
@@ -141,7 +151,13 @@ data class ToolCallPayload(
     val server: Boolean,
     val metadata: JsonObject?,
     val images: List<ToolImage> = emptyList(),
+    /** 本工程新增：起止时刻（epoch ms）；老 payload / 未写键时为 null。 */
+    val startedAt: Long? = null,
+    val finishedAt: Long? = null,
 )
+
+private fun JsonObject.long(key: String): Long? =
+    (this[key] as? JsonPrimitive)?.content?.toLongOrNull()
 
 private fun JsonObject.string(key: String): String? =
     (this[key] as? JsonPrimitive)?.content

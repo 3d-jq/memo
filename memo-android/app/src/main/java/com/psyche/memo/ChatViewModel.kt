@@ -229,6 +229,19 @@ class ChatViewModel(
         _expandedUserMessages.value = if (id in current) current - id else current + id
     }
 
+    /**
+     * 哪些**工具行**被手动展开了（本工程新增，2026-09-26 ZCode 式 AI 输出样式）。
+     * 与 [expandedUserMessages] 同理：LazyColumn 会销毁滑出视口的组合，行内本地
+     * `remember` 会自己弹回折叠。键是 [ToolUiPart.id]（流式期间稳定）。不落库。
+     */
+    private val _expandedToolRows = MutableStateFlow<Set<String>>(emptySet())
+    val expandedToolRows: StateFlow<Set<String>> = _expandedToolRows
+
+    fun toggleToolRowExpanded(id: String) {
+        val current = _expandedToolRows.value
+        _expandedToolRows.value = if (id in current) current - id else current + id
+    }
+
     private var generationJob: Job? = null
 
     /** 在途翻译请求（messageId → Job），新请求顶掉旧的（TS _runs 语义）。 */
@@ -2433,6 +2446,8 @@ class ChatViewModel(
                         content = JsonPrimitive(resultJson),
                         server = payload.server,
                         metadata = payload.metadata,
+                        startedAt = payload.startedAt,
+                        finishedAt = payload.finishedAt ?: System.currentTimeMillis(),
                     )
                 } else p
             } else p

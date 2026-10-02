@@ -91,10 +91,8 @@ data class TimelineCollapse<T>(val visible: List<T>, val hiddenCount: Int)
 data class ChatTimelineSettings(
     val showThinkingCards: Boolean = true,
     val showToolCards: Boolean = true,
-    val collapseThinkingSteps: Boolean = false,
     val showToolResultSummary: Boolean = false,
     val hideToolResultImages: Boolean = false,
-    val enableReasoningMarkdown: Boolean = true,
     // Markdown 开关（settings_provider.dart:272-277，三个默认都是 true）：
     // 关掉时正文退化成同字号/行高的纯文本（chat_message_widget.dart
     // L2049-2066 用户侧 / L2427-2441 助手侧）。
@@ -122,8 +120,6 @@ data class ChatTimelineSettings(
     // （settings_provider.dart，两个默认都是 true）。
     val mathRendering: Boolean = true,
     val dollarLatex: Boolean = true,
-    /** 流式等待提示（扫光文字）的字号/颜色/提示词 —— 用户自定义（2026-09-13）。 */
-    val thinkingIndicator: ThinkingIndicatorSettings = ThinkingIndicatorSettings(),
     // 用户（user）消息侧 —— settings_provider.dart:1068-1085（三个默认都是 true），
     // 由 chat_message_widget.dart:1719-1735 的用户头消费。
     val showUserAvatar: Boolean = true,
@@ -166,10 +162,8 @@ data class ChatTimelineSettings(
             return ChatTimelineSettings(
                 showThinkingCards = bool("display_show_thinking_cards_v1", true),
                 showToolCards = bool("display_show_tool_cards_v1", true),
-                collapseThinkingSteps = bool("display_collapse_thinking_steps_v1", false),
                 showToolResultSummary = bool("display_show_tool_result_summary_v1", false),
                 hideToolResultImages = bool("display_hide_tool_result_images_v1", false),
-                enableReasoningMarkdown = bool("display_enable_reasoning_markdown_v1", true),
                 enableUserMarkdown = bool("display_enable_user_markdown_v1", true),
                 enableAssistantMarkdown = bool("display_enable_assistant_markdown_v1", true),
                 autoCollapseCodeBlock = bool("display_auto_collapse_code_block_v1", false),
@@ -189,7 +183,6 @@ data class ChatTimelineSettings(
                     ?.trim()?.trim('"')?.toFloatOrNull() ?: 1f,
                 mathRendering = bool("display_enable_math_rendering_v1", true),
                 dollarLatex = bool("display_enable_dollar_latex_v1", true),
-                thinkingIndicator = ThinkingIndicatorSettings.fromPrefs(read),
                 showUserAvatar = bool("display_show_user_avatar_v1", true),
                 showUserName = bool("display_show_user_name_v1", true),
                 showUserTimestamp = bool("display_show_user_timestamp_v1", true),

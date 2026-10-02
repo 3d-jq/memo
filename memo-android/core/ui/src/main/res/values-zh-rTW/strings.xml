@@ -65,6 +65,12 @@
     <string name="ask_user_card_something_else">其他</string>
     <string name="ask_user_card_submit">提交回答</string>
     <string name="ask_user_pending_reply">等待你的回覆…</string>
+    <string name="agent_trace_thinking">正在思考</string>
+    <string name="agent_trace_thought">思考</string>
+    <string name="agent_trace_duration_seconds">持續了 %1$d 秒</string>
+    <string name="agent_trace_tool_running">執行中</string>
+    <string name="agent_trace_tool_done">已執行</string>
+    <string name="agent_trace_tool_failed">執行失敗</string>
     <string name="asr_services_add_action">新增</string>
     <string name="asr_services_add_title">新增語音辨識</string>
     <string name="asr_services_add_tooltip">新增語音辨識服務</string>
@@ -568,8 +574,6 @@
     <string name="bottom_tools_sheet_save">儲存</string>
     <string name="bottom_tools_sheet_upload">上傳檔案</string>
     <string name="camera_permission_denied_message">未授予相機權限</string>
-    <string name="chain_of_thought_collapse">收起</string>
-    <string name="chain_of_thought_expand_steps">展開更多 %1$s 步</string>
     <string name="chat_attachment_unreadable_skipped">已跳過 %1$s 個本機無法讀取的附件（圖片格式不支援）。</string>
     <string name="chat_history_page_cancel">取消</string>
     <string name="chat_history_page_delete">刪除</string>
@@ -621,7 +625,6 @@
     <string name="chat_message_widget_citations_title">引用（共%1$s條）</string>
     <string name="chat_message_widget_copied_to_clipboard">已複製到剪貼簿</string>
     <string name="chat_message_widget_create_memory">建立記憶</string>
-    <string name="chat_message_widget_deep_thinking">深度思考</string>
     <string name="chat_message_widget_file_not_found">檔案不存在: %1$s</string>
     <string name="chat_message_widget_generate_image">生成圖片：%1$s</string>
     <string name="chat_message_widget_generate_video">生成影片：%1$s</string>
@@ -867,7 +870,6 @@
     <string name="display_settings_page_chat_model_icon_title">聊天列表模型圖示</string>
     <string name="display_settings_page_code_font_title">程式碼字體</string>
     <string name="display_settings_page_collapse_thinking_steps_subtitle">預設只顯示最新步驟，展開後查看全部</string>
-    <string name="display_settings_page_collapse_thinking_steps_title">折疊思考步驟</string>
     <string name="display_settings_page_edit_assistant_keep_thinking_tool_cards_subtitle">關閉後，目前編輯版本只保留助手正文；切回上一版本仍可查看思考與工具卡片</string>
     <string name="display_settings_page_edit_assistant_keep_thinking_tool_cards_title">編輯助手時保留思考與工具卡片</string>
     <string name="display_settings_page_enable_assistant_markdown_title">助手訊息 Markdown 渲染</string>
@@ -877,7 +879,6 @@
     <string name="display_settings_page_enable_image_cropper_title">啟用圖片裁剪</string>
     <string name="display_settings_page_enable_math_subtitle">渲染 LaTeX 數學公式（行內與區塊）</string>
     <string name="display_settings_page_enable_math_title">啟用數學公式渲染</string>
-    <string name="display_settings_page_enable_reasoning_markdown_title">思维鏈 Markdown 渲染</string>
     <string name="display_settings_page_enable_user_markdown_title">使用者訊息 Markdown 渲染</string>
     <string name="display_settings_page_enter_to_send_title">回車鍵發送訊息</string>
     <string name="display_settings_page_font_local_file_label">本機檔案</string>

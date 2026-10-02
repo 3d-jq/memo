@@ -134,6 +134,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 
 /**
@@ -164,6 +165,12 @@ data class ToolUiPart(
     val attachedImages: List<String> = emptyList(),
     /** Dart 侧是显式字段（默认 false）；流式 payload 没有它，按 content 推断。 */
     val loading: Boolean = content.isNullOrEmpty(),
+    /**
+     * 起止时刻（本工程新增，2026-09-26 ZCode 式工具行计时的数据层）：epoch 毫秒，
+     * payload 缺键（老消息）即 null → 界面不显示时长。
+     */
+    val startedAt: Long? = null,
+    val finishedAt: Long? = null,
 ) {
     /** chat_message_widget.dart `parseToolResultImages(content).$1` —— 剥离整行图片标记后的正文。 */
     val cleanText: String by lazy { parseToolResultImages(content).first }
@@ -173,6 +180,18 @@ data class ToolUiPart(
 
     /** 实际渲染的图片：payload 附件在前，正文 markdown 图片在后。 */
     val allImagePaths: List<String> get() = attachedImages + imagePaths
+
+    /**
+     * 工具执行失败（ToolExecution 契约的失败信封 `{type:"tool_error", status:"error", …}`）。
+     * 纯文本结果解析失败按「非失败」处理 —— 老会话的大多数结果不是 JSON 信封。
+     */
+    val isError: Boolean by lazy {
+        val raw = content.orEmpty()
+        raw.isNotEmpty() && runCatching {
+            val obj = json.parseToJsonElement(raw).jsonObject
+            (obj["status"] as? JsonPrimitive)?.content == "error"
+        }.getOrDefault(false)
+    }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
@@ -192,6 +211,8 @@ data class ToolUiPart(
                 attachedImages = (obj["images"] as? JsonArray)
                     ?.mapNotNull { element -> (element as? JsonObject)?.str("uri") }
                     .orEmpty(),
+                startedAt = obj.long("startedAt"),
+                finishedAt = obj.long("finishedAt"),
             )
         }
 
@@ -211,6 +232,9 @@ data class ToolUiPart(
                 loading = false,
             )
         }
+
+        private fun JsonObject.long(key: String): Long? =
+            (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.toLongOrNull()
     }
 }
 
@@ -453,186 +477,12 @@ private fun localToolTitleFor(name: String, args: JsonObject?): String? = when (
     else -> null
 }
 
-// ---------------------------------------------------------------------------
-// Timeline tool step (chat_message_widget.dart _ChainOfThoughtToolStep)
-// ---------------------------------------------------------------------------
-
-/**
- * 时间线里的一行工具调用：轨道图标（18dp 位，加载态是 3×2/12dp 的呼吸点）、
- * 13sp 标题（加载态带呼吸高光）、行尾 ChevronRight（ask-user 换成上下箭头），
- * 正文按 ask-user → TTS → 屏幕时间 → 天气 → 纯文本摘要的优先级取一种，
- * 下面再按需追加一块：工具结果图片横滚条。
- * 点标题打开详情弹层（ask-user 改为折叠/展开）。
- */
-@Composable
-fun ChainOfThoughtToolStep(
-    part: ToolUiPart,
-    isFirst: Boolean,
-    isLast: Boolean,
-    showToolResultSummary: Boolean,
-    hideToolResultImages: Boolean = false,
-    conversationId: String? = null,
-    askUser: AskUserInteractionService? = null,
-    onSubmitAskUser: ((AskUserResult) -> Unit)? = null,
-) {
-    val cs = MaterialTheme.colorScheme
-    val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg()
-    val isAskUser = part.toolName == LocalToolNames.ASK_USER
-    val loading = part.loading
-    // _askUserExpanded 默认 true（`_askUserExpanded ?? true`）。
-    var askUserExpanded by rememberSaveable { mutableStateOf(true) }
-    var showDetail by remember { mutableStateOf(false) }
-    var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
-
-    val icon: @Composable () -> Unit = if (isAskUser || !loading) {
-        @Composable {
-            Icon(
-                imageVector = toolIconFor(part.toolName, part.arguments),
-                contentDescription = null,
-                tint = fg.strong,
-                modifier = Modifier.size(16.dp),
-            )
-        }
-    } else {
-        @Composable {
-            LoadingDotsIndicator(
-                color = fg.strong,
-                dotDp = ChatStyleSpec.TOOL_LOADING_DOTS_DOT_DP,
-                gapDp = ChatStyleSpec.TOOL_LOADING_DOTS_GAP_DP,
-                heightDp = ChatStyleSpec.TOOL_LOADING_DOTS_HEIGHT_DP,
-            )
-        }
-    }
-
-    val label: @Composable () -> Unit = {
-        Text(
-            text = toolTitleFor(part.toolName, part.arguments, isResult = !loading),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            style = TextStyle(
-                fontSize = ChatStyleSpec.TIMELINE_LABEL_SP.sp,
-                fontWeight = AppFontWeights.semibold,
-                color = fg.strong,
-            ),
-            modifier = Modifier.thinkingSheen(fg.strong, isDark, enabled = loading && !isAskUser),
-        )
-    }
-
-    // CMW:5282-5286 —— 未答 → 已答 时自动重新展开（didUpdateWidget 等价）。
-    val answered = part.content?.trim()?.isNotEmpty() == true && !loading
-    var wasAnswered by remember(part.id) { mutableStateOf(answered) }
-    LaunchedEffect(answered) {
-        if (isAskUser && !wasAnswered && answered) askUserExpanded = true
-        wasAnswered = answered
-    }
-
-    // CMW:5457-5526 —— ask-user 时正文整块换成 _AskUserInlineBody；否则按摘要
-    // 优先级链取一种，再在摘要下方挂工具结果图片横滚条（120/240 常量）。
-    val askUserBody: (@Composable () -> Unit)? = if (isAskUser) {
-        { AskUserInlineBody(part = part, onSubmit = onSubmitAskUser, askUser = askUser) }
-    } else {
-        null
-    }
-    val summaryContent: (@Composable () -> Unit)? = askUserBody ?: toolStepSummary(
-        part = part,
-        fg = fg,
-        errorColor = cs.error,
-        isAskUser = isAskUser,
-        showToolResultSummary = showToolResultSummary,
-    )
-    val imageStrip: (@Composable () -> Unit)? =
-        if (!isAskUser && !hideToolResultImages && part.allImagePaths.isNotEmpty()) {
-            {
-                ToolResultImageStrip(
-                    paths = part.allImagePaths,
-                    height = ChatStyleSpec.TOOL_IMAGE_TIMELINE_HEIGHT_DP.dp,
-                    maxWidth = ChatStyleSpec.TOOL_IMAGE_TIMELINE_MAX_WIDTH_DP.dp,
-                    // CMW:5501 / 667-672 —— 点击只开单张（ImageViewerPage(images: [path])）。
-                    onOpenViewer = { paths, index -> viewerState = listOf(paths[index]) to 0 },
-                )
-            }
-        } else {
-            null
-        }
-    // 两块正文（摘要 / 图片条）共用同一份 `content` 判据：`contentVisible` 与
-    // `expectContent` 都从这里派生，所以新增一块必须同时改这里 —— 只画不判会把折叠态算歪
-    // （TimelineStepShell 里 `hasBody = content != null || expectContent`）。
-    val content: (@Composable () -> Unit)? =
-        if (summaryContent == null && imageStrip == null) {
-            null
-        } else {
-            {
-                Column(horizontalAlignment = Alignment.Start) {
-                    if (summaryContent != null) summaryContent()
-                    if (summaryContent != null && imageStrip != null) {
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    if (imageStrip != null) imageStrip()
-                }
-            }
-        }
-
-    val indicator: @Composable () -> Unit = if (isAskUser) {
-        @Composable {
-            Icon(
-                imageVector = if (askUserExpanded) Lucide.ChevronUp else Lucide.ChevronDown,
-                contentDescription = null,
-                tint = fg.muted,
-                modifier = Modifier.size(16.dp),
-            )
-        }
-    } else {
-        @Composable {
-            Icon(
-                imageVector = Lucide.ChevronRight,
-                contentDescription = null,
-                tint = fg.muted,
-                modifier = Modifier.size(16.dp),
-            )
-        }
-    }
-
-    val onToggleAskUser: () -> Unit = { askUserExpanded = !askUserExpanded }
-    val onOpenDetail: () -> Unit = { showDetail = true }
-
-    // CMW:5528-5561 的「审批中行尾 X/Check」不再内联：待审批时由输入栏位置的审批面板
-    // 负责（用户 2026-09-14「工具权限确认这个…应该出现在输入框那个位置」）。
-    val extra: (@Composable () -> Unit)? = null
-
-    TimelineStepShell(
-        icon = icon,
-        label = label,
-        isFirst = isFirst,
-        isLast = isLast,
-        fg = fg,
-        isDark = isDark,
-        onTap = if (isAskUser) onToggleAskUser else onOpenDetail,
-        extra = extra,
-        indicator = indicator,
-        content = content,
-        contentVisible = content != null && (!isAskUser || askUserExpanded),
-        expectContent = loading || isAskUser || content != null,
-    )
-
-    if (showDetail) {
-        ToolDetailSheet(part = part, onDismiss = { showDetail = false })
-    }
-    viewerState?.let { (paths, index) ->
-        ImageViewerOverlay(
-            images = paths,
-            initialIndex = index,
-            onClose = { viewerState = null },
-        )
-    }
-}
-
 /**
  * CMW:5457-5488 的摘要优先级（ask-user 分支在 ChainOfThoughtToolStep 里先被
  * 替换成 _AskUserInlineBody，这里的 isAskUser 分支只是兜底）。
  */
 @Composable
-private fun toolStepSummary(
+internal fun toolStepSummary(
     part: ToolUiPart,
     fg: ChatSurfaceFg,
     errorColor: Color,
@@ -712,171 +562,6 @@ private fun toolStepSummary(
     return ttsSummary ?: screenTimeSummary ?: weatherSummary ?: textSummary
 }
 
-// ---------------------------------------------------------------------------
-// Boxed inline card (chat_message_widget.dart _ToolCallItem, mobile)
-// ---------------------------------------------------------------------------
-
-
-/**
- * `role == tool` 消息里的独立工具卡：18dp 状态位（loading 用 2dp 圆环，颜色
- * fg.accent）+ 13sp emphasis 标题（加载态呼吸高光）+ TTS / 天气 / 屏幕时间专属摘要，
- * 末尾按需追加图片横滚条。
- * 整卡 16dp 圆角、按压 260ms，点开详情弹层。ask-user 整卡换 [AskUserToolCard]。
- * 上游这里的审批状态位（Shield + "Waiting for approval" + Deny/Approve）随审批体系
- * 一起拆除（用户 2026-09-25「工具的权限审批全部去掉」）。
- */
-@Composable
-fun ToolCallCard(
-    part: ToolUiPart,
-    hideToolResultImages: Boolean = false,
-    conversationId: String? = null,
-    askUser: AskUserInteractionService? = null,
-    onRecoveredAnswer: ((ToolUiPart, AskUserResult) -> Unit)? = null,
-) {
-    val cs = MaterialTheme.colorScheme
-    val isDark = cs.surface.luminance() < 0.5f
-    val fg = chatSurfaceFg()
-    var showDetail by remember { mutableStateOf(false) }
-    var viewerState by remember { mutableStateOf<Pair<List<String>, Int>?>(null) }
-
-    // CMW:5686-5688 —— ask-user 整卡换 _AskUserToolCard；onSubmit 只接恢复路径
-    // （无进行中请求时），askUser 供 inline body 直接路由 service.answer。
-    if (part.toolName == LocalToolNames.ASK_USER) {
-        AskUserToolCard(
-            part = part,
-            onSubmit = onRecoveredAnswer?.let { cb -> { result -> cb(part, result) } },
-            askUser = askUser,
-        )
-        return
-    }
-
-    val loading = part.loading
-    val ttsText = if (part.toolName == LocalToolNames.TEXT_TO_SPEECH) {
-        textToSpeechToolText(part.arguments)
-    } else {
-        ""
-    }
-
-    CardPress(
-        onTap = { showDetail = true },
-        isDark = isDark,
-        modifier = Modifier.fillMaxWidth(),
-        radius = 16.dp,
-        durationMs = 260,
-    ) {
-        // _buildSharedChatSurface(defaultColor: primaryContainer α .25/.30)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    cs.primaryContainer.copy(
-                        alpha = if (isDark) {
-                            ChatStyleSpec.TIMELINE_CARD_ALPHA_DARK
-                        } else {
-                            ChatStyleSpec.TIMELINE_CARD_ALPHA_LIGHT
-                        },
-                    ),
-                    RoundedCornerShape(MemoRadius.INNER_DP.dp),
-                )
-                .padding(start = 16.dp, top = 12.dp, end = 12.dp, bottom = 12.dp),
-            horizontalAlignment = Alignment.Start,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(18.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    when {
-                        loading -> CircularProgressIndicator(
-                            color = fg.accent,
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        else -> Icon(
-                            imageVector = toolIconFor(part.toolName, part.arguments),
-                            contentDescription = null,
-                            tint = fg.strong,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                    Text(
-                        text = toolTitleFor(
-                            part.toolName,
-                            part.arguments,
-                            isResult = !loading,
-                        ),
-                        style = TextStyle(
-                            fontSize = 13.sp,
-                            fontWeight = AppFontWeights.emphasis,
-                            color = fg.strong,
-                        ),
-                        modifier = Modifier.thinkingSheen(
-                            fg.strong,
-                            isDark,
-                            enabled = loading,
-                        ),
-                    )
-                }
-            }
-            if (ttsText.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                TextToSpeechReplayRow(
-                    text = ttsText,
-                    textColor = fg.body,
-                    buttonColor = fg.accent,
-                )
-            }
-            if (!loading && part.toolName == LocalToolNames.WEATHER) {
-                val weather = WeatherToolResult.tryParse(part.content)
-                if (weather != null && !weather.isError) {
-                    Spacer(Modifier.height(8.dp))
-                    WeatherToolSummary(result = weather, textColor = fg.body)
-                }
-            }
-            if (!loading && part.toolName == LocalToolNames.SCREEN_TIME) {
-                val screenTime = ScreenTimeResult.tryParse(part.content)
-                if (screenTime != null && (screenTime.isNoPermission || screenTime.hasApps)) {
-                    Spacer(Modifier.height(8.dp))
-                    ScreenTimeToolSummary(
-                        result = screenTime,
-                        textColor = fg.body,
-                        secondaryColor = fg.muted,
-                        errorColor = cs.error,
-                    )
-                }
-            }
-            // CMW:5905-5929 —— 工具结果图片横滚条（180/320 常量），点击只开单张。
-            if (!hideToolResultImages && part.allImagePaths.isNotEmpty()) {
-                Spacer(Modifier.height(10.dp))
-                ToolResultImageStrip(
-                    paths = part.allImagePaths,
-                    height = ChatStyleSpec.TOOL_IMAGE_CARD_HEIGHT_DP.dp,
-                    maxWidth = ChatStyleSpec.TOOL_IMAGE_CARD_MAX_WIDTH_DP.dp,
-                    onOpenViewer = { paths, index -> viewerState = listOf(paths[index]) to 0 },
-                )
-            }
-        }
-    }
-
-    if (showDetail) {
-        ToolDetailSheet(part = part, onDismiss = { showDetail = false })
-    }
-    viewerState?.let { (paths, index) ->
-        ImageViewerOverlay(
-            images = paths,
-            initialIndex = index,
-            onClose = { viewerState = null },
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Detail sheet (chat_message_widget.dart _showToolDetail + tool_detail_text_section)
-// ---------------------------------------------------------------------------
-
 private const val LAZY_LINE_THRESHOLD = 120
 private const val LAZY_CHAR_THRESHOLD = 8000
 private const val CHUNK_LINES = 40
@@ -926,272 +611,9 @@ internal fun prettyToolJson(raw: String): String = try {
     raw
 }
 
-/**
- * 工具详情弹层：CustomBottomSheet 皮肤（overlaySurface + 顶部 20dp 圆角 +
- * 32×4 抓手 + 15sp 标题 / 24dp 关闭键），正文 LTRB(16,8,16,24)。
- * screen_time 有 apps 时整块换成 ScreenTimeToolDetailBody。
- */
-@OptIn(ExperimentalMaterial3Api::class, kotlinx.serialization.ExperimentalSerializationApi::class)
-@Composable
-fun ToolDetailSheet(part: ToolUiPart, onDismiss: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
-    val scope = rememberCoroutineScope()
-    val title = toolTitleFor(part.toolName, part.arguments, isResult = !part.loading)
-    val argumentsLabel = stringResource(UiR.string.chat_message_widget_arguments)
-    val resultLabel = stringResource(UiR.string.chat_message_widget_result)
-    val closeLabel = stringResource(UiR.string.mcp_page_close)
-    val cleanText = part.cleanText
-    val argsPretty = prettyJson.encodeToString(JsonElement.serializer(), part.arguments)
-    val resultText = if (cleanText.isNotEmpty()) {
-        prettyToolJson(cleanText)
-    } else {
-        stringResource(UiR.string.chat_message_widget_no_result_yet)
-    }
-    val screenTime = if (part.toolName == LocalToolNames.SCREEN_TIME) {
-        ScreenTimeResult.tryParse(cleanText)
-    } else {
-        null
-    }
-    val useScreenTimeDetail = screenTime != null && screenTime.hasApps
-    val listState = rememberLazyListState()
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = semantic.overlaySurface(cs),
-        shape = RoundedCornerShape(topStart = MemoRadius.CARD_DP.dp, topEnd = MemoRadius.CARD_DP.dp),
-        dragHandle = null,
-    ) {
-        // 拖拽调高：CustomBottomSheet 的手势在 Compose 里用 nestedScroll 等价
-        // 实现（列表在顶部继续下拉则缩层，缩到 0.60 以下关闭；上拉先扩到
-        // 0.90 再让列表滚动）。
-        val screenHpx = LocalWindowInfo.current.containerSize.height.toFloat()
-        var sheetFraction by remember { mutableFloatStateOf(SHEET_PARTIAL_FRACTION) }
-        var closing by remember { mutableStateOf(false) }
-        val sheetResize = object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                val dy = available.y
-                if (dy < 0 && listState.canScrollBackward.not() &&
-                    sheetFraction < SHEET_EXPANDED_FRACTION
-                ) {
-                    val grow = (-dy / screenHpx).coerceAtMost(SHEET_EXPANDED_FRACTION - sheetFraction)
-                    sheetFraction += grow
-                    return Offset(0f, -grow * screenHpx)
-                }
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(
-                consumed: Offset,
-                available: Offset,
-                source: NestedScrollSource,
-            ): Offset {
-                val dy = available.y
-                if (dy > 0 && sheetFraction > SHEET_PARTIAL_FRACTION) {
-                    val remaining = sheetFraction - SHEET_PARTIAL_FRACTION
-                    val shrink = (dy / screenHpx).coerceAtMost(remaining)
-                    sheetFraction -= shrink
-                    if (shrink >= remaining && !closing) {
-                        closing = true
-                        scope.launch { sheetState.hide() }
-                    }
-                    return Offset(0f, shrink * screenHpx)
-                }
-                return Offset.Zero
-            }
-        }
-        val sheetHeight = with(LocalDensity.current) { screenHpx.toDp() } * sheetFraction
-
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .height(sheetHeight)
-                .nestedScroll(sheetResize),
-        ) {
-            // _DragHandle：30dp 命中区内的 32×4 r2 色条，onSurface α0.12。
-            Box(
-                modifier = Modifier.fillMaxWidth().height(30.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(width = 32.dp, height = 4.dp)
-                        .background(
-                            cs.onSurface.copy(alpha = 0.12f),
-                            RoundedCornerShape(2.dp),
-                        ),
-                )
-            }
-            // _SheetHeader：LTRB(20,8,16,0) + 15sp emphasis 标题 + 24dp 关闭键。
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, top = 8.dp, end = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = TextStyle(
-                        color = cs.onSurface,
-                        fontSize = 15.sp,
-                        fontWeight = AppFontWeights.emphasis,
-                        lineHeight = 18.sp,
-                    ),
-                    modifier = Modifier.weight(1f),
-                )
-                IosIconButton(
-                    icon = Lucide.X,
-                    onTap = onDismiss,
-                    modifier = Modifier.size(24.dp),
-                    size = 20.dp,
-                    contentPadding = 0.dp,
-                    color = cs.onSurface.copy(alpha = 0.62f),
-                    semanticLabel = closeLabel,
-                )
-            }
-            // SelectionArea（_ToolDetailBody 外层）。
-            SelectionContainer(Modifier.fillMaxWidth().weight(1f)) {
-                if (screenTime != null && useScreenTimeDetail) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
-                    ) {
-                        ScreenTimeToolDetailBody(result = screenTime)
-                    }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(
-                            start = 16.dp,
-                            top = 8.dp,
-                            end = 16.dp,
-                            bottom = 24.dp,
-                        ),
-                    ) {
-                        toolDetailTextSection(argumentsLabel, argsPretty)
-                        item { Spacer(Modifier.height(12.dp)) }
-                        toolDetailTextSection(resultLabel, resultText)
-                    }
-                }
-            }
-        }
-    }
+/** 参数 JSON 美化（行内详情正文用，失败原样返回）。 */
+internal fun prettyArgsJson(args: JsonObject): String = try {
+    prettyJson.encodeToString(JsonElement.serializer(), args)
+} catch (e: Exception) {
+    args.toString()
 }
-
-/**
- * tool_detail_text_section.dart ToolDetailTextSection：12sp 标签（下距 6dp）
- * + surfaceFill/outlineVariant α0.2 的 10dp 圆角容器；超阈值文本按 40 行
- * 分块挂到外层 LazyColumn，容器的底色与描边按首/中/末段拆到各 item 上，
- * 拼出 Dart DecoratedSliver 的一整圈装饰（段间没有横线）。
- */
-private fun LazyListScope.toolDetailTextSection(label: String, text: String) {
-    item(key = "tool-detail-label-$label") { SectionLabel(label) }
-    if (!shouldChunkText(text)) {
-        item(key = "tool-detail-text-$label") {
-            TextBlockChunk(first = true, last = true) {
-                Text(text = text, style = TextStyle(fontSize = 12.sp))
-            }
-        }
-        return
-    }
-    val chunks = chunkText(text)
-    itemsIndexed(chunks, key = { index, _ -> "tool-detail-text-$label-$index" }) { index, chunk ->
-        TextBlockChunk(first = index == 0, last = index == chunks.lastIndex) {
-            Text(text = chunk, style = TextStyle(fontSize = 12.sp))
-        }
-    }
-}
-
-@Composable
-private fun SectionLabel(label: String) {
-    val cs = MaterialTheme.colorScheme
-    Text(
-        text = label,
-        style = TextStyle(fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.6f)),
-        modifier = Modifier.padding(bottom = 6.dp),
-    )
-}
-
-@Composable
-private fun TextBlockChunk(first: Boolean, last: Boolean, content: @Composable () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val semantic = LocalSemanticColors.current
-    val line = cs.outlineVariant.copy(alpha = 0.2f)
-    val shape: Shape = RoundedCornerShape(
-        topStart = if (first) MemoRadius.SMALL_DP.dp else 0.dp,
-        topEnd = if (first) MemoRadius.SMALL_DP.dp else 0.dp,
-        bottomStart = if (last) MemoRadius.SMALL_DP.dp else 0.dp,
-        bottomEnd = if (last) MemoRadius.SMALL_DP.dp else 0.dp,
-    )
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(semantic.surfaceFill, shape)
-            // DecoratedSliver 的描边是整组一圈，分块之间没有横线，所以每块只画
-            // 自己那几段（Modifier.border 四边齐全，画不出这个效果）。
-            .drawBehind {
-                val sw = 1.dp.toPx()
-                val half = sw / 2f
-                val w = size.width
-                val h = size.height
-                val r = 10.dp.toPx().coerceAtMost(minOf(w, h) / 2f - half).coerceAtLeast(0f)
-                val vTop = if (first) half + r else 0f
-                val vBottom = if (last) h - half - r else h
-                drawLine(line, Offset(half, vTop), Offset(half, vBottom), sw)
-                drawLine(line, Offset(w - half, vTop), Offset(w - half, vBottom), sw)
-                val corner = Size(2 * r, 2 * r)
-                val stroke = Stroke(sw)
-                if (first) {
-                    drawLine(line, Offset(half + r, half), Offset(w - half - r, half), sw)
-                    drawArc(line, 180f, 90f, false, Offset(half, half), corner, style = stroke)
-                    drawArc(
-                        line,
-                        270f,
-                        90f,
-                        false,
-                        Offset(w - half - 2 * r, half),
-                        corner,
-                        style = stroke,
-                    )
-                }
-                if (last) {
-                    drawLine(line, Offset(half + r, h - half), Offset(w - half - r, h - half), sw)
-                    drawArc(
-                        line,
-                        90f,
-                        90f,
-                        false,
-                        Offset(half, h - half - 2 * r),
-                        corner,
-                        style = stroke,
-                    )
-                    drawArc(
-                        line,
-                        0f,
-                        90f,
-                        false,
-                        Offset(w - half - 2 * r, h - half - 2 * r),
-                        corner,
-                        style = stroke,
-                    )
-                }
-            }
-            .padding(
-                start = 10.dp,
-                top = if (first) 10.dp else 0.dp,
-                end = 10.dp,
-                bottom = if (last) 10.dp else 0.dp,
-            ),
-    ) {
-        content()
-    }
-}
-
-// TTS replay row lives in TtsPlayer.kt (TextToSpeechReplayRow).

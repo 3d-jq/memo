@@ -182,6 +182,9 @@ internal fun MessageRow(
     /** 长用户消息是否已展开（本工程新增，见 [CollapsibleUserBubble]）。 */
     userBubbleExpanded: Boolean = false,
     onToggleUserBubbleExpanded: () -> Unit = {},
+    /** 已手动展开的工具行 id 集合（本工程新增，见 [AgentTraceBlock]；收在 VM 防 LazyColumn 重置）。 */
+    expandedToolRows: Set<String> = emptySet(),
+    onToggleToolRow: (String) -> Unit = {},
 ) {
     ChatRecompositionProbe.messageRows++
     val cs = MaterialTheme.colorScheme
@@ -316,13 +319,22 @@ internal fun MessageRow(
                         ),
                     com.psyche.memo.ui.chat.LocalChatBubbleStyles provides timelineSettings.bubbleStyles,
                 ) {
-                    com.psyche.memo.ui.chat.ToolCallCard(
-                        part = toolPart,
-                        hideToolResultImages = timelineSettings.hideToolResultImages,
-                        conversationId = conversationId,
-                        askUser = askUserService,
-                        onRecoveredAnswer = onRecoveredAnswer,
-                    )
+                    if (toolPart.toolName == com.psyche.memo.ui.BuiltInToolCatalog.LocalToolNames.ASK_USER) {
+                        // ask-user 消息卡：问询交互本体，不并入紧凑行。
+                        com.psyche.memo.ui.chat.AskUserToolCard(
+                            part = toolPart,
+                            onSubmit = onRecoveredAnswer?.let { cb -> { result -> cb(toolPart, result) } },
+                            askUser = askUserService,
+                        )
+                    } else {
+                        com.psyche.memo.ui.chat.ToolTraceRow(
+                            part = toolPart,
+                            expanded = toolPart.id in expandedToolRows,
+                            onToggleExpanded = { onToggleToolRow(toolPart.id) },
+                            showToolResultSummary = timelineSettings.showToolResultSummary,
+                            hideToolResultImages = timelineSettings.hideToolResultImages,
+                        )
+                    }
                 }
             }
         }
@@ -700,13 +712,15 @@ internal fun MessageRow(
                                 }
                             }
                             is com.psyche.memo.ui.chat.AssistantBlock.Thinking ->
-                                com.psyche.memo.ui.chat.ChainOfThoughtCard(
+                                com.psyche.memo.ui.chat.AgentTraceBlock(
                                     steps = block.steps,
                                     settings = timelineSettings,
                                     conversationId = conversationId,
                                     askUser = askUserService,
                                     onRecoveredAnswer = onRecoveredAnswer,
                                     onToggleReasoning = onToggleReasoning,
+                                    expandedToolRows = expandedToolRows,
+                                    onToggleToolRow = onToggleToolRow,
                                 )
                         }
                         }

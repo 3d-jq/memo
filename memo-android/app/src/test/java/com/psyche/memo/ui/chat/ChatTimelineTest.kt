@@ -344,10 +344,8 @@ class ChatTimelineTest {
         val s = ChatTimelineSettings.fromPrefs { null }
         assertEquals(true, s.showThinkingCards)
         assertEquals(true, s.showToolCards)
-        assertEquals(false, s.collapseThinkingSteps)
         assertEquals(false, s.showToolResultSummary)
         assertEquals(false, s.hideToolResultImages)
-        assertEquals(true, s.enableReasoningMarkdown)
     }
 
     @Test
@@ -358,15 +356,12 @@ class ChatTimelineTest {
             "display_collapse_thinking_steps_v1" to "1",
             "display_show_tool_result_summary_v1" to "1",
             "display_hide_tool_result_images_v1" to "1",
-            "display_enable_reasoning_markdown_v1" to "0",
         )
         val s = ChatTimelineSettings.fromPrefs { store[it] }
         assertEquals(false, s.showThinkingCards)
         assertEquals(true, s.showToolCards)
-        assertEquals(true, s.collapseThinkingSteps)
         assertEquals(true, s.showToolResultSummary)
         assertEquals(true, s.hideToolResultImages)
-        assertEquals(false, s.enableReasoningMarkdown)
     }
 
     @Test

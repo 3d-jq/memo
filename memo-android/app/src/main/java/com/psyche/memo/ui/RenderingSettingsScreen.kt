@@ -96,7 +96,6 @@ fun RenderingSettingsScreen(
     var dollarLatex by remember { mutableStateOf(readBool("display_enable_dollar_latex_v1", true)) }
     var mathRendering by remember { mutableStateOf(readBool("display_enable_math_rendering_v1", true)) }
     var userMarkdown by remember { mutableStateOf(readBool("display_enable_user_markdown_v1", true)) }
-    var reasoningMarkdown by remember { mutableStateOf(readBool("display_enable_reasoning_markdown_v1", true)) }
     var assistantMarkdown by remember { mutableStateOf(readBool("display_enable_assistant_markdown_v1", true)) }
     // settings_provider.dart:5296/5285 — autoCollapse / mobileWrap default false.
     var autoCollapse by remember { mutableStateOf(readBool("display_auto_collapse_code_block_v1", false)) }
@@ -173,13 +172,6 @@ fun RenderingSettingsScreen(
                         stringResource(UiR.string.display_settings_page_enable_user_markdown_title),
                         value = userMarkdown,
                         onToggle = { userMarkdown = it; writeBool("display_enable_user_markdown_v1", it) },
-                    )
-                    SettingsIosDivider()
-                    SettingsSwitchRow(
-                        Lucide.Brain,
-                        stringResource(UiR.string.display_settings_page_enable_reasoning_markdown_title),
-                        value = reasoningMarkdown,
-                        onToggle = { reasoningMarkdown = it; writeBool("display_enable_reasoning_markdown_v1", it) },
                     )
                     SettingsIosDivider()
                     SettingsSwitchRow(
