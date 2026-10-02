@@ -208,9 +208,12 @@ fun AgentTraceBlock(
             onToggle = if (running && !messageFailed) null else ({ onTogglePhase(phaseKey) }),
         )
         if (expanded) {
-            Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            // ZCode 三层间距：hairline → pt-5(20px) 进折叠区 → 行间 gap-4(16px) →
+            // 区外下一 item mt-5(20px，MessageRow 的 blockGap)。行自带 4dp 上下，
+            // 所以这里 16/8 折算后视觉与 ZCode 一致。
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                 filteredSteps.forEachIndexed { index, step ->
-                    if (index > 0) Spacer(Modifier.height(4.dp))
+                    if (index > 0) Spacer(Modifier.height(8.dp))
                     when (step) {
                         is TimelineStep.Reasoning -> ReasoningTraceRow(
                             step = step,
