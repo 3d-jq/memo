@@ -123,7 +123,9 @@ cd memo-android && ./gradlew <task>
 
 - **会话对象归容器**：`ChatViewModel` 不继承 androidx ViewModel，由
   `AppContainerImpl.chatSession(conversationId)` 持有（上限 12、挤最旧、`destroy()`）；
-  作用域自有 `sessionScope`。页面销毁不断流。「进程被杀续跑」写 `generation_run_rows`。
+  作用域自有 `sessionScope`。页面销毁不断流。（`generation_run_rows` 只有 DDL 没有
+  DAO，**「进程被杀续跑」目前没有实现**——2026-10-02 审查确认，别在文档里声称它存在。）
+
 - **中断随生成终止释放**：问询 pending 表按 `(conversationId, toolCallId)` 分键；**每条终止
   路径**（生成 finally / `stop()` / `releaseForReuse()` / `destroy()` / 前台服务超时）都走
   `releaseInterruptions()`；守卫 `AskUserInteractionServiceTest` / `ChatInterruptionTest`。

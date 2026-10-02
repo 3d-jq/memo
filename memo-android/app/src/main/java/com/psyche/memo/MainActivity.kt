@@ -875,10 +875,13 @@ private fun AppThemeAndContent(
 
                 // 全局悬浮语音播放器（app_overlays.dart 的 TtsFloatingPlayer）：
                 // 挂在根 Box 上，浮在任何页面之上；播放结束仍停留，便于重播。
+                //
+                // P1：原来这里挂着 `onDispose { TtsPlayer.shutdown() }` —— TtsPlayer 是
+                // 进程级单例、init 有「已初始化就 return」守卫且唯一调用点在
+                // `Application.onCreate`。于是**转屏一次** Activity 重建 → 引擎被关 →
+                // 守卫仍认为已初始化 → 每条消息的朗读、悬浮胶囊、「听测试」全部静默，
+                // 只能杀进程恢复。TtsPlayer 的生命周期跟着进程，不跟着 Activity。
                 com.psyche.memo.ui.chat.TtsFloatingPlayer()
-                androidx.compose.runtime.DisposableEffect(Unit) {
-                    onDispose { com.psyche.memo.ui.chat.TtsPlayer.shutdown() }
-                }
             }
         }
         }

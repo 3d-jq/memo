@@ -91,4 +91,10 @@ data class BrowserTabInfo(
     val title: String,
     val url: String,
     val active: Boolean,
+    /**
+     * 标签清单代次（P1）：每次清单变化（开/关/切）递增。模型回传的 `index` 必须和
+     * 「拿到这个 index 的那次 list」同代 —— 关一枚非活动标签会让后面的 index 集体左移，
+     * 不设闸就会静默关错标签（用户正在看的那枚）。
+     */
+    val tabsGeneration: Int = 0,
 )

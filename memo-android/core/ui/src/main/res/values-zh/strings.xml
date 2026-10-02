@@ -2963,6 +2963,8 @@
     <string name="browser_enable_title">启用内置浏览器</string>
     <string name="browser_enable_desc">开启后所有助手都能用内置浏览器工具打开、读取并操作网页；网页正文只是数据，不会被当成指令。</string>
     <string name="browser_data_title">浏览器数据</string>
+    <string name="browser_clear_confirm_message">将关闭所有浏览器标签，并清除 Cookie 与网站存储数据。这会导致你在 App 内浏览器登录过的所有网站退出登录。</string>
+    <string name="browser_clear_confirm_title">清空浏览器数据</string>
     <string name="browser_clear">清空浏览器数据</string>
     <string name="browser_view_page">查看页面</string>
     <string name="browser_open_browser">打开浏览器</string>

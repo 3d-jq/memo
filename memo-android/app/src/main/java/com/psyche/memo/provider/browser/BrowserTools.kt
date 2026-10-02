@@ -236,6 +236,13 @@ object BrowserTools {
      * 把元素号传进来，然后关掉一个它以为已经点过的标签。两句必须分开写。
      */
     private val TAB_INDEX_PROP = prop("integer", "A tab number from `$TABS`(list).")
+
+    /** 标签清单代次：`$TABS`(list) 一并返回；带上它就拒绝跨清单变化的 index（P1）。 */
+    private val TABS_GENERATION_PROP = prop(
+        "integer",
+        "The `tabs_generation` from the `$TABS`(list) you took this index from. A stale " +
+            "generation is refused, never re-targeted.",
+    )
     private val TAB_ACTION_PROP = prop("string", "Tab action.", listOf("list", "select", "close"))
 
     /** parameters 对象：`required` 为空就不写这个键（与 v1 的单工具形状同源，只是键成了每颗一份）。 */
@@ -276,7 +283,11 @@ object BrowserTools {
 
             PAGE_INFO -> emptyMap<String, JsonObject>() to emptyList()
             RELOAD -> emptyMap<String, JsonObject>() to emptyList()
-            TABS -> mapOf("action" to TAB_ACTION_PROP, "index" to TAB_INDEX_PROP) to listOf("action")
+            TABS -> mapOf(
+                "action" to TAB_ACTION_PROP,
+                "index" to TAB_INDEX_PROP,
+                "tabs_generation" to TABS_GENERATION_PROP,
+            ) to listOf("action")
             // 走到这里 = ORDERED 里加了名字却忘了写 schema。宁可回空对象让
             // everyNameHasASchemaAndADescription 当场红，也不要静默递出一份缺定义的请求。
             else -> emptyMap<String, JsonObject>() to emptyList()
@@ -738,6 +749,18 @@ object BrowserTools {
                                 "worked: call `$FIND` or `$READ` to see what is actually on the " +
                                 "page, try another element, or hand it to the user to tap."
                         }
+                    } else {
+                        // P2：签名取不到（脚本超时 / 页面正在导航）时，旧行为是**两个键**
+                        // 都不写 —— 线格式表达不了「不知道」，于是正好退化成这套机制要防的
+                        // 那个失败模式：一条干净的 status:"ok" 而没有 page_changed。显式写
+                        // "unknown" 并附 note，让「不知道」至少被捕到。
+                        fields["page_changed"] = "unknown"
+                        fields["note"] =
+                            "Could not tell whether the page changed: the page signature was " +
+                                "not available (the page may have been navigating, or the " +
+                                "signature script timed out). Do NOT claim this click worked; " +
+                                "re-observe with `$READ` or `$FIND` before telling the user " +
+                                "anything."
                     }
                 }
                 ok(gateway, toolName, fields)
@@ -766,6 +789,8 @@ object BrowserTools {
         fun tabFields(): Map<String, Any> = mapOf(
             "tabs" to rendered(),
             "active" to (gateway.tabInfos().firstOrNull { it.active }?.index ?: -1),
+            // 清单代次：select/close 必须原样回传（P1）。
+            "tabs_generation" to (gateway.tabInfos().firstOrNull()?.tabsGeneration ?: 0),
         )
 
         return when (args.text("action")) {
@@ -794,6 +819,23 @@ object BrowserTools {
                         fix = "Call `$TABS` with action=\"list\" first, then pass one of those " +
                             "indexes. Nothing was changed.",
                     )
+                // P1：代次闸。标签 index 是**位置性的**：关一枚非活动标签会让后面所有
+                // index 集体左移（closeTabLocked 只修 activeIndex，不换代次）。不设闸的
+                // 后果是「模型拿旧列表关 1 号，实际关掉用户正在看的那枚」。回传的
+                // tabs_generation 必须等于当前清单代次，不一致就不执行。
+                val currentGeneration = gateway.tabInfos().firstOrNull()?.tabsGeneration ?: 0
+                val declared = args.int("tabs_generation")
+                if (declared != null && declared != currentGeneration) {
+                    return@tabsTool error(
+                        toolName = TABS,
+                        code = "TABS_GENERATION_STALE",
+                        detail = "The tab list changed since `$TABS`(list): you targeted " +
+                            "index $index from generation $declared, the list is now " +
+                            "generation $currentGeneration.",
+                        instruction = "Tab numbers are positional and shift when a tab closes. " +
+                            "Nothing was changed. Call `$TABS`(list) again and re-target.",
+                    )
+                }
                 val outcome = if (args.text("action") == "select") {
                     gateway.selectTab(index)
                 } else {
@@ -912,6 +954,16 @@ object BrowserTools {
         var polls = 0
         while (true) {
             polls++
+            // P2：轮询期间用户可能开遮罩接管。接管后还继续对**用户正在看的那枚标签**
+            // 跑 `find`，query 分支甚至会「对用户页面匹配成功」——那是把用户的页面当成
+            // 助手的等待目标。每轮开头重查一次，被接管就立刻停。
+            if (gateway.userControls) return error(
+                WAIT,
+                code = "USER_CONTROLS_PAGE",
+                detail = "The user took over the browser while you were waiting.",
+                instruction = "Stop acting on this page. Wait for the user to hand it back, or " +
+                    "answer from what you already read.",
+            )
             val (ran, payload) = gateway.run(BrowserScripts.findScript(), SCRIPT_TIMEOUT_MS)
             if (!ran) return jsError(WAIT, payload)
             val snapshot = BrowserScripts.parseElements(payload, gateway.generation)

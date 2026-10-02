@@ -27,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.map
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -225,8 +226,15 @@ internal fun MessageRow(
     // TTS 播放状态 → Speak/Stop/Resume 图标。原版用全局 isActive，导致读一条消息
     // 时**所有**消息都显示停止；这里按 ownerId 只让被朗读的那条消息响应，并在暂停
     // 时显示继续（用户实测反馈）。
-    val ttsState by com.psyche.memo.ui.chat.TtsPlayer.state.collectAsState()
-    val ttsAction = com.psyche.memo.ui.chat.messageTtsAction(ttsState, msg.id)
+    //
+    // P1：**投影后再订阅**。`TtsPlaybackState` 带 `positionMs`，而 onRangeStart 是
+    // 每个语音 range 一次（网络引擎还有 200ms ticker）——直接 collectAsState 会让
+    // 视口内**每一行**都随播放进度重组。投影成只跟本行相关的三元图标后，别人的
+    // positionMs 变化到不了这行的重启作用域（父级跳过挡不住 collectAsState 的读）。
+    val ttsAction by androidx.compose.runtime.remember(msg.id) {
+        com.psyche.memo.ui.chat.TtsPlayer.state
+            .map { s -> com.psyche.memo.ui.chat.messageTtsAction(s, msg.id) }
+    }.collectAsState(initial = com.psyche.memo.ui.chat.MessageTtsAction.SPEAK)
     // search_web / builtin_search 工具结果提取为引用来源
     // （chat_message_widget.dart _allSearchItems，从后往前、去重）。
     val searchItems = remember(msg.id, msg.parts) {

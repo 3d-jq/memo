@@ -1555,7 +1555,12 @@ class ChatViewModel(
         generationJob?.cancel()
         _streaming.value = true
         beginBackgroundGeneration()
+        val generationId = backgroundGenerationId
         val generationStartMs = System.currentTimeMillis()
+        // P1：终止路径（用户停止 / 失败）落库时必须带分组与版本，否则 regenerate 的
+        // 失败气泡落进默认组，同一轮出现两个气泡、versionSelections 指向不存在的版本。
+        val persistGroupId = assistantGroupId
+        val persistVersion = assistantVersion
         generationJob = sessionScope.launch {
             // Publish streaming state so the drawer can show its loading dot.
             container.streamingConversationIds.value =
@@ -1932,6 +1937,7 @@ class ChatViewModel(
                     tools = tools,
                     allParts = allParts,
                     allSegments = allSegments,
+                    generationId = generationId,
                     startedAtMs = generationStartMs,
                     updateStreaming = { parts, segments ->
                         updateAssistantStreaming(assistantId, parts, segments)
@@ -1966,12 +1972,14 @@ class ChatViewModel(
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // user stop: the partial reply is kept and persisted, exactly
-                // like the original stop path.
+                // like the original stop path. **带分组与版本**（P1）。
                 persistAssistant(
                     assistantId,
                     allParts,
                     segments = allSegments,
                     segmentsJson = encodeSegments(allSegments),
+                    groupId = persistGroupId,
+                    version = persistVersion,
                 )
             } catch (e: Exception) {
                 val segmentsJson = encodeSegments(allSegments)
@@ -1988,22 +1996,31 @@ class ChatViewModel(
                     allParts,
                     segmentsJson,
                 )
+                // 同上：失败也要落回原分组（P1）。
                 persistAssistant(
                     assistantId,
                     finalParts,
                     segments = allSegments,
                     segmentsJson = segmentsJson,
+                    groupId = persistGroupId,
+                    version = persistVersion,
                 )
             } finally {
                 // 终止路径（正常结束 / 用户停止 / 真失败）都要把倒计时清掉，
                 // 否则「N 秒后重试」会停在一个已经结束的消息上。
                 updateAssistantRetry(assistantId, null)
-                _streaming.value = false
-                // 协程要结束了：没人等的问询必须还回去，否则这条会话被面板锁死。
-                releaseInterruptions()
-                container.streamingConversationIds.value =
-                    container.streamingConversationIds.value - conversationId
-                endBackgroundGeneration()
+                // P1：**归属检查**。被取消的前驱协程的 finally 会晚于新协程的
+                // beginBackgroundGeneration 落地（媒体工具阻塞在 IO 上时窗口是分钟级），
+                // 无检查地读字段会释放**新**协程的前台服务、删掉新协程的超时回调、
+                // 关掉新协程的 ask_user 面板。只有字段还指着自己这轮时才动。
+                if (backgroundGenerationId == generationId) {
+                    _streaming.value = false
+                    // 协程要结束了：没人等的问询必须还回去，否则这条会话被面板锁死。
+                    releaseInterruptions()
+                    container.streamingConversationIds.value =
+                        container.streamingConversationIds.value - conversationId
+                    endBackgroundGeneration()
+                }
                 // home_view_model L1755+ —— 回复完成后生成建议气泡。
                 maybeGenerateSuggestions()
                 // 默认模型「标题总结」槽位通电：首条回复完成后自动生成标题
@@ -2194,6 +2211,11 @@ class ChatViewModel(
         tools: List<LlmToolSpec>,
         allParts: MutableList<MessagePart>,
         allSegments: MutableList<ReasoningSegment>,
+        /**
+         * 本轮的后台生成 id（[startGeneration] 覆盖前驱**之后**取得的）。finally 的
+         * 归属检查用它：被取消的前驱晚结束时不许拆新协程的账（P1）。
+         */
+        generationId: String?,
         /** 本轮生成的起始时刻 —— 收尾写 UI 的 durationMs 与落库同口径。 */
         startedAtMs: Long,
         updateStreaming: (List<MessagePart>, String?) -> Unit,
@@ -2606,6 +2628,8 @@ class ChatViewModel(
                     tools = offeredTools(),
                     allParts = allParts,
                     allSegments = allSegments,
+                    // 续答不新开后台生成，沿用当前这一轮的 id。
+                    generationId = backgroundGenerationId,
                     startedAtMs = continueStartMs,
                     updateStreaming = { parts, segments ->
                         updateAssistantStreaming(messageId, parts, segments)

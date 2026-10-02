@@ -67,6 +67,7 @@ fun BrowserFeatureSettingsScreen(
             title = stringResource(UiR.string.browser_feature_title),
             onBack = onBack,
         )
+        var showClearConfirm by remember { mutableStateOf(false) }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -96,13 +97,30 @@ fun BrowserFeatureSettingsScreen(
             }
             item(key = "card_data") {
                 SettingsSectionCard {
+                    // P0：这是「清凭据」的**第三个入口**（另两个 = 遮罩的「清空并关闭」与关功能
+                    // 开关），而 `closeAll()` 默认就清 cookies + WebStorage —— 无确认地一键
+                    // 登出所有网站违反了自家「唯一清点」的不变量。补确认框并把后果讲明。
                     SettingsRow(
                         icon = Lucide.Trash2,
                         label = stringResource(UiR.string.browser_clear),
-                        onTap = { container.appScope.launch { container.browserSessions.closeAll() } },
+                        onTap = { showClearConfirm = true },
                     )
                 }
             }
+        }
+        if (showClearConfirm) {
+            MemoAlertDialog(
+                onDismiss = { showClearConfirm = false },
+                title = stringResource(UiR.string.browser_clear_confirm_title),
+                text = stringResource(UiR.string.browser_clear_confirm_message),
+                confirmLabel = stringResource(UiR.string.browser_clear),
+                destructive = true,
+                onConfirm = {
+                    showClearConfirm = false
+                    container.appScope.launch { container.browserSessions.closeAll() }
+                },
+                dismissLabel = stringResource(UiR.string.mcp_page_close),
+            )
         }
     }
 }

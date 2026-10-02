@@ -483,6 +483,13 @@ fun ChatContent(
             httpClient = container.httpClient,
         )
     }
+    // P0：离开组合（返回/开抽屉/切会话/页面销毁）必须释放麦克风。裸 remember 时
+    // destroy() 只能被 cancel()/finish() 触发，而那两个都绑在 ChatInputBar 的点击上 ——
+    // 用户按返回后 SpeechRecognizer/AsrRecorder 继续持有 RECORD_AUDIO、云端 ASR 的
+    // cloudWorker 还继续 POST，而录音 UI 已消失，用户手里没有任何东西能停。
+    androidx.compose.runtime.DisposableEffect(voiceInput) {
+        onDispose { voiceInput.cancel() }
+    }
     // 云端 ASR 需要运行时 RECORD_AUDIO 授权（原版由 permission_handler 申请）。
     val voiceFocusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val micPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(

@@ -162,8 +162,13 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
 
     override fun tabInfos(): List<BrowserTabInfo> = renderTabs()
 
+    /** 标签清单代次（P1）：开/关/切任一变化都 +1，见 [BrowserTabInfo.tabsGeneration]。 */
+    private var tabsGeneration: Int = 0
+
     private fun renderTabs(): List<BrowserTabInfo> =
-        tabs.mapIndexed { i, tab -> BrowserTabInfo(i, tab.title, tab.url, i == activeIndex) }
+        tabs.mapIndexed { i, tab ->
+            BrowserTabInfo(i, tab.title, tab.url, i == activeIndex, tabsGeneration)
+        }
 
     /** 标签的 url/标题落地、标签增删切之后都要让界面看见新清单（主线程调用）。 */
     internal fun tabsChanged() {
@@ -197,6 +202,7 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         requireMain()
         check(index in tabs.indices) { "活动标签编号越界" }
         activeIndex = index
+        tabsGeneration++
         tabs[index].bumpGenerationAndDropSnapshot()
         val container = hostContainer
         if (container != null) {
@@ -204,6 +210,22 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
             tabs[index].attachTo(container)
         }
         tabsChanged()
+    }
+
+    /**
+     * 渲染进程消失（P0）：把死标签摘掉、补一枚空标签维持「恰有一个活动标签」不变量，
+     * 换代次作废全部在途 index，并向工具侧可见地记一条 `RENDERER_GONE` ——
+     * 否则模型看到的是每颗动作都超时，无法区分「死标签」和「慢页面」。
+     */
+    internal fun reportRendererGone(tab: BrowserTab) {
+        requireMain()
+        if (closed) return
+        val index = tabs.indexOf(tab)
+        if (index < 0 || tabs.getOrNull(index) !== tab) return
+        appendNotice("RENDERER_GONE:${tab.url.take(120)}")
+        if (closeTabLocked(index)) {
+            bumpGenerationAndDropSnapshot()
+        }
     }
 
     /**
@@ -217,6 +239,8 @@ class BrowserSession private constructor(private val appContext: Context) : Brow
         requireMain()
         if (closed || index !in tabs.indices) return false
         val activeBefore = tabs[activeIndex]
+        // P1：关掉一枚就足以让后面所有 index 左移——先涨价再删。
+        tabsGeneration++
         val dying = tabs.removeAt(index)
         dying.destroy()
         if (tabs.isEmpty()) tabs.add(BrowserTab(this, appContext))

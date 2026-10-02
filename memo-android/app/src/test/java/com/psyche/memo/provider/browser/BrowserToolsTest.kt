@@ -351,9 +351,10 @@ class BrowserToolsTest {
         val tokens = TokenEstimator.estimate(rendered)
         assertTrue(
             "浏览器族的 schema = $tokens tokens（${rendered.length} 字符）。spec §12 的估算区间是 " +
-                "1000–1400、天花板给在上沿 1400（首版重复边界话时是 2411）：超了说明描述又在膨胀，" +
-                "要么删话、要么把这句话记进 PORTING 让知情的人签字。",
-            tokens <= 1_400,
+                "1000–1400、原天花板给在上沿 1400（首版重复边界话时是 2411）：超了说明描述又在膨胀，" +
+                "要么删话、要么把这句话记进迁移说明让知情的人签字。2026-10-02 因 browser_tabs 加代次" +
+                "闸字段 tabs_generation 上调到 1500（话没膨胀，只多一个字段）。",
+            tokens <= 1_500,
         )
     }
 
@@ -965,9 +966,15 @@ class BrowserToolsTest {
         assertNull("页面变了就不该再教育一句", result["note"])
     }
 
-    /** 取不到指纹（脚本超时 / 结构不对）⇒ **不写这个键**：宁可少一张收据，也不许把"不知道"说成"没变"。 */
+    /**
+     * 取不到指纹（脚本超时 / 结构不对）⇒ `page_changed = "unknown"` + note。
+     *
+     * P2：旧契约是「不写这个键」——但线格式里**缺失会被读成「没有变化＝没动」**，
+     * 正好是这套机制要防的过度声称，且偏偏发生在最该起作用的页面（忙/导航中）。
+     * 显式 unknown 才能让「不知道」被捕到。
+     */
     @Test
-    fun unavailablePageSignatureOmitsTheJudgementInsteadOfLying() = runBlocking {
+    fun unavailablePageSignatureReportsUnknownInsteadOfOmitting() = runBlocking {
         val gateway = FakeGateway(
             elements = elementSnapshot(),
             // find 的形状当返回值：里面没有 `sig` 这个键，等于"取不到指纹"。
@@ -978,7 +985,12 @@ class BrowserToolsTest {
                 BrowserTools.CLICK, gateway, argsOf("\"index\":1", "\"generation\":4"),
             ) {},
         )
-        assertNull("判不了就别判", result["page_changed"])
+        assertEquals(
+            "取不到证据必须显式 unknown",
+            "unknown",
+            result["page_changed"]!!.jsonPrimitive.content,
+        )
+        assertTrue(result.toString().contains("note"))
         assertEquals("取证失败不许把动作本身报成失败", "ok", result["status"]!!.jsonPrimitive.content)
     }
 

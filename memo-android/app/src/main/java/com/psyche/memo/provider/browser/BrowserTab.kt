@@ -66,6 +66,9 @@ internal class BrowserTab(
 
     /** 会话发号器给的当前代次；页面落地/动作生效时由 [bumpGenerationAndDropSnapshot] 换新号。 */
     var generation: Int = owner.nextEpoch()
+
+    /** 渲染进程已消失（P0：onRenderProcessGone）。此标签不再可用，会话负责摘除。 */
+    var rendererGone: Boolean = false
         private set
 
     var snapshot: BrowserPageSnapshot? = null
@@ -122,6 +125,18 @@ internal class BrowserTab(
         view.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(webView: WebView, request: WebResourceRequest): Boolean =
                 !isAllowedUrl(request.url.toString())
+
+            // P0：渲染进程 OOM / 崩溃。平台默认行为是「应用不重写就杀应用进程」——
+            // 5 枚真 WebView 的设计把这个风险从理论变成了常规路径。返回 true 保活，
+            // 把死标签摘掉并让会话知道（后续动作改道到新标签，模型也能从响应里看见）。
+            override fun onRenderProcessGone(
+                webView: WebView,
+                detail: android.webkit.RenderProcessGoneDetail,
+            ): Boolean {
+                rendererGone = true
+                owner.reportRendererGone(this@BrowserTab)
+                return true
+            }
 
             override fun onPageFinished(webView: WebView, finishedUrl: String?) {
                 loading = false
@@ -316,11 +331,27 @@ internal class BrowserTab(
         }
     }
 
+    /**
+     * P2：**等真实落地**。旧实现点完就直接换代次并回成功，而 url/title 只在
+     * `onPageFinished` 刷新 —— 250ms 之后信封里带的是**上一页**的 url，模型以为在
+     * N 页、下一步 read 读到 N−1。这里 arm `navigation` deferred（`reload`/`navigate`
+     * 同一条路子），真的等 `onPageFinished` 响完再换代次、报成功。
+     */
     suspend fun goBack(): Boolean = withContext(Dispatchers.Main) {
         if (dead || !view.canGoBack()) return@withContext false
+        val done = CompletableDeferred<String>()
+        navigation = done
         view.goBack()
+        val verdict = try {
+            withTimeoutOrNull(BrowserSession.NAV_TIMEOUT_MS) { done.await() }
+        } catch (e: CancellationException) {
+            stopLoadingUnlessDead()
+            throw e
+        } finally {
+            if (navigation === done) navigation = null
+        }
         bumpGenerationAndDropSnapshot()
-        true
+        verdict == "ok"
     }
 
     /**
@@ -328,11 +359,22 @@ internal class BrowserTab(
      * 差别只有方向。同样**不等加载完成** —— 前进过去之后 `onPageFinished` 自己会再 bump 一次，
      * 工具侧再叠一层就是每跳两颗（spec §3 的代次契约）。
      */
+    /** 与 [goBack] 同形状（P2：同样等 `onPageFinished` 落地才报成功）。 */
     suspend fun goForward(): Boolean = withContext(Dispatchers.Main) {
         if (dead || !view.canGoForward()) return@withContext false
+        val done = CompletableDeferred<String>()
+        navigation = done
         view.goForward()
+        val verdict = try {
+            withTimeoutOrNull(BrowserSession.NAV_TIMEOUT_MS) { done.await() }
+        } catch (e: CancellationException) {
+            stopLoadingUnlessDead()
+            throw e
+        } finally {
+            if (navigation === done) navigation = null
+        }
         bumpGenerationAndDropSnapshot()
-        true
+        verdict == "ok"
     }
 
     suspend fun reload(): Result<Unit> = withContext(Dispatchers.Main) {

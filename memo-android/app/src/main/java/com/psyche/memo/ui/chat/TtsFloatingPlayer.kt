@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -161,19 +162,32 @@ fun TtsFloatingPlayer(
     // 保存音频：先整段重合成，再让用户选落点（SAF CreateDocument），与
     // `tts_floating_player.dart:373-421` 的 `_save()` 一致。
     val saveContext = LocalContext.current
-    var pendingAudio by remember { mutableStateOf<com.psyche.memo.provider.NetworkTtsResult?>(null) }
+    // P1：合成结果走**进程级 pending 状态**，不回调里直接 launch。转屏时
+    // Activity 重建会注销 launcher —— 旧的裸 `Handler(mainLooper).post` 回调正好
+    // 撞上已注销的 launcher，主线程 IllegalStateException。现在回调只把结果放进
+    // `TtsPlayer.pendingSaveRequest`，下面 LaunchedEffect 看到 pending 才拉起 SAF，
+    // 新组合重建后同一笔 pending 仍可见，重新拉即可。
+    val pendingAudio by TtsPlayer.pendingSaveRequest.collectAsState()
     var saving by remember { mutableStateOf(false) }
     val saveLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument("audio/mpeg"),
     ) { uri ->
         val audio = pendingAudio
-        pendingAudio = null
+        TtsPlayer.clearPendingSaveRequest()
         if (uri != null && audio != null) {
             runCatching {
                 saveContext.contentResolver.openOutputStream(uri)?.use { it.write(audio.bytes) }
             }
         }
         saving = false
+    }
+    LaunchedEffect(pendingAudio) {
+        if (pendingAudio != null) {
+            saving = true
+            saveLauncher.launch(
+                "memo_tts_${System.currentTimeMillis()}.${pendingAudio?.extension ?: "mp3"}",
+            )
+        }
     }
     val onSave: () -> Unit = {
         if (!saving) {
@@ -182,10 +196,7 @@ fun TtsFloatingPlayer(
                 if (audio == null) {
                     saving = false
                 } else {
-                    pendingAudio = audio
-                    saveLauncher.launch(
-                        "memo_tts_${System.currentTimeMillis()}.${audio.extension}",
-                    )
+                    TtsPlayer.requestSaveAudio(audio)
                 }
             }
         }

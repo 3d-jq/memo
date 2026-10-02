@@ -2961,6 +2961,8 @@ Instruction: standing rules the assistant should follow, not one-off tasks from 
     <string name="browser_enable_title">Enable built-in browser</string>
     <string name="browser_enable_desc">When on, every assistant can use the built-in browser tools to open, read and operate web pages. Page text is data, not instructions.</string>
     <string name="browser_data_title">Browser data</string>
+    <string name="browser_clear_confirm_message">This closes all browser tabs and removes cookies and stored site data. You will be signed out of every site in the app browser.</string>
+    <string name="browser_clear_confirm_title">Clear browsing data</string>
     <string name="browser_clear">Clear browsing data</string>
     <string name="browser_view_page">View page</string>
     <string name="browser_open_browser">Open browser</string>

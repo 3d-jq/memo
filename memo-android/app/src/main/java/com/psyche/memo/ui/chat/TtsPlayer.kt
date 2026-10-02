@@ -122,6 +122,30 @@ object TtsPlayer {
      * 悬浮播放器的「保存音频」用它拿字节，而不是把当前这一块的缓存拼起来。
      * 未使用网络语音 / 合成失败 → null。
      */
+    private val _pendingSaveRequest = kotlinx.coroutines.flow.MutableStateFlow<
+        com.psyche.memo.provider.NetworkTtsResult?
+        >(null)
+
+    /**
+     * 待保存的合成结果（P1）。`TtsFloatingPlayer` 合成完成后从这里取，而不是在
+     * `Thread` 的回调里直接 `launcher.launch()` —— 后者在 Activity 重建后是对着
+     * 已注销的 launcher 调（主线程 IllegalStateException）。状态存进程级单例上，
+     * 新组合重建后能看到同一笔 pending 并重新拉起 SAF。
+     */
+    val pendingSaveRequest: kotlinx.coroutines.flow.StateFlow<
+        com.psyche.memo.provider.NetworkTtsResult?,
+        > = _pendingSaveRequest
+
+    /** 清除 pending（SAF 回调落地后 / 用户取消）。 */
+    fun clearPendingSaveRequest() {
+        _pendingSaveRequest.value = null
+    }
+
+    /** 合成完成：把结果挂上 pending，等 `TtsFloatingPlayer` 拉起 SAF。 */
+    fun requestSaveAudio(result: com.psyche.memo.provider.NetworkTtsResult) {
+        _pendingSaveRequest.value = result
+    }
+
     fun collectNetworkAudio(text: String, onResult: (com.psyche.memo.provider.NetworkTtsResult?) -> Unit) {
         val engine = switchableRef
         if (engine == null) {
