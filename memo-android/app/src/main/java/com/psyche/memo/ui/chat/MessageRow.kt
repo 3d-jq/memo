@@ -622,16 +622,23 @@ internal fun MessageRow(
                         }
                         Box(modifier = blockAppearance) {
                         // 流 item 间距照 ZCode：工作段（思考+工具）与相邻块之间 mt-5（20dp），
-                        // 其余（正文↔媒体等）维持上游 8dp。
-                        val blockGap = if (index > 0 &&
-                            (block is com.psyche.memo.ui.chat.AssistantBlock.Thinking ||
-                                assistantBlocks[index - 1] is com.psyche.memo.ui.chat.AssistantBlock.Thinking)
-                        ) {
-                            20.dp
-                        } else {
-                            8.dp
+                        // 其余（正文↔媒体等）维持上游 8dp。hairline→正文取 28dp：ZCode 那边
+                        // 正文是裸文字（line 下 20px 即字），我们正文在气泡里，边到字还有
+                        // 内边距，气泡边距要放大才看得出 ZCode 的呼吸感（用户实测 20 太近）。
+                        val prevIsThinking = index > 0 &&
+                            assistantBlocks[index - 1] is com.psyche.memo.ui.chat.AssistantBlock.Thinking
+                        val blockGap = when {
+                            index == 0 && block is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> 12.dp
+                            prevIsThinking && block is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> 20.dp
+                            prevIsThinking || block is com.psyche.memo.ui.chat.AssistantBlock.Thinking -> 28.dp
+                            else -> 8.dp
                         }
                         if (index > 0) Spacer(Modifier.height(blockGap))
+                        if (index == 0 && block is com.psyche.memo.ui.chat.AssistantBlock.Thinking) {
+                            // 首块就是工作段（典型：思考→工具→正文）：名字行与「工作中/已工作」
+                            // 之间也留出 ZCode userInput→status 的呼吸感。
+                            Spacer(Modifier.height(12.dp))
+                        }
                         when (block) {
                             is com.psyche.memo.ui.chat.AssistantBlock.Media -> {
                                 // 媒体块：与正文块同序（工具产出的图紧跟工具卡）。
